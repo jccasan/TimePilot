@@ -57,23 +57,39 @@ const availableSkills = [
   { value: "generate_invoice", label: "Generate Invoice" },
 ];
 
-const ruleFormSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  trigger: z.enum(["lead_created", "quote_created", "service_completed", "payment_failed", "invoice_created"]),
-  actionType: z.string().min(1, "Action type is required"),
-  skillName: z.string().optional(),
-  skillRouteId: z.string().optional(),
-  sendAfterGenerate: z.boolean().optional(),
-  scopeToContact: z.boolean().optional(),
-  description: z.string().optional(),
-}).superRefine((data, ctx) => {
-  if (data.actionType === "run_skill" && !data.skillName) {
-    ctx.addIssue({ code: "custom", path: ["skillName"], message: "Skill is required" });
-  }
-  if (data.actionType === "run_skill" && data.skillName === "optimize_route" && !data.skillRouteId) {
-    ctx.addIssue({ code: "custom", path: ["skillRouteId"], message: "Route is required for optimize_route" });
-  }
-});
+const ruleFormSchema = z
+  .object({
+    name: z.string().min(1, "Name is required"),
+    trigger: z.enum([
+      "lead_created",
+      "quote_created",
+      "service_completed",
+      "payment_failed",
+      "invoice_created",
+    ]),
+    actionType: z.string().min(1, "Action type is required"),
+    skillName: z.string().optional(),
+    skillRouteId: z.string().optional(),
+    sendAfterGenerate: z.boolean().optional(),
+    scopeToContact: z.boolean().optional(),
+    description: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.actionType === "run_skill" && !data.skillName) {
+      ctx.addIssue({ code: "custom", path: ["skillName"], message: "Skill is required" });
+    }
+    if (
+      data.actionType === "run_skill" &&
+      data.skillName === "optimize_route" &&
+      !data.skillRouteId
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["skillRouteId"],
+        message: "Route is required for optimize_route",
+      });
+    }
+  });
 
 type RuleFormValues = z.infer<typeof ruleFormSchema>;
 
@@ -100,12 +116,18 @@ function getActionLabel(rule: AutomationRule): string {
 }
 
 function ruleToFormValues(rule: AutomationRule): RuleFormValues {
-  const config = rule.actionConfig as { type: string; params?: Record<string, unknown> } | undefined;
+  const config = rule.actionConfig as
+    | { type: string; params?: Record<string, unknown> }
+    | undefined;
   const actionType = config?.type ?? "create_task";
-  const skillName = actionType === "run_skill" ? (config?.params?.skillName as string | undefined) ?? "" : "";
-  const skillRouteId = skillName === "optimize_route" ? (config?.params?.routeId as string | undefined) ?? "" : "";
-  const sendAfterGenerate = skillName === "generate_invoice" ? !!(config?.params?.sendAfterGenerate) : false;
-  const scopeToContact = skillName === "generate_invoice" ? !!(config?.params?.scopeToContact) : false;
+  const skillName =
+    actionType === "run_skill" ? ((config?.params?.skillName as string | undefined) ?? "") : "";
+  const skillRouteId =
+    skillName === "optimize_route" ? ((config?.params?.routeId as string | undefined) ?? "") : "";
+  const sendAfterGenerate =
+    skillName === "generate_invoice" ? !!config?.params?.sendAfterGenerate : false;
+  const scopeToContact =
+    skillName === "generate_invoice" ? !!config?.params?.scopeToContact : false;
   return {
     name: rule.name,
     trigger: rule.trigger as RuleFormValues["trigger"],
@@ -151,111 +173,191 @@ function RuleFormFields({
 
   return (
     <>
-      <FormField control={form.control} name="name" render={({ field }) => (
-        <FormItem>
-          <FormLabel>Rule Name</FormLabel>
-          <FormControl><Input {...field} data-testid="input-rule-name" /></FormControl>
-          <FormMessage />
-        </FormItem>
-      )} />
-      <FormField control={form.control} name="description" render={({ field }) => (
-        <FormItem>
-          <FormLabel>Description (optional)</FormLabel>
-          <FormControl><Input {...field} data-testid="input-rule-description" /></FormControl>
-          <FormMessage />
-        </FormItem>
-      )} />
-      <FormField control={form.control} name="trigger" render={({ field }) => (
-        <FormItem>
-          <FormLabel>Trigger</FormLabel>
-          <Select onValueChange={field.onChange} value={field.value}>
-            <FormControl><SelectTrigger data-testid="select-trigger"><SelectValue /></SelectTrigger></FormControl>
-            <SelectContent>
-              {triggers.map((t) => (
-                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FormMessage />
-        </FormItem>
-      )} />
-      <FormField control={form.control} name="actionType" render={({ field }) => (
-        <FormItem>
-          <FormLabel>Action</FormLabel>
-          <Select onValueChange={(v) => { field.onChange(v); form.setValue("skillName", ""); form.setValue("skillRouteId", ""); }} value={field.value}>
-            <FormControl><SelectTrigger data-testid="select-action"><SelectValue /></SelectTrigger></FormControl>
-            <SelectContent>
-              {actionTypes.map((a) => (
-                <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FormMessage />
-        </FormItem>
-      )} />
-      {watchedActionType === "run_skill" && (
-        <FormField control={form.control} name="skillName" render={({ field }) => (
+      <FormField
+        control={form.control}
+        name="name"
+        render={({ field }) => (
           <FormItem>
-            <FormLabel>Skill</FormLabel>
-            <Select onValueChange={(v) => { field.onChange(v); form.setValue("skillRouteId", ""); form.setValue("sendAfterGenerate", false); form.setValue("scopeToContact", false); }} value={field.value ?? ""}>
-              <FormControl><SelectTrigger data-testid="select-skill-name"><SelectValue placeholder="Select a skill" /></SelectTrigger></FormControl>
+            <FormLabel>Rule Name</FormLabel>
+            <FormControl>
+              <Input {...field} data-testid="input-rule-name" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="description"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Description (optional)</FormLabel>
+            <FormControl>
+              <Input {...field} data-testid="input-rule-description" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="trigger"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Trigger</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value}>
+              <FormControl>
+                <SelectTrigger data-testid="select-trigger">
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
               <SelectContent>
-                {availableSkills.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                {triggers.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <FormMessage />
           </FormItem>
-        )} />
+        )}
+      />
+      <FormField
+        control={form.control}
+        name="actionType"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Action</FormLabel>
+            <Select
+              onValueChange={(v) => {
+                field.onChange(v);
+                form.setValue("skillName", "");
+                form.setValue("skillRouteId", "");
+              }}
+              value={field.value}
+            >
+              <FormControl>
+                <SelectTrigger data-testid="select-action">
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {actionTypes.map((a) => (
+                  <SelectItem key={a.value} value={a.value}>
+                    {a.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      {watchedActionType === "run_skill" && (
+        <FormField
+          control={form.control}
+          name="skillName"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Skill</FormLabel>
+              <Select
+                onValueChange={(v) => {
+                  field.onChange(v);
+                  form.setValue("skillRouteId", "");
+                  form.setValue("sendAfterGenerate", false);
+                  form.setValue("scopeToContact", false);
+                }}
+                value={field.value ?? ""}
+              >
+                <FormControl>
+                  <SelectTrigger data-testid="select-skill-name">
+                    <SelectValue placeholder="Select a skill" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {availableSkills.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
       )}
       {watchedActionType === "run_skill" && watchedSkillName === "generate_invoice" && (
         <>
-          <FormField control={form.control} name="scopeToContact" render={({ field }) => (
-            <FormItem className="flex items-center gap-2 space-y-0">
-              <FormControl>
-                <Checkbox
-                  checked={field.value ?? false}
-                  onCheckedChange={field.onChange}
-                  data-testid="checkbox-scope-to-contact"
-                />
-              </FormControl>
-              <div>
-                <FormLabel className="cursor-pointer font-normal">Scope to triggering contact</FormLabel>
-                <p className="text-xs text-muted-foreground">Only invoice the contact who triggered this rule, instead of all pending clients.</p>
-              </div>
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="sendAfterGenerate" render={({ field }) => (
-            <FormItem className="flex items-center gap-2 space-y-0">
-              <FormControl>
-                <Checkbox
-                  checked={field.value ?? false}
-                  onCheckedChange={field.onChange}
-                  data-testid="checkbox-send-after-generate"
-                />
-              </FormControl>
-              <FormLabel className="cursor-pointer font-normal">Send after generating</FormLabel>
-            </FormItem>
-          )} />
+          <FormField
+            control={form.control}
+            name="scopeToContact"
+            render={({ field }) => (
+              <FormItem className="flex items-center gap-2 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value ?? false}
+                    onCheckedChange={field.onChange}
+                    data-testid="checkbox-scope-to-contact"
+                  />
+                </FormControl>
+                <div>
+                  <FormLabel className="cursor-pointer font-normal">
+                    Scope to triggering contact
+                  </FormLabel>
+                  <p className="text-xs text-muted-foreground">
+                    Only invoice the contact who triggered this rule, instead of all pending
+                    clients.
+                  </p>
+                </div>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="sendAfterGenerate"
+            render={({ field }) => (
+              <FormItem className="flex items-center gap-2 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value ?? false}
+                    onCheckedChange={field.onChange}
+                    data-testid="checkbox-send-after-generate"
+                  />
+                </FormControl>
+                <FormLabel className="cursor-pointer font-normal">Send after generating</FormLabel>
+              </FormItem>
+            )}
+          />
         </>
       )}
       {watchedActionType === "run_skill" && watchedSkillName === "optimize_route" && (
-        <FormField control={form.control} name="skillRouteId" render={({ field }) => (
-          <FormItem>
-            <FormLabel>Route to optimize</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value ?? ""}>
-              <FormControl><SelectTrigger data-testid="select-skill-route-id"><SelectValue placeholder="Select a route" /></SelectTrigger></FormControl>
-              <SelectContent>
-                <SelectItem value="__all__">All active routes</SelectItem>
-                {(routes ?? []).map((r) => (
-                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )} />
+        <FormField
+          control={form.control}
+          name="skillRouteId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Route to optimize</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                <FormControl>
+                  <SelectTrigger data-testid="select-skill-route-id">
+                    <SelectValue placeholder="Select a route" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="__all__">All active routes</SelectItem>
+                  {(routes ?? []).map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
       )}
     </>
   );
@@ -359,7 +461,9 @@ export default function Automation() {
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold" data-testid="text-automation-heading">Automation</h1>
+        <h1 className="text-2xl font-bold" data-testid="text-automation-heading">
+          Automation
+        </h1>
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-create-rule">
@@ -371,9 +475,16 @@ export default function Automation() {
               <DialogTitle>Create Automation Rule</DialogTitle>
             </DialogHeader>
             <Form {...createForm}>
-              <form onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
+              <form
+                onSubmit={createForm.handleSubmit((v) => createMutation.mutate(v))}
+                className="space-y-4"
+              >
                 <RuleFormFields form={createForm} routes={routes} />
-                <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-rule">
+                <Button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  data-testid="button-submit-rule"
+                >
                   {createMutation.isPending ? "Creating..." : "Create Rule"}
                 </Button>
               </form>
@@ -383,7 +494,12 @@ export default function Automation() {
       </div>
 
       {/* Edit dialog */}
-      <Dialog open={!!editingRule} onOpenChange={(open) => { if (!open) setEditingRule(null); }}>
+      <Dialog
+        open={!!editingRule}
+        onOpenChange={(open) => {
+          if (!open) setEditingRule(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Automation Rule</DialogTitle>
@@ -396,7 +512,11 @@ export default function Automation() {
               className="space-y-4"
             >
               <RuleFormFields form={editForm} routes={routes} />
-              <Button type="submit" disabled={editMutation.isPending} data-testid="button-submit-edit-rule">
+              <Button
+                type="submit"
+                disabled={editMutation.isPending}
+                data-testid="button-submit-edit-rule"
+              >
                 {editMutation.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </form>
@@ -418,7 +538,9 @@ export default function Automation() {
                 <div className="flex items-center gap-3">
                   <Zap className="h-5 w-5 text-muted-foreground shrink-0" />
                   <div>
-                    <p className="font-medium" data-testid={`text-rule-name-${rule.id}`}>{rule.name}</p>
+                    <p className="font-medium" data-testid={`text-rule-name-${rule.id}`}>
+                      {rule.name}
+                    </p>
                     <div className="flex flex-wrap items-center gap-2 mt-1">
                       <Badge variant="outline" data-testid={`badge-trigger-${rule.id}`}>
                         {rule.trigger.replace(/_/g, " ")}
@@ -441,7 +563,9 @@ export default function Automation() {
                   </Button>
                   <Switch
                     checked={rule.isActive}
-                    onCheckedChange={(checked) => toggleMutation.mutate({ id: rule.id, isActive: checked })}
+                    onCheckedChange={(checked) =>
+                      toggleMutation.mutate({ id: rule.id, isActive: checked })
+                    }
                     data-testid={`switch-rule-${rule.id}`}
                   />
                 </div>
@@ -451,7 +575,10 @@ export default function Automation() {
         </div>
       ) : (
         <Card>
-          <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-no-rules">
+          <CardContent
+            className="p-6 text-center text-muted-foreground"
+            data-testid="text-no-rules"
+          >
             No automation rules. Create one to automate your workflows.
           </CardContent>
         </Card>

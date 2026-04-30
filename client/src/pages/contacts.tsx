@@ -31,7 +31,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Search, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Trash2, Tags, RefreshCw, Send, SlidersHorizontal, CalendarClock } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Download,
+  Upload,
+  FileDown,
+  AlertTriangle,
+  CheckCircle2,
+  Trash2,
+  Tags,
+  RefreshCw,
+  Send,
+  SlidersHorizontal,
+  CalendarClock,
+} from "lucide-react";
 import { DialogFooter } from "@/components/ui/dialog";
 import { AddContactDialog } from "@/components/add-contact-dialog";
 import { LearnHowButton } from "@/components/interactive-tutorial";
@@ -52,7 +66,6 @@ const statusColors: Record<string, string> = {
 type ImportRow = Record<string, string>;
 
 type ColumnMapping = { csvHeader: string; mappedField: string };
-
 
 const CONTACT_FIELDS = [
   { key: "firstName", label: "First Name" },
@@ -106,10 +119,11 @@ export default function Contacts() {
   if (search) queryParams.set("search", search);
   const queryString = queryParams.toString();
 
-  const { data: contacts, isLoading } = useQuery<(EnrichedContact & { isStopOnlyContact?: boolean })[]>({
+  const { data: contacts, isLoading } = useQuery<
+    (EnrichedContact & { isStopOnlyContact?: boolean })[]
+  >({
     queryKey: ["/api/contacts" + (queryString ? `?${queryString}` : "")],
   });
-
 
   const { data: tagsList = [] } = useQuery<Tag[]>({
     queryKey: ["/api/tags"],
@@ -125,7 +139,10 @@ export default function Contacts() {
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       setSelectedIds(new Set());
       const action = variables.status ? `Status changed to ${variables.status}` : "Tag added";
-      toast({ title: "Bulk update complete", description: `${action} for ${variables.ids.length} contact(s).` });
+      toast({
+        title: "Bulk update complete",
+        description: `${action} for ${variables.ids.length} contact(s).`,
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Bulk update failed", description: error.message, variant: "destructive" });
@@ -144,7 +161,10 @@ export default function Contacts() {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       setSelectedIds(new Set());
       setDeleteConfirmOpen(false);
-      toast({ title: "Contacts deleted", description: `${ids.length} contact(s) deleted successfully.` });
+      toast({
+        title: "Contacts deleted",
+        description: `${ids.length} contact(s) deleted successfully.`,
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Delete failed", description: error.message, variant: "destructive" });
@@ -153,7 +173,9 @@ export default function Contacts() {
 
   const sendPortalLinkMutation = useMutation({
     mutationFn: async (ids: string[]) => {
-      const res = await apiRequest("POST", "/api/contacts/bulk/send-portal-link", { contactIds: ids });
+      const res = await apiRequest("POST", "/api/contacts/bulk/send-portal-link", {
+        contactIds: ids,
+      });
       return res.json();
     },
     onSuccess: (data: { sent: number; skipped: number; errors?: string[] }) => {
@@ -161,7 +183,8 @@ export default function Contacts() {
       setSelectedIds(new Set());
       let description = `Portal link sent to ${data.sent} contact(s).`;
       if (data.skipped > 0) description += ` ${data.skipped} skipped.`;
-      if (data.errors && data.errors.length > 0) description += ` Issues: ${data.errors.join(", ")}`;
+      if (data.errors && data.errors.length > 0)
+        description += ` Issues: ${data.errors.join(", ")}`;
       toast({ title: "Portal links sent", description });
     },
     onError: (error: Error) => {
@@ -194,7 +217,11 @@ export default function Contacts() {
 
   const handleBulkEditApply = () => {
     if (!bulkEditDayOfWeek && !bulkEditFrequency) {
-      toast({ title: "Nothing selected", description: "Choose at least one field to update.", variant: "destructive" });
+      toast({
+        title: "Nothing selected",
+        description: "Choose at least one field to update.",
+        variant: "destructive",
+      });
       return;
     }
     bulkUpdateServicePlansMutation.mutate({
@@ -205,7 +232,7 @@ export default function Contacts() {
   };
 
   const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -218,7 +245,7 @@ export default function Contacts() {
     if (selectedIds.size === contacts.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(contacts.map(c => c.id)));
+      setSelectedIds(new Set(contacts.map((c) => c.id)));
     }
   };
 
@@ -226,7 +253,9 @@ export default function Contacts() {
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold" data-testid="text-contacts-heading">Contacts</h1>
+          <h1 className="text-2xl font-bold" data-testid="text-contacts-heading">
+            Contacts
+          </h1>
           <LearnHowButton
             tutorialId="tutorial_import_wizard"
             onStart={startTutorial}
@@ -234,40 +263,60 @@ export default function Contacts() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => window.open("/api/contacts/export/csv", "_blank")} data-testid="button-export-csv">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open("/api/contacts/export/csv", "_blank")}
+            data-testid="button-export-csv"
+          >
             <Download className="mr-1 h-4 w-4" />
             Export
           </Button>
-          <Button variant="outline" size="sm" disabled={isValidating} onClick={() => {
-            const input = document.createElement("input");
-            input.type = "file";
-            input.accept = ".csv";
-            input.onchange = async (e) => {
-              const file = (e.target as HTMLInputElement).files?.[0];
-              if (!file) return;
-              setIsValidating(true);
-              try {
-                const text = await file.text();
-                const res = await apiRequest("POST", "/api/contacts/validate-csv", { csv: text });
-                const validation = await res.json();
-                setColumnMapping(validation.columnMapping);
-                setNewLeadSources(validation.newLeadSources);
-                setRawCsvRows(validation.rawRows);
-                setRawCsvHeaders(validation.csvHeaders);
-                setImportRows(validation.rows);
-                setImportStep("mapping");
-              } catch (err: any) {
-                toast({ title: "Validation failed", description: err.message, variant: "destructive" });
-              } finally {
-                setIsValidating(false);
-              }
-            };
-            input.click();
-          }} data-testid="button-import-csv">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isValidating}
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = ".csv";
+              input.onchange = async (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (!file) return;
+                setIsValidating(true);
+                try {
+                  const text = await file.text();
+                  const res = await apiRequest("POST", "/api/contacts/validate-csv", { csv: text });
+                  const validation = await res.json();
+                  setColumnMapping(validation.columnMapping);
+                  setNewLeadSources(validation.newLeadSources);
+                  setRawCsvRows(validation.rawRows);
+                  setRawCsvHeaders(validation.csvHeaders);
+                  setImportRows(validation.rows);
+                  setImportStep("mapping");
+                } catch (err: any) {
+                  toast({
+                    title: "Validation failed",
+                    description: err.message,
+                    variant: "destructive",
+                  });
+                } finally {
+                  setIsValidating(false);
+                }
+              };
+              input.click();
+            }}
+            data-testid="button-import-csv"
+          >
             <Upload className="mr-1 h-4 w-4" />
             {isValidating ? "Validating..." : "Import"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => window.open("/api/contacts/sample-csv", "_blank")} data-testid="button-download-sample-csv">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => window.open("/api/contacts/sample-csv", "_blank")}
+            data-testid="button-download-sample-csv"
+          >
             <FileDown className="mr-1 h-4 w-4" />
             Import Template
           </Button>
@@ -292,12 +341,24 @@ export default function Contacts() {
 
       <Tabs value={statusFilter} onValueChange={setStatusFilter}>
         <TabsList className="flex-wrap">
-          <TabsTrigger value="all" data-testid="tab-all">All</TabsTrigger>
-          <TabsTrigger value="lead" data-testid="tab-lead">Lead</TabsTrigger>
-          <TabsTrigger value="estimate" data-testid="tab-estimate">Estimate</TabsTrigger>
-          <TabsTrigger value="active" data-testid="tab-active">Active</TabsTrigger>
-          <TabsTrigger value="paused" data-testid="tab-paused">Paused</TabsTrigger>
-          <TabsTrigger value="cancelled" data-testid="tab-cancelled">Cancelled</TabsTrigger>
+          <TabsTrigger value="all" data-testid="tab-all">
+            All
+          </TabsTrigger>
+          <TabsTrigger value="lead" data-testid="tab-lead">
+            Lead
+          </TabsTrigger>
+          <TabsTrigger value="estimate" data-testid="tab-estimate">
+            Estimate
+          </TabsTrigger>
+          <TabsTrigger value="active" data-testid="tab-active">
+            Active
+          </TabsTrigger>
+          <TabsTrigger value="paused" data-testid="tab-paused">
+            Paused
+          </TabsTrigger>
+          <TabsTrigger value="cancelled" data-testid="tab-cancelled">
+            Cancelled
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -331,7 +392,10 @@ export default function Contacts() {
                 />
               </div>
               <Link href={`/contacts/${contact.id}`} className="flex-1 min-w-0">
-                <Card className="hover-elevate cursor-pointer" data-testid={`card-contact-${contact.id}`}>
+                <Card
+                  className="hover-elevate cursor-pointer"
+                  data-testid={`card-contact-${contact.id}`}
+                >
                   <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
                     <div>
                       <p className="font-medium" data-testid={`text-contact-name-${contact.id}`}>
@@ -341,8 +405,14 @@ export default function Contacts() {
                         {contact.email || "No email"} {contact.phone ? ` | ${contact.phone}` : ""}
                       </p>
                       {contact.streetAddress && (
-                        <p className="text-sm text-muted-foreground" data-testid={`text-contact-address-${contact.id}`}>
-                          {contact.streetAddress}{contact.address2 ? `, ${contact.address2}` : ""}{contact.city ? `, ${contact.city}` : ""}{contact.state ? `, ${contact.state}` : ""} {contact.zipCode || ""}
+                        <p
+                          className="text-sm text-muted-foreground"
+                          data-testid={`text-contact-address-${contact.id}`}
+                        >
+                          {contact.streetAddress}
+                          {contact.address2 ? `, ${contact.address2}` : ""}
+                          {contact.city ? `, ${contact.city}` : ""}
+                          {contact.state ? `, ${contact.state}` : ""} {contact.zipCode || ""}
                         </p>
                       )}
                     </div>
@@ -378,7 +448,9 @@ export default function Contacts() {
                           className="text-xs border-purple-300 text-purple-700 dark:border-purple-600 dark:text-purple-400"
                           data-testid={`badge-lead-source-${contact.id}`}
                         >
-                          {contact.leadSource.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                          {contact.leadSource
+                            .replace(/_/g, " ")
+                            .replace(/\b\w/g, (c) => c.toUpperCase())}
                         </Badge>
                       )}
                       {contact.leadSource === "website_widget" && (
@@ -406,14 +478,20 @@ export default function Contacts() {
         </div>
       ) : (
         <Card>
-          <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-no-contacts">
+          <CardContent
+            className="p-6 text-center text-muted-foreground"
+            data-testid="text-no-contacts"
+          >
             No contacts found. Add your first contact to get started.
           </CardContent>
         </Card>
       )}
 
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" data-testid="bulk-action-bar">
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+          data-testid="bulk-action-bar"
+        >
           <Card className="shadow-lg">
             <CardContent className="flex flex-wrap items-center gap-2 p-3">
               <span className="text-sm font-medium mr-1" data-testid="text-bulk-selected-count">
@@ -422,7 +500,12 @@ export default function Contacts() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={bulkUpdateMutation.isPending} data-testid="button-bulk-change-status">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={bulkUpdateMutation.isPending}
+                    data-testid="button-bulk-change-status"
+                  >
                     <RefreshCw className="mr-1 h-4 w-4" />
                     Change Status
                   </Button>
@@ -431,10 +514,14 @@ export default function Contacts() {
                   {["lead", "estimate", "active", "paused", "cancelled"].map((s) => (
                     <DropdownMenuItem
                       key={s}
-                      onClick={() => bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), status: s })}
+                      onClick={() =>
+                        bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), status: s })
+                      }
                       data-testid={`menu-item-status-${s}`}
                     >
-                      <Badge variant="secondary" className={`${statusColors[s]} mr-2`}>{s}</Badge>
+                      <Badge variant="secondary" className={`${statusColors[s]} mr-2`}>
+                        {s}
+                      </Badge>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -442,7 +529,12 @@ export default function Contacts() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={bulkUpdateMutation.isPending} data-testid="button-bulk-add-tag">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={bulkUpdateMutation.isPending}
+                    data-testid="button-bulk-add-tag"
+                  >
                     <Tags className="mr-1 h-4 w-4" />
                     Add Tag
                   </Button>
@@ -454,7 +546,9 @@ export default function Contacts() {
                     tagsList.map((tag) => (
                       <DropdownMenuItem
                         key={tag.id}
-                        onClick={() => bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), tagId: tag.id })}
+                        onClick={() =>
+                          bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), tagId: tag.id })
+                        }
                         data-testid={`menu-item-tag-${tag.id}`}
                       >
                         <span
@@ -526,13 +620,20 @@ export default function Contacts() {
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle data-testid="text-delete-confirm-title">Delete {selectedIds.size} Contact(s)?</DialogTitle>
+            <DialogTitle data-testid="text-delete-confirm-title">
+              Delete {selectedIds.size} Contact(s)?
+            </DialogTitle>
             <DialogDescription data-testid="text-delete-confirm-description">
-              This action cannot be undone. All selected contacts and their associated data will be permanently removed.
+              This action cannot be undone. All selected contacts and their associated data will be
+              permanently removed.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)} data-testid="button-cancel-bulk-delete">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmOpen(false)}
+              data-testid="button-cancel-bulk-delete"
+            >
               Cancel
             </Button>
             <Button
@@ -541,24 +642,39 @@ export default function Contacts() {
               disabled={bulkDeleteMutation.isPending}
               data-testid="button-confirm-bulk-delete"
             >
-              {bulkDeleteMutation.isPending ? "Deleting..." : `Delete ${selectedIds.size} Contact(s)`}
+              {bulkDeleteMutation.isPending
+                ? "Deleting..."
+                : `Delete ${selectedIds.size} Contact(s)`}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={bulkEditOpen} onOpenChange={(open) => { setBulkEditOpen(open); if (!open) { setBulkEditDayOfWeek(""); setBulkEditFrequency(""); } }}>
+      <Dialog
+        open={bulkEditOpen}
+        onOpenChange={(open) => {
+          setBulkEditOpen(open);
+          if (!open) {
+            setBulkEditDayOfWeek("");
+            setBulkEditFrequency("");
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle data-testid="text-bulk-edit-title">Update Service Plans</DialogTitle>
             <DialogDescription>
-              Update active service plans for {selectedIds.size} selected client{selectedIds.size !== 1 ? "s" : ""}. Leave a field blank to keep it unchanged.
+              Update active service plans for {selectedIds.size} selected client
+              {selectedIds.size !== 1 ? "s" : ""}. Leave a field blank to keep it unchanged.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Service Day</label>
-              <Select value={bulkEditDayOfWeek || "__none__"} onValueChange={(v) => setBulkEditDayOfWeek(v === "__none__" ? "" : v)}>
+              <Select
+                value={bulkEditDayOfWeek || "__none__"}
+                onValueChange={(v) => setBulkEditDayOfWeek(v === "__none__" ? "" : v)}
+              >
                 <SelectTrigger data-testid="select-bulk-day-of-week">
                   <SelectValue placeholder="Don't change" />
                 </SelectTrigger>
@@ -574,12 +690,17 @@ export default function Contacts() {
                 </SelectContent>
               </Select>
               {bulkEditDayOfWeek && (
-                <p className="text-xs text-muted-foreground">Plans will be auto-assigned to the matching route for this day if one exists.</p>
+                <p className="text-xs text-muted-foreground">
+                  Plans will be auto-assigned to the matching route for this day if one exists.
+                </p>
               )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Service Frequency</label>
-              <Select value={bulkEditFrequency || "__none__"} onValueChange={(v) => setBulkEditFrequency(v === "__none__" ? "" : v)}>
+              <Select
+                value={bulkEditFrequency || "__none__"}
+                onValueChange={(v) => setBulkEditFrequency(v === "__none__" ? "" : v)}
+              >
                 <SelectTrigger data-testid="select-bulk-frequency">
                   <SelectValue placeholder="Don't change" />
                 </SelectTrigger>
@@ -594,12 +715,19 @@ export default function Contacts() {
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setBulkEditOpen(false)} data-testid="button-bulk-edit-cancel">
+            <Button
+              variant="outline"
+              onClick={() => setBulkEditOpen(false)}
+              data-testid="button-bulk-edit-cancel"
+            >
               Cancel
             </Button>
             <Button
               onClick={handleBulkEditApply}
-              disabled={bulkUpdateServicePlansMutation.isPending || (!bulkEditDayOfWeek && !bulkEditFrequency)}
+              disabled={
+                bulkUpdateServicePlansMutation.isPending ||
+                (!bulkEditDayOfWeek && !bulkEditFrequency)
+              }
               data-testid="button-bulk-edit-apply"
             >
               {bulkUpdateServicePlansMutation.isPending ? "Updating..." : "Apply to All Selected"}
@@ -608,7 +736,19 @@ export default function Contacts() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={importStep !== "idle"} onOpenChange={(open) => { if (!open) { setImportStep("idle"); setImportRows([]); setRawCsvRows([]); setRawCsvHeaders([]); setColumnMapping([]); setNewLeadSources([]); } }}>
+      <Dialog
+        open={importStep !== "idle"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setImportStep("idle");
+            setImportRows([]);
+            setRawCsvRows([]);
+            setRawCsvHeaders([]);
+            setColumnMapping([]);
+            setNewLeadSources([]);
+          }
+        }}
+      >
         <DialogContent className="max-w-[95vw] w-[900px] max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle data-testid="text-import-title">
@@ -643,8 +783,10 @@ export default function Contacts() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__skip__">-- Skip this column --</SelectItem>
-                        {CONTACT_FIELDS.map(f => (
-                          <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                        {CONTACT_FIELDS.map((f) => (
+                          <SelectItem key={f.key} value={f.key}>
+                            {f.label}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -659,11 +801,21 @@ export default function Contacts() {
 
               {newLeadSources.length > 0 && (
                 <div className="border rounded-md p-3 space-y-1 border-amber-300 bg-amber-50 dark:bg-amber-950/20">
-                  <p className="text-sm font-medium text-amber-700 dark:text-amber-400">New Lead Sources</p>
-                  <p className="text-xs text-muted-foreground">These will be added to your lead sources list:</p>
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                    New Lead Sources
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    These will be added to your lead sources list:
+                  </p>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {newLeadSources.map((s) => (
-                      <Badge key={s} variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-300">{s}</Badge>
+                      <Badge
+                        key={s}
+                        variant="outline"
+                        className="text-amber-700 dark:text-amber-400 border-amber-300"
+                      >
+                        {s}
+                      </Badge>
                     ))}
                   </div>
                 </div>
@@ -677,8 +829,10 @@ export default function Contacts() {
                 <thead className="bg-muted/50 sticky top-0">
                   <tr>
                     <th className="p-2 text-left font-medium w-8">#</th>
-                    {CONTACT_FIELDS.filter(f => importRows.some(r => r[f.key])).map(f => (
-                      <th key={f.key} className="p-2 text-left font-medium whitespace-nowrap">{f.label}</th>
+                    {CONTACT_FIELDS.filter((f) => importRows.some((r) => r[f.key])).map((f) => (
+                      <th key={f.key} className="p-2 text-left font-medium whitespace-nowrap">
+                        {f.label}
+                      </th>
                     ))}
                     <th className="p-2 w-10"></th>
                   </tr>
@@ -686,7 +840,9 @@ export default function Contacts() {
                 <tbody>
                   {importRows.map((row, rowIdx) => {
                     const hasName = row.firstName && row.lastName;
-                    const visibleFields = CONTACT_FIELDS.filter(f => importRows.some(r => r[f.key]));
+                    const visibleFields = CONTACT_FIELDS.filter((f) =>
+                      importRows.some((r) => r[f.key])
+                    );
                     return (
                       <tr
                         key={rowIdx}
@@ -694,7 +850,7 @@ export default function Contacts() {
                         data-testid={`import-row-${rowIdx}`}
                       >
                         <td className="p-2 text-muted-foreground">{rowIdx + 1}</td>
-                        {visibleFields.map(f => (
+                        {visibleFields.map((f) => (
                           <td key={f.key} className="p-1">
                             <Input
                               value={row[f.key] || ""}
@@ -732,24 +888,42 @@ export default function Contacts() {
             </div>
           )}
 
-          {importStep === "review" && (() => {
-            const missingNames = importRows.filter(r => !r.firstName || !r.lastName);
-            return missingNames.length > 0 ? (
-              <div className="border rounded-md p-3 space-y-1 border-destructive/50 bg-destructive/5 flex-shrink-0">
-                <p className="text-sm font-medium text-destructive">{missingNames.length} row{missingNames.length !== 1 ? "s" : ""} missing required fields</p>
-                <p className="text-xs text-muted-foreground">Rows without a first and last name will be skipped. Edit them above or remove them.</p>
-              </div>
-            ) : null;
-          })()}
+          {importStep === "review" &&
+            (() => {
+              const missingNames = importRows.filter((r) => !r.firstName || !r.lastName);
+              return missingNames.length > 0 ? (
+                <div className="border rounded-md p-3 space-y-1 border-destructive/50 bg-destructive/5 flex-shrink-0">
+                  <p className="text-sm font-medium text-destructive">
+                    {missingNames.length} row{missingNames.length !== 1 ? "s" : ""} missing required
+                    fields
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Rows without a first and last name will be skipped. Edit them above or remove
+                    them.
+                  </p>
+                </div>
+              ) : null;
+            })()}
 
           <DialogFooter className="gap-2 flex-shrink-0">
-            <Button variant="outline" onClick={() => { setImportStep("idle"); setImportRows([]); setRawCsvRows([]); setRawCsvHeaders([]); setColumnMapping([]); setNewLeadSources([]); }} data-testid="button-cancel-import">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportStep("idle");
+                setImportRows([]);
+                setRawCsvRows([]);
+                setRawCsvHeaders([]);
+                setColumnMapping([]);
+                setNewLeadSources([]);
+              }}
+              data-testid="button-cancel-import"
+            >
               Cancel
             </Button>
             {importStep === "mapping" && (
               <Button
                 onClick={() => {
-                  const remapped = rawCsvRows.map(values => {
+                  const remapped = rawCsvRows.map((values) => {
                     const row: ImportRow = {};
                     columnMapping.forEach((col, idx) => {
                       if (col.mappedField) {
@@ -768,16 +942,24 @@ export default function Contacts() {
             )}
             {importStep === "review" && (
               <>
-                <Button variant="outline" onClick={() => setImportStep("mapping")} data-testid="button-back-to-mapping">
+                <Button
+                  variant="outline"
+                  onClick={() => setImportStep("mapping")}
+                  data-testid="button-back-to-mapping"
+                >
                   Back
                 </Button>
                 <Button
-                  disabled={isImporting || importRows.filter(r => r.firstName && r.lastName).length === 0}
+                  disabled={
+                    isImporting || importRows.filter((r) => r.firstName && r.lastName).length === 0
+                  }
                   onClick={async () => {
                     setIsImporting(true);
                     try {
-                      const validRows = importRows.filter(r => r.firstName && r.lastName);
-                      const res = await apiRequest("POST", "/api/contacts/import/json", { rows: validRows });
+                      const validRows = importRows.filter((r) => r.firstName && r.lastName);
+                      const res = await apiRequest("POST", "/api/contacts/import/json", {
+                        rows: validRows,
+                      });
                       const result = await res.json();
                       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
                       queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
@@ -797,14 +979,20 @@ export default function Contacts() {
                       setColumnMapping([]);
                       setNewLeadSources([]);
                     } catch (err: any) {
-                      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+                      toast({
+                        title: "Import failed",
+                        description: err.message,
+                        variant: "destructive",
+                      });
                     } finally {
                       setIsImporting(false);
                     }
                   }}
                   data-testid="button-confirm-import"
                 >
-                  {isImporting ? "Importing..." : `Import ${importRows.filter(r => r.firstName && r.lastName).length} Contacts`}
+                  {isImporting
+                    ? "Importing..."
+                    : `Import ${importRows.filter((r) => r.firstName && r.lastName).length} Contacts`}
                 </Button>
               </>
             )}

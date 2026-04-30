@@ -33,7 +33,14 @@ function buildGoogleMapsUrl(address?: string, lat?: number, lng?: number): strin
   return "#";
 }
 
-export function StreetViewImage({ address, lat, lng, className = "", size, clickToNavigate = true }: StreetViewImageProps) {
+export function StreetViewImage({
+  address,
+  lat,
+  lng,
+  className = "",
+  size,
+  clickToNavigate = true,
+}: StreetViewImageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -59,16 +66,17 @@ export function StreetViewImage({ address, lat, lng, className = "", size, click
 
   const image = (
     <div className={`relative overflow-hidden rounded-md border ${className}`}>
-      {loading && (
-        <Skeleton className="absolute inset-0 rounded-md" />
-      )}
+      {loading && <Skeleton className="absolute inset-0 rounded-md" />}
       <img
         src={imgUrl}
         alt={`Street view of ${address || "property"}`}
         className={`w-full h-full object-contain transition-opacity duration-300 ${loading ? "opacity-0" : "opacity-100"}`}
         loading="lazy"
         onLoad={() => setLoading(false)}
-        onError={() => { setLoading(false); setError(true); }}
+        onError={() => {
+          setLoading(false);
+          setError(true);
+        }}
         data-testid="img-street-view"
       />
     </div>

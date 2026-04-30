@@ -26,7 +26,9 @@ export function encryptToken(plaintext: string): string {
     if (process.env.NODE_ENV === "production") {
       throw new Error("QBO_TOKEN_SECRET is required in production for secure token storage");
     }
-    console.warn("[QBO] WARNING: QBO_TOKEN_SECRET not set, storing tokens in plaintext. Set QBO_TOKEN_SECRET for encrypted storage.");
+    console.warn(
+      "[QBO] WARNING: QBO_TOKEN_SECRET not set, storing tokens in plaintext. Set QBO_TOKEN_SECRET for encrypted storage."
+    );
     return plaintext;
   }
   const iv = crypto.randomBytes(12);
@@ -91,14 +93,19 @@ export function getQboAuthUrl(redirectUri: string, state: string): string {
   return `${QBO_AUTH_URL}?${params.toString()}`;
 }
 
-export async function exchangeQboCode(code: string, redirectUri: string): Promise<{
+export async function exchangeQboCode(
+  code: string,
+  redirectUri: string
+): Promise<{
   access_token: string;
   refresh_token: string;
   expires_in: number;
   x_refresh_token_expires_in: number;
   token_type: string;
 }> {
-  const auth = Buffer.from(`${process.env.QBO_CLIENT_ID}:${process.env.QBO_CLIENT_SECRET}`).toString("base64");
+  const auth = Buffer.from(
+    `${process.env.QBO_CLIENT_ID}:${process.env.QBO_CLIENT_SECRET}`
+  ).toString("base64");
   const res = await fetch(QBO_TOKEN_URL, {
     method: "POST",
     headers: {
@@ -119,7 +126,9 @@ export async function exchangeQboCode(code: string, redirectUri: string): Promis
   return res.json();
 }
 
-export async function refreshQboTokens(companyId: string): Promise<{ access_token: string; refresh_token: string }> {
+export async function refreshQboTokens(
+  companyId: string
+): Promise<{ access_token: string; refresh_token: string }> {
   const existing = refreshLocks.get(companyId);
   if (existing) {
     return existing;
@@ -132,20 +141,27 @@ export async function refreshQboTokens(companyId: string): Promise<{ access_toke
   return refreshPromise;
 }
 
-async function doRefreshQboTokens(companyId: string): Promise<{ access_token: string; refresh_token: string }> {
-  const [company] = await db.select({
-    id: companies.id,
-    qboRefreshToken: companies.qboRefreshToken,
-    qboAccessToken: companies.qboAccessToken,
-    qboTokenExpiresAt: companies.qboTokenExpiresAt,
-    qboRealmId: companies.qboRealmId,
-  }).from(companies).where(eq(companies.id, companyId));
+async function doRefreshQboTokens(
+  companyId: string
+): Promise<{ access_token: string; refresh_token: string }> {
+  const [company] = await db
+    .select({
+      id: companies.id,
+      qboRefreshToken: companies.qboRefreshToken,
+      qboAccessToken: companies.qboAccessToken,
+      qboTokenExpiresAt: companies.qboTokenExpiresAt,
+      qboRealmId: companies.qboRealmId,
+    })
+    .from(companies)
+    .where(eq(companies.id, companyId));
   if (!company?.qboRefreshToken) {
     throw new Error("No QBO refresh token found");
   }
 
   const decryptedRefreshToken = decryptToken(company.qboRefreshToken);
-  const auth = Buffer.from(`${process.env.QBO_CLIENT_ID}:${process.env.QBO_CLIENT_SECRET}`).toString("base64");
+  const auth = Buffer.from(
+    `${process.env.QBO_CLIENT_ID}:${process.env.QBO_CLIENT_SECRET}`
+  ).toString("base64");
   const res = await fetch(QBO_TOKEN_URL, {
     method: "POST",
     headers: {
@@ -161,41 +177,53 @@ async function doRefreshQboTokens(companyId: string): Promise<{ access_token: st
   if (!res.ok) {
     const errText = await res.text();
     if (res.status === 401 || res.status === 400) {
-      await db.update(companies).set({
-        qboAccessToken: null,
-        qboRefreshToken: null,
-        qboTokenExpiresAt: null,
-        qboRealmId: null,
-        qboConnectedAt: null,
-      }).where(eq(companies.id, companyId));
+      await db
+        .update(companies)
+        .set({
+          qboAccessToken: null,
+          qboRefreshToken: null,
+          qboTokenExpiresAt: null,
+          qboRealmId: null,
+          qboConnectedAt: null,
+        })
+        .where(eq(companies.id, companyId));
       throw new Error("QBO connection expired. Please reconnect your QuickBooks account.");
     }
     throw new Error(`QBO token refresh failed: ${res.status} ${errText}`);
   }
   const data = await res.json();
 
-  await db.update(companies).set({
-    qboAccessToken: encryptToken(data.access_token),
-    qboRefreshToken: encryptToken(data.refresh_token),
-    qboTokenExpiresAt: new Date(Date.now() + data.expires_in * 1000),
-  }).where(eq(companies.id, companyId));
+  await db
+    .update(companies)
+    .set({
+      qboAccessToken: encryptToken(data.access_token),
+      qboRefreshToken: encryptToken(data.refresh_token),
+      qboTokenExpiresAt: new Date(Date.now() + data.expires_in * 1000),
+    })
+    .where(eq(companies.id, companyId));
 
   return { access_token: data.access_token, refresh_token: data.refresh_token };
 }
 
 async function getValidAccessToken(companyId: string): Promise<{ token: string; realmId: string }> {
-  const [company] = await db.select({
-    id: companies.id,
-    qboRealmId: companies.qboRealmId,
-    qboAccessToken: companies.qboAccessToken,
-    qboRefreshToken: companies.qboRefreshToken,
-    qboTokenExpiresAt: companies.qboTokenExpiresAt,
-  }).from(companies).where(eq(companies.id, companyId));
+  const [company] = await db
+    .select({
+      id: companies.id,
+      qboRealmId: companies.qboRealmId,
+      qboAccessToken: companies.qboAccessToken,
+      qboRefreshToken: companies.qboRefreshToken,
+      qboTokenExpiresAt: companies.qboTokenExpiresAt,
+    })
+    .from(companies)
+    .where(eq(companies.id, companyId));
   if (!company?.qboRealmId || !company?.qboAccessToken) {
     throw new Error("QuickBooks is not connected");
   }
 
-  if (company.qboTokenExpiresAt && new Date(company.qboTokenExpiresAt) < new Date(Date.now() + 60000)) {
+  if (
+    company.qboTokenExpiresAt &&
+    new Date(company.qboTokenExpiresAt) < new Date(Date.now() + 60000)
+  ) {
     const refreshed = await refreshQboTokens(companyId);
     return { token: refreshed.access_token, realmId: company.qboRealmId };
   }
@@ -203,7 +231,12 @@ async function getValidAccessToken(companyId: string): Promise<{ token: string; 
   return { token: decryptToken(company.qboAccessToken), realmId: company.qboRealmId };
 }
 
-async function qboRequest(companyId: string, method: string, path: string, body?: any): Promise<any> {
+async function qboRequest(
+  companyId: string,
+  method: string,
+  path: string,
+  body?: any
+): Promise<any> {
   const { token, realmId } = await getValidAccessToken(companyId);
   const url = `${getQboApiBase()}/company/${realmId}${path}`;
   const headers: Record<string, string> = {
@@ -238,7 +271,15 @@ async function qboRequest(companyId: string, method: string, path: string, body?
   return res.json();
 }
 
-async function logSync(companyId: string, entityType: string, entityId: string, action: string, status: "pending" | "synced" | "error", qboEntityId?: string, errorMessage?: string) {
+async function logSync(
+  companyId: string,
+  entityType: string,
+  entityId: string,
+  action: string,
+  status: "pending" | "synced" | "error",
+  qboEntityId?: string,
+  errorMessage?: string
+) {
   await db.insert(qboSyncLogs).values({
     companyId,
     entityType,
@@ -251,8 +292,14 @@ async function logSync(companyId: string, entityType: string, entityId: string, 
   });
 }
 
-export async function syncContactToQbo(companyId: string, contactId: string): Promise<{ qboCustomerId: string }> {
-  const [contact] = await db.select().from(contacts).where(and(eq(contacts.id, contactId), eq(contacts.companyId, companyId)));
+export async function syncContactToQbo(
+  companyId: string,
+  contactId: string
+): Promise<{ qboCustomerId: string }> {
+  const [contact] = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.id, contactId), eq(contacts.companyId, companyId)));
   if (!contact) throw new Error("Contact not found");
 
   if (contact.qboCustomerId) {
@@ -266,13 +313,15 @@ export async function syncContactToQbo(companyId: string, contactId: string): Pr
       DisplayName: `${contact.firstName} ${contact.lastName}`.trim(),
       PrimaryEmailAddr: contact.email ? { Address: contact.email } : undefined,
       PrimaryPhone: contact.phone ? { FreeFormNumber: contact.phone } : undefined,
-      BillAddr: contact.streetAddress ? {
-        Line1: contact.streetAddress,
-        Line2: contact.address2 || undefined,
-        City: contact.city || undefined,
-        CountrySubDivisionCode: contact.state || undefined,
-        PostalCode: contact.zipCode || undefined,
-      } : undefined,
+      BillAddr: contact.streetAddress
+        ? {
+            Line1: contact.streetAddress,
+            Line2: contact.address2 || undefined,
+            City: contact.city || undefined,
+            CountrySubDivisionCode: contact.state || undefined,
+            PostalCode: contact.zipCode || undefined,
+          }
+        : undefined,
     });
 
     await logSync(companyId, "contact", contactId, "update", "synced", contact.qboCustomerId);
@@ -284,8 +333,11 @@ export async function syncContactToQbo(companyId: string, contactId: string): Pr
   let existingCustomer: any = null;
   try {
     if (contact.email) {
-      const searchRes = await qboRequest(companyId, "GET",
-        `/query?query=${encodeURIComponent(`SELECT * FROM Customer WHERE PrimaryEmailAddr = '${contact.email.replace(/'/g, "\\'")}'`)}`);
+      const searchRes = await qboRequest(
+        companyId,
+        "GET",
+        `/query?query=${encodeURIComponent(`SELECT * FROM Customer WHERE PrimaryEmailAddr = '${contact.email.replace(/'/g, "\\'")}'`)}`
+      );
       const customers = searchRes?.QueryResponse?.Customer;
       if (customers?.length > 0) {
         existingCustomer = customers[0];
@@ -293,8 +345,11 @@ export async function syncContactToQbo(companyId: string, contactId: string): Pr
     }
 
     if (!existingCustomer) {
-      const searchRes = await qboRequest(companyId, "GET",
-        `/query?query=${encodeURIComponent(`SELECT * FROM Customer WHERE DisplayName = '${displayName.replace(/'/g, "\\'")}'`)}`);
+      const searchRes = await qboRequest(
+        companyId,
+        "GET",
+        `/query?query=${encodeURIComponent(`SELECT * FROM Customer WHERE DisplayName = '${displayName.replace(/'/g, "\\'")}'`)}`
+      );
       const customers = searchRes?.QueryResponse?.Customer;
       if (customers?.length > 0) {
         existingCustomer = customers[0];
@@ -315,24 +370,39 @@ export async function syncContactToQbo(companyId: string, contactId: string): Pr
       FamilyName: contact.lastName || undefined,
       PrimaryEmailAddr: contact.email ? { Address: contact.email } : undefined,
       PrimaryPhone: contact.phone ? { FreeFormNumber: contact.phone } : undefined,
-      BillAddr: contact.streetAddress ? {
-        Line1: contact.streetAddress,
-        Line2: contact.address2 || undefined,
-        City: contact.city || undefined,
-        CountrySubDivisionCode: contact.state || undefined,
-        PostalCode: contact.zipCode || undefined,
-      } : undefined,
+      BillAddr: contact.streetAddress
+        ? {
+            Line1: contact.streetAddress,
+            Line2: contact.address2 || undefined,
+            City: contact.city || undefined,
+            CountrySubDivisionCode: contact.state || undefined,
+            PostalCode: contact.zipCode || undefined,
+          }
+        : undefined,
     });
     qboCustomerId = String(createRes.Customer.Id);
   }
 
   await db.update(contacts).set({ qboCustomerId }).where(eq(contacts.id, contactId));
-  await logSync(companyId, "contact", contactId, existingCustomer ? "match" : "create", "synced", qboCustomerId);
+  await logSync(
+    companyId,
+    "contact",
+    contactId,
+    existingCustomer ? "match" : "create",
+    "synced",
+    qboCustomerId
+  );
   return { qboCustomerId };
 }
 
-export async function syncInvoiceToQbo(companyId: string, invoiceId: string): Promise<{ qboInvoiceId: string }> {
-  const [invoice] = await db.select().from(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
+export async function syncInvoiceToQbo(
+  companyId: string,
+  invoiceId: string
+): Promise<{ qboInvoiceId: string }> {
+  const [invoice] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
   if (!invoice) throw new Error("Invoice not found");
 
   const [contact] = await db.select().from(contacts).where(eq(contacts.id, invoice.contactId));
@@ -344,18 +414,27 @@ export async function syncInvoiceToQbo(companyId: string, invoiceId: string): Pr
     qboCustomerId = syncResult.qboCustomerId;
   }
 
-  const lineItems = await db.select().from(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId));
+  const lineItems = await db
+    .select()
+    .from(invoiceLineItems)
+    .where(eq(invoiceLineItems.invoiceId, invoiceId));
 
   let serviceItemRef = { value: "1", name: "Services" };
   try {
-    const itemQuery = await qboRequest(companyId, "GET",
-      `/query?query=${encodeURIComponent("SELECT * FROM Item WHERE Type = 'Service' MAXRESULTS 1")}`);
+    const itemQuery = await qboRequest(
+      companyId,
+      "GET",
+      `/query?query=${encodeURIComponent("SELECT * FROM Item WHERE Type = 'Service' MAXRESULTS 1")}`
+    );
     const items = itemQuery?.QueryResponse?.Item;
     if (items?.length > 0) {
       serviceItemRef = { value: String(items[0].Id), name: items[0].Name };
     } else {
-      const nonInvQuery = await qboRequest(companyId, "GET",
-        `/query?query=${encodeURIComponent("SELECT * FROM Item WHERE Type = 'NonInventory' MAXRESULTS 1")}`);
+      const nonInvQuery = await qboRequest(
+        companyId,
+        "GET",
+        `/query?query=${encodeURIComponent("SELECT * FROM Item WHERE Type = 'NonInventory' MAXRESULTS 1")}`
+      );
       const nonInvItems = nonInvQuery?.QueryResponse?.Item;
       if (nonInvItems?.length > 0) {
         serviceItemRef = { value: String(nonInvItems[0].Id), name: nonInvItems[0].Name };
@@ -442,14 +521,17 @@ export async function syncInvoiceToQbo(companyId: string, invoiceId: string): Pr
   return { qboInvoiceId };
 }
 
-async function lookupQboAccount(companyId: string, accountType: string, accountSubType: string): Promise<string | null> {
+async function lookupQboAccount(
+  companyId: string,
+  accountType: string,
+  accountSubType: string
+): Promise<string | null> {
   try {
     const query = `SELECT * FROM Account WHERE AccountType = '${accountType}' AND AccountSubType = '${accountSubType}' MAXRESULTS 1`;
     const res = await qboRequest(companyId, "GET", `/query?query=${encodeURIComponent(query)}`);
     const accounts = res?.QueryResponse?.Account;
     if (accounts?.length > 0) return String(accounts[0].Id);
-  } catch {
-  }
+  } catch {}
   return null;
 }
 
@@ -466,8 +548,7 @@ async function lookupQboCheckingAccount(companyId: string): Promise<string | nul
       const checking = accounts.find((a: any) => a.AccountSubType === "Checking");
       return String((checking || accounts[0]).Id);
     }
-  } catch {
-  }
+  } catch {}
   return null;
 }
 
@@ -479,12 +560,14 @@ async function lookupDefaultFeeAccount(companyId: string): Promise<string | null
     const res = await qboRequest(companyId, "GET", `/query?query=${encodeURIComponent(query)}`);
     const accounts = res?.QueryResponse?.Account;
     if (accounts?.length > 0) return String(accounts[0].Id);
-  } catch {
-  }
+  } catch {}
   return null;
 }
 
-async function getStripeFeeForPayment(stripePaymentIntentId: string, stripeAccount?: string | null): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
+async function getStripeFeeForPayment(
+  stripePaymentIntentId: string,
+  stripeAccount?: string | null
+): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
   try {
     return await retrievePaymentIntentFees(stripePaymentIntentId, stripeAccount);
   } catch (err: unknown) {
@@ -494,15 +577,24 @@ async function getStripeFeeForPayment(stripePaymentIntentId: string, stripeAccou
   }
 }
 
-export async function listQboExpenseAccounts(companyId: string): Promise<{ id: string; name: string; accountSubType: string }[]> {
+export async function listQboExpenseAccounts(
+  companyId: string
+): Promise<{ id: string; name: string; accountSubType: string }[]> {
   const query = `SELECT Id, Name, AccountSubType FROM Account WHERE AccountType = 'Expense' MAXRESULTS 100`;
   const res = await qboRequest(companyId, "GET", `/query?query=${encodeURIComponent(query)}`);
   const accounts = res?.QueryResponse?.Account || [];
-  return accounts.map((a: Record<string, unknown>) => ({ id: String(a.Id), name: String(a.Name), accountSubType: String(a.AccountSubType || "") }));
+  return accounts.map((a: Record<string, unknown>) => ({
+    id: String(a.Id),
+    name: String(a.Name),
+    accountSubType: String(a.AccountSubType || ""),
+  }));
 }
 
 export async function syncPaymentToQbo(companyId: string, invoiceId: string): Promise<void> {
-  const [invoice] = await db.select().from(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
+  const [invoice] = await db
+    .select()
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, companyId)));
   if (!invoice?.qboInvoiceId) {
     await syncInvoiceToQbo(companyId, invoiceId);
   }
@@ -515,13 +607,17 @@ export async function syncPaymentToQbo(companyId: string, invoiceId: string): Pr
 
   let qboPaymentId: string | null = null;
 
-  const existingPaymentLogs = await db.select().from(qboSyncLogs)
-    .where(and(
-      eq(qboSyncLogs.companyId, companyId),
-      eq(qboSyncLogs.entityType, "payment"),
-      eq(qboSyncLogs.entityId, invoiceId),
-      eq(qboSyncLogs.status, "synced"),
-    ))
+  const existingPaymentLogs = await db
+    .select()
+    .from(qboSyncLogs)
+    .where(
+      and(
+        eq(qboSyncLogs.companyId, companyId),
+        eq(qboSyncLogs.entityType, "payment"),
+        eq(qboSyncLogs.entityId, invoiceId),
+        eq(qboSyncLogs.status, "synced")
+      )
+    )
     .limit(1);
 
   if (existingPaymentLogs.length > 0) {
@@ -531,21 +627,26 @@ export async function syncPaymentToQbo(companyId: string, invoiceId: string): Pr
   if (!qboPaymentId) {
     try {
       const safeInvoiceNum = (freshInvoice.invoiceNumber || "").replace(/'/g, "\\'");
-      const paymentQuery = await qboRequest(companyId, "GET",
-        `/query?query=${encodeURIComponent(`SELECT * FROM Payment WHERE PaymentRefNum = '${safeInvoiceNum}'`)}`);
+      const paymentQuery = await qboRequest(
+        companyId,
+        "GET",
+        `/query?query=${encodeURIComponent(`SELECT * FROM Payment WHERE PaymentRefNum = '${safeInvoiceNum}'`)}`
+      );
       const existingPayments = paymentQuery?.QueryResponse?.Payment;
       if (existingPayments?.length > 0) {
         const linked = existingPayments.find((p: Record<string, unknown>) =>
           (p.Line as Array<Record<string, unknown>>)?.some((l) =>
-            (l.LinkedTxn as Array<Record<string, unknown>>)?.some((t) => t.TxnId === freshInvoice.qboInvoiceId))
+            (l.LinkedTxn as Array<Record<string, unknown>>)?.some(
+              (t) => t.TxnId === freshInvoice.qboInvoiceId
+            )
+          )
         );
         if (linked) {
           qboPaymentId = String(linked.Id);
           await logSync(companyId, "payment", invoiceId, "match", "synced", qboPaymentId);
         }
       }
-    } catch {
-    }
+    } catch {}
   }
 
   if (!qboPaymentId) {
@@ -554,19 +655,25 @@ export async function syncPaymentToQbo(companyId: string, invoiceId: string): Pr
     const paymentBody: Record<string, unknown> = {
       CustomerRef: { value: contact?.qboCustomerId },
       TotalAmt: parseFloat(freshInvoice.total),
-      Line: [{
-        Amount: parseFloat(freshInvoice.total),
-        LinkedTxn: [{
-          TxnId: freshInvoice.qboInvoiceId,
-          TxnType: "Invoice",
-        }],
-      }],
+      Line: [
+        {
+          Amount: parseFloat(freshInvoice.total),
+          LinkedTxn: [
+            {
+              TxnId: freshInvoice.qboInvoiceId,
+              TxnType: "Invoice",
+            },
+          ],
+        },
+      ],
     };
 
     if (undepositedFundsId) {
       paymentBody.DepositToAccountRef = { value: undepositedFundsId };
     } else {
-      console.warn(`[QBO] Undeposited Funds account not found for company ${companyId}. Payment will use QBO default deposit account; deposit reconciliation will be skipped.`);
+      console.warn(
+        `[QBO] Undeposited Funds account not found for company ${companyId}. Payment will use QBO default deposit account; deposit reconciliation will be skipped.`
+      );
     }
 
     const paymentRes = await qboRequest(companyId, "POST", `/payment`, paymentBody);
@@ -583,17 +690,21 @@ async function reconcileDeposit(
   invoiceId: string,
   qboPaymentId: string,
   freshInvoice: typeof invoices.$inferSelect,
-  company: typeof companies.$inferSelect | undefined,
+  company: typeof companies.$inferSelect | undefined
 ): Promise<void> {
   if (!freshInvoice.stripePaymentIntentId) return;
 
-  const existingDepositLogs = await db.select().from(qboSyncLogs)
-    .where(and(
-      eq(qboSyncLogs.companyId, companyId),
-      eq(qboSyncLogs.entityType, "deposit"),
-      eq(qboSyncLogs.entityId, invoiceId),
-      eq(qboSyncLogs.status, "synced"),
-    ))
+  const existingDepositLogs = await db
+    .select()
+    .from(qboSyncLogs)
+    .where(
+      and(
+        eq(qboSyncLogs.companyId, companyId),
+        eq(qboSyncLogs.entityType, "deposit"),
+        eq(qboSyncLogs.entityId, invoiceId),
+        eq(qboSyncLogs.status, "synced")
+      )
+    )
     .limit(1);
 
   if (existingDepositLogs.length > 0) return;
@@ -604,8 +715,18 @@ async function reconcileDeposit(
 
   const expectedNet = stripeFee.grossCents - stripeFee.feeCents;
   if (expectedNet !== stripeFee.netCents) {
-    console.warn(`[QBO] Stripe fee math mismatch for PI ${freshInvoice.stripePaymentIntentId}: gross(${stripeFee.grossCents}) - fee(${stripeFee.feeCents}) != net(${stripeFee.netCents}). Skipping deposit.`);
-    await logSync(companyId, "deposit", invoiceId, "skip", "error", undefined, "Stripe fee math verification failed.");
+    console.warn(
+      `[QBO] Stripe fee math mismatch for PI ${freshInvoice.stripePaymentIntentId}: gross(${stripeFee.grossCents}) - fee(${stripeFee.feeCents}) != net(${stripeFee.netCents}). Skipping deposit.`
+    );
+    await logSync(
+      companyId,
+      "deposit",
+      invoiceId,
+      "skip",
+      "error",
+      undefined,
+      "Stripe fee math verification failed."
+    );
     return;
   }
 
@@ -613,20 +734,43 @@ async function reconcileDeposit(
   if (!feeAccountId) {
     feeAccountId = await lookupDefaultFeeAccount(companyId);
     if (feeAccountId) {
-      await db.update(companies).set({ qboFeeAccountRef: feeAccountId }).where(eq(companies.id, companyId));
+      await db
+        .update(companies)
+        .set({ qboFeeAccountRef: feeAccountId })
+        .where(eq(companies.id, companyId));
     }
   }
 
   if (!feeAccountId) {
-    console.warn(`[QBO] No fee expense account found for company ${companyId}. Skipping deposit creation.`);
-    await logSync(companyId, "deposit", invoiceId, "skip", "error", undefined, "No fee expense account configured. Set one in Settings > QuickBooks.");
+    console.warn(
+      `[QBO] No fee expense account found for company ${companyId}. Skipping deposit creation.`
+    );
+    await logSync(
+      companyId,
+      "deposit",
+      invoiceId,
+      "skip",
+      "error",
+      undefined,
+      "No fee expense account configured. Set one in Settings > QuickBooks."
+    );
     return;
   }
 
   const bankAccountId = await lookupQboCheckingAccount(companyId);
   if (!bankAccountId) {
-    console.warn(`[QBO] No bank/checking account found for company ${companyId}. Skipping deposit.`);
-    await logSync(companyId, "deposit", invoiceId, "skip", "error", undefined, "No bank account found in QuickBooks.");
+    console.warn(
+      `[QBO] No bank/checking account found for company ${companyId}. Skipping deposit.`
+    );
+    await logSync(
+      companyId,
+      "deposit",
+      invoiceId,
+      "skip",
+      "error",
+      undefined,
+      "No bank account found in QuickBooks."
+    );
     return;
   }
 
@@ -640,10 +784,12 @@ async function reconcileDeposit(
       Line: [
         {
           Amount: grossAmount,
-          LinkedTxn: [{
-            TxnId: qboPaymentId,
-            TxnType: "Payment",
-          }],
+          LinkedTxn: [
+            {
+              TxnId: qboPaymentId,
+              TxnType: "Payment",
+            },
+          ],
         },
         {
           Amount: -feeAmount,
@@ -657,10 +803,20 @@ async function reconcileDeposit(
       PrivateNote: `Stripe net deposit for invoice ${freshInvoice.invoiceNumber}. Fee: $${feeAmount.toFixed(2)}`,
     });
 
-    await logSync(companyId, "deposit", invoiceId, "create", "synced", String(depositRes.Deposit.Id));
+    await logSync(
+      companyId,
+      "deposit",
+      invoiceId,
+      "create",
+      "synced",
+      String(depositRes.Deposit.Id)
+    );
   } catch (depositErr: unknown) {
     const errMsg = depositErr instanceof Error ? depositErr.message : String(depositErr);
-    console.error(`[QBO] Deposit creation failed for invoice ${invoiceId} (company ${companyId}):`, errMsg);
+    console.error(
+      `[QBO] Deposit creation failed for invoice ${invoiceId} (company ${companyId}):`,
+      errMsg
+    );
     await logSync(companyId, "deposit", invoiceId, "create", "error", undefined, errMsg);
   }
 }
@@ -678,14 +834,16 @@ export async function getQboSyncStatus(companyId: string): Promise<{
   const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
   const connected = !!(company?.qboRealmId && company?.qboAccessToken);
 
-  const logs = await db.select().from(qboSyncLogs)
+  const logs = await db
+    .select()
+    .from(qboSyncLogs)
     .where(eq(qboSyncLogs.companyId, companyId))
     .orderBy(desc(qboSyncLogs.createdAt))
     .limit(50);
 
-  const totalSynced = logs.filter(l => l.status === "synced").length;
-  const totalErrors = logs.filter(l => l.status === "error").length;
-  const lastSyncedLog = logs.find(l => l.status === "synced");
+  const totalSynced = logs.filter((l) => l.status === "synced").length;
+  const totalErrors = logs.filter((l) => l.status === "error").length;
+  const lastSyncedLog = logs.find((l) => l.status === "synced");
 
   return {
     connected,
@@ -695,7 +853,7 @@ export async function getQboSyncStatus(companyId: string): Promise<{
     totalSynced,
     totalErrors,
     feeAccountRef: company?.qboFeeAccountRef || null,
-    recentLogs: logs.slice(0, 20).map(l => ({
+    recentLogs: logs.slice(0, 20).map((l) => ({
       id: l.id,
       entityType: l.entityType,
       entityId: l.entityId,
@@ -708,13 +866,22 @@ export async function getQboSyncStatus(companyId: string): Promise<{
   };
 }
 
-export async function runFullSync(companyId: string): Promise<{ contactsSynced: number; invoicesSynced: number; errors: string[] }> {
+export async function runFullSync(
+  companyId: string
+): Promise<{ contactsSynced: number; invoicesSynced: number; errors: string[] }> {
   const errors: string[] = [];
   let contactsSynced = 0;
   let invoicesSynced = 0;
 
-  const allContacts = await db.select().from(contacts)
-    .where(and(eq(contacts.companyId, companyId), sql`${contacts.status} IN ('active', 'lead', 'estimate', 'paused')`));
+  const allContacts = await db
+    .select()
+    .from(contacts)
+    .where(
+      and(
+        eq(contacts.companyId, companyId),
+        sql`${contacts.status} IN ('active', 'lead', 'estimate', 'paused')`
+      )
+    );
 
   for (const contact of allContacts) {
     try {
@@ -727,8 +894,12 @@ export async function runFullSync(companyId: string): Promise<{ contactsSynced: 
     }
   }
 
-  const allInvoices = await db.select().from(invoices)
-    .where(and(eq(invoices.companyId, companyId), sql`${invoices.status} IN ('sent', 'pending', 'paid')`));
+  const allInvoices = await db
+    .select()
+    .from(invoices)
+    .where(
+      and(eq(invoices.companyId, companyId), sql`${invoices.status} IN ('sent', 'pending', 'paid')`)
+    );
 
   for (const inv of allInvoices) {
     try {
@@ -757,7 +928,7 @@ export async function processWebhookEntity(
   companyId: string,
   entityName: string,
   entityId: string,
-  operation: string,
+  operation: string
 ): Promise<void> {
   const normalizedOp = operation.toLowerCase();
   const normalizedEntity = entityName.toLowerCase();
@@ -767,7 +938,9 @@ export async function processWebhookEntity(
       if (normalizedOp === "create" || normalizedOp === "update") {
         await updateLocalContactFromQboCustomer(companyId, entityId);
       } else if (normalizedOp === "delete") {
-        const matchingContacts = await db.select().from(contacts)
+        const matchingContacts = await db
+          .select()
+          .from(contacts)
           .where(and(eq(contacts.companyId, companyId), eq(contacts.qboCustomerId, entityId)));
         for (const c of matchingContacts) {
           await db.update(contacts).set({ qboCustomerId: null }).where(eq(contacts.id, c.id));
@@ -780,7 +953,9 @@ export async function processWebhookEntity(
       } else if (normalizedOp === "void") {
         await handleQboInvoiceVoid(companyId, entityId);
       } else if (normalizedOp === "delete") {
-        const matchingInvoices = await db.select().from(invoices)
+        const matchingInvoices = await db
+          .select()
+          .from(invoices)
           .where(and(eq(invoices.companyId, companyId), eq(invoices.qboInvoiceId, entityId)));
         for (const inv of matchingInvoices) {
           await db.update(invoices).set({ qboInvoiceId: null }).where(eq(invoices.id, inv.id));
@@ -789,20 +964,38 @@ export async function processWebhookEntity(
       }
     } else if (normalizedEntity === "item") {
       await logSync(companyId, "item", entityId, normalizedOp, "synced", entityId);
-      console.log(`[QBO Webhook] Item ${normalizedOp} id=${entityId} for company=${companyId} (logged, no local model)`);
+      console.log(
+        `[QBO Webhook] Item ${normalizedOp} id=${entityId} for company=${companyId} (logged, no local model)`
+      );
     }
   } catch (err: any) {
-    console.error(`[QBO Webhook] Error processing ${entityName} ${operation} id=${entityId}:`, err.message);
-    await logSync(companyId, normalizedEntity, entityId, normalizedOp, "error", entityId, err.message);
+    console.error(
+      `[QBO Webhook] Error processing ${entityName} ${operation} id=${entityId}:`,
+      err.message
+    );
+    await logSync(
+      companyId,
+      normalizedEntity,
+      entityId,
+      normalizedOp,
+      "error",
+      entityId,
+      err.message
+    );
   }
 }
 
-async function updateLocalContactFromQboCustomer(companyId: string, qboCustomerId: string): Promise<void> {
+async function updateLocalContactFromQboCustomer(
+  companyId: string,
+  qboCustomerId: string
+): Promise<void> {
   const qboData = await qboRequest(companyId, "GET", `/customer/${qboCustomerId}`);
   const customer = qboData?.Customer;
   if (!customer) return;
 
-  const matchingContacts = await db.select().from(contacts)
+  const matchingContacts = await db
+    .select()
+    .from(contacts)
     .where(and(eq(contacts.companyId, companyId), eq(contacts.qboCustomerId, qboCustomerId)));
 
   if (matchingContacts.length === 0) {
@@ -815,7 +1008,10 @@ async function updateLocalContactFromQboCustomer(companyId: string, qboCustomerI
     if (customer.PrimaryEmailAddr?.Address && customer.PrimaryEmailAddr.Address !== contact.email) {
       updates.email = customer.PrimaryEmailAddr.Address;
     }
-    if (customer.PrimaryPhone?.FreeFormNumber && customer.PrimaryPhone.FreeFormNumber !== contact.phone) {
+    if (
+      customer.PrimaryPhone?.FreeFormNumber &&
+      customer.PrimaryPhone.FreeFormNumber !== contact.phone
+    ) {
       updates.phone = customer.PrimaryPhone.FreeFormNumber;
     }
     if (customer.GivenName && customer.GivenName !== contact.firstName) {
@@ -834,12 +1030,17 @@ async function updateLocalContactFromQboCustomer(companyId: string, qboCustomerI
   }
 }
 
-async function updateLocalInvoiceFromQboInvoice(companyId: string, qboInvoiceId: string): Promise<void> {
+async function updateLocalInvoiceFromQboInvoice(
+  companyId: string,
+  qboInvoiceId: string
+): Promise<void> {
   const qboData = await qboRequest(companyId, "GET", `/invoice/${qboInvoiceId}`);
   const qboInvoice = qboData?.Invoice;
   if (!qboInvoice) return;
 
-  const matchingInvoices = await db.select().from(invoices)
+  const matchingInvoices = await db
+    .select()
+    .from(invoices)
     .where(and(eq(invoices.companyId, companyId), eq(invoices.qboInvoiceId, qboInvoiceId)));
 
   if (matchingInvoices.length === 0) {
@@ -857,7 +1058,10 @@ async function updateLocalInvoiceFromQboInvoice(companyId: string, qboInvoiceId:
         await logSync(companyId, "invoice", inv.id, "inbound-void", "synced", qboInvoiceId);
       }
     } else if (balance === 0 && totalAmt > 0 && inv.status !== "paid") {
-      await db.update(invoices).set({ status: "paid", paidAt: new Date() }).where(eq(invoices.id, inv.id));
+      await db
+        .update(invoices)
+        .set({ status: "paid", paidAt: new Date() })
+        .where(eq(invoices.id, inv.id));
       await logSync(companyId, "invoice", inv.id, "inbound-paid", "synced", qboInvoiceId);
     } else {
       await logSync(companyId, "invoice", inv.id, "inbound-update", "synced", qboInvoiceId);
@@ -866,7 +1070,9 @@ async function updateLocalInvoiceFromQboInvoice(companyId: string, qboInvoiceId:
 }
 
 async function handleQboInvoiceVoid(companyId: string, qboInvoiceId: string): Promise<void> {
-  const matchingInvoices = await db.select().from(invoices)
+  const matchingInvoices = await db
+    .select()
+    .from(invoices)
     .where(and(eq(invoices.companyId, companyId), eq(invoices.qboInvoiceId, qboInvoiceId)));
 
   for (const inv of matchingInvoices) {
@@ -878,7 +1084,9 @@ async function handleQboInvoiceVoid(companyId: string, qboInvoiceId: string): Pr
 }
 
 export async function lookupCompanyByRealmId(realmId: string): Promise<string | null> {
-  const [company] = await db.select({ id: companies.id }).from(companies)
+  const [company] = await db
+    .select({ id: companies.id })
+    .from(companies)
     .where(eq(companies.qboRealmId, realmId))
     .limit(1);
   return company?.id || null;
@@ -896,10 +1104,12 @@ export async function runCdcPoll(): Promise<void> {
   try {
     console.log("[QBO CDC] Starting CDC poll...");
 
-    const connectedCompanies = await db.select({
-      id: companies.id,
-      qboRealmId: companies.qboRealmId,
-    }).from(companies)
+    const connectedCompanies = await db
+      .select({
+        id: companies.id,
+        qboRealmId: companies.qboRealmId,
+      })
+      .from(companies)
       .where(and(isNotNull(companies.qboRealmId), isNotNull(companies.qboAccessToken)));
 
     if (connectedCompanies.length === 0) {
@@ -913,8 +1123,11 @@ export async function runCdcPoll(): Promise<void> {
       try {
         await refreshQboTokens(company.id);
 
-        const cdcRes = await qboRequest(company.id, "GET",
-          `/cdc?entities=Customer,Invoice,Item&changedSince=${encodeURIComponent(changedSince)}`);
+        const cdcRes = await qboRequest(
+          company.id,
+          "GET",
+          `/cdc?entities=Customer,Invoice,Item&changedSince=${encodeURIComponent(changedSince)}`
+        );
 
         const cdcResponse = cdcRes?.CDCResponse;
         if (!Array.isArray(cdcResponse)) continue;
@@ -930,10 +1143,17 @@ export async function runCdcPoll(): Promise<void> {
                 try {
                   const qboId = String(customer.Id);
                   if (customer.status === "Deleted") {
-                    const matching = await db.select().from(contacts)
-                      .where(and(eq(contacts.companyId, company.id), eq(contacts.qboCustomerId, qboId)));
+                    const matching = await db
+                      .select()
+                      .from(contacts)
+                      .where(
+                        and(eq(contacts.companyId, company.id), eq(contacts.qboCustomerId, qboId))
+                      );
                     for (const c of matching) {
-                      await db.update(contacts).set({ qboCustomerId: null }).where(eq(contacts.id, c.id));
+                      await db
+                        .update(contacts)
+                        .set({ qboCustomerId: null })
+                        .where(eq(contacts.id, c.id));
                       await logSync(company.id, "contact", c.id, "cdc-unlink", "synced", qboId);
                     }
                   } else {
@@ -941,7 +1161,15 @@ export async function runCdcPoll(): Promise<void> {
                   }
                 } catch (err: any) {
                   console.error(`[QBO CDC] Customer processing error:`, err.message);
-                  await logSync(company.id, "customer", String(customer.Id), "cdc-update", "error", String(customer.Id), err.message).catch(() => {});
+                  await logSync(
+                    company.id,
+                    "customer",
+                    String(customer.Id),
+                    "cdc-update",
+                    "error",
+                    String(customer.Id),
+                    err.message
+                  ).catch(() => {});
                 }
               }
             }
@@ -952,10 +1180,17 @@ export async function runCdcPoll(): Promise<void> {
                 try {
                   const qboId = String(qboInv.Id);
                   if (qboInv.status === "Deleted") {
-                    const matching = await db.select().from(invoices)
-                      .where(and(eq(invoices.companyId, company.id), eq(invoices.qboInvoiceId, qboId)));
+                    const matching = await db
+                      .select()
+                      .from(invoices)
+                      .where(
+                        and(eq(invoices.companyId, company.id), eq(invoices.qboInvoiceId, qboId))
+                      );
                     for (const inv of matching) {
-                      await db.update(invoices).set({ qboInvoiceId: null }).where(eq(invoices.id, inv.id));
+                      await db
+                        .update(invoices)
+                        .set({ qboInvoiceId: null })
+                        .where(eq(invoices.id, inv.id));
                       await logSync(company.id, "invoice", inv.id, "cdc-unlink", "synced", qboId);
                     }
                   } else if (qboInv.PrivateNote?.includes("Voided")) {
@@ -965,7 +1200,15 @@ export async function runCdcPoll(): Promise<void> {
                   }
                 } catch (err: any) {
                   console.error(`[QBO CDC] Invoice processing error:`, err.message);
-                  await logSync(company.id, "invoice", String(qboInv.Id), "cdc-update", "error", String(qboInv.Id), err.message).catch(() => {});
+                  await logSync(
+                    company.id,
+                    "invoice",
+                    String(qboInv.Id),
+                    "cdc-update",
+                    "error",
+                    String(qboInv.Id),
+                    err.message
+                  ).catch(() => {});
                 }
               }
             }
@@ -973,13 +1216,22 @@ export async function runCdcPoll(): Promise<void> {
             if (qr.Item) {
               const items = Array.isArray(qr.Item) ? qr.Item : [qr.Item];
               for (const item of items) {
-                await logSync(company.id, "item", String(item.Id), "cdc-update", "synced", String(item.Id));
+                await logSync(
+                  company.id,
+                  "item",
+                  String(item.Id),
+                  "cdc-update",
+                  "synced",
+                  String(item.Id)
+                );
               }
             }
           }
         }
 
-        console.log(`[QBO CDC] Completed poll for company ${company.id} (realm=${company.qboRealmId})`);
+        console.log(
+          `[QBO CDC] Completed poll for company ${company.id} (realm=${company.qboRealmId})`
+        );
       } catch (err: any) {
         console.error(`[QBO CDC] Failed for company ${company.id}:`, err.message);
       }
@@ -995,10 +1247,10 @@ export function startCdcPolling(): void {
   const SIX_HOURS = 6 * 60 * 60 * 1000;
 
   setTimeout(() => {
-    runCdcPoll().catch(err => console.error("[QBO CDC] Initial poll error:", err));
+    runCdcPoll().catch((err) => console.error("[QBO CDC] Initial poll error:", err));
 
     setInterval(() => {
-      runCdcPoll().catch(err => console.error("[QBO CDC] Scheduled poll error:", err));
+      runCdcPoll().catch((err) => console.error("[QBO CDC] Scheduled poll error:", err));
     }, SIX_HOURS);
   }, 90_000);
 
@@ -1009,7 +1261,9 @@ export async function disconnectQbo(companyId: string): Promise<void> {
   const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
   if (company?.qboAccessToken) {
     try {
-      const auth = Buffer.from(`${process.env.QBO_CLIENT_ID}:${process.env.QBO_CLIENT_SECRET}`).toString("base64");
+      const auth = Buffer.from(
+        `${process.env.QBO_CLIENT_ID}:${process.env.QBO_CLIENT_SECRET}`
+      ).toString("base64");
       await fetch("https://developer.api.intuit.com/v2/oauth2/tokens/revoke", {
         method: "POST",
         headers: {
@@ -1023,12 +1277,15 @@ export async function disconnectQbo(companyId: string): Promise<void> {
     }
   }
 
-  await db.update(companies).set({
-    qboAccessToken: null,
-    qboRefreshToken: null,
-    qboTokenExpiresAt: null,
-    qboRealmId: null,
-    qboConnectedAt: null,
-    qboIncomeAccountRef: null,
-  }).where(eq(companies.id, companyId));
+  await db
+    .update(companies)
+    .set({
+      qboAccessToken: null,
+      qboRefreshToken: null,
+      qboTokenExpiresAt: null,
+      qboRealmId: null,
+      qboConnectedAt: null,
+      qboIncomeAccountRef: null,
+    })
+    .where(eq(companies.id, companyId));
 }

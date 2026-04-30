@@ -1,8 +1,8 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 export function toLocalDateString(date: Date, timezone?: string): string {
@@ -13,9 +13,9 @@ export function toLocalDateString(date: Date, timezone?: string): string {
       month: "2-digit",
       day: "2-digit",
     }).formatToParts(date);
-    const year = parts.find(p => p.type === "year")!.value;
-    const month = parts.find(p => p.type === "month")!.value;
-    const day = parts.find(p => p.type === "day")!.value;
+    const year = parts.find((p) => p.type === "year")!.value;
+    const month = parts.find((p) => p.type === "month")!.value;
+    const day = parts.find((p) => p.type === "day")!.value;
     return `${year}-${month}-${day}`;
   }
   const year = date.getFullYear();

@@ -5,7 +5,13 @@ import { storage } from "../storage";
 import { sendEmail } from "../services/email";
 import { getRetellAgentWebhookUrl, registerRetellWebhook, getAppBaseUrl } from "../services/retell";
 
-async function recordRepair(companyId: string | null, agentId: string, oldUrl: string | null, newUrl: string, triggeredBy: "auto" | "manual"): Promise<void> {
+async function recordRepair(
+  companyId: string | null,
+  agentId: string,
+  oldUrl: string | null,
+  newUrl: string,
+  triggeredBy: "auto" | "manual"
+): Promise<void> {
   try {
     await storage.createRetellWebhookRepair({
       companyId: companyId ?? undefined,
@@ -23,7 +29,10 @@ const DEDUP_WINDOW_MS = 23 * 60 * 60 * 1000;
 const NOTIFICATION_TITLE_BROKEN = "Retell Webhook Not Registered";
 const NOTIFICATION_TITLE_FIXED = "Retell Webhook Auto-Repaired";
 
-async function isWebhookRegistered(agentId: string, expectedUrl: string): Promise<{ registered: boolean; currentUrl: string | null; error?: string }> {
+async function isWebhookRegistered(
+  agentId: string,
+  expectedUrl: string
+): Promise<{ registered: boolean; currentUrl: string | null; error?: string }> {
   try {
     const currentUrl = await getRetellAgentWebhookUrl(agentId);
     return { registered: !!currentUrl && currentUrl === expectedUrl, currentUrl };
@@ -38,7 +47,7 @@ async function alertCompany(
   currentUrl: string | null,
   expectedUrl: string,
   baseUrl: string,
-  fixed: boolean,
+  fixed: boolean
 ): Promise<void> {
   const notificationTitle = fixed ? NOTIFICATION_TITLE_FIXED : NOTIFICATION_TITLE_BROKEN;
   const dedupCutoff = new Date(Date.now() - DEDUP_WINDOW_MS);
@@ -56,7 +65,9 @@ async function alertCompany(
     .limit(1);
 
   if (recentAlerts.length > 0) {
-    console.log(`[retell-webhook-check] Alert already sent recently for company "${company.name}" — skipping`);
+    console.log(
+      `[retell-webhook-check] Alert already sent recently for company "${company.name}" — skipping`
+    );
     return;
   }
 
@@ -77,15 +88,10 @@ async function alertCompany(
     .select({ email: users.email, firstName: users.firstName, role: companyUsers.role })
     .from(companyUsers)
     .innerJoin(users, eq(companyUsers.userId, users.id))
-    .where(
-      and(
-        eq(companyUsers.companyId, company.id),
-        eq(companyUsers.isActive, true)
-      )
-    );
+    .where(and(eq(companyUsers.companyId, company.id), eq(companyUsers.isActive, true)));
 
   const staffToAlert = recipients.filter(
-    r => r.email && (r.role === "owner" || r.role === "admin")
+    (r) => r.email && (r.role === "owner" || r.role === "admin")
   );
 
   for (const recipient of staffToAlert) {
@@ -140,14 +146,20 @@ async function alertCompany(
         });
 
     if (!emailResult.success) {
-      console.error(`[retell-webhook-check] Email delivery failed for ${company.id} (${recipient.email}): ${emailResult.error}`);
+      console.error(
+        `[retell-webhook-check] Email delivery failed for ${company.id} (${recipient.email}): ${emailResult.error}`
+      );
     } else {
-      console.log(`[retell-webhook-check] Alert email sent to ${recipient.email} for company "${company.name}" (fixed=${fixed})`);
+      console.log(
+        `[retell-webhook-check] Alert email sent to ${recipient.email} for company "${company.name}" (fixed=${fixed})`
+      );
     }
   }
 
   if (staffToAlert.length === 0) {
-    console.warn(`[retell-webhook-check] No owner/admin email found for company "${company.name}" (${company.id}) — in-app notification created but no email sent`);
+    console.warn(
+      `[retell-webhook-check] No owner/admin email found for company "${company.name}" (${company.id}) — in-app notification created but no email sent`
+    );
   }
 }
 
@@ -175,61 +187,89 @@ export async function runRetellWebhookCheck(): Promise<void> {
     .where(isNotNull(companies.retellAgentId));
 
   if (retellCompanies.length > 0) {
-    console.log(`[retell-webhook-check] Checking ${retellCompanies.length} company/companies with per-company Retell agent`);
+    console.log(
+      `[retell-webhook-check] Checking ${retellCompanies.length} company/companies with per-company Retell agent`
+    );
 
     for (const company of retellCompanies) {
       const agentId = company.retellAgentId!;
       try {
         const { registered, currentUrl, error } = await isWebhookRegistered(agentId, expectedUrl);
         if (error) {
-          console.warn(`[retell-webhook-check] Could not fetch webhook URL for company "${company.name}" (agent ${agentId}): ${error}`);
+          console.warn(
+            `[retell-webhook-check] Could not fetch webhook URL for company "${company.name}" (agent ${agentId}): ${error}`
+          );
           continue;
         }
         companyChecked++;
         if (registered) {
-          console.log(`[retell-webhook-check] Webhook OK for company "${company.name}" (agent ${agentId})`);
+          console.log(
+            `[retell-webhook-check] Webhook OK for company "${company.name}" (agent ${agentId})`
+          );
           continue;
         }
-        console.warn(`[retell-webhook-check] Webhook missing/mismatched for company "${company.name}" (agent ${agentId}). Current: ${currentUrl ?? "none"}, Expected: ${expectedUrl}`);
+        console.warn(
+          `[retell-webhook-check] Webhook missing/mismatched for company "${company.name}" (agent ${agentId}). Current: ${currentUrl ?? "none"}, Expected: ${expectedUrl}`
+        );
 
         let autoFixed = false;
         try {
           await registerRetellWebhook(agentId);
           autoFixed = true;
-          console.log(`[retell-webhook-check] Auto-registered webhook for company "${company.name}" (agent ${agentId})`);
+          console.log(
+            `[retell-webhook-check] Auto-registered webhook for company "${company.name}" (agent ${agentId})`
+          );
           await recordRepair(company.id, agentId, currentUrl, expectedUrl, "auto");
         } catch (fixErr: unknown) {
           const fixMsg = fixErr instanceof Error ? fixErr.message : String(fixErr);
-          console.error(`[retell-webhook-check] Auto-registration failed for company "${company.name}" (agent ${agentId}): ${fixMsg}`);
+          console.error(
+            `[retell-webhook-check] Auto-registration failed for company "${company.name}" (agent ${agentId}): ${fixMsg}`
+          );
         }
 
         await alertCompany(company, currentUrl, expectedUrl, baseUrl, autoFixed);
         alertSent++;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[retell-webhook-check] Error checking company "${company.name}" (${company.id}):`, msg);
+        console.error(
+          `[retell-webhook-check] Error checking company "${company.name}" (${company.id}):`,
+          msg
+        );
       }
     }
   }
 
   const globalAgentId = process.env.RETELL_AGENT_ID;
   if (globalAgentId) {
-    const alreadyCoveredByCompany = retellCompanies.some(c => c.retellAgentId === globalAgentId);
+    const alreadyCoveredByCompany = retellCompanies.some((c) => c.retellAgentId === globalAgentId);
     if (!alreadyCoveredByCompany) {
-      const { registered, currentUrl, error } = await isWebhookRegistered(globalAgentId, expectedUrl);
+      const { registered, currentUrl, error } = await isWebhookRegistered(
+        globalAgentId,
+        expectedUrl
+      );
       if (error) {
-        console.warn(`[retell-webhook-check] Could not fetch webhook URL for global agent ${globalAgentId}: ${error}`);
+        console.warn(
+          `[retell-webhook-check] Could not fetch webhook URL for global agent ${globalAgentId}: ${error}`
+        );
       } else if (!registered) {
-        console.warn(`[retell-webhook-check] PLATFORM ALERT: Global RETELL_AGENT_ID webhook is missing/mismatched. Current: ${currentUrl ?? "none"}, Expected: ${expectedUrl}. Attempting auto-repair…`);
+        console.warn(
+          `[retell-webhook-check] PLATFORM ALERT: Global RETELL_AGENT_ID webhook is missing/mismatched. Current: ${currentUrl ?? "none"}, Expected: ${expectedUrl}. Attempting auto-repair…`
+        );
         try {
           await registerRetellWebhook(globalAgentId);
-          console.log(`[retell-webhook-check] Auto-repair succeeded for global RETELL_AGENT_ID (agent ${globalAgentId})`);
+          console.log(
+            `[retell-webhook-check] Auto-repair succeeded for global RETELL_AGENT_ID (agent ${globalAgentId})`
+          );
         } catch (fixErr: unknown) {
           const fixMsg = fixErr instanceof Error ? fixErr.message : String(fixErr);
-          console.error(`[retell-webhook-check] Auto-repair failed for global RETELL_AGENT_ID (agent ${globalAgentId}): ${fixMsg}`);
+          console.error(
+            `[retell-webhook-check] Auto-repair failed for global RETELL_AGENT_ID (agent ${globalAgentId}): ${fixMsg}`
+          );
         }
       } else {
-        console.log(`[retell-webhook-check] Global RETELL_AGENT_ID webhook OK (agent ${globalAgentId})`);
+        console.log(
+          `[retell-webhook-check] Global RETELL_AGENT_ID webhook OK (agent ${globalAgentId})`
+        );
       }
     }
   }
@@ -239,5 +279,7 @@ export async function runRetellWebhookCheck(): Promise<void> {
     return;
   }
 
-  console.log(`[retell-webhook-check] Check complete — ${companyChecked} company/companies checked, ${alertSent} alert(s) sent`);
+  console.log(
+    `[retell-webhook-check] Check complete — ${companyChecked} company/companies checked, ${alertSent} alert(s) sent`
+  );
 }

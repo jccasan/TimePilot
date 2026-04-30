@@ -76,7 +76,9 @@ export async function getCachedRouteData<T>(key: string): Promise<T | null> {
   return entry ? (entry.data as T) : null;
 }
 
-export async function addPendingMutation(mutation: Omit<PendingMutation, "id" | "createdAt" | "status">): Promise<string> {
+export async function addPendingMutation(
+  mutation: Omit<PendingMutation, "id" | "createdAt" | "status">
+): Promise<string> {
   const db = await getDB();
   const id = `mut-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   await db.put("pendingMutations", {
@@ -94,7 +96,11 @@ export async function getPendingMutations(): Promise<PendingMutation[]> {
   return all.sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export async function updateMutationStatus(id: string, status: PendingMutation["status"], errorMessage?: string): Promise<void> {
+export async function updateMutationStatus(
+  id: string,
+  status: PendingMutation["status"],
+  errorMessage?: string
+): Promise<void> {
   const db = await getDB();
   const mutation = await db.get("pendingMutations", id);
   if (mutation) {
@@ -104,7 +110,10 @@ export async function updateMutationStatus(id: string, status: PendingMutation["
   }
 }
 
-export async function saveMutationUpdate(id: string, updates: Partial<PendingMutation>): Promise<void> {
+export async function saveMutationUpdate(
+  id: string,
+  updates: Partial<PendingMutation>
+): Promise<void> {
   const db = await getDB();
   const mutation = await db.get("pendingMutations", id);
   if (mutation) {
@@ -117,7 +126,9 @@ export async function removePendingMutation(id: string): Promise<void> {
   await db.delete("pendingMutations", id);
 }
 
-export async function addPendingPhoto(photo: Omit<PendingPhoto, "id" | "createdAt" | "status">): Promise<string> {
+export async function addPendingPhoto(
+  photo: Omit<PendingPhoto, "id" | "createdAt" | "status">
+): Promise<string> {
   const db = await getDB();
   const id = `photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   await db.put("pendingPhotos", {
@@ -140,7 +151,11 @@ export async function getPendingPhotosForVisit(visitId: string): Promise<Pending
   return db.getAllFromIndex("pendingPhotos", "by-visit", visitId);
 }
 
-export async function updatePhotoStatus(id: string, status: PendingPhoto["status"], errorMessage?: string): Promise<void> {
+export async function updatePhotoStatus(
+  id: string,
+  status: PendingPhoto["status"],
+  errorMessage?: string
+): Promise<void> {
   const db = await getDB();
   const photo = await db.get("pendingPhotos", id);
   if (photo) {

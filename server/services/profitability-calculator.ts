@@ -8,10 +8,7 @@ import {
   type PriceCalculatorInputs,
   type PriceCalculatorResult,
 } from "./pricing-calculator";
-import type {
-  PricingConfig,
-  InsertProfitabilitySnapshot,
-} from "@shared/schema";
+import type { PricingConfig, InsertProfitabilitySnapshot } from "@shared/schema";
 
 export type ProfitabilityStatus = "profitable" | "marginal" | "unprofitable";
 
@@ -71,11 +68,16 @@ const DEFAULT_PROFITABILITY_CONFIG: ProfitabilityConfig = {
 
 function getFrequencyVisitsPerMonth(frequency: string): number {
   switch (frequency) {
-    case "weekly": return 4.33;
-    case "biweekly": return 2.17;
-    case "monthly": return 1;
-    case "onetime": return 1;
-    default: return 4.33;
+    case "weekly":
+      return 4.33;
+    case "biweekly":
+      return 2.17;
+    case "monthly":
+      return 1;
+    case "onetime":
+      return 1;
+    default:
+      return 4.33;
   }
 }
 
@@ -96,15 +98,15 @@ export async function calculateCustomerProfitability(
   if (!company) return null;
 
   const contacts = await storage.getContacts(companyId, {});
-  const contact = contacts.find(c => c.id === contactId);
+  const contact = contacts.find((c) => c.id === contactId);
   if (!contact) return null;
 
   const allPlans = await storage.getServicePlans(companyId, { contactId, isActive: true });
-  const plans = allPlans.filter(p => !p.isStopOnly);
+  const plans = allPlans.filter((p) => !p.isStopOnly);
   if (plans.length === 0) return null;
 
   const properties = await storage.getProperties(companyId, contactId);
-  const propertyMap = new Map(properties.map(p => [p.id, p]));
+  const propertyMap = new Map(properties.map((p) => [p.id, p]));
 
   const pricingConfig = company.pricingConfig as Partial<PricingConfig> | null;
 
@@ -121,9 +123,8 @@ export async function calculateCustomerProfitability(
     effectivePricingConfig.burdenMultiplier = costOverrides.burdenMultiplier;
   }
 
-  const effectiveOverhead = costOverrides?.overheadAllocationCents !== undefined
-    ? undefined
-    : overrideOverhead;
+  const effectiveOverhead =
+    costOverrides?.overheadAllocationCents !== undefined ? undefined : overrideOverhead;
 
   const propertyResults: CustomerPropertyProfitability[] = [];
 
@@ -144,14 +145,18 @@ export async function calculateCustomerProfitability(
     const dogCount = property.numberOfDogs ?? 1;
 
     const planAddOns = await storage.getServicePlanAddOns(plan.id);
-    const activeAddOns = planAddOns.filter(a => a.isActive);
-    const addOnsCents = activeAddOns.reduce((s, a) => s + Math.round((parseFloat(a.price) || 0) * 100), 0);
+    const activeAddOns = planAddOns.filter((a) => a.isActive);
+    const addOnsCents = activeAddOns.reduce(
+      (s, a) => s + Math.round((parseFloat(a.price) || 0) * 100),
+      0
+    );
     const totalPerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100) + addOnsCents;
-    const hasYardDeodorizing = activeAddOns.some(a => a.name.toLowerCase().includes("deodor"));
+    const hasYardDeodorizing = activeAddOns.some((a) => a.name.toLowerCase().includes("deodor"));
 
-    const distanceMiles = costOverrides?.distanceFromNearestStopMiles !== undefined
-      ? costOverrides.distanceFromNearestStopMiles
-      : (effectiveConfig.distanceFromNearestStopMiles ?? 1.0);
+    const distanceMiles =
+      costOverrides?.distanceFromNearestStopMiles !== undefined
+        ? costOverrides.distanceFromNearestStopMiles
+        : (effectiveConfig.distanceFromNearestStopMiles ?? 1.0);
 
     const inputs: PriceCalculatorInputs = {
       yardSizeAcres,
@@ -164,7 +169,12 @@ export async function calculateCustomerProfitability(
       hasYardDeodorizing,
     };
 
-    const result = calculatePrice(inputs, effectivePricingConfig, effectiveOverhead, costOverrides?.overheadAllocationCents);
+    const result = calculatePrice(
+      inputs,
+      effectivePricingConfig,
+      effectiveOverhead,
+      costOverrides?.overheadAllocationCents
+    );
 
     // Job-level economics: standardized travel time instead of actual route data
     const fullConfig = getEffectivePricingConfig(effectivePricingConfig);
@@ -173,32 +183,34 @@ export async function calculateCustomerProfitability(
       ...inputs,
       overrideAdjustedTravelMinutes: standardTravelMins,
     };
-    const jobResult = calculatePrice(jobInputs, effectivePricingConfig, effectiveOverhead, costOverrides?.overheadAllocationCents);
+    const jobResult = calculatePrice(
+      jobInputs,
+      effectivePricingConfig,
+      effectiveOverhead,
+      costOverrides?.overheadAllocationCents
+    );
 
     const revenuePerVisitCents = totalPerVisitCents;
     const costPerVisitCents = result.minimumPriceCents;
     const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;
-    const profitMarginPct = revenuePerVisitCents > 0
-      ? (profitPerVisitCents / revenuePerVisitCents) * 100
-      : 0;
+    const profitMarginPct =
+      revenuePerVisitCents > 0 ? (profitPerVisitCents / revenuePerVisitCents) * 100 : 0;
     const jobMinutes = result.derived.jobMinutes;
-    const profitPerHourCents = jobMinutes > 0
-      ? (profitPerVisitCents / jobMinutes) * 60
-      : 0;
+    const profitPerHourCents = jobMinutes > 0 ? (profitPerVisitCents / jobMinutes) * 60 : 0;
 
     const jobCostPerVisitCents = jobResult.minimumPriceCents;
     const jobProfitPerVisitCents = revenuePerVisitCents - jobCostPerVisitCents;
-    const jobProfitMarginPct = revenuePerVisitCents > 0
-      ? (jobProfitPerVisitCents / revenuePerVisitCents) * 100
-      : 0;
+    const jobProfitMarginPct =
+      revenuePerVisitCents > 0 ? (jobProfitPerVisitCents / revenuePerVisitCents) * 100 : 0;
     const jobResultMinutes = jobResult.derived.jobMinutes;
-    const jobProfitPerHourCents = jobResultMinutes > 0
-      ? (jobProfitPerVisitCents / jobResultMinutes) * 60
-      : 0;
+    const jobProfitPerHourCents =
+      jobResultMinutes > 0 ? (jobProfitPerVisitCents / jobResultMinutes) * 60 : 0;
 
     propertyResults.push({
       propertyId: property.id,
-      propertyAddress: [property.streetAddress, property.city, property.state, property.zipCode].filter(Boolean).join(", "),
+      propertyAddress: [property.streetAddress, property.city, property.state, property.zipCode]
+        .filter(Boolean)
+        .join(", "),
       servicePlanId: plan.id,
       frequency: plan.frequency,
       dogCount,
@@ -226,17 +238,21 @@ export async function calculateCustomerProfitability(
     });
   }
 
-  const totalRevenuePerVisitCents = propertyResults.reduce((sum, p) => sum + p.revenuePerVisitCents, 0);
+  const totalRevenuePerVisitCents = propertyResults.reduce(
+    (sum, p) => sum + p.revenuePerVisitCents,
+    0
+  );
   const totalCostPerVisitCents = propertyResults.reduce((sum, p) => sum + p.costPerVisitCents, 0);
   const totalProfitPerVisitCents = totalRevenuePerVisitCents - totalCostPerVisitCents;
-  const overallMarginPct = totalRevenuePerVisitCents > 0
-    ? (totalProfitPerVisitCents / totalRevenuePerVisitCents) * 100
-    : 0;
+  const overallMarginPct =
+    totalRevenuePerVisitCents > 0
+      ? (totalProfitPerVisitCents / totalRevenuePerVisitCents) * 100
+      : 0;
 
   let monthlyRevenueCents = 0;
   let monthlyCostCents = 0;
   for (const p of propertyResults) {
-    const plan = plans.find(pl => pl.id === p.servicePlanId);
+    const plan = plans.find((pl) => pl.id === p.servicePlanId);
     const visitsPerMonth = getFrequencyVisitsPerMonth(plan?.frequency ?? "weekly");
     monthlyRevenueCents += Math.round(p.revenuePerVisitCents * visitsPerMonth);
     monthlyCostCents += Math.round(p.costPerVisitCents * visitsPerMonth);
@@ -277,15 +293,17 @@ export async function calculateAllCustomerProfitability(
   const overheadTotal = await storage.getTotalMonthlyOverheadCents(companyId);
   const overrideOverhead = overheadTotal > 0 ? overheadTotal : undefined;
 
-  const activePlans = allPlans.filter(p => !p.isStopOnly);
-  const allAddOnsMap = await storage.getAllServicePlanAddOnsForCompany(activePlans.map(p => p.id));
+  const activePlans = allPlans.filter((p) => !p.isStopOnly);
+  const allAddOnsMap = await storage.getAllServicePlanAddOnsForCompany(
+    activePlans.map((p) => p.id)
+  );
 
   const plansByContact = new Map<string, typeof activePlans>();
   for (const plan of activePlans) {
     if (!plansByContact.has(plan.contactId)) plansByContact.set(plan.contactId, []);
     plansByContact.get(plan.contactId)!.push(plan);
   }
-  const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+  const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
   const results: CustomerProfitability[] = [];
   for (const contact of contacts) {
@@ -301,9 +319,8 @@ export async function calculateAllCustomerProfitability(
     if (contactOverrides?.burdenMultiplier !== undefined) {
       contactPricingConfig.burdenMultiplier = contactOverrides.burdenMultiplier;
     }
-    const contactOverhead = contactOverrides?.overheadAllocationCents !== undefined
-      ? undefined
-      : overrideOverhead;
+    const contactOverhead =
+      contactOverrides?.overheadAllocationCents !== undefined ? undefined : overrideOverhead;
 
     const propertyResults: CustomerPropertyProfitability[] = [];
     for (const plan of plans) {
@@ -322,14 +339,18 @@ export async function calculateAllCustomerProfitability(
       const dogCount = property.numberOfDogs ?? 1;
 
       const planAddOns = allAddOnsMap.get(plan.id) || [];
-      const activeAddOns = planAddOns.filter(a => a.isActive);
-      const addOnsCents = activeAddOns.reduce((s, a) => s + Math.round((parseFloat(a.price) || 0) * 100), 0);
+      const activeAddOns = planAddOns.filter((a) => a.isActive);
+      const addOnsCents = activeAddOns.reduce(
+        (s, a) => s + Math.round((parseFloat(a.price) || 0) * 100),
+        0
+      );
       const totalPerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100) + addOnsCents;
-      const hasYardDeodorizing = activeAddOns.some(a => a.name.toLowerCase().includes("deodor"));
+      const hasYardDeodorizing = activeAddOns.some((a) => a.name.toLowerCase().includes("deodor"));
 
-      const distanceMiles = contactOverrides?.distanceFromNearestStopMiles !== undefined
-        ? contactOverrides.distanceFromNearestStopMiles
-        : (effectiveConfig.distanceFromNearestStopMiles ?? 1.0);
+      const distanceMiles =
+        contactOverrides?.distanceFromNearestStopMiles !== undefined
+          ? contactOverrides.distanceFromNearestStopMiles
+          : (effectiveConfig.distanceFromNearestStopMiles ?? 1.0);
 
       const inputs: PriceCalculatorInputs = {
         yardSizeAcres,
@@ -342,31 +363,48 @@ export async function calculateAllCustomerProfitability(
         hasYardDeodorizing,
       };
 
-      const result = calculatePrice(inputs, contactPricingConfig, contactOverhead, contactOverrides?.overheadAllocationCents);
+      const result = calculatePrice(
+        inputs,
+        contactPricingConfig,
+        contactOverhead,
+        contactOverrides?.overheadAllocationCents
+      );
       const contactFullConfig = getEffectivePricingConfig(contactPricingConfig);
       const contactStandardTravelMins = contactFullConfig.standardTravelMinutesPerStop ?? 3;
       const contactJobInputs: PriceCalculatorInputs = {
         ...inputs,
         overrideAdjustedTravelMinutes: contactStandardTravelMins,
       };
-      const contactJobResult = calculatePrice(contactJobInputs, contactPricingConfig, contactOverhead, contactOverrides?.overheadAllocationCents);
+      const contactJobResult = calculatePrice(
+        contactJobInputs,
+        contactPricingConfig,
+        contactOverhead,
+        contactOverrides?.overheadAllocationCents
+      );
 
       const revenuePerVisitCents = totalPerVisitCents;
       const costPerVisitCents = result.minimumPriceCents;
       const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;
-      const profitMarginPct = revenuePerVisitCents > 0 ? (profitPerVisitCents / revenuePerVisitCents) * 100 : 0;
+      const profitMarginPct =
+        revenuePerVisitCents > 0 ? (profitPerVisitCents / revenuePerVisitCents) * 100 : 0;
       const jobMinutes = result.derived.jobMinutes;
       const profitPerHourCents = jobMinutes > 0 ? (profitPerVisitCents / jobMinutes) * 60 : 0;
 
       const contactJobCostPerVisitCents = contactJobResult.minimumPriceCents;
       const contactJobProfitPerVisitCents = revenuePerVisitCents - contactJobCostPerVisitCents;
-      const contactJobProfitMarginPct = revenuePerVisitCents > 0 ? (contactJobProfitPerVisitCents / revenuePerVisitCents) * 100 : 0;
+      const contactJobProfitMarginPct =
+        revenuePerVisitCents > 0 ? (contactJobProfitPerVisitCents / revenuePerVisitCents) * 100 : 0;
       const contactJobResultMinutes = contactJobResult.derived.jobMinutes;
-      const contactJobProfitPerHourCents = contactJobResultMinutes > 0 ? (contactJobProfitPerVisitCents / contactJobResultMinutes) * 60 : 0;
+      const contactJobProfitPerHourCents =
+        contactJobResultMinutes > 0
+          ? (contactJobProfitPerVisitCents / contactJobResultMinutes) * 60
+          : 0;
 
       propertyResults.push({
         propertyId: property.id,
-        propertyAddress: [property.streetAddress, property.city, property.state, property.zipCode].filter(Boolean).join(", "),
+        propertyAddress: [property.streetAddress, property.city, property.state, property.zipCode]
+          .filter(Boolean)
+          .join(", "),
         servicePlanId: plan.id,
         frequency: plan.frequency,
         dogCount,
@@ -396,15 +434,21 @@ export async function calculateAllCustomerProfitability(
 
     if (propertyResults.length === 0) continue;
 
-    const totalRevenuePerVisitCents = propertyResults.reduce((sum, p) => sum + p.revenuePerVisitCents, 0);
+    const totalRevenuePerVisitCents = propertyResults.reduce(
+      (sum, p) => sum + p.revenuePerVisitCents,
+      0
+    );
     const totalCostPerVisitCents = propertyResults.reduce((sum, p) => sum + p.costPerVisitCents, 0);
     const totalProfitPerVisitCents = totalRevenuePerVisitCents - totalCostPerVisitCents;
-    const overallMarginPct = totalRevenuePerVisitCents > 0 ? (totalProfitPerVisitCents / totalRevenuePerVisitCents) * 100 : 0;
+    const overallMarginPct =
+      totalRevenuePerVisitCents > 0
+        ? (totalProfitPerVisitCents / totalRevenuePerVisitCents) * 100
+        : 0;
 
     let monthlyRevenueCents = 0;
     let monthlyCostCents = 0;
     for (const p of propertyResults) {
-      const plan = plans.find(pl => pl.id === p.servicePlanId);
+      const plan = plans.find((pl) => pl.id === p.servicePlanId);
       const visitsPerMonth = getFrequencyVisitsPerMonth(plan?.frequency ?? "weekly");
       monthlyRevenueCents += Math.round(p.revenuePerVisitCents * visitsPerMonth);
       monthlyCostCents += Math.round(p.costPerVisitCents * visitsPerMonth);
@@ -503,9 +547,8 @@ export function generateBulkRecommendations(
     for (const prop of customer.properties) {
       if (prop.profitMarginPct < 15) {
         const projectedProfit = prop.recommendedPriceCents - prop.costPerVisitCents;
-        const projectedMargin = prop.recommendedPriceCents > 0
-          ? (projectedProfit / prop.recommendedPriceCents) * 100
-          : 0;
+        const projectedMargin =
+          prop.recommendedPriceCents > 0 ? (projectedProfit / prop.recommendedPriceCents) * 100 : 0;
 
         recommendations.push({
           contactId: customer.contactId,

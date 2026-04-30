@@ -14,10 +14,27 @@ import {
   ensureConnectedCustomer,
 } from "../services/stripe";
 import { computeInvoice } from "../invoice-engine/invoice.compute";
-import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "../invoice-engine/invoice.render";
+import {
+  renderInvoice,
+  loadTemplate,
+  loadTheme,
+  getDefaultTemplatePath,
+  getDefaultThemePath,
+} from "../invoice-engine/invoice.render";
 
-import { isAuthenticated, getCompanyContext, requireRole, getBaseUrl, handleError, auditLog, p, notify, escapeHtml, normalizeQuoteFrequency, provisionPortalAccess } from "./shared";
-
+import {
+  isAuthenticated,
+  getCompanyContext,
+  requireRole,
+  getBaseUrl,
+  handleError,
+  auditLog,
+  p,
+  notify,
+  escapeHtml,
+  normalizeQuoteFrequency,
+  provisionPortalAccess,
+} from "./shared";
 
 export async function registerPortalRoutes(app: Express): Promise<void> {
   // ================ Client Portal Routes ================
@@ -36,7 +53,12 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       for (const company of allCompanies) {
         const companyContacts = await storage.getContacts(company.id, { search: email });
         const match = companyContacts.find(
-          (c) => (c.email || "").toLowerCase().split(",").map(e => e.trim()).includes(email) && c.hasPortalAccess
+          (c) =>
+            (c.email || "")
+              .toLowerCase()
+              .split(",")
+              .map((e) => e.trim())
+              .includes(email) && c.hasPortalAccess
         );
         if (match) {
           if (match.portalPasswordHash) {
@@ -50,13 +72,17 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       if (!foundContact) {
         if (hasAccessButNoPassword) {
-          return res.status(401).json({ error: "Your account needs a password. Please use 'Forgot Password' to set one up." });
+          return res.status(401).json({
+            error: "Your account needs a password. Please use 'Forgot Password' to set one up.",
+          });
         }
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
       if (!foundContact.portalPasswordHash) {
-        return res.status(401).json({ error: "Your account needs a password. Please use 'Forgot Password' to set one up." });
+        return res.status(401).json({
+          error: "Your account needs a password. Please use 'Forgot Password' to set one up.",
+        });
       }
 
       const [salt, hash] = foundContact.portalPasswordHash.split(":");
@@ -87,11 +113,13 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       // send Authorization headers) are still authenticated for /objects/ downloads.
       (req.session as any).portalContactId = foundContact.id;
       await new Promise<void>((resolve, reject) =>
-        req.session.save(err => (err ? reject(err) : resolve()))
+        req.session.save((err) => (err ? reject(err) : resolve()))
       );
 
       res.json({ token, contactId: foundContact.id });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   const resetRequestCounts = new Map<string, { count: number; resetAt: number }>();
@@ -120,7 +148,12 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       for (const company of allCompanies) {
         const companyContacts = await storage.getContacts(company.id, { search: normalizedEmail });
         const match = companyContacts.find(
-          (c) => (c.email || "").toLowerCase().split(",").map(e => e.trim()).includes(normalizedEmail) && c.hasPortalAccess
+          (c) =>
+            (c.email || "")
+              .toLowerCase()
+              .split(",")
+              .map((e) => e.trim())
+              .includes(normalizedEmail) && c.hasPortalAccess
         );
         if (match) {
           foundContact = match;
@@ -173,21 +206,28 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       }).catch(console.error);
 
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/portal/reset-password", async (req: Request, res: Response) => {
     try {
       const { token, password } = req.body;
-      if (!token || !password) return res.status(400).json({ error: "Token and password are required" });
-      if (String(password).length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+      if (!token || !password)
+        return res.status(400).json({ error: "Token and password are required" });
+      if (String(password).length < 6)
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
 
       const allCompanies = await storage.listCompanies();
       let foundContact = null;
       for (const company of allCompanies) {
         const contacts = await storage.getContacts(company.id, {});
         const match = contacts.find(
-          (c) => c.resetToken === token && c.resetTokenExpiry && new Date(c.resetTokenExpiry) > new Date()
+          (c) =>
+            c.resetToken === token &&
+            c.resetTokenExpiry &&
+            new Date(c.resetTokenExpiry) > new Date()
         );
         if (match) {
           foundContact = match;
@@ -196,7 +236,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       }
 
       if (!foundContact) {
-        return res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+        return res
+          .status(400)
+          .json({ error: "Invalid or expired reset link. Please request a new one." });
       }
 
       const salt = crypto.randomBytes(16).toString("hex");
@@ -214,7 +256,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       });
 
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/portal/verify-email", async (req: Request, res: Response) => {
@@ -227,7 +271,10 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       for (const company of allCompanies) {
         const contacts = await storage.getContacts(company.id, {});
         const match = contacts.find(
-          (c) => c.emailVerificationToken === token && c.emailVerificationExpiry && new Date(c.emailVerificationExpiry) > new Date()
+          (c) =>
+            c.emailVerificationToken === token &&
+            c.emailVerificationExpiry &&
+            new Date(c.emailVerificationExpiry) > new Date()
         );
         if (match) {
           foundContact = match;
@@ -247,7 +294,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       });
 
       res.json({ success: true, email: foundContact.pendingEmail });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   async function getPortalContext(req: Request) {
@@ -283,7 +332,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         companyName: company?.name || "",
         pendingEmail: contact.pendingEmail || null,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/portal/schedule", async (req: Request, res: Response) => {
@@ -291,7 +342,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const { contactId, companyId } = await getPortalContext(req);
       const plans = await storage.getServicePlans(companyId, { contactId });
       const today = new Date().toISOString().split("T")[0];
-      const futureDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const futureDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
       const upcomingVisits = await storage.getVisitsForDateRange(companyId, today, futureDate);
 
       const planIds = new Set(plans.map((p) => p.id));
@@ -314,7 +367,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           propertyAddress: props.find((p) => p.id === v.propertyId)?.streetAddress || "",
         })),
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/portal/invoices", async (req: Request, res: Response) => {
@@ -322,29 +377,39 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const { contactId, companyId } = await getPortalContext(req);
       const invoicesList = await storage.getInvoices(companyId, { contactId });
       const visibleStatuses = ["sent", "pending", "paid", "failed"];
-      res.json(invoicesList.filter(inv => visibleStatuses.includes(inv.status)).map((inv) => ({
-        id: inv.id,
-        invoiceNumber: inv.invoiceNumber,
-        dueDate: inv.dueDate,
-        total: inv.total,
-        tipAmount: inv.tipAmount || "0",
-        status: inv.status,
-        createdAt: inv.createdAt,
-      })));
-    } catch (err) { handleError(res, err); }
+      res.json(
+        invoicesList
+          .filter((inv) => visibleStatuses.includes(inv.status))
+          .map((inv) => ({
+            id: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            dueDate: inv.dueDate,
+            total: inv.total,
+            tipAmount: inv.tipAmount || "0",
+            status: inv.status,
+            createdAt: inv.createdAt,
+          }))
+      );
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/portal/invoices/:id/pay", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
       const invoice = await storage.getInvoice(p(req.params.id), companyId);
-      if (!invoice || invoice.contactId !== contactId) return res.status(404).json({ error: "Invoice not found" });
+      if (!invoice || invoice.contactId !== contactId)
+        return res.status(404).json({ error: "Invoice not found" });
       if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
-      if (invoice.status === "draft") return res.status(400).json({ error: "This invoice has not been finalized yet" });
-      if (invoice.status === "voided") return res.status(400).json({ error: "This invoice has been voided" });
+      if (invoice.status === "draft")
+        return res.status(400).json({ error: "This invoice has not been finalized yet" });
+      if (invoice.status === "voided")
+        return res.status(400).json({ error: "This invoice has been voided" });
 
       const tipAmount = Math.round(parseFloat(req.body?.tipAmount || "0") * 100) / 100;
-      if (isNaN(tipAmount) || tipAmount < 0) return res.status(400).json({ error: "Invalid tip amount" });
+      if (isNaN(tipAmount) || tipAmount < 0)
+        return res.status(400).json({ error: "Invalid tip amount" });
       if (tipAmount > 500) return res.status(400).json({ error: "Tip amount exceeds maximum" });
 
       const contact = await storage.getContactById(contactId);
@@ -380,7 +445,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       });
 
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/portal/pause", async (req: Request, res: Response) => {
@@ -394,19 +461,32 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
       const pausedPlanIds: string[] = [];
       for (const plan of plans) {
-        await storage.updateServicePlan(plan.id, companyId, { isActive: false, pausedAt: new Date() });
+        await storage.updateServicePlan(plan.id, companyId, {
+          isActive: false,
+          pausedAt: new Date(),
+        });
         pausedPlanIds.push(plan.id);
       }
 
       const today = new Date().toISOString().split("T")[0];
       const cancelledCount = await storage.cancelFutureVisitsForPlans(pausedPlanIds, today);
       if (cancelledCount > 0) {
-        console.log(`[portal-pause] Cancelled ${cancelledCount} future visits for contact ${contactId}`);
+        console.log(
+          `[portal-pause] Cancelled ${cancelledCount} future visits for contact ${contactId}`
+        );
       }
 
-      notify(companyId, "service_paused", "Service Paused", `${contact.firstName} ${contact.lastName} paused their service via the portal.`, `/contacts/${contactId}`);
+      notify(
+        companyId,
+        "service_paused",
+        "Service Paused",
+        `${contact.firstName} ${contact.lastName} paused their service via the portal.`,
+        `/contacts/${contactId}`
+      );
       res.json({ success: true, status: "paused" });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/portal/resume", async (req: Request, res: Response) => {
@@ -437,7 +517,12 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
         try {
           const { generateVisitsForPlans } = await import("../jobs/auto-visits");
-          const created = await generateVisitsForPlans(companyId, reactivatedPlanIds, startStr, endStr);
+          const created = await generateVisitsForPlans(
+            companyId,
+            reactivatedPlanIds,
+            startStr,
+            endStr
+          );
           if (created > 0) {
             console.log(`[portal-resume] Generated ${created} visits for contact ${contactId}`);
           }
@@ -446,9 +531,17 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         }
       }
 
-      notify(companyId, "service_resumed", "Service Resumed", `${contact.firstName} ${contact.lastName} resumed their service via the portal.`, `/contacts/${contactId}`);
+      notify(
+        companyId,
+        "service_resumed",
+        "Service Resumed",
+        `${contact.firstName} ${contact.lastName} resumed their service via the portal.`,
+        `/contacts/${contactId}`
+      );
       res.json({ success: true, status: "active" });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/portal/visits/history", async (req: Request, res: Response) => {
@@ -461,7 +554,11 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const today = new Date().toISOString().split("T")[0];
       const allVisits = await storage.getVisitsForDateRange(companyId, pastDate, today);
       const pastVisits = allVisits
-        .filter((v: any) => planIds.has(v.servicePlanId) && (v.status === "completed" || v.status === "skipped" || v.status === "cancelled"))
+        .filter(
+          (v: any) =>
+            planIds.has(v.servicePlanId) &&
+            (v.status === "completed" || v.status === "skipped" || v.status === "cancelled")
+        )
         .sort((a: any, b: any) => b.scheduledDate.localeCompare(a.scheduledDate));
 
       const props = await storage.getProperties(companyId, contactId);
@@ -484,7 +581,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         page,
         totalPages: Math.ceil(pastVisits.length / limit),
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/portal/contact-us", async (req: Request, res: Response) => {
@@ -498,7 +597,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       const company = await storage.getCompany(companyId);
       const companyEmail = company?.email;
-      if (!companyEmail) return res.status(400).json({ error: "Company does not have a contact email configured" });
+      if (!companyEmail)
+        return res.status(400).json({ error: "Company does not have a contact email configured" });
 
       const emailSubject = subject || `Message from ${contact.firstName} ${contact.lastName}`;
       await sendEmail({
@@ -535,26 +635,38 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         status: "sent",
       });
 
-      notify(companyId, "portal_message", `${contact.firstName} ${contact.lastName} -- Portal Message`, `${contact.firstName} ${contact.lastName} sent a message via the portal.`, `/#client-requests`);
+      notify(
+        companyId,
+        "portal_message",
+        `${contact.firstName} ${contact.lastName} -- Portal Message`,
+        `${contact.firstName} ${contact.lastName} sent a message via the portal.`,
+        `/#client-requests`
+      );
 
       res.json({ success: true, message: "Your message has been sent." });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/portal/messages", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
       const msgs = await storage.getMessages(companyId, { contactId });
-      res.json(msgs.map((m) => ({
-        id: m.id,
-        direction: m.direction,
-        channel: m.channel,
-        subject: m.subject,
-        body: m.body,
-        status: m.status,
-        createdAt: m.createdAt,
-      })));
-    } catch (err) { handleError(res, err); }
+      res.json(
+        msgs.map((m) => ({
+          id: m.id,
+          direction: m.direction,
+          channel: m.channel,
+          subject: m.subject,
+          body: m.body,
+          status: m.status,
+          createdAt: m.createdAt,
+        }))
+      );
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/portal/logout", async (req: Request, res: Response) => {
@@ -564,10 +676,12 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       // Clear portal identity from session cookie to revoke object download access.
       delete (req.session as any).portalContactId;
       await new Promise<void>((resolve, reject) =>
-        req.session.save(err => (err ? reject(err) : resolve()))
+        req.session.save((err) => (err ? reject(err) : resolve()))
       );
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/portal/properties", async (req: Request, res: Response) => {
@@ -575,7 +689,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const { contactId, companyId } = await getPortalContext(req);
       const properties = await storage.getProperties(companyId, contactId);
       res.json(properties);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/portal/profile", async (req: Request, res: Response) => {
@@ -588,7 +704,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       if (req.body.firstName !== undefined) updates.firstName = String(req.body.firstName).trim();
       if (req.body.lastName !== undefined) updates.lastName = String(req.body.lastName).trim();
       if (req.body.phone !== undefined) updates.phone = String(req.body.phone).trim() || null;
-      if (req.body.streetAddress !== undefined) updates.streetAddress = String(req.body.streetAddress).trim();
+      if (req.body.streetAddress !== undefined)
+        updates.streetAddress = String(req.body.streetAddress).trim();
       if (req.body.city !== undefined) updates.city = String(req.body.city).trim();
       if (req.body.state !== undefined) updates.state = String(req.body.state).trim();
       if (req.body.zipCode !== undefined) updates.zipCode = String(req.body.zipCode).trim();
@@ -612,8 +729,10 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
             if (existing) {
               const propUpdates: any = {};
               if (prop.gateCode !== undefined) propUpdates.gateCode = prop.gateCode;
-              if (prop.specialInstructions !== undefined) propUpdates.specialInstructions = prop.specialInstructions;
-              if (prop.streetAddress !== undefined) propUpdates.streetAddress = String(prop.streetAddress).trim();
+              if (prop.specialInstructions !== undefined)
+                propUpdates.specialInstructions = prop.specialInstructions;
+              if (prop.streetAddress !== undefined)
+                propUpdates.streetAddress = String(prop.streetAddress).trim();
               if (prop.city !== undefined) propUpdates.city = String(prop.city).trim();
               if (prop.state !== undefined) propUpdates.state = String(prop.state).trim();
               if (prop.zipCode !== undefined) propUpdates.zipCode = String(prop.zipCode).trim();
@@ -688,7 +807,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           pendingEmail: updatedContact!.pendingEmail || null,
         },
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/portal/request-cleanup", async (req: Request, res: Response) => {
@@ -705,7 +826,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         linkUrl: "/#client-requests",
       });
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Portal: Payment Methods (T001) ================
@@ -733,22 +856,29 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       const baseUrl = getBaseUrl(req);
       const Stripe = (await import("stripe")).default;
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-04-30.basil" as any });
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: "2025-04-30.basil" as any,
+      });
       const setupOpts: Record<string, any> = {};
       if (connectAcct) {
         setupOpts.stripeAccount = connectAcct;
       }
-      const session = await stripe.checkout.sessions.create({
-        customer: stripeCustomerId,
-        mode: "setup",
-        payment_method_types: ["card"],
-        success_url: `${baseUrl}/portal/client?card_added=1`,
-        cancel_url: `${baseUrl}/portal/client`,
-        metadata: { tenant_id: companyId, checkout_type: "portal_setup" },
-      }, setupOpts);
+      const session = await stripe.checkout.sessions.create(
+        {
+          customer: stripeCustomerId,
+          mode: "setup",
+          payment_method_types: ["card"],
+          success_url: `${baseUrl}/portal/client?card_added=1`,
+          cancel_url: `${baseUrl}/portal/client`,
+          metadata: { tenant_id: companyId, checkout_type: "portal_setup" },
+        },
+        setupOpts
+      );
 
       res.json({ url: session.url });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/portal/payment-methods", async (req: Request, res: Response) => {
@@ -756,7 +886,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const { contactId, companyId } = await getPortalContext(req);
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (!contact.stripeCustomerId) return res.json({ methods: [], autoPayEnabled: contact.autoPayEnabled });
+      if (!contact.stripeCustomerId)
+        return res.json({ methods: [], autoPayEnabled: contact.autoPayEnabled });
 
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
@@ -773,14 +904,17 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       }
       const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
       res.json({ methods, autoPayEnabled: contact.autoPayEnabled });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/portal/payment-methods/:id", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
       const contact = await storage.getContactById(contactId);
-      if (!contact?.stripeCustomerId) return res.status(400).json({ error: "No payment methods on file" });
+      if (!contact?.stripeCustomerId)
+        return res.status(400).json({ error: "No payment methods on file" });
 
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
@@ -801,7 +935,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       await detachPaymentMethod(p(req.params.id), connectAcct);
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/portal/auto-pay", async (req: Request, res: Response) => {
@@ -810,7 +946,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const { enabled } = req.body;
       await storage.updateContact(contactId, companyId, { autoPayEnabled: !!enabled });
       res.json({ success: true, autoPayEnabled: !!enabled });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Portal: Referral Program (T003) ================
@@ -826,7 +964,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         referralCode: contact.referralCode || null,
         referralCount,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/portal/referral/generate", async (req: Request, res: Response) => {
@@ -839,7 +979,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const code = `REF-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
       await storage.updateContact(contactId, companyId, { referralCode: code });
       res.json({ referralCode: code });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Portal: Estimates (T004) ================
@@ -848,26 +990,32 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
     try {
       const { contactId, companyId } = await getPortalContext(req);
       const allEstimates = await storage.getEstimates(companyId, { contactId });
-      res.json(allEstimates.map((e) => ({
-        id: e.id,
-        description: e.description,
-        items: e.items,
-        totalCents: e.totalCents,
-        status: e.status,
-        sentAt: e.sentAt,
-        respondedAt: e.respondedAt,
-        responseNote: e.responseNote,
-        createdAt: e.createdAt,
-      })));
-    } catch (err) { handleError(res, err); }
+      res.json(
+        allEstimates.map((e) => ({
+          id: e.id,
+          description: e.description,
+          items: e.items,
+          totalCents: e.totalCents,
+          status: e.status,
+          sentAt: e.sentAt,
+          respondedAt: e.respondedAt,
+          responseNote: e.responseNote,
+          createdAt: e.createdAt,
+        }))
+      );
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/portal/estimates/:id/approve", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
       const estimate = await storage.getEstimate(p(req.params.id), companyId);
-      if (!estimate || estimate.contactId !== contactId) return res.status(404).json({ error: "Estimate not found" });
-      if (estimate.status !== "pending") return res.status(400).json({ error: "Estimate is no longer pending" });
+      if (!estimate || estimate.contactId !== contactId)
+        return res.status(404).json({ error: "Estimate not found" });
+      if (estimate.status !== "pending")
+        return res.status(400).json({ error: "Estimate is no longer pending" });
 
       await storage.updateEstimate(estimate.id, companyId, {
         status: "approved",
@@ -881,25 +1029,47 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       if (estimate.propertyId) {
         try {
           await storage.createJobFromEstimate(estimate, contactId);
-          notify(companyId, "general", "Draft Job Created from Estimate", `${contactName} approved estimate "${estimate.description}". A draft job has been created — review and approve the schedule.`, `/scheduling`);
+          notify(
+            companyId,
+            "general",
+            "Draft Job Created from Estimate",
+            `${contactName} approved estimate "${estimate.description}". A draft job has been created — review and approve the schedule.`,
+            `/scheduling`
+          );
         } catch (jobErr) {
           console.error("[estimate-approve] Failed to auto-create job:", jobErr);
-          notify(companyId, "general", "Estimate Approved", `${contactName} approved estimate: ${estimate.description}`, `/contacts/${contactId}`);
+          notify(
+            companyId,
+            "general",
+            "Estimate Approved",
+            `${contactName} approved estimate: ${estimate.description}`,
+            `/contacts/${contactId}`
+          );
         }
       } else {
-        notify(companyId, "general", "Estimate Approved", `${contactName} approved estimate: ${estimate.description}`, `/contacts/${contactId}`);
+        notify(
+          companyId,
+          "general",
+          "Estimate Approved",
+          `${contactName} approved estimate: ${estimate.description}`,
+          `/contacts/${contactId}`
+        );
       }
 
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/portal/estimates/:id/decline", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
       const estimate = await storage.getEstimate(p(req.params.id), companyId);
-      if (!estimate || estimate.contactId !== contactId) return res.status(404).json({ error: "Estimate not found" });
-      if (estimate.status !== "pending") return res.status(400).json({ error: "Estimate is no longer pending" });
+      if (!estimate || estimate.contactId !== contactId)
+        return res.status(404).json({ error: "Estimate not found" });
+      if (estimate.status !== "pending")
+        return res.status(400).json({ error: "Estimate is no longer pending" });
 
       await storage.updateEstimate(estimate.id, companyId, {
         status: "declined",
@@ -908,9 +1078,17 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       });
 
       const contact = await storage.getContactById(contactId);
-      notify(companyId, "general", "Estimate Declined", `${contact?.firstName} ${contact?.lastName} declined estimate: ${estimate.description}${req.body.reason ? ` - Reason: ${req.body.reason}` : ""}`, `/contacts/${contactId}`);
+      notify(
+        companyId,
+        "general",
+        "Estimate Declined",
+        `${contact?.firstName} ${contact?.lastName} declined estimate: ${estimate.description}${req.body.reason ? ` - Reason: ${req.body.reason}` : ""}`,
+        `/contacts/${contactId}`
+      );
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Portal: Quotes ================
@@ -922,7 +1100,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const quoteRow = allQuotes.rows?.[0];
       if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
 
-      const isExpired = quoteRow.status === "expired" || (quoteRow.expires_at && new Date(quoteRow.expires_at as string) < new Date());
+      const isExpired =
+        quoteRow.status === "expired" ||
+        (quoteRow.expires_at && new Date(quoteRow.expires_at as string) < new Date());
 
       const safeQuote = {
         id: quoteRow.id,
@@ -1069,14 +1249,25 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       res.json(contact.reminderPreferences || { email: true, sms: false });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/portal/notifications", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
       const prefs = req.body;
-      const booleanKeys = ["email", "sms", "serviceReminder", "serviceCompleted", "invoiceReady", "invoiceDueReminder", "paymentConfirmation", "reminderOptOut"];
+      const booleanKeys = [
+        "email",
+        "sms",
+        "serviceReminder",
+        "serviceCompleted",
+        "invoiceReady",
+        "invoiceDueReminder",
+        "paymentConfirmation",
+        "reminderOptOut",
+      ];
       const validChannels = ["sms", "email", "both"];
       const validTimings = ["24h_before", "2h_before", "morning_of"];
       const cleaned: Record<string, boolean | string | undefined> = {};
@@ -1084,17 +1275,26 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         if (prefs[key] !== undefined) cleaned[key] = !!prefs[key];
       }
       if (prefs.preferredChannel !== undefined) {
-        cleaned.preferredChannel = validChannels.includes(prefs.preferredChannel) ? prefs.preferredChannel : undefined;
+        cleaned.preferredChannel = validChannels.includes(prefs.preferredChannel)
+          ? prefs.preferredChannel
+          : undefined;
       }
       if (prefs.preferredTiming !== undefined) {
-        cleaned.preferredTiming = validTimings.includes(prefs.preferredTiming) ? prefs.preferredTiming : undefined;
+        cleaned.preferredTiming = validTimings.includes(prefs.preferredTiming)
+          ? prefs.preferredTiming
+          : undefined;
       }
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      const merged = { ...(contact.reminderPreferences || { email: true, sms: false }), ...cleaned };
+      const merged = {
+        ...(contact.reminderPreferences || { email: true, sms: false }),
+        ...cleaned,
+      };
       await storage.updateContact(contactId, companyId, { reminderPreferences: merged });
       res.json({ success: true, preferences: merged });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Portal: Service Change Requests (T006) ================
@@ -1126,29 +1326,42 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       });
 
       const contact = await storage.getContactById(contactId);
-      const senderName = `${contact?.firstName || ""} ${contact?.lastName || ""}`.trim() || "A client";
-      notify(companyId, "general", `${senderName} -- Service Change Request`, `${senderName} requested a ${requestType.replace(/_/g, " ")}${note ? `: ${note}` : ""}`, `/#client-requests`);
+      const senderName =
+        `${contact?.firstName || ""} ${contact?.lastName || ""}`.trim() || "A client";
+      notify(
+        companyId,
+        "general",
+        `${senderName} -- Service Change Request`,
+        `${senderName} requested a ${requestType.replace(/_/g, " ")}${note ? `: ${note}` : ""}`,
+        `/#client-requests`
+      );
 
       res.json({ success: true, id: request.id });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/portal/service-changes", async (req: Request, res: Response) => {
     try {
       const { contactId, companyId } = await getPortalContext(req);
       const requests = await storage.getServiceChangeRequests(companyId, { contactId });
-      res.json(requests.map((r) => ({
-        id: r.id,
-        requestType: r.requestType,
-        currentValue: r.currentValue,
-        requestedValue: r.requestedValue,
-        note: r.note,
-        status: r.status,
-        adminNote: r.adminNote,
-        createdAt: r.createdAt,
-        respondedAt: r.respondedAt,
-      })));
-    } catch (err) { handleError(res, err); }
+      res.json(
+        requests.map((r) => ({
+          id: r.id,
+          requestType: r.requestType,
+          currentValue: r.currentValue,
+          requestedValue: r.requestedValue,
+          note: r.note,
+          status: r.status,
+          adminNote: r.adminNote,
+          createdAt: r.createdAt,
+          respondedAt: r.respondedAt,
+        }))
+      );
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Portal: Photo Gallery (T007) ================
@@ -1159,13 +1372,18 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const plans = await storage.getServicePlans(companyId, { contactId });
       const planIds = new Set(plans.map((p) => p.id));
 
-      const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
       const today = new Date().toISOString().split("T")[0];
       const allVisits = await storage.getVisitsForDateRange(companyId, sixMonthsAgo, today);
       const props = await storage.getProperties(companyId, contactId);
 
       const visitsWithPhotos = allVisits
-        .filter((v: any) => planIds.has(v.servicePlanId) && (v.proofOfServicePhoto || v.proofOfServicePhotoBefore))
+        .filter(
+          (v: any) =>
+            planIds.has(v.servicePlanId) && (v.proofOfServicePhoto || v.proofOfServicePhotoBefore)
+        )
         .sort((a: any, b: any) => b.scheduledDate.localeCompare(a.scheduledDate))
         .slice(0, 50)
         .map((v: any) => ({
@@ -1177,7 +1395,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         }));
 
       res.json(visitsWithPhotos);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Portal: Billing PDF Download (T008) ================
@@ -1186,7 +1406,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
     try {
       const { contactId, companyId } = await getPortalContext(req);
       const invoice = await storage.getInvoice(p(req.params.id), companyId);
-      if (!invoice || invoice.contactId !== contactId) return res.status(404).json({ error: "Invoice not found" });
+      if (!invoice || invoice.contactId !== contactId)
+        return res.status(404).json({ error: "Invoice not found" });
 
       const contact = await storage.getContactById(contactId);
       const company = await storage.getCompany(companyId);
@@ -1195,20 +1416,32 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const PDFDocument = (await import("pdfkit")).default;
       const doc = new PDFDocument({ size: "LETTER", margin: 50 });
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`
+      );
       doc.pipe(res);
 
       doc.fontSize(20).text(company?.name || "Invoice", { align: "left" });
       doc.moveDown(0.5);
-      doc.fontSize(10).fillColor("#666666").text(`${company?.address || ""}`);
+      doc
+        .fontSize(10)
+        .fillColor("#666666")
+        .text(`${company?.address || ""}`);
       if (company?.phone) doc.text(`Phone: ${company.phone}`);
       if (company?.email) doc.text(`Email: ${company.email}`);
       doc.moveDown(1);
 
-      doc.fontSize(16).fillColor("#000000").text(`Invoice ${invoice.invoiceNumber}`, { align: "right" });
+      doc
+        .fontSize(16)
+        .fillColor("#000000")
+        .text(`Invoice ${invoice.invoiceNumber}`, { align: "right" });
       doc.moveDown(0.5);
       doc.fontSize(10).fillColor("#666666");
-      doc.text(`Date: ${invoice.issuedDate || invoice.createdAt?.toISOString().split("T")[0] || ""}`, { align: "right" });
+      doc.text(
+        `Date: ${invoice.issuedDate || invoice.createdAt?.toISOString().split("T")[0] || ""}`,
+        { align: "right" }
+      );
       doc.text(`Due: ${invoice.dueDate}`, { align: "right" });
       doc.text(`Status: ${invoice.status.toUpperCase()}`, { align: "right" });
       doc.moveDown(1);
@@ -1225,7 +1458,10 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       doc.text("Qty", 310, tableTop, { width: 50, align: "center" });
       doc.text("Unit Price", 370, tableTop, { width: 80, align: "right" });
       doc.text("Total", 460, tableTop, { width: 80, align: "right" });
-      doc.moveTo(50, tableTop + 15).lineTo(540, tableTop + 15).stroke("#cccccc");
+      doc
+        .moveTo(50, tableTop + 15)
+        .lineTo(540, tableTop + 15)
+        .stroke("#cccccc");
 
       let yPos = tableTop + 25;
       for (const item of lineItems) {
@@ -1241,17 +1477,31 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       yPos += 10;
       doc.fontSize(10).fillColor("#000000");
       if (Number(invoice.discountAmount) > 0) {
-        doc.text(`Discount: -$${Number(invoice.discountAmount).toFixed(2)}`, 370, yPos, { width: 170, align: "right" });
+        doc.text(`Discount: -$${Number(invoice.discountAmount).toFixed(2)}`, 370, yPos, {
+          width: 170,
+          align: "right",
+        });
         yPos += 18;
       }
       if (Number(invoice.tax) > 0) {
-        doc.text(`Tax: $${Number(invoice.tax).toFixed(2)}`, 370, yPos, { width: 170, align: "right" });
+        doc.text(`Tax: $${Number(invoice.tax).toFixed(2)}`, 370, yPos, {
+          width: 170,
+          align: "right",
+        });
         yPos += 18;
       }
-      doc.fontSize(12).font("Helvetica-Bold").text(`Total: $${Number(invoice.total).toFixed(2)}`, 370, yPos, { width: 170, align: "right" });
+      doc
+        .fontSize(12)
+        .font("Helvetica-Bold")
+        .text(`Total: $${Number(invoice.total).toFixed(2)}`, 370, yPos, {
+          width: 170,
+          align: "right",
+        });
 
       doc.end();
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/portal/billing-statement", async (req: Request, res: Response) => {
@@ -1260,7 +1510,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const contact = await storage.getContactById(contactId);
       const company = await storage.getCompany(companyId);
 
-      const startDate = (req.query.startDate as string) || new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const startDate =
+        (req.query.startDate as string) ||
+        new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
       const endDate = (req.query.endDate as string) || new Date().toISOString().split("T")[0];
 
       const allInvoices = await storage.getInvoices(companyId, { contactId });
@@ -1273,7 +1525,10 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const PDFDocument = (await import("pdfkit")).default;
       const doc = new PDFDocument({ size: "LETTER", margin: 50 });
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="billing-statement-${startDate}-to-${endDate}.pdf"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="billing-statement-${startDate}-to-${endDate}.pdf"`
+      );
       doc.pipe(res);
 
       doc.fontSize(20).text(company?.name || "Billing Statement", { align: "left" });
@@ -1292,14 +1547,19 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       doc.text("Due Date", 250, tableTop, { width: 80 });
       doc.text("Status", 340, tableTop, { width: 70 });
       doc.text("Amount", 420, tableTop, { width: 100, align: "right" });
-      doc.moveTo(50, tableTop + 15).lineTo(540, tableTop + 15).stroke("#cccccc");
+      doc
+        .moveTo(50, tableTop + 15)
+        .lineTo(540, tableTop + 15)
+        .stroke("#cccccc");
 
       let yPos = tableTop + 25;
       let grandTotal = 0;
       for (const inv of filtered) {
         doc.fontSize(9).fillColor("#000000");
         doc.text(inv.invoiceNumber, 50, yPos, { width: 100 });
-        doc.text(inv.issuedDate || inv.createdAt?.toISOString().split("T")[0] || "", 160, yPos, { width: 80 });
+        doc.text(inv.issuedDate || inv.createdAt?.toISOString().split("T")[0] || "", 160, yPos, {
+          width: 80,
+        });
         doc.text(inv.dueDate, 250, yPos, { width: 80 });
         doc.text(inv.status, 340, yPos, { width: 70 });
         doc.text(`$${Number(inv.total).toFixed(2)}`, 420, yPos, { width: 100, align: "right" });
@@ -1316,16 +1576,23 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       doc.fontSize(11).font("Helvetica-Bold").fillColor("#000000");
       doc.text(`Total: $${grandTotal.toFixed(2)}`, 420, yPos, { width: 100, align: "right" });
 
-      const paidTotal = filtered.filter((i) => i.status === "paid").reduce((s, i) => s + Number(i.total), 0);
+      const paidTotal = filtered
+        .filter((i) => i.status === "paid")
+        .reduce((s, i) => s + Number(i.total), 0);
       const outstandingTotal = grandTotal - paidTotal;
       yPos += 20;
       doc.fontSize(10).font("Helvetica").fillColor("#666666");
       doc.text(`Paid: $${paidTotal.toFixed(2)}`, 420, yPos, { width: 100, align: "right" });
       yPos += 15;
-      doc.text(`Outstanding: $${outstandingTotal.toFixed(2)}`, 420, yPos, { width: 100, align: "right" });
+      doc.text(`Outstanding: $${outstandingTotal.toFixed(2)}`, 420, yPos, {
+        width: 100,
+        align: "right",
+      });
 
       doc.end();
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Admin: Estimates (T004) ================
@@ -1336,7 +1603,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       requireRole(role);
       const { contactId, propertyId, description, items, totalCents } = req.body;
       if (!contactId || !description || !items || totalCents === undefined) {
-        return res.status(400).json({ error: "contactId, description, items, and totalCents are required" });
+        return res
+          .status(400)
+          .json({ error: "contactId, description, items, and totalCents are required" });
       }
 
       const contact = await storage.getContact(contactId, companyId);
@@ -1384,7 +1653,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       }
 
       res.json(estimate);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/estimates", isAuthenticated, async (req: Request, res: Response) => {
@@ -1395,7 +1666,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         contactId: req.query.contactId as string | undefined,
       });
       res.json(allEstimates);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Admin: Service Change Requests (T006) ================
@@ -1407,160 +1680,232 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         status: req.query.status as string | undefined,
       });
 
-      const enriched = await Promise.all(requests.map(async (r) => {
-        const contact = await storage.getContactById(r.contactId);
-        return {
-          ...r,
-          contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
-        };
-      }));
+      const enriched = await Promise.all(
+        requests.map(async (r) => {
+          const contact = await storage.getContactById(r.contactId);
+          return {
+            ...r,
+            contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
+          };
+        })
+      );
 
       res.json(enriched);
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/service-change-requests/:id/approve", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const request = await storage.getServiceChangeRequest(p(req.params.id), companyId);
-      if (!request) return res.status(404).json({ error: "Change request not found" });
-      if (request.status !== "pending") return res.status(400).json({ error: "Request is not pending" });
-
-      await storage.updateServiceChangeRequest(request.id, companyId, {
-        status: "approved",
-        adminNote: req.body.adminNote || null,
-        respondedAt: new Date(),
-      });
-
-      if (request.requestType === "pause") {
-        await storage.updateContact(request.contactId, companyId, { status: "paused" });
-        const plans = await storage.getServicePlans(companyId, { contactId: request.contactId, isActive: true });
-        for (const plan of plans) {
-          await storage.updateServicePlan(plan.id, companyId, { isActive: false });
-        }
-      } else if (request.requestType === "cancel" && request.servicePlanId) {
-        await storage.updateServicePlan(request.servicePlanId, companyId, { isActive: false });
-      } else if (request.servicePlanId && request.requestedValue) {
-        if (request.requestType === "frequency_change") {
-          await storage.updateServicePlan(request.servicePlanId, companyId, { frequency: request.requestedValue as any });
-        } else if (request.requestType === "day_change") {
-          await storage.updateServicePlan(request.servicePlanId, companyId, { dayOfWeek: request.requestedValue as any });
-        }
-      }
-
-      res.json({ success: true });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/service-change-requests/:id/deny", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const request = await storage.getServiceChangeRequest(p(req.params.id), companyId);
-      if (!request) return res.status(404).json({ error: "Change request not found" });
-      if (request.status !== "pending") return res.status(400).json({ error: "Request is not pending" });
-
-      await storage.updateServiceChangeRequest(request.id, companyId, {
-        status: "denied",
-        adminNote: req.body.adminNote || req.body.reason || null,
-        respondedAt: new Date(),
-      });
-
-      res.json({ success: true });
-    } catch (err) { handleError(res, err); }
-  });
-
-  // Admin route: generate portal invite link
-  app.post("/api/contacts/:id/portal-access", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (!contact.email) return res.status(400).json({ error: "Contact must have an email address to enable portal access" });
-
-      await provisionPortalAccess(p(req.params.id), companyId, getBaseUrl(req));
-
-      res.json({ success: true, message: "Portal access enabled. Temporary password has been emailed to the customer." });
-    } catch (err: any) {
-      console.error("[portal-access/provision] Unhandled error:", { message: err?.message, stack: err?.stack, name: err?.name });
+    } catch (err) {
       handleError(res, err);
     }
   });
 
-  app.delete("/api/contacts/:id/portal-access", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-
-      await storage.updateContact(p(req.params.id), companyId, { hasPortalAccess: false });
-      res.json({ success: true, message: "Portal access disabled." });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/contacts/:id/portal-access/reset-password", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role, userId } = await getCompanyContext(req);
-      requireRole(role, ["owner", "admin"]);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (!contact.hasPortalAccess) return res.status(400).json({ error: "Portal access is not enabled for this contact" });
-      const { newPassword } = req.body;
-      if (!newPassword || newPassword.length < 8) {
-        return res.status(400).json({ error: "Password must be at least 8 characters" });
-      }
-      const salt = crypto.randomBytes(16).toString("hex");
-      const portalPasswordHash = await new Promise<string>((resolve, reject) => {
-        crypto.scrypt(newPassword, salt, 64, (err, key) => {
-          if (err) return reject(err);
-          resolve(`${salt}:${key.toString("hex")}`);
-        });
-      });
-      await storage.updateContact(p(req.params.id), companyId, { portalPasswordHash });
-      auditLog(companyId, userId, "contact", p(req.params.id), "update", { action: "portal_password_reset", resetBy: userId });
-      res.json({ success: true, message: "Client portal password has been updated." });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/contacts/:id/portal-access/resend", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (!contact.email) return res.status(400).json({ error: "Contact must have an email address to send a portal link" });
-      if (!contact.hasPortalAccess) return res.status(400).json({ error: "Portal access is not enabled for this contact. Enable it first." });
-
-      const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
-      const salt = crypto.randomBytes(16).toString("hex");
-      const portalPasswordHash = await new Promise<string>((resolve, reject) => {
-        crypto.scrypt(tempPassword, salt, 64, (err, key) => {
-          if (err) return reject(err);
-          resolve(`${salt}:${key.toString("hex")}`);
-        });
-      });
-
+  app.post(
+    "/api/service-change-requests/:id/approve",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
       try {
-        await storage.updateContact(p(req.params.id), companyId, { portalPasswordHash });
-      } catch (dbErr: any) {
-        console.error("[portal-access/resend] Failed to update contact:", { contactId: p(req.params.id), companyId, message: dbErr?.message, stack: dbErr?.stack, name: dbErr?.name });
-        throw new Error(`Failed to save new portal credentials: ${dbErr?.message || String(dbErr)}`);
-      }
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const request = await storage.getServiceChangeRequest(p(req.params.id), companyId);
+        if (!request) return res.status(404).json({ error: "Change request not found" });
+        if (request.status !== "pending")
+          return res.status(400).json({ error: "Request is not pending" });
 
-      const company = await storage.getCompany(companyId);
-      const portalUrl = `${getBaseUrl(req)}/portal/login`;
-      sendEmail({
-        companyId: companyId,
-        contactId: p(req.params.id),
-        to: contact.email,
-        subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
-        senderName: company?.name || undefined,
-        replyTo: company?.email || undefined,
-        text: `Hi ${contact.firstName},\n\nHere is your client portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nNew Password: ${tempPassword}\n\nThank you!`,
-        html: `
+        await storage.updateServiceChangeRequest(request.id, companyId, {
+          status: "approved",
+          adminNote: req.body.adminNote || null,
+          respondedAt: new Date(),
+        });
+
+        if (request.requestType === "pause") {
+          await storage.updateContact(request.contactId, companyId, { status: "paused" });
+          const plans = await storage.getServicePlans(companyId, {
+            contactId: request.contactId,
+            isActive: true,
+          });
+          for (const plan of plans) {
+            await storage.updateServicePlan(plan.id, companyId, { isActive: false });
+          }
+        } else if (request.requestType === "cancel" && request.servicePlanId) {
+          await storage.updateServicePlan(request.servicePlanId, companyId, { isActive: false });
+        } else if (request.servicePlanId && request.requestedValue) {
+          if (request.requestType === "frequency_change") {
+            await storage.updateServicePlan(request.servicePlanId, companyId, {
+              frequency: request.requestedValue as any,
+            });
+          } else if (request.requestType === "day_change") {
+            await storage.updateServicePlan(request.servicePlanId, companyId, {
+              dayOfWeek: request.requestedValue as any,
+            });
+          }
+        }
+
+        res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/service-change-requests/:id/deny",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const request = await storage.getServiceChangeRequest(p(req.params.id), companyId);
+        if (!request) return res.status(404).json({ error: "Change request not found" });
+        if (request.status !== "pending")
+          return res.status(400).json({ error: "Request is not pending" });
+
+        await storage.updateServiceChangeRequest(request.id, companyId, {
+          status: "denied",
+          adminNote: req.body.adminNote || req.body.reason || null,
+          respondedAt: new Date(),
+        });
+
+        res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  // Admin route: generate portal invite link
+  app.post(
+    "/api/contacts/:id/portal-access",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        if (!contact.email)
+          return res
+            .status(400)
+            .json({ error: "Contact must have an email address to enable portal access" });
+
+        await provisionPortalAccess(p(req.params.id), companyId, getBaseUrl(req));
+
+        res.json({
+          success: true,
+          message: "Portal access enabled. Temporary password has been emailed to the customer.",
+        });
+      } catch (err: any) {
+        console.error("[portal-access/provision] Unhandled error:", {
+          message: err?.message,
+          stack: err?.stack,
+          name: err?.name,
+        });
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.delete(
+    "/api/contacts/:id/portal-access",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+        await storage.updateContact(p(req.params.id), companyId, { hasPortalAccess: false });
+        res.json({ success: true, message: "Portal access disabled." });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/contacts/:id/portal-access/reset-password",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role, userId } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        if (!contact.hasPortalAccess)
+          return res.status(400).json({ error: "Portal access is not enabled for this contact" });
+        const { newPassword } = req.body;
+        if (!newPassword || newPassword.length < 8) {
+          return res.status(400).json({ error: "Password must be at least 8 characters" });
+        }
+        const salt = crypto.randomBytes(16).toString("hex");
+        const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+          crypto.scrypt(newPassword, salt, 64, (err, key) => {
+            if (err) return reject(err);
+            resolve(`${salt}:${key.toString("hex")}`);
+          });
+        });
+        await storage.updateContact(p(req.params.id), companyId, { portalPasswordHash });
+        auditLog(companyId, userId, "contact", p(req.params.id), "update", {
+          action: "portal_password_reset",
+          resetBy: userId,
+        });
+        res.json({ success: true, message: "Client portal password has been updated." });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/contacts/:id/portal-access/resend",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        if (!contact.email)
+          return res
+            .status(400)
+            .json({ error: "Contact must have an email address to send a portal link" });
+        if (!contact.hasPortalAccess)
+          return res
+            .status(400)
+            .json({ error: "Portal access is not enabled for this contact. Enable it first." });
+
+        const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
+        const salt = crypto.randomBytes(16).toString("hex");
+        const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+          crypto.scrypt(tempPassword, salt, 64, (err, key) => {
+            if (err) return reject(err);
+            resolve(`${salt}:${key.toString("hex")}`);
+          });
+        });
+
+        try {
+          await storage.updateContact(p(req.params.id), companyId, { portalPasswordHash });
+        } catch (dbErr: any) {
+          console.error("[portal-access/resend] Failed to update contact:", {
+            contactId: p(req.params.id),
+            companyId,
+            message: dbErr?.message,
+            stack: dbErr?.stack,
+            name: dbErr?.name,
+          });
+          throw new Error(
+            `Failed to save new portal credentials: ${dbErr?.message || String(dbErr)}`
+          );
+        }
+
+        const company = await storage.getCompany(companyId);
+        const portalUrl = `${getBaseUrl(req)}/portal/login`;
+        sendEmail({
+          companyId: companyId,
+          contactId: p(req.params.id),
+          to: contact.email,
+          subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
+          senderName: company?.name || undefined,
+          replyTo: company?.email || undefined,
+          text: `Hi ${contact.firstName},\n\nHere is your client portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nNew Password: ${tempPassword}\n\nThank you!`,
+          html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
               <h1 style="color: white; margin: 0;">${company?.name || "ScooPilot"}</h1>
@@ -1579,55 +1924,73 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
             </div>
           </div>
         `,
-      }).catch((err) => console.error("[portal-access/resend] Failed to send portal link email:", err));
+        }).catch((err) =>
+          console.error("[portal-access/resend] Failed to send portal link email:", err)
+        );
 
-      res.json({ success: true, message: "Portal link with new credentials has been emailed to the customer." });
-    } catch (err: any) {
-      console.error("[portal-access/resend] Unhandled error:", { message: err?.message, stack: err?.stack, name: err?.name });
-      handleError(res, err);
+        res.json({
+          success: true,
+          message: "Portal link with new credentials has been emailed to the customer.",
+        });
+      } catch (err: any) {
+        console.error("[portal-access/resend] Unhandled error:", {
+          message: err?.message,
+          stack: err?.stack,
+          name: err?.name,
+        });
+        handleError(res, err);
+      }
     }
-  });
+  );
 
   // ================ Client Onboarding Form ================
 
-  app.post("/api/contacts/:id/send-onboarding", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role, userId } = await getCompanyContext(req);
-      requireRole(role);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
+  app.post(
+    "/api/contacts/:id/send-onboarding",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role, userId } = await getCompanyContext(req);
+        requireRole(role);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      const propertiesList = await storage.getProperties(companyId, p(req.params.id));
-      if (!propertiesList || propertiesList.length === 0) {
-        return res.status(400).json({ error: "This contact has no properties. Add a property before sending an onboarding form." });
-      }
+        const propertiesList = await storage.getProperties(companyId, p(req.params.id));
+        if (!propertiesList || propertiesList.length === 0) {
+          return res.status(400).json({
+            error:
+              "This contact has no properties. Add a property before sending an onboarding form.",
+          });
+        }
 
-      const property = propertiesList[0];
-      let token = property.onboardingToken;
+        const property = propertiesList[0];
+        let token = property.onboardingToken;
 
-      if (!token) {
-        token = crypto.randomUUID();
-        await storage.updateProperty(property.id, companyId, { onboardingToken: token });
-      }
+        if (!token) {
+          token = crypto.randomUUID();
+          await storage.updateProperty(property.id, companyId, { onboardingToken: token });
+        }
 
-      const baseUrl = getBaseUrl(req);
-      const onboardingUrl = `${baseUrl}/onboarding/${token}`;
+        const baseUrl = getBaseUrl(req);
+        const onboardingUrl = `${baseUrl}/onboarding/${token}`;
 
-      let emailed = false;
+        let emailed = false;
 
-      if (contact.email) {
-        const company = await storage.getCompany(companyId);
-        if (company?.clientNotificationsSuppressed) {
-          console.log(`[send-onboarding] Email suppressed for contact ${p(req.params.id)} — Import Mode on`);
-        } else {
-          const emailResult = await sendEmail({
-            companyId,
-            to: contact.email,
-            subject: `${company?.name || "Your Service Provider"} — Please Complete Your Onboarding Form`,
-            senderName: company?.name || undefined,
-            replyTo: company?.email || undefined,
-            text: `Hi ${contact.firstName},\n\nWelcome! To prepare for your first service visit, please take a few minutes to fill out our onboarding form.\n\nOnboarding Form: ${onboardingUrl}\n\nThis helps our technicians know about your dogs, gate access, and how to best serve you.\n\nThank you!`,
-            html: `
+        if (contact.email) {
+          const company = await storage.getCompany(companyId);
+          if (company?.clientNotificationsSuppressed) {
+            console.log(
+              `[send-onboarding] Email suppressed for contact ${p(req.params.id)} — Import Mode on`
+            );
+          } else {
+            const emailResult = await sendEmail({
+              companyId,
+              to: contact.email,
+              subject: `${company?.name || "Your Service Provider"} — Please Complete Your Onboarding Form`,
+              senderName: company?.name || undefined,
+              replyTo: company?.email || undefined,
+              text: `Hi ${contact.firstName},\n\nWelcome! To prepare for your first service visit, please take a few minutes to fill out our onboarding form.\n\nOnboarding Form: ${onboardingUrl}\n\nThis helps our technicians know about your dogs, gate access, and how to best serve you.\n\nThank you!`,
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
                   <h1 style="color: white; margin: 0;">${escapeHtml(company?.name || "Your Service Provider")}</h1>
@@ -1641,71 +2004,87 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
                 </div>
               </div>
             `,
-          }).catch((err) => {
-            console.error("Failed to send onboarding email:", err);
-            return { success: false, error: String(err) };
-          });
-          emailed = emailResult.success === true;
+            }).catch((err) => {
+              console.error("Failed to send onboarding email:", err);
+              return { success: false, error: String(err) };
+            });
+            emailed = emailResult.success === true;
+          }
         }
-      }
 
-      storage.createActivityLog({
-        companyId,
-        contactId: p(req.params.id),
-        userId,
-        action: "email_sent",
-        details: {
-          type: emailed ? "onboarding_email_sent" : "onboarding_link_generated",
-          url: onboardingUrl,
-          propertyId: property.id,
-          ...(emailed && { sentTo: contact.email }),
-        },
-      }).catch(console.error);
-
-      res.json({ success: true, url: onboardingUrl, emailed, noEmail: !contact.email });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/contacts/:id/regenerate-onboarding", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role, userId } = await getCompanyContext(req);
-      requireRole(role);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-
-      const propertiesList = await storage.getProperties(companyId, p(req.params.id));
-      if (!propertiesList || propertiesList.length === 0) {
-        return res.status(400).json({ error: "This contact has no properties." });
-      }
-
-      const property = propertiesList[0];
-      const newToken = crypto.randomUUID();
-      await storage.updateProperty(property.id, companyId, { onboardingToken: newToken });
-
-      const baseUrl = getBaseUrl(req);
-      const onboardingUrl = `${baseUrl}/onboarding/${newToken}`;
-
-      storage.createActivityLog({
-        companyId,
-        contactId: p(req.params.id),
-        userId,
-        action: "email_sent",
-        details: { type: "onboarding_link_regenerated", url: onboardingUrl, propertyId: property.id },
-      }).catch(console.error);
-
-      if (contact.email) {
-        const company = await storage.getCompany(companyId);
-        if (company?.clientNotificationsSuppressed) {
-          console.log(`[regenerate-onboarding] Email suppressed for contact ${p(req.params.id)} — Import Mode on`);
-        } else {
-          sendEmail({
+        storage
+          .createActivityLog({
             companyId,
-            to: contact.email,
-            subject: `${company?.name || "Your Service Provider"} — New Onboarding Link`,
-            senderName: company?.name || undefined,
-            replyTo: company?.email || undefined,
-            text: `Hi ${contact.firstName},\n\nA new onboarding link has been generated for your account. Please use the link below (your previous link is no longer valid).\n\nOnboarding Form: ${onboardingUrl}\n\nThank you!`,
-            html: `
+            contactId: p(req.params.id),
+            userId,
+            action: "email_sent",
+            details: {
+              type: emailed ? "onboarding_email_sent" : "onboarding_link_generated",
+              url: onboardingUrl,
+              propertyId: property.id,
+              ...(emailed && { sentTo: contact.email }),
+            },
+          })
+          .catch(console.error);
+
+        res.json({ success: true, url: onboardingUrl, emailed, noEmail: !contact.email });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/contacts/:id/regenerate-onboarding",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role, userId } = await getCompanyContext(req);
+        requireRole(role);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+        const propertiesList = await storage.getProperties(companyId, p(req.params.id));
+        if (!propertiesList || propertiesList.length === 0) {
+          return res.status(400).json({ error: "This contact has no properties." });
+        }
+
+        const property = propertiesList[0];
+        const newToken = crypto.randomUUID();
+        await storage.updateProperty(property.id, companyId, { onboardingToken: newToken });
+
+        const baseUrl = getBaseUrl(req);
+        const onboardingUrl = `${baseUrl}/onboarding/${newToken}`;
+
+        storage
+          .createActivityLog({
+            companyId,
+            contactId: p(req.params.id),
+            userId,
+            action: "email_sent",
+            details: {
+              type: "onboarding_link_regenerated",
+              url: onboardingUrl,
+              propertyId: property.id,
+            },
+          })
+          .catch(console.error);
+
+        if (contact.email) {
+          const company = await storage.getCompany(companyId);
+          if (company?.clientNotificationsSuppressed) {
+            console.log(
+              `[regenerate-onboarding] Email suppressed for contact ${p(req.params.id)} — Import Mode on`
+            );
+          } else {
+            sendEmail({
+              companyId,
+              to: contact.email,
+              subject: `${company?.name || "Your Service Provider"} — New Onboarding Link`,
+              senderName: company?.name || undefined,
+              replyTo: company?.email || undefined,
+              text: `Hi ${contact.firstName},\n\nA new onboarding link has been generated for your account. Please use the link below (your previous link is no longer valid).\n\nOnboarding Form: ${onboardingUrl}\n\nThank you!`,
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
                   <h1 style="color: white; margin: 0;">${escapeHtml(company?.name || "Your Service Provider")}</h1>
@@ -1718,28 +2097,45 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
                 </div>
               </div>
             `,
-          }).catch((err) => console.error("Failed to send regenerated onboarding email:", err));
+            }).catch((err) => console.error("Failed to send regenerated onboarding email:", err));
+          }
         }
-      }
 
-      res.json({ success: true, url: onboardingUrl, emailed: !!contact.email });
-    } catch (err) { handleError(res, err); }
-  });
+        res.json({ success: true, url: onboardingUrl, emailed: !!contact.email });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   interface OnboardingGetRow {
-    id: string; contact_id: string; company_id: string;
-    street_address: string; city: string; state: string; zip_code: string;
-    number_of_dogs: number; gate_code: string | null; special_instructions: string | null;
-    has_dangerous_dog: boolean; dangerous_dog_notes: string | null;
-    dog_names: string | null; dog_breeds: string | null;
+    id: string;
+    contact_id: string;
+    company_id: string;
+    street_address: string;
+    city: string;
+    state: string;
+    zip_code: string;
+    number_of_dogs: number;
+    gate_code: string | null;
+    special_instructions: string | null;
+    has_dangerous_dog: boolean;
+    dangerous_dog_notes: string | null;
+    dog_names: string | null;
+    dog_breeds: string | null;
     onboarding_completed_at: string | null;
-    first_name: string; last_name: string; email: string | null; phone: string | null;
-    company_name: string; logo_url: string | null;
+    first_name: string;
+    last_name: string;
+    email: string | null;
+    phone: string | null;
+    company_name: string;
+    logo_url: string | null;
   }
 
   app.get("/api/public/onboarding/:token", async (req: Request, res: Response) => {
     try {
-      const { token: _token } = req.params; const token = p(_token);
+      const { token: _token } = req.params;
+      const token = p(_token);
       const rows = await db.execute(sql`
         SELECT p.id, p.contact_id, p.company_id, p.street_address, p.city, p.state, p.zip_code,
                p.number_of_dogs, p.gate_code, p.special_instructions,
@@ -1753,7 +2149,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         WHERE p.onboarding_token = ${token}
         LIMIT 1
       `);
-      if (!rows.rows.length) return res.status(404).json({ error: "Onboarding link not found or expired" });
+      if (!rows.rows.length)
+        return res.status(404).json({ error: "Onboarding link not found or expired" });
       const row = rows.rows[0] as unknown as OnboardingGetRow;
       res.json({
         contact: {
@@ -1783,12 +2180,15 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         },
         alreadyCompleted: !!row.onboarding_completed_at,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/public/onboarding/:token", async (req: Request, res: Response) => {
     try {
-      const { token: _token } = req.params; const token = p(_token);
+      const { token: _token } = req.params;
+      const token = p(_token);
       const rows = await db.execute(sql`
         SELECT p.id, p.company_id, p.contact_id, p.onboarding_completed_at
         FROM properties p
@@ -1796,21 +2196,32 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         LIMIT 1
       `);
       if (!rows.rows.length) return res.status(404).json({ error: "Onboarding link not found" });
-      const row = rows.rows[0] as { id: string; company_id: string; contact_id: string; onboarding_completed_at: string | null };
+      const row = rows.rows[0] as {
+        id: string;
+        company_id: string;
+        contact_id: string;
+        onboarding_completed_at: string | null;
+      };
       if (row.onboarding_completed_at) {
         return res.status(400).json({ error: "This onboarding form has already been submitted" });
       }
 
       const {
-        dogNames, dogBreeds, hasDangerousDog, dangerousDogNotes,
-        gateCode, specialInstructions, techInstructions,
-        preferredContactMethod, bestContactTime,
+        dogNames,
+        dogBreeds,
+        hasDangerousDog,
+        dangerousDogNotes,
+        gateCode,
+        specialInstructions,
+        techInstructions,
+        preferredContactMethod,
+        bestContactTime,
       } = req.body;
 
-      const combinedInstructions = [
-        specialInstructions || "",
-        techInstructions ? `Technician notes: ${techInstructions}` : "",
-      ].filter(Boolean).join("\n\n") || null;
+      const combinedInstructions =
+        [specialInstructions || "", techInstructions ? `Technician notes: ${techInstructions}` : ""]
+          .filter(Boolean)
+          .join("\n\n") || null;
 
       await db.execute(sql`
         UPDATE properties SET
@@ -1839,77 +2250,97 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           if (bestContactTime) {
             updated.bestContactTime = bestContactTime;
             if (bestContactTime === "morning") updated.preferredTiming = "morning_of";
-            else if (bestContactTime === "afternoon" || bestContactTime === "evening") updated.preferredTiming = "24h_before";
+            else if (bestContactTime === "afternoon" || bestContactTime === "evening")
+              updated.preferredTiming = "24h_before";
           }
-          await storage.updateContact(row.contact_id, row.company_id, { reminderPreferences: updated as any });
+          await storage.updateContact(row.contact_id, row.company_id, {
+            reminderPreferences: updated as any,
+          });
         }
       }
 
-      storage.createActivityLog({
-        companyId: row.company_id,
-        contactId: row.contact_id,
-        userId: null,
-        action: "updated",
-        details: { type: "onboarding_completed", propertyId: row.id },
-      }).catch(console.error);
+      storage
+        .createActivityLog({
+          companyId: row.company_id,
+          contactId: row.contact_id,
+          userId: null,
+          action: "updated",
+          details: { type: "onboarding_completed", propertyId: row.id },
+        })
+        .catch(console.error);
 
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/contacts/bulk/send-portal-link", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const { contactIds } = req.body;
-      if (!Array.isArray(contactIds) || contactIds.length === 0) {
-        return res.status(400).json({ error: "contactIds array is required" });
-      }
+  app.post(
+    "/api/contacts/bulk/send-portal-link",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const { contactIds } = req.body;
+        if (!Array.isArray(contactIds) || contactIds.length === 0) {
+          return res.status(400).json({ error: "contactIds array is required" });
+        }
 
-      const company = await storage.getCompany(companyId);
-      const portalUrl = `${getBaseUrl(req)}/portal/login`;
-      let sent = 0;
-      let skipped = 0;
-      const errors: string[] = [];
+        const company = await storage.getCompany(companyId);
+        const portalUrl = `${getBaseUrl(req)}/portal/login`;
+        let sent = 0;
+        let skipped = 0;
+        const errors: string[] = [];
 
-      for (const contactId of contactIds) {
-        try {
-          const contact = await storage.getContact(contactId, companyId);
-          if (!contact) { skipped++; continue; }
-          if (!contact.email) { skipped++; errors.push(`${contact.firstName} ${contact.lastName}: no email`); continue; }
+        for (const contactId of contactIds) {
+          try {
+            const contact = await storage.getContact(contactId, companyId);
+            if (!contact) {
+              skipped++;
+              continue;
+            }
+            if (!contact.email) {
+              skipped++;
+              errors.push(`${contact.firstName} ${contact.lastName}: no email`);
+              continue;
+            }
 
-          let tempPassword: string | null = null;
-          if (!contact.hasPortalAccess) {
-            tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
-            const salt = crypto.randomBytes(16).toString("hex");
-            const portalPasswordHash = await new Promise<string>((resolve, reject) => {
-              crypto.scrypt(tempPassword!, salt, 64, (err, key) => {
-                if (err) reject(err);
-                resolve(`${salt}:${key.toString("hex")}`);
+            let tempPassword: string | null = null;
+            if (!contact.hasPortalAccess) {
+              tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
+              const salt = crypto.randomBytes(16).toString("hex");
+              const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+                crypto.scrypt(tempPassword!, salt, 64, (err, key) => {
+                  if (err) reject(err);
+                  resolve(`${salt}:${key.toString("hex")}`);
+                });
               });
-            });
-            await storage.updateContact(contactId, companyId, { hasPortalAccess: true, portalPasswordHash });
-          } else {
-            tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
-            const salt = crypto.randomBytes(16).toString("hex");
-            const portalPasswordHash = await new Promise<string>((resolve, reject) => {
-              crypto.scrypt(tempPassword!, salt, 64, (err, key) => {
-                if (err) reject(err);
-                resolve(`${salt}:${key.toString("hex")}`);
+              await storage.updateContact(contactId, companyId, {
+                hasPortalAccess: true,
+                portalPasswordHash,
               });
-            });
-            await storage.updateContact(contactId, companyId, { portalPasswordHash });
-          }
+            } else {
+              tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
+              const salt = crypto.randomBytes(16).toString("hex");
+              const portalPasswordHash = await new Promise<string>((resolve, reject) => {
+                crypto.scrypt(tempPassword!, salt, 64, (err, key) => {
+                  if (err) reject(err);
+                  resolve(`${salt}:${key.toString("hex")}`);
+                });
+              });
+              await storage.updateContact(contactId, companyId, { portalPasswordHash });
+            }
 
-          sendEmail({
-            companyId: companyId,
-            contactId: contactId,
-            to: contact.email,
-            subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
-            senderName: company?.name || undefined,
-            replyTo: company?.email || undefined,
-            text: `Hi ${contact.firstName},\n\nHere is your client portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nPassword: ${tempPassword}\n\nThank you!`,
-            html: `
+            sendEmail({
+              companyId: companyId,
+              contactId: contactId,
+              to: contact.email,
+              subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
+              senderName: company?.name || undefined,
+              replyTo: company?.email || undefined,
+              text: `Hi ${contact.firstName},\n\nHere is your client portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nPassword: ${tempPassword}\n\nThank you!`,
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
                   <h1 style="color: white; margin: 0;">${company?.name || "ScooPilot"}</h1>
@@ -1927,18 +2358,23 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
                 </div>
               </div>
             `,
-          }).catch((err) => console.error(`Failed to send portal link to ${contact.email}:`, err));
+            }).catch((err) =>
+              console.error(`Failed to send portal link to ${contact.email}:`, err)
+            );
 
-          sent++;
-        } catch (e: any) {
-          skipped++;
-          errors.push(e.message || "Unknown error");
+            sent++;
+          } catch (e: any) {
+            skipped++;
+            errors.push(e.message || "Unknown error");
+          }
         }
-      }
 
-      res.json({ success: true, sent, skipped, errors: errors.length > 0 ? errors : undefined });
-    } catch (err) { handleError(res, err); }
-  });
+        res.json({ success: true, sent, skipped, errors: errors.length > 0 ? errors : undefined });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // ── Invoice Theme Settings ─────────────────────────────────────────
 
@@ -1957,14 +2393,29 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       } else {
         res.json(defaultTheme);
       }
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.put("/api/invoice-theme", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const theme = req.body;
-      const allowed = ["primaryColor", "accentColor", "textColor", "mutedColor", "borderColor", "backgroundColor", "cardColor", "fontFamily", "logoSize", "borderRadius", "showLogo", "logoPosition"];
+      const allowed = [
+        "primaryColor",
+        "accentColor",
+        "textColor",
+        "mutedColor",
+        "borderColor",
+        "backgroundColor",
+        "cardColor",
+        "fontFamily",
+        "logoSize",
+        "borderRadius",
+        "showLogo",
+        "logoPosition",
+      ];
       const filtered: any = {};
       for (const key of allowed) {
         if (theme[key] !== undefined) filtered[key] = theme[key];
@@ -1976,14 +2427,22 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       await storage.updateCompany(companyId, { invoiceTheme: JSON.stringify(filtered) });
       const defaultTheme = loadTheme(getDefaultThemePath());
       res.json({ ...defaultTheme, ...filtered });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ── Invoice Template Rendering ──────────────────────────────────────
 
   app.get("/invoice/example", (_req: Request, res: Response) => {
     try {
-      const examplePath = path.join(process.cwd(), "server", "templates", "examples", "invoice.example.json");
+      const examplePath = path.join(
+        process.cwd(),
+        "server",
+        "templates",
+        "examples",
+        "invoice.example.json"
+      );
       const rawData = JSON.parse(fs.readFileSync(examplePath, "utf-8"));
       const computed = computeInvoice(rawData);
       const tpl = loadTemplate(getDefaultTemplatePath());
@@ -2017,28 +2476,41 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : "";
       const formattedDueDate = invoice.dueDate
-        ? new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+        ? new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          })
         : "";
 
-      const billingAddr = contact.streetAddress ? {
-        line1: contact.streetAddress,
-        line2: contact.address2 || "",
-        city: contact.city || "",
-        state: contact.state || "",
-        zip: contact.zipCode || "",
-      } : null;
-      const serviceAddrObj = serviceAddr ? {
-        line1: serviceAddr.streetAddress || "",
-        line2: "",
-        city: serviceAddr.city || "",
-        state: serviceAddr.state || "",
-        zip: serviceAddr.zipCode || "",
-      } : null;
-      const billingLine = billingAddr ? `${billingAddr.line1} ${billingAddr.city} ${billingAddr.state} ${billingAddr.zip}`.trim() : "";
-      const serviceLine = serviceAddrObj ? `${serviceAddrObj.line1} ${serviceAddrObj.city} ${serviceAddrObj.state} ${serviceAddrObj.zip}`.trim() : "";
+      const billingAddr = contact.streetAddress
+        ? {
+            line1: contact.streetAddress,
+            line2: contact.address2 || "",
+            city: contact.city || "",
+            state: contact.state || "",
+            zip: contact.zipCode || "",
+          }
+        : null;
+      const serviceAddrObj = serviceAddr
+        ? {
+            line1: serviceAddr.streetAddress || "",
+            line2: "",
+            city: serviceAddr.city || "",
+            state: serviceAddr.state || "",
+            zip: serviceAddr.zipCode || "",
+          }
+        : null;
+      const billingLine = billingAddr
+        ? `${billingAddr.line1} ${billingAddr.city} ${billingAddr.state} ${billingAddr.zip}`.trim()
+        : "";
+      const serviceLine = serviceAddrObj
+        ? `${serviceAddrObj.line1} ${serviceAddrObj.city} ${serviceAddrObj.state} ${serviceAddrObj.zip}`.trim()
+        : "";
       const showServiceAddress = serviceAddrObj && serviceLine && serviceLine !== billingLine;
 
-      const hasStripe = isStripeConfigured() && parseFloat(invoice.total) > 0 && invoice.status !== "paid";
+      const hasStripe =
+        isStripeConfigured() && parseFloat(invoice.total) > 0 && invoice.status !== "paid";
       const previewPaymentUrl = hasStripe ? "#preview" : "";
 
       const invoiceData: any = {
@@ -2052,7 +2524,11 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         invoice: {
           number: invoice.invoiceNumber,
           status: statusRaw,
-          issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
+          issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          }),
           due_date: formattedDueDate,
           terms: "Net 30",
           service_period: "",
@@ -2100,7 +2576,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       res.setHeader("Content-Type", "text/html");
       res.send(html);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
-
 }

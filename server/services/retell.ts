@@ -9,7 +9,9 @@ function getRetellApiKey(): string {
 export function getAppBaseUrl(): string {
   const url = process.env.APP_BASE_URL;
   if (!url) {
-    console.warn("[Retell] APP_BASE_URL is not set — webhook URL may be incorrect. Set APP_BASE_URL to your production domain (e.g. https://yourapp.replit.app).");
+    console.warn(
+      "[Retell] APP_BASE_URL is not set — webhook URL may be incorrect. Set APP_BASE_URL to your production domain (e.g. https://yourapp.replit.app)."
+    );
     const replSlug = process.env.REPL_SLUG;
     const replOwner = process.env.REPL_OWNER;
     if (replSlug && replOwner) {
@@ -44,11 +46,14 @@ export async function cloneRetellAgent(params: {
     const body = await getRes.text();
     throw new Error(`Retell get-agent (template) failed (${getRes.status}): ${body}`);
   }
-  const template = await getRes.json() as Record<string, unknown>;
+  const template = (await getRes.json()) as Record<string, unknown>;
 
   const fieldsToOmit = new Set([
-    "agent_id", "last_modification_timestamp", "inbound_phone_numbers",
-    "outbound_phone_numbers", "knowledge_base_ids",
+    "agent_id",
+    "last_modification_timestamp",
+    "inbound_phone_numbers",
+    "outbound_phone_numbers",
+    "knowledge_base_ids",
   ]);
   const agentBody: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(template)) {
@@ -70,7 +75,7 @@ export async function cloneRetellAgent(params: {
     const body = await createRes.text();
     throw new Error(`Retell create-agent (clone) failed (${createRes.status}): ${body}`);
   }
-  const created = await createRes.json() as { agent_id: string };
+  const created = (await createRes.json()) as { agent_id: string };
   return created.agent_id;
 }
 
@@ -91,7 +96,9 @@ export async function provisionRetellNumber(params: {
   let availableNumbers = await tryAreaCode(preferredAreaCode);
 
   if (!availableNumbers.length && preferredAreaCode !== "800") {
-    console.warn(`[Retell] No numbers in area code ${preferredAreaCode}, trying fallback area codes`);
+    console.warn(
+      `[Retell] No numbers in area code ${preferredAreaCode}, trying fallback area codes`
+    );
     for (const fallback of ["206", "425", "503", "650", "214", "312"]) {
       availableNumbers = await tryAreaCode(fallback);
       if (availableNumbers.length) {
@@ -135,14 +142,16 @@ export async function getRetellAgentWebhookUrl(agentId: string): Promise<string 
     const body = await res.text();
     throw new Error(`Retell get-agent failed (${res.status}): ${body}`);
   }
-  const data = await res.json() as { webhook_url?: string };
+  const data = (await res.json()) as { webhook_url?: string };
   return data.webhook_url ?? null;
 }
 
 export async function registerRetellWebhook(agentId: string): Promise<void> {
   const baseUrl = getAppBaseUrl();
   if (!baseUrl) {
-    console.warn(`[Retell] Skipping webhook registration for agent ${agentId}: APP_BASE_URL is not configured`);
+    console.warn(
+      `[Retell] Skipping webhook registration for agent ${agentId}: APP_BASE_URL is not configured`
+    );
     return;
   }
   const webhookUrl = `${baseUrl}/api/webhooks/retell`;
@@ -172,13 +181,19 @@ export async function checkRetellWebhookSync(agentId: string): Promise<void> {
   try {
     const registeredUrl = await getRetellAgentWebhookUrl(agentId);
     if (!registeredUrl) {
-      console.warn(`[Retell] Webhook URL for agent ${agentId} is not set. Expected: ${expectedUrl}`);
+      console.warn(
+        `[Retell] Webhook URL for agent ${agentId} is not set. Expected: ${expectedUrl}`
+      );
       await registerRetellWebhook(agentId);
       console.log(`[Retell] Auto-corrected: registered missing webhook URL on agent ${agentId}`);
     } else if (registeredUrl !== expectedUrl) {
-      console.warn(`[Retell] Webhook URL mismatch for agent ${agentId}. Registered: ${registeredUrl} | Expected: ${expectedUrl}`);
+      console.warn(
+        `[Retell] Webhook URL mismatch for agent ${agentId}. Registered: ${registeredUrl} | Expected: ${expectedUrl}`
+      );
       await registerRetellWebhook(agentId);
-      console.log(`[Retell] Auto-corrected: updated webhook URL on agent ${agentId} from "${registeredUrl}" to "${expectedUrl}"`);
+      console.log(
+        `[Retell] Auto-corrected: updated webhook URL on agent ${agentId} from "${registeredUrl}" to "${expectedUrl}"`
+      );
     } else {
       console.log(`[Retell] Webhook URL for agent ${agentId} is current: ${registeredUrl}`);
     }
@@ -209,7 +224,7 @@ export async function seedRetellKnowledgeBase(params: {
     throw new Error(`Retell create-knowledge-base failed (${createRes.status}): ${body}`);
   }
 
-  const kbData = await createRes.json() as { knowledge_base_id: string };
+  const kbData = (await createRes.json()) as { knowledge_base_id: string };
   const knowledgeBaseId = kbData.knowledge_base_id;
 
   const baseUrl = getAppBaseUrl();
@@ -233,7 +248,9 @@ export async function seedRetellKnowledgeBase(params: {
   }
 
   if (webhookUrl) {
-    console.log(`[Retell] Registered webhook URL "${webhookUrl}" on agent ${params.agentId} (combined with KB patch)`);
+    console.log(
+      `[Retell] Registered webhook URL "${webhookUrl}" on agent ${params.agentId} (combined with KB patch)`
+    );
   }
 
   return knowledgeBaseId;

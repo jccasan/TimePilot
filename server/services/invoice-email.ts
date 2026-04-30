@@ -1,7 +1,13 @@
 import { storage } from "../storage";
 import { sendEmail } from "./email";
 import { computeInvoice } from "../invoice-engine/invoice.compute";
-import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "../invoice-engine/invoice.render";
+import {
+  renderInvoice,
+  loadTemplate,
+  loadTheme,
+  getDefaultTemplatePath,
+  getDefaultThemePath,
+} from "../invoice-engine/invoice.render";
 import { isStripeConfigured, createCheckoutSession, ensureConnectedCustomer } from "./stripe";
 
 function maskEmail(email: string): string {
@@ -37,7 +43,9 @@ export async function sendInvoiceEmail(
   const company = await storage.getCompany(companyId);
 
   if (company?.clientNotificationsSuppressed) {
-    console.log(`[invoice-email] Suppressed (clientNotificationsSuppressed=true) for invoice ${invoiceId}`);
+    console.log(
+      `[invoice-email] Suppressed (clientNotificationsSuppressed=true) for invoice ${invoiceId}`
+    );
     return { success: true, messageId: "suppressed-quiet-mode" };
   }
 
@@ -50,7 +58,9 @@ export async function sendInvoiceEmail(
   let paymentUrl: string | undefined;
   if (isStripeConfigured()) {
     const invoiceTotal = parseFloat(invoice.total);
-    const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+    const connectAccountId = company?.stripeConnectOnboarded
+      ? company.stripeConnectAccountId
+      : null;
     if (invoiceTotal > 0) {
       try {
         const contactName = `${contact.firstName} ${contact.lastName}`.trim();
@@ -76,7 +86,10 @@ export async function sendInvoiceEmail(
         });
         paymentUrl = checkoutResult.url;
       } catch (stripeErr: any) {
-        console.error("[invoice-email] Could not generate Stripe checkout URL, sending without payment link:", stripeErr?.message || stripeErr);
+        console.error(
+          "[invoice-email] Could not generate Stripe checkout URL, sending without payment link:",
+          stripeErr?.message || stripeErr
+        );
       }
     } else {
       paymentUrl = `${baseUrl}/invoice/${invoice.id}/pay`;
@@ -91,24 +104,32 @@ export async function sendInvoiceEmail(
   const paidNum = invoice.paidAt ? parseFloat(invoice.total) : 0;
 
   const emailFormattedDueDate = invoice.dueDate
-    ? new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+    ? new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
     : "";
 
-  const emailBillingAddr = contact.streetAddress ? {
-    line1: contact.streetAddress,
-    line2: contact.address2 || "",
-    city: contact.city || "",
-    state: contact.state || "",
-    zip: contact.zipCode || "",
-  } : null;
+  const emailBillingAddr = contact.streetAddress
+    ? {
+        line1: contact.streetAddress,
+        line2: contact.address2 || "",
+        city: contact.city || "",
+        state: contact.state || "",
+        zip: contact.zipCode || "",
+      }
+    : null;
 
-  const emailServiceAddr = serviceAddr ? {
-    line1: serviceAddr.streetAddress || "",
-    line2: "",
-    city: serviceAddr.city || "",
-    state: serviceAddr.state || "",
-    zip: serviceAddr.zipCode || "",
-  } : null;
+  const emailServiceAddr = serviceAddr
+    ? {
+        line1: serviceAddr.streetAddress || "",
+        line2: "",
+        city: serviceAddr.city || "",
+        state: serviceAddr.state || "",
+        zip: serviceAddr.zipCode || "",
+      }
+    : null;
 
   const emailBillingLine = emailBillingAddr
     ? `${emailBillingAddr.line1} ${emailBillingAddr.city} ${emailBillingAddr.state} ${emailBillingAddr.zip}`.trim()
@@ -116,7 +137,8 @@ export async function sendInvoiceEmail(
   const emailServiceLine = emailServiceAddr
     ? `${emailServiceAddr.line1} ${emailServiceAddr.city} ${emailServiceAddr.state} ${emailServiceAddr.zip}`.trim()
     : "";
-  const emailShowServiceAddr = emailServiceAddr && emailServiceLine && emailServiceLine !== emailBillingLine;
+  const emailShowServiceAddr =
+    emailServiceAddr && emailServiceLine && emailServiceLine !== emailBillingLine;
 
   const invoiceData = {
     business: {
@@ -129,7 +151,11 @@ export async function sendInvoiceEmail(
     invoice: {
       number: invoice.invoiceNumber,
       status: invoice.status || "pending",
-      issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
+      issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      }),
       due_date: emailFormattedDueDate,
       terms: "Net 30",
       service_period: "",
@@ -140,7 +166,7 @@ export async function sendInvoiceEmail(
     billing_address: emailBillingAddr,
     service_address: emailServiceAddr,
     show_service_address: emailShowServiceAddr ? emailServiceAddr : null,
-    line_items: lineItems.map(li => ({
+    line_items: lineItems.map((li) => ({
       description: li.description,
       details: "",
       qty: li.quantity,
@@ -177,7 +203,7 @@ export async function sendInvoiceEmail(
 
   const subject = `Invoice ${invoice.invoiceNumber} from ${company?.name || "ScooPilot"}`;
   const venmoTextLine = company?.venmoHandle ? `\nOr pay via Venmo: @${company.venmoHandle}` : "";
-  const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}${venmoTextLine}\n\nThank you for your business!`;
+  const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${lineItems.map((li) => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}${venmoTextLine}\n\nThank you for your business!`;
 
   const msg = await storage.createMessage({
     companyId,
@@ -194,7 +220,9 @@ export async function sendInvoiceEmail(
     metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
   });
 
-  console.log(`[invoice-email] Sending invoice ${invoice.invoiceNumber} to ${maskEmail(contact.email)}`);
+  console.log(
+    `[invoice-email] Sending invoice ${invoice.invoiceNumber} to ${maskEmail(contact.email)}`
+  );
   const result = await sendEmail({
     companyId,
     to: contact.email,
@@ -207,14 +235,18 @@ export async function sendInvoiceEmail(
   });
 
   if (result.success) {
-    console.log(`[invoice-email] Sent invoice ${invoice.invoiceNumber} to ${maskEmail(contact.email)}`);
+    console.log(
+      `[invoice-email] Sent invoice ${invoice.invoiceNumber} to ${maskEmail(contact.email)}`
+    );
     await storage.updateMessageStatus(msg.id, "sent");
     if (invoice.status === "pending" || invoice.status === "draft") {
       await storage.updateInvoice(invoice.id, companyId, { status: "sent" });
     }
     return { success: true, messageId: msg.id, paymentUrl: paymentUrl || undefined };
   } else {
-    console.error(`[invoice-email] Failed to send invoice ${invoice.invoiceNumber}: ${result.error}`);
+    console.error(
+      `[invoice-email] Failed to send invoice ${invoice.invoiceNumber}: ${result.error}`
+    );
     await storage.updateMessageStatus(msg.id, "failed", result.error);
     return { success: false, error: result.error };
   }

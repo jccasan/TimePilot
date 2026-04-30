@@ -3,21 +3,52 @@ import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql, eq, and, gte, desc } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, routes, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, messages as messagesTable, messages, usageEvents, auditTrail, visits } from "@shared/schema";
-import { getUserById, getUserByEmail, createPasswordResetToken, createUserWithTempPassword } from "../services/app-auth";
-import { sendEmail, sendAdminSignupNotification, buildWelcomeEmailContent } from "../services/email";
+import {
+  users,
+  companyUsers,
+  companies,
+  contacts,
+  properties,
+  routes,
+  adminUsers,
+  adminSessions,
+  adminAuditLogs,
+  subscriptionTiers,
+  messages as messagesTable,
+  messages,
+  usageEvents,
+  auditTrail,
+  visits,
+} from "@shared/schema";
+import {
+  getUserById,
+  getUserByEmail,
+  createPasswordResetToken,
+  createUserWithTempPassword,
+} from "../services/app-auth";
+import {
+  sendEmail,
+  sendAdminSignupNotification,
+  buildWelcomeEmailContent,
+} from "../services/email";
 import {
   isStripeConfigured,
   migrateCustomerToConnectedAccount,
   isCustomerOnPlatform,
 } from "../services/stripe";
 import { registerRetellWebhook, getRetellAgentWebhookUrl, getAppBaseUrl } from "../services/retell";
+import { TIER_CONFIG } from "@shared/schema";
+
 import {
-  TIER_CONFIG,
-} from "@shared/schema";
-
-import { isAuthenticated, isAdmin, getCompanyContext, handleError, auditLog, p, notify, seedDefaultLeadSources } from "./shared";
-
+  isAuthenticated,
+  isAdmin,
+  getCompanyContext,
+  handleError,
+  auditLog,
+  p,
+  notify,
+  seedDefaultLeadSources,
+} from "./shared";
 
 export async function registerAdminRoutes(app: Express): Promise<void> {
   // ================ Admin (Platform-level) Routes ================
@@ -30,22 +61,41 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     }
   });
 
-
   app.post("/api/admin/login", async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body;
-      if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+      if (!email || !password)
+        return res.status(400).json({ error: "Email and password required" });
       const { loginAdmin } = await import("../services/admin-auth");
       const result = await loginAdmin(email, password);
-      const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+      const ip =
+        req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ||
+        req.socket.remoteAddress ||
+        "unknown";
       if ("error" in result) {
-        await db.insert(adminAuditLogs).values({ adminEmail: email, action: "login_failed", ipAddress: ip }).catch(() => {});
+        await db
+          .insert(adminAuditLogs)
+          .values({ adminEmail: email, action: "login_failed", ipAddress: ip })
+          .catch(() => {});
         return res.status(401).json({ error: result.error });
       }
-      const [adminUser] = await db.select({ id: adminUsers.id }).from(adminUsers).where(eq(adminUsers.email, email));
-      await db.insert(adminAuditLogs).values({ adminUserId: adminUser?.id, adminEmail: email, action: "login_success", ipAddress: ip }).catch(() => {});
+      const [adminUser] = await db
+        .select({ id: adminUsers.id })
+        .from(adminUsers)
+        .where(eq(adminUsers.email, email));
+      await db
+        .insert(adminAuditLogs)
+        .values({
+          adminUserId: adminUser?.id,
+          adminEmail: email,
+          action: "login_success",
+          ipAddress: ip,
+        })
+        .catch(() => {});
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/logout", async (req: Request, res: Response) => {
@@ -56,18 +106,27 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         await logoutAdmin(token);
       }
       res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/change-password", isAdmin, async (req: Request, res: Response) => {
     try {
       const { currentPassword, newPassword } = req.body;
-      if (!currentPassword || !newPassword) return res.status(400).json({ error: "Both passwords required" });
+      if (!currentPassword || !newPassword)
+        return res.status(400).json({ error: "Both passwords required" });
       const { changeAdminPassword } = await import("../services/admin-auth");
-      const result = await changeAdminPassword((req as any).adminUser.userId, currentPassword, newPassword);
+      const result = await changeAdminPassword(
+        (req as any).adminUser.userId,
+        currentPassword,
+        newPassword
+      );
       if (result.error) return res.status(400).json({ error: result.error });
       res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/check", isAdmin, async (req: Request, res: Response) => {
@@ -80,76 +139,107 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     try {
       const stats = await storage.getPlatformStats();
       res.json(stats);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // Platform admin: view ALL message exceptions (including zero-candidate items)
   app.get("/api/admin/message-exceptions", isAdmin, async (req: Request, res: Response) => {
     try {
-      const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
+      const resolved =
+        req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
       const exceptions = await storage.getMessageExceptions({ resolved });
       res.json(exceptions);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/admin/message-exceptions/:id/resolve", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = req.body;
-      if (!companyId) return res.status(400).json({ error: "companyId is required" });
-      const adminUserId = (req as any).adminUser.userId;
-      const exception = await storage.resolveMessageException(p(req.params.id), adminUserId, companyId, true);
-      if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
+  app.post(
+    "/api/admin/message-exceptions/:id/resolve",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = req.body;
+        if (!companyId) return res.status(400).json({ error: "companyId is required" });
+        const adminUserId = (req as any).adminUser.userId;
+        const exception = await storage.resolveMessageException(
+          p(req.params.id),
+          adminUserId,
+          companyId,
+          true
+        );
+        if (!exception)
+          return res.status(404).json({ error: "Exception not found or already resolved" });
 
-      if (exception.body && exception.fromAddress) {
-        try {
-          const allContacts = await storage.getContacts(companyId);
-          const fromDigits = exception.fromAddress.replace(/\D/g, "");
-          const matchedContact = allContacts.find(c => {
-            const cDigits = (c.phone || "").replace(/\D/g, "");
-            return cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
-          });
+        if (exception.body && exception.fromAddress) {
+          try {
+            const allContacts = await storage.getContacts(companyId);
+            const fromDigits = exception.fromAddress.replace(/\D/g, "");
+            const matchedContact = allContacts.find((c) => {
+              const cDigits = (c.phone || "").replace(/\D/g, "");
+              return (
+                cDigits.length >= 10 &&
+                fromDigits.length >= 10 &&
+                fromDigits.endsWith(cDigits.slice(-10))
+              );
+            });
 
-          await storage.createMessage({
-            companyId,
-            contactId: matchedContact?.id || null,
-            channel: "sms",
-            direction: "inbound",
-            status: "received",
-            fromAddress: exception.fromAddress,
-            toAddress: exception.toAddress,
-            body: exception.body,
-            externalId: exception.providerMessageId || undefined,
-          });
+            await storage.createMessage({
+              companyId,
+              contactId: matchedContact?.id || null,
+              channel: "sms",
+              direction: "inbound",
+              status: "received",
+              fromAddress: exception.fromAddress,
+              toAddress: exception.toAddress,
+              body: exception.body,
+              externalId: exception.providerMessageId || undefined,
+            });
 
-          if (matchedContact) {
-            const { isSharedNumber } = await import("../services/sms");
-            if (isSharedNumber(exception.toAddress)) {
-              await storage.upsertMessageRouting({
-                sharedNumber: exception.toAddress,
-                customerPhone: exception.fromAddress,
-                companyId,
-                contactId: matchedContact.id,
-                channel: "sms",
-                lastUsedAt: new Date(),
-              });
+            if (matchedContact) {
+              const { isSharedNumber } = await import("../services/sms");
+              if (isSharedNumber(exception.toAddress)) {
+                await storage.upsertMessageRouting({
+                  sharedNumber: exception.toAddress,
+                  customerPhone: exception.fromAddress,
+                  companyId,
+                  contactId: matchedContact.id,
+                  channel: "sms",
+                  lastUsedAt: new Date(),
+                });
+              }
             }
+          } catch (msgErr) {
+            console.error(
+              `[Admin MessageException] Resolved exception ${p(req.params.id)} but message delivery failed:`,
+              msgErr
+            );
           }
-        } catch (msgErr) {
-          console.error(`[Admin MessageException] Resolved exception ${p(req.params.id)} but message delivery failed:`, msgErr);
         }
+        res.json(exception);
+      } catch (err) {
+        handleError(res, err);
       }
-      res.json(exception);
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
-  app.post("/api/admin/message-exceptions/:id/dismiss", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const adminUserId = (req as any).adminUser.userId;
-      const exception = await storage.dismissMessageException(p(req.params.id), adminUserId);
-      if (!exception) return res.status(404).json({ error: "Exception not found or already resolved" });
-      res.json(exception);
-    } catch (err) { handleError(res, err); }
-  });
+  app.post(
+    "/api/admin/message-exceptions/:id/dismiss",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const adminUserId = (req as any).adminUser.userId;
+        const exception = await storage.dismissMessageException(p(req.params.id), adminUserId);
+        if (!exception)
+          return res.status(404).json({ error: "Exception not found or already resolved" });
+        res.json(exception);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.get("/api/admin/inactive-users", isAdmin, async (_req: Request, res: Response) => {
     try {
@@ -181,7 +271,9 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         result[`${days}d`] = rows;
       }
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/companies", isAdmin, async (_req: Request, res: Response) => {
@@ -191,36 +283,54 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const { TIER_CONFIG: tierCfg } = await import("@shared/schema");
 
-      const enriched = await Promise.all(allCompanies.map(async (c) => {
-        const companyUsersList = await storage.getCompanyUsers(c.id);
-        const activeUserCount = companyUsersList.filter(cu => cu.isActive).length;
-        const contactList = await storage.getContacts(c.id);
+      const enriched = await Promise.all(
+        allCompanies.map(async (c) => {
+          const companyUsersList = await storage.getCompanyUsers(c.id);
+          const activeUserCount = companyUsersList.filter((cu) => cu.isActive).length;
+          const contactList = await storage.getContacts(c.id);
 
-        const smsResult = await db.select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
-          .from(usageEvents)
-          .where(and(eq(usageEvents.companyId, c.id), eq(usageEvents.eventType, "sms_segment"), gte(usageEvents.recordedAt, periodStart)));
-        const voiceResult = await db.select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
-          .from(usageEvents)
-          .where(and(eq(usageEvents.companyId, c.id), eq(usageEvents.eventType, "voice_minute"), gte(usageEvents.recordedAt, periodStart)));
+          const smsResult = await db
+            .select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
+            .from(usageEvents)
+            .where(
+              and(
+                eq(usageEvents.companyId, c.id),
+                eq(usageEvents.eventType, "sms_segment"),
+                gte(usageEvents.recordedAt, periodStart)
+              )
+            );
+          const voiceResult = await db
+            .select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
+            .from(usageEvents)
+            .where(
+              and(
+                eq(usageEvents.companyId, c.id),
+                eq(usageEvents.eventType, "voice_minute"),
+                gte(usageEvents.recordedAt, periodStart)
+              )
+            );
 
-        const tierKey = c.subscriptionTier as keyof typeof tierCfg;
-        const tierMaxUsers = tierCfg[tierKey]?.maxUsers || 1;
-        const maxUsers = (c as any).customMaxUsers ?? tierMaxUsers;
-        const nearLimit = activeUserCount >= Math.ceil(maxUsers * 0.8);
+          const tierKey = c.subscriptionTier as keyof typeof tierCfg;
+          const tierMaxUsers = tierCfg[tierKey]?.maxUsers || 1;
+          const maxUsers = (c as any).customMaxUsers ?? tierMaxUsers;
+          const nearLimit = activeUserCount >= Math.ceil(maxUsers * 0.8);
 
-        return {
-          ...c,
-          userCount: companyUsersList.length,
-          activeUserCount,
-          maxUsers,
-          nearUserLimit: nearLimit,
-          contactCount: contactList.length,
-          smsSegments: Number(smsResult[0]?.total || 0),
-          voiceMinutes: Number(voiceResult[0]?.total || 0),
-        };
-      }));
+          return {
+            ...c,
+            userCount: companyUsersList.length,
+            activeUserCount,
+            maxUsers,
+            nearUserLimit: nearLimit,
+            contactCount: contactList.length,
+            smsSegments: Number(smsResult[0]?.total || 0),
+            voiceMinutes: Number(voiceResult[0]?.total || 0),
+          };
+        })
+      );
       res.json(enriched);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/companies/:id", isAdmin, async (req: Request, res: Response) => {
@@ -243,15 +353,25 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const contactList = await storage.getContacts(company.id);
       const invoiceList = await storage.getInvoices(company.id);
       const notes = await storage.getAdminNotes(company.id);
-      res.json({ ...company, users: usersWithDetails, contacts: contactList, invoices: invoiceList, notes });
-    } catch (err) { handleError(res, err); }
+      res.json({
+        ...company,
+        users: usersWithDetails,
+        contacts: contactList,
+        invoices: invoiceList,
+        notes,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/companies", isAdmin, async (req: Request, res: Response) => {
     try {
       const { companyName, ownerEmail, ownerFirstName, ownerLastName, subscriptionTier } = req.body;
       if (!companyName || !ownerEmail || !ownerFirstName) {
-        return res.status(400).json({ error: "Company name, owner email, and owner first name are required" });
+        return res
+          .status(400)
+          .json({ error: "Company name, owner email, and owner first name are required" });
       }
       if (typeof companyName !== "string" || companyName.trim().length < 2) {
         return res.status(400).json({ error: "Company name must be at least 2 characters" });
@@ -260,7 +380,15 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       if (!emailRegex.test(ownerEmail)) {
         return res.status(400).json({ error: "Invalid email address" });
       }
-      const validTiers = ["free_trial", "tier_starter", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
+      const validTiers = [
+        "free_trial",
+        "tier_starter",
+        "tier_1",
+        "tier_1_3",
+        "tier_3_5",
+        "tier_6_10",
+        "tier_10_plus",
+      ];
       const tier = validTiers.includes(subscriptionTier) ? subscriptionTier : "tier_1";
 
       let user = await getUserByEmail(ownerEmail);
@@ -270,7 +398,12 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       if (!user) {
         const crypto = await import("crypto");
         tempPassword = crypto.randomBytes(6).toString("base64url");
-        user = await createUserWithTempPassword(ownerEmail, ownerFirstName, ownerLastName || "", tempPassword);
+        user = await createUserWithTempPassword(
+          ownerEmail,
+          ownerFirstName,
+          ownerLastName || "",
+          tempPassword
+        );
       } else {
         isExistingUser = true;
       }
@@ -297,7 +430,13 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         const appUrl = `${protocol}://${host}`;
 
         if (tempPassword) {
-          const _adminWelcome = buildWelcomeEmailContent({ firstName: ownerFirstName, companyName, appUrl, email: ownerEmail, tempPassword });
+          const _adminWelcome = buildWelcomeEmailContent({
+            firstName: ownerFirstName,
+            companyName,
+            appUrl,
+            email: ownerEmail,
+            tempPassword,
+          });
           await sendEmail({
             companyId: company.id,
             to: ownerEmail,
@@ -336,7 +475,9 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         isExistingUser,
         emailSent,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/migrate-stripe-customers", isAdmin, async (req: Request, res: Response) => {
@@ -345,13 +486,25 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
 
       const dryRun = req.body?.dryRun === true;
       const allCompanies = await storage.listCompanies();
-      const results: Array<{ companyId: string; companyName: string; migratedContacts: number; skippedContacts: number; errors: string[] }> = [];
+      const results: Array<{
+        companyId: string;
+        companyName: string;
+        migratedContacts: number;
+        skippedContacts: number;
+        errors: string[];
+      }> = [];
 
       for (const company of allCompanies) {
         if (!company.stripeConnectOnboarded || !company.stripeConnectAccountId) continue;
 
         const contacts = await storage.getContacts(company.id);
-        const companyResult = { companyId: company.id, companyName: company.name, migratedContacts: 0, skippedContacts: 0, errors: [] as string[] };
+        const companyResult = {
+          companyId: company.id,
+          companyName: company.name,
+          migratedContacts: 0,
+          skippedContacts: 0,
+          errors: [] as string[],
+        };
 
         for (const contact of contacts) {
           if (!contact.stripeCustomerId) continue;
@@ -377,19 +530,32 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
 
             if (migrationResult.status === "skipped") {
               companyResult.skippedContacts++;
-              console.log(`[Stripe Migration] Skipped contact ${contact.id} — customer ${contact.stripeCustomerId} not found on platform (already migrated)`);
+              console.log(
+                `[Stripe Migration] Skipped contact ${contact.id} — customer ${contact.stripeCustomerId} not found on platform (already migrated)`
+              );
             } else {
-              await storage.updateContact(contact.id, company.id, { stripeCustomerId: migrationResult.newCustomerId });
+              await storage.updateContact(contact.id, company.id, {
+                stripeCustomerId: migrationResult.newCustomerId,
+              });
               companyResult.migratedContacts++;
-              const statusLabel = migrationResult.status === "partial" ? " (PARTIAL — some payment methods failed)" : "";
-              console.log(`[Stripe Migration] Migrated contact ${contact.id} (${contact.firstName} ${contact.lastName}): ${contact.stripeCustomerId} → ${migrationResult.newCustomerId} (${migrationResult.migratedPaymentMethods}/${migrationResult.totalPaymentMethods} payment methods)${statusLabel}`);
+              const statusLabel =
+                migrationResult.status === "partial"
+                  ? " (PARTIAL — some payment methods failed)"
+                  : "";
+              console.log(
+                `[Stripe Migration] Migrated contact ${contact.id} (${contact.firstName} ${contact.lastName}): ${contact.stripeCustomerId} → ${migrationResult.newCustomerId} (${migrationResult.migratedPaymentMethods}/${migrationResult.totalPaymentMethods} payment methods)${statusLabel}`
+              );
               if (migrationResult.failedPaymentMethods.length > 0) {
-                companyResult.errors.push(`Contact ${contact.id}: partial PM migration — failed: ${migrationResult.failedPaymentMethods.join(", ")}`);
+                companyResult.errors.push(
+                  `Contact ${contact.id}: partial PM migration — failed: ${migrationResult.failedPaymentMethods.join(", ")}`
+                );
               }
             }
           } catch (migErr: any) {
             companyResult.errors.push(`Contact ${contact.id}: ${migErr.message}`);
-            console.error(`[Stripe Migration] Failed to migrate contact ${contact.id}: ${migErr.message}`);
+            console.error(
+              `[Stripe Migration] Failed to migrate contact ${contact.id}: ${migErr.message}`
+            );
           }
         }
 
@@ -400,62 +566,116 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const totalSkipped = results.reduce((sum, r) => sum + r.skippedContacts, 0);
       const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);
       res.json({ dryRun, totalMigrated, totalSkipped, totalErrors, results });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.patch("/api/admin/companies/:id/notifications", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const company = await storage.getCompany(p(req.params.id));
-      if (!company) return res.status(404).json({ error: "Company not found" });
-      const { clientNotificationsSuppressed } = req.body;
-      if (typeof clientNotificationsSuppressed !== "boolean") {
-        return res.status(400).json({ error: "clientNotificationsSuppressed must be a boolean" });
+  app.patch(
+    "/api/admin/companies/:id/notifications",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const company = await storage.getCompany(p(req.params.id));
+        if (!company) return res.status(404).json({ error: "Company not found" });
+        const { clientNotificationsSuppressed } = req.body;
+        if (typeof clientNotificationsSuppressed !== "boolean") {
+          return res.status(400).json({ error: "clientNotificationsSuppressed must be a boolean" });
+        }
+        await storage.updateCompany(p(req.params.id), { clientNotificationsSuppressed });
+        console.log(
+          `[admin] Set clientNotificationsSuppressed=${clientNotificationsSuppressed} for company ${p(req.params.id)} (${company.name})`
+        );
+        res.json({
+          success: true,
+          companyId: p(req.params.id),
+          name: company.name,
+          clientNotificationsSuppressed,
+        });
+      } catch (err) {
+        handleError(res, err);
       }
-      await storage.updateCompany(p(req.params.id), { clientNotificationsSuppressed });
-      console.log(`[admin] Set clientNotificationsSuppressed=${clientNotificationsSuppressed} for company ${p(req.params.id)} (${company.name})`);
-      res.json({ success: true, companyId: p(req.params.id), name: company.name, clientNotificationsSuppressed });
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
-  app.post("/api/admin/companies/:id/resend-welcome", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const company = await storage.getCompany(p(req.params.id));
-      if (!company) return res.status(404).json({ error: "Company not found" });
-      const companyUserRecords = await storage.getCompanyUsers(company.id);
-      const ownerEntry = companyUserRecords.find((cu: { role: string }) => cu.role === "owner");
-      if (!ownerEntry) return res.status(404).json({ error: "No owner found for company" });
-      const owner = await getUserById((ownerEntry as { userId: string }).userId);
-      if (!owner || !owner.email) return res.status(404).json({ error: "Owner user record not found" });
-      const protocol = req.headers["x-forwarded-proto"] || "https";
-      const host = req.headers.host || "app.scoopilot.com";
-      const appUrl = `${protocol}://${host}`;
-      const firstName = owner.firstName || owner.email.split("@")[0];
-      const welcome = buildWelcomeEmailContent({ firstName, companyName: company.name, appUrl });
-      const result = await sendEmail({ companyId: company.id, to: owner.email, subject: welcome.subject, text: welcome.text, html: welcome.html });
-      if (!result.success) return res.status(500).json({ error: result.error });
-      console.log(`[Admin] Resent welcome email to ${owner.email} for company "${company.name}"`);
-      res.json({ success: true, sentTo: owner.email });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.patch("/api/admin/companies/:id/subscription", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const { tier, subscriptionStatus, trialEndsAt, customMaxUsers } = req.body;
-      const validTiers = ["free_trial", "tier_starter", "tier_1", "tier_1_3", "tier_3_5", "tier_6_10", "tier_10_plus"];
-      if (!tier || !validTiers.includes(tier)) return res.status(400).json({ error: "Invalid tier" });
-      const validStatuses = ["active", "trialing", "past_due", "cancelled", "suspended"];
-      if (subscriptionStatus !== undefined && !validStatuses.includes(subscriptionStatus)) {
-        return res.status(400).json({ error: "Invalid subscription status" });
+  app.post(
+    "/api/admin/companies/:id/resend-welcome",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const company = await storage.getCompany(p(req.params.id));
+        if (!company) return res.status(404).json({ error: "Company not found" });
+        const companyUserRecords = await storage.getCompanyUsers(company.id);
+        const ownerEntry = companyUserRecords.find((cu: { role: string }) => cu.role === "owner");
+        if (!ownerEntry) return res.status(404).json({ error: "No owner found for company" });
+        const owner = await getUserById((ownerEntry as { userId: string }).userId);
+        if (!owner || !owner.email)
+          return res.status(404).json({ error: "Owner user record not found" });
+        const protocol = req.headers["x-forwarded-proto"] || "https";
+        const host = req.headers.host || "app.scoopilot.com";
+        const appUrl = `${protocol}://${host}`;
+        const firstName = owner.firstName || owner.email.split("@")[0];
+        const welcome = buildWelcomeEmailContent({ firstName, companyName: company.name, appUrl });
+        const result = await sendEmail({
+          companyId: company.id,
+          to: owner.email,
+          subject: welcome.subject,
+          text: welcome.text,
+          html: welcome.html,
+        });
+        if (!result.success) return res.status(500).json({ error: result.error });
+        console.log(`[Admin] Resent welcome email to ${owner.email} for company "${company.name}"`);
+        res.json({ success: true, sentTo: owner.email });
+      } catch (err) {
+        handleError(res, err);
       }
-      const opts: { subscriptionStatus?: string; trialEndsAt?: Date | null; customMaxUsers?: number | null } = {};
-      if (subscriptionStatus !== undefined) opts.subscriptionStatus = subscriptionStatus;
-      if (trialEndsAt !== undefined) opts.trialEndsAt = trialEndsAt ? new Date(trialEndsAt) : null;
-      if (customMaxUsers !== undefined) opts.customMaxUsers = customMaxUsers === null ? null : parseInt(customMaxUsers);
-      const updated = await storage.updateCompanySubscription(p(req.params.id), tier, opts);
-      await logAdminAudit(req, "change_subscription", "company", p(req.params.id), { tier, subscriptionStatus, trialEndsAt, customMaxUsers });
-      res.json(updated);
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
+
+  app.patch(
+    "/api/admin/companies/:id/subscription",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { tier, subscriptionStatus, trialEndsAt, customMaxUsers } = req.body;
+        const validTiers = [
+          "free_trial",
+          "tier_starter",
+          "tier_1",
+          "tier_1_3",
+          "tier_3_5",
+          "tier_6_10",
+          "tier_10_plus",
+        ];
+        if (!tier || !validTiers.includes(tier))
+          return res.status(400).json({ error: "Invalid tier" });
+        const validStatuses = ["active", "trialing", "past_due", "cancelled", "suspended"];
+        if (subscriptionStatus !== undefined && !validStatuses.includes(subscriptionStatus)) {
+          return res.status(400).json({ error: "Invalid subscription status" });
+        }
+        const opts: {
+          subscriptionStatus?: string;
+          trialEndsAt?: Date | null;
+          customMaxUsers?: number | null;
+        } = {};
+        if (subscriptionStatus !== undefined) opts.subscriptionStatus = subscriptionStatus;
+        if (trialEndsAt !== undefined)
+          opts.trialEndsAt = trialEndsAt ? new Date(trialEndsAt) : null;
+        if (customMaxUsers !== undefined)
+          opts.customMaxUsers = customMaxUsers === null ? null : parseInt(customMaxUsers);
+        const updated = await storage.updateCompanySubscription(p(req.params.id), tier, opts);
+        await logAdminAudit(req, "change_subscription", "company", p(req.params.id), {
+          tier,
+          subscriptionStatus,
+          trialEndsAt,
+          customMaxUsers,
+        });
+        res.json(updated);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.post("/api/admin/companies/:id/cancel", isAdmin, async (req: Request, res: Response) => {
     try {
@@ -474,33 +694,62 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
           const StripeLib = (await import("stripe")).default;
           const stripeKey = process.env.STRIPE_SECRET_KEY;
           if (stripeKey) {
-            const stripeInstance = new StripeLib(stripeKey, { apiVersion: "2026-01-28.clover" as any });
-            const updated = await stripeInstance.subscriptions.update(company.stripeSubscriptionId, { cancel_at_period_end: true });
+            const stripeInstance = new StripeLib(stripeKey, {
+              apiVersion: "2026-01-28.clover" as any,
+            });
+            const updated = await stripeInstance.subscriptions.update(
+              company.stripeSubscriptionId,
+              { cancel_at_period_end: true }
+            );
             if (updated.cancel_at) scheduledCancelAt = new Date(updated.cancel_at * 1000);
-            console.log(`[Admin] Scheduled Stripe subscription ${company.stripeSubscriptionId} for cancellation at period end (${scheduledCancelAt?.toISOString()}) for company "${company.name}"`);
+            console.log(
+              `[Admin] Scheduled Stripe subscription ${company.stripeSubscriptionId} for cancellation at period end (${scheduledCancelAt?.toISOString()}) for company "${company.name}"`
+            );
           }
         } catch (stripeErr: any) {
           if (stripeErr?.code !== "resource_missing") {
-            console.warn(`[Admin] Stripe cancel_at_period_end failed for ${company.name}:`, stripeErr.message);
+            console.warn(
+              `[Admin] Stripe cancel_at_period_end failed for ${company.name}:`,
+              stripeErr.message
+            );
           }
         }
         // Mark as pending cancellation in DB — status stays active so tenant keeps access
-        await db.update(companies)
+        await db
+          .update(companies)
           .set({ cancelAtPeriodEnd: true, cancelAt: scheduledCancelAt } as any)
           .where(eq(companies.id, p(req.params.id)));
-        await logAdminAudit(req, "cancel_account_scheduled", "company", p(req.params.id), { reason: req.body.reason || null, cancelAt: scheduledCancelAt });
-        console.log(`[Admin] Account "${company.name}" (${p(req.params.id)}) scheduled for cancellation at period end by ${(req as any).adminUser?.email}`);
+        await logAdminAudit(req, "cancel_account_scheduled", "company", p(req.params.id), {
+          reason: req.body.reason || null,
+          cancelAt: scheduledCancelAt,
+        });
+        console.log(
+          `[Admin] Account "${company.name}" (${p(req.params.id)}) scheduled for cancellation at period end by ${(req as any).adminUser?.email}`
+        );
         return res.json({ ok: true, companyName: company.name, scheduledCancelAt });
       }
       // No Stripe subscription — immediately cancel (manual billing)
-      await storage.updateCompanySubscription(p(req.params.id), company.subscriptionTier || "free_trial", {
-        subscriptionStatus: "cancelled",
+      await storage.updateCompanySubscription(
+        p(req.params.id),
+        company.subscriptionTier || "free_trial",
+        {
+          subscriptionStatus: "cancelled",
+        }
+      );
+      await db
+        .update(companies)
+        .set({ canceledAt: new Date() })
+        .where(eq(companies.id, p(req.params.id)));
+      await logAdminAudit(req, "cancel_account", "company", p(req.params.id), {
+        reason: req.body.reason || null,
       });
-      await db.update(companies).set({ canceledAt: new Date() }).where(eq(companies.id, p(req.params.id)));
-      await logAdminAudit(req, "cancel_account", "company", p(req.params.id), { reason: req.body.reason || null });
-      console.log(`[Admin] Account "${company.name}" (${p(req.params.id)}) cancelled immediately (no Stripe sub) by ${(req as any).adminUser?.email}`);
+      console.log(
+        `[Admin] Account "${company.name}" (${p(req.params.id)}) cancelled immediately (no Stripe sub) by ${(req as any).adminUser?.email}`
+      );
       res.json({ ok: true, companyName: company.name });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/companies/:id/reactivate", isAdmin, async (req: Request, res: Response) => {
@@ -508,40 +757,66 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const company = await storage.getCompany(p(req.params.id));
       if (!company) return res.status(404).json({ error: "Company not found" });
       if (!(company as any).cancelAtPeriodEnd) {
-        return res.status(400).json({ error: "Account does not have a scheduled cancellation to undo" });
+        return res
+          .status(400)
+          .json({ error: "Account does not have a scheduled cancellation to undo" });
       }
       if (company.stripeSubscriptionId) {
         const stripeKey = process.env.STRIPE_SECRET_KEY;
         if (stripeKey) {
           try {
             const StripeLib = (await import("stripe")).default;
-            const stripeInstance = new StripeLib(stripeKey, { apiVersion: "2026-01-28.clover" as any });
-            await stripeInstance.subscriptions.update(company.stripeSubscriptionId, { cancel_at_period_end: false });
-            console.log(`[Admin] Reversed scheduled cancellation for Stripe subscription ${company.stripeSubscriptionId} for company "${company.name}"`);
+            const stripeInstance = new StripeLib(stripeKey, {
+              apiVersion: "2026-01-28.clover" as any,
+            });
+            await stripeInstance.subscriptions.update(company.stripeSubscriptionId, {
+              cancel_at_period_end: false,
+            });
+            console.log(
+              `[Admin] Reversed scheduled cancellation for Stripe subscription ${company.stripeSubscriptionId} for company "${company.name}"`
+            );
           } catch (stripeErr: any) {
             if (stripeErr?.code === "resource_missing") {
-              console.warn(`[Admin] Stripe subscription not found for ${company.name}, clearing local state only`);
+              console.warn(
+                `[Admin] Stripe subscription not found for ${company.name}, clearing local state only`
+              );
             } else {
-              console.error(`[Admin] Stripe reactivate failed for ${company.name}:`, stripeErr.message);
-              return res.status(502).json({ error: "Failed to reverse cancellation in Stripe. Please try again or contact support." });
+              console.error(
+                `[Admin] Stripe reactivate failed for ${company.name}:`,
+                stripeErr.message
+              );
+              return res.status(502).json({
+                error:
+                  "Failed to reverse cancellation in Stripe. Please try again or contact support.",
+              });
             }
           }
         }
-        await db.update(companies)
+        await db
+          .update(companies)
           .set({ cancelAtPeriodEnd: false, cancelAt: null } as any)
           .where(eq(companies.id, p(req.params.id)));
       } else {
-        await storage.updateCompanySubscription(p(req.params.id), company.subscriptionTier || "free_trial", {
-          subscriptionStatus: "active",
-        });
-        await db.update(companies)
+        await storage.updateCompanySubscription(
+          p(req.params.id),
+          company.subscriptionTier || "free_trial",
+          {
+            subscriptionStatus: "active",
+          }
+        );
+        await db
+          .update(companies)
           .set({ cancelAtPeriodEnd: false, cancelAt: null, canceledAt: null } as any)
           .where(eq(companies.id, p(req.params.id)));
       }
       await logAdminAudit(req, "reactivate_account", "company", p(req.params.id), {});
-      console.log(`[Admin] Account "${company.name}" (${p(req.params.id)}) reactivated by ${(req as any).adminUser?.email}`);
+      console.log(
+        `[Admin] Account "${company.name}" (${p(req.params.id)}) reactivated by ${(req as any).adminUser?.email}`
+      );
       return res.json({ ok: true, companyName: company.name });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Pending Approval Admin Routes ================
@@ -549,32 +824,41 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
   app.get("/api/admin/pending-approvals", isAdmin, async (_req: Request, res: Response) => {
     try {
       const { eq } = await import("drizzle-orm");
-      const pendingCompanies = await db.select().from(companies).where(eq(companies.subscriptionStatus, "pending_approval"));
-      const result = await Promise.all(pendingCompanies.map(async (c) => {
-        const companyUserRecords = await storage.getCompanyUsers(c.id);
-        const ownerRecord = companyUserRecords.find(cu => cu.role === "owner") || companyUserRecords[0];
-        let ownerEmail: string | null = null;
-        let ownerName: string | null = null;
-        if (ownerRecord) {
-          const ownerUser = await getUserById(ownerRecord.userId);
-          if (ownerUser) {
-            ownerEmail = ownerUser.email || null;
-            ownerName = [ownerUser.firstName, ownerUser.lastName].filter(Boolean).join(" ") || null;
+      const pendingCompanies = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.subscriptionStatus, "pending_approval"));
+      const result = await Promise.all(
+        pendingCompanies.map(async (c) => {
+          const companyUserRecords = await storage.getCompanyUsers(c.id);
+          const ownerRecord =
+            companyUserRecords.find((cu) => cu.role === "owner") || companyUserRecords[0];
+          let ownerEmail: string | null = null;
+          let ownerName: string | null = null;
+          if (ownerRecord) {
+            const ownerUser = await getUserById(ownerRecord.userId);
+            if (ownerUser) {
+              ownerEmail = ownerUser.email || null;
+              ownerName =
+                [ownerUser.firstName, ownerUser.lastName].filter(Boolean).join(" ") || null;
+            }
           }
-        }
-        return {
-          id: c.id,
-          name: c.name,
-          email: c.email,
-          ownerEmail,
-          ownerName,
-          signupCountry: c.signupCountry || null,
-          verificationUrl: c.verificationUrl || null,
-          createdAt: c.createdAt,
-        };
-      }));
+          return {
+            id: c.id,
+            name: c.name,
+            email: c.email,
+            ownerEmail,
+            ownerName,
+            signupCountry: c.signupCountry || null,
+            verificationUrl: c.verificationUrl || null,
+            createdAt: c.createdAt,
+          };
+        })
+      );
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/companies/:id/approve", isAdmin, async (req: Request, res: Response) => {
@@ -598,14 +882,17 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       })();
 
       const companyUserRecords = await storage.getCompanyUsers(company.id);
-      const ownerRecord = companyUserRecords.find(cu => cu.role === "owner") || companyUserRecords[0];
+      const ownerRecord =
+        companyUserRecords.find((cu) => cu.role === "owner") || companyUserRecords[0];
       if (ownerRecord) {
-        await db.update((await import("@shared/models/auth")).users)
+        await db
+          .update((await import("@shared/models/auth")).users)
           .set({ passwordHash: newPasswordHash, mustChangePassword: true, updatedAt: new Date() })
           .where(eq((await import("@shared/models/auth")).users.id, ownerRecord.userId));
       }
 
-      await db.update(companies)
+      await db
+        .update(companies)
         .set({
           subscriptionStatus: "trialing",
           trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
@@ -646,13 +933,17 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
                 </div>
               </div>
             `,
-          }).catch(err => console.error("[Admin Approve] Failed to send approval email:", err));
+          }).catch((err) => console.error("[Admin Approve] Failed to send approval email:", err));
         }
       }
 
-      console.log(`[Admin] Account "${company.name}" (${p(req.params.id)}) approved by ${(req as any).adminUser?.email}`);
+      console.log(
+        `[Admin] Account "${company.name}" (${p(req.params.id)}) approved by ${(req as any).adminUser?.email}`
+      );
       res.json({ ok: true, companyName: company.name });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/companies/:id/reject", isAdmin, async (req: Request, res: Response) => {
@@ -663,15 +954,21 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: "Account is not pending approval" });
       }
 
-      const { sendRejectionEmail = false, rejectionNote } = req.body as { sendRejectionEmail?: boolean; rejectionNote?: string };
+      const { sendRejectionEmail = false, rejectionNote } = req.body as {
+        sendRejectionEmail?: boolean;
+        rejectionNote?: string;
+      };
 
       const companyUserRecords = await storage.getCompanyUsers(company.id);
-      const ownerRecord = companyUserRecords.find(cu => cu.role === "owner") || companyUserRecords[0];
+      const ownerRecord =
+        companyUserRecords.find((cu) => cu.role === "owner") || companyUserRecords[0];
 
       if (sendRejectionEmail && ownerRecord) {
         const ownerUser = await getUserById(ownerRecord.userId);
         if (ownerUser?.email) {
-          const note = rejectionNote?.trim() || "We're currently focused on serving pet waste removal businesses in the US and Canada.";
+          const note =
+            rejectionNote?.trim() ||
+            "We're currently focused on serving pet waste removal businesses in the US and Canada.";
           await sendEmail({
             to: ownerUser.email,
             subject: "Update on your ScooPilot application",
@@ -691,98 +988,130 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
                 </div>
               </div>
             `,
-          }).catch(err => console.error("[Admin Reject] Failed to send rejection email:", err));
+          }).catch((err) => console.error("[Admin Reject] Failed to send rejection email:", err));
         }
       }
 
       const { eq: eqOp, inArray } = await import("drizzle-orm");
-      const userIds = companyUserRecords.map(cu => cu.userId);
+      const userIds = companyUserRecords.map((cu) => cu.userId);
       await db.delete(companies).where(eqOp(companies.id, p(req.params.id)));
       if (userIds.length > 0) {
-        await db.delete((await import("@shared/models/auth")).users).where(inArray((await import("@shared/models/auth")).users.id, userIds));
+        await db
+          .delete((await import("@shared/models/auth")).users)
+          .where(inArray((await import("@shared/models/auth")).users.id, userIds));
       }
 
-      await logAdminAudit(req, "reject_account", "company", p(req.params.id), { sendRejectionEmail, rejectionNote: rejectionNote || null });
-      console.log(`[Admin] Account "${company.name}" (${p(req.params.id)}) rejected and deleted by ${(req as any).adminUser?.email}`);
-      res.json({ ok: true, companyName: company.name });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/admin/companies/:id/regenerate-visits", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const company = await storage.getCompany(p(req.params.id));
-      if (!company) return res.status(404).json({ error: "Company not found" });
-      const { generateVisitsForCompany } = await import("../jobs/auto-visits");
-      const { getCompanyToday } = await import("../utils/company-date");
-      const companyToday = getCompanyToday(company.timezone || "America/New_York");
-      // Look back 30 days to catch any missed past one-time visits, then forward 6 months
-      const startDate = new Date(companyToday + "T00:00:00Z");
-      startDate.setUTCDate(startDate.getUTCDate() - 30);
-      const endDate = new Date(companyToday + "T00:00:00Z");
-      endDate.setUTCDate(endDate.getUTCDate() + 182);
-      const created = await generateVisitsForCompany(
-        p(req.params.id),
-        startDate.toISOString().split("T")[0],
-        endDate.toISOString().split("T")[0],
-      );
-      await logAdminAudit(req, "regenerate_visits", "company", p(req.params.id), { created });
-      console.log(`[Admin] Regenerated ${created} visits for "${company.name}" (${p(req.params.id)})`);
-      return res.json({ ok: true, companyName: company.name, visitsCreated: created });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/admin/companies/:id/users/:userId/reset-password", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const companyId = p(req.params.id); const userId = p(req.params.userId);
-      const { newPassword } = req.body;
-      const companyUsers = await storage.getCompanyUsers(companyId);
-      const cu = companyUsers.find((u) => u.userId === userId);
-      if (!cu) return res.status(404).json({ error: "User not found in this company" });
-      const user = await getUserById(userId);
-      if (!user) return res.status(404).json({ error: "User not found" });
-      const crypto = await import("crypto");
-      const password = newPassword && typeof newPassword === "string" && newPassword.length >= 8
-        ? newPassword
-        : crypto.randomBytes(6).toString("base64url");
-      const { users: usersTable } = await import("@shared/schema");
-      const salt = crypto.randomBytes(16).toString("hex");
-      const SCRYPT_KEYLEN = 64;
-      const hash = await new Promise<string>((resolve, reject) => {
-        crypto.scrypt(password, salt, SCRYPT_KEYLEN, (err, key) => {
-          if (err) reject(err);
-          else resolve(`${salt}:${key.toString("hex")}`);
-        });
+      await logAdminAudit(req, "reject_account", "company", p(req.params.id), {
+        sendRejectionEmail,
+        rejectionNote: rejectionNote || null,
       });
-      await db.update(usersTable)
-        .set({ passwordHash: hash, mustChangePassword: true })
-        .where(eq(usersTable.id, userId));
-      console.log(`[Admin] Password reset for user ${user.email} (${userId}) by ${(req as any).adminUser?.email}`);
-      res.json({ ok: true, email: user.email, tempPassword: password });
-    } catch (err) { handleError(res, err); }
+      console.log(
+        `[Admin] Account "${company.name}" (${p(req.params.id)}) rejected and deleted by ${(req as any).adminUser?.email}`
+      );
+      res.json({ ok: true, companyName: company.name });
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/admin/companies/:id/users/:userId/send-reset-email", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const companyId = p(req.params.id); const userId = p(req.params.userId);
-      const companyUsers = await storage.getCompanyUsers(companyId);
-      const cu = companyUsers.find((u) => u.userId === userId);
-      if (!cu) return res.status(404).json({ error: "User not found in this company" });
-      const user = await getUserById(userId);
-      if (!user || !user.email) return res.status(404).json({ error: "User not found" });
+  app.post(
+    "/api/admin/companies/:id/regenerate-visits",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const company = await storage.getCompany(p(req.params.id));
+        if (!company) return res.status(404).json({ error: "Company not found" });
+        const { generateVisitsForCompany } = await import("../jobs/auto-visits");
+        const { getCompanyToday } = await import("../utils/company-date");
+        const companyToday = getCompanyToday(company.timezone || "America/New_York");
+        // Look back 30 days to catch any missed past one-time visits, then forward 6 months
+        const startDate = new Date(companyToday + "T00:00:00Z");
+        startDate.setUTCDate(startDate.getUTCDate() - 30);
+        const endDate = new Date(companyToday + "T00:00:00Z");
+        endDate.setUTCDate(endDate.getUTCDate() + 182);
+        const created = await generateVisitsForCompany(
+          p(req.params.id),
+          startDate.toISOString().split("T")[0],
+          endDate.toISOString().split("T")[0]
+        );
+        await logAdminAudit(req, "regenerate_visits", "company", p(req.params.id), { created });
+        console.log(
+          `[Admin] Regenerated ${created} visits for "${company.name}" (${p(req.params.id)})`
+        );
+        return res.json({ ok: true, companyName: company.name, visitsCreated: created });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
-      const result = await createPasswordResetToken(user.email);
-      if ("error" in result) return res.status(400).json({ error: result.error });
+  app.post(
+    "/api/admin/companies/:id/users/:userId/reset-password",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const companyId = p(req.params.id);
+        const userId = p(req.params.userId);
+        const { newPassword } = req.body;
+        const companyUsers = await storage.getCompanyUsers(companyId);
+        const cu = companyUsers.find((u) => u.userId === userId);
+        if (!cu) return res.status(404).json({ error: "User not found in this company" });
+        const user = await getUserById(userId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+        const crypto = await import("crypto");
+        const password =
+          newPassword && typeof newPassword === "string" && newPassword.length >= 8
+            ? newPassword
+            : crypto.randomBytes(6).toString("base64url");
+        const { users: usersTable } = await import("@shared/schema");
+        const salt = crypto.randomBytes(16).toString("hex");
+        const SCRYPT_KEYLEN = 64;
+        const hash = await new Promise<string>((resolve, reject) => {
+          crypto.scrypt(password, salt, SCRYPT_KEYLEN, (err, key) => {
+            if (err) reject(err);
+            else resolve(`${salt}:${key.toString("hex")}`);
+          });
+        });
+        await db
+          .update(usersTable)
+          .set({ passwordHash: hash, mustChangePassword: true })
+          .where(eq(usersTable.id, userId));
+        console.log(
+          `[Admin] Password reset for user ${user.email} (${userId}) by ${(req as any).adminUser?.email}`
+        );
+        res.json({ ok: true, email: user.email, tempPassword: password });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
-      const host = req.headers.host || "localhost:5000";
-      const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
-      const resetUrl = `${isLocalhost ? "http" : "https"}://${host}/reset-password?token=${result.token}`;
+  app.post(
+    "/api/admin/companies/:id/users/:userId/send-reset-email",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const companyId = p(req.params.id);
+        const userId = p(req.params.userId);
+        const companyUsers = await storage.getCompanyUsers(companyId);
+        const cu = companyUsers.find((u) => u.userId === userId);
+        if (!cu) return res.status(404).json({ error: "User not found in this company" });
+        const user = await getUserById(userId);
+        if (!user || !user.email) return res.status(404).json({ error: "User not found" });
 
-      const emailResult = await sendEmail({
-        companyId: companyId,
-        to: user.email,
-        subject: "Reset your ScooPilot password",
-        text: `Hi ${user.firstName || "there"},\n\nA password reset was requested for your account. Click the link below to set a new password:\n\n${resetUrl}\n\nThis link expires in 1 hour.`,
-        html: `
+        const result = await createPasswordResetToken(user.email);
+        if ("error" in result) return res.status(400).json({ error: result.error });
+
+        const host = req.headers.host || "localhost:5000";
+        const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+        const resetUrl = `${isLocalhost ? "http" : "https"}://${host}/reset-password?token=${result.token}`;
+
+        const emailResult = await sendEmail({
+          companyId: companyId,
+          to: user.email,
+          subject: "Reset your ScooPilot password",
+          text: `Hi ${user.firstName || "there"},\n\nA password reset was requested for your account. Click the link below to set a new password:\n\n${resetUrl}\n\nThis link expires in 1 hour.`,
+          html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
               <h1 style="color: white; margin: 0;">ScooPilot</h1>
@@ -798,47 +1127,56 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
             </div>
           </div>
         `,
-      });
-
-      if (!emailResult.success) {
-        return res.status(500).json({ error: "Failed to send email: " + emailResult.error });
-      }
-
-      console.log(`[Admin] Password reset email sent to ${user.email} by ${(req as any).adminUser?.email}`);
-      res.json({ ok: true, email: user.email });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/admin/companies/:id/users/:userId/send-credentials", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const companyId = p(req.params.id); const userId = p(req.params.userId);
-      const companyUsers = await storage.getCompanyUsers(companyId);
-      const cu = companyUsers.find((u) => u.userId === userId);
-      if (!cu) return res.status(404).json({ error: "User not found in this company" });
-      const user = await getUserById(userId);
-      if (!user || !user.email) return res.status(404).json({ error: "User not found" });
-
-      const crypto = await import("crypto");
-      const tempPassword = crypto.randomBytes(6).toString("base64url");
-      const { users: usersTable } = await import("@shared/schema");
-      const salt = crypto.randomBytes(16).toString("hex");
-      const hash = await new Promise<string>((resolve, reject) => {
-        crypto.scrypt(tempPassword, salt, 64, (err, key) => {
-          if (err) reject(err);
-          else resolve(`${salt}:${key.toString("hex")}`);
         });
-      });
 
-      const host = req.headers.host || "localhost:5000";
-      const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
-      const appUrl = `${isLocalhost ? "http" : "https"}://${host}`;
+        if (!emailResult.success) {
+          return res.status(500).json({ error: "Failed to send email: " + emailResult.error });
+        }
 
-      const emailResult = await sendEmail({
-        companyId: companyId,
-        to: user.email,
-        subject: "Your ScooPilot login credentials",
-        text: `Hi ${user.firstName || "there"},\n\nHere are your ScooPilot login credentials:\n\nLogin: ${appUrl}\nEmail: ${user.email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
-        html: `
+        console.log(
+          `[Admin] Password reset email sent to ${user.email} by ${(req as any).adminUser?.email}`
+        );
+        res.json({ ok: true, email: user.email });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/admin/companies/:id/users/:userId/send-credentials",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const companyId = p(req.params.id);
+        const userId = p(req.params.userId);
+        const companyUsers = await storage.getCompanyUsers(companyId);
+        const cu = companyUsers.find((u) => u.userId === userId);
+        if (!cu) return res.status(404).json({ error: "User not found in this company" });
+        const user = await getUserById(userId);
+        if (!user || !user.email) return res.status(404).json({ error: "User not found" });
+
+        const crypto = await import("crypto");
+        const tempPassword = crypto.randomBytes(6).toString("base64url");
+        const { users: usersTable } = await import("@shared/schema");
+        const salt = crypto.randomBytes(16).toString("hex");
+        const hash = await new Promise<string>((resolve, reject) => {
+          crypto.scrypt(tempPassword, salt, 64, (err, key) => {
+            if (err) reject(err);
+            else resolve(`${salt}:${key.toString("hex")}`);
+          });
+        });
+
+        const host = req.headers.host || "localhost:5000";
+        const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+        const appUrl = `${isLocalhost ? "http" : "https"}://${host}`;
+
+        const emailResult = await sendEmail({
+          companyId: companyId,
+          to: user.email,
+          subject: "Your ScooPilot login credentials",
+          text: `Hi ${user.firstName || "there"},\n\nHere are your ScooPilot login credentials:\n\nLogin: ${appUrl}\nEmail: ${user.email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`,
+          html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
               <h1 style="color: white; margin: 0;">ScooPilot</h1>
@@ -858,20 +1196,28 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
             </div>
           </div>
         `,
-      });
+        });
 
-      if (!emailResult.success) {
-        return res.status(500).json({ error: "Failed to send credentials email. Password was not changed." });
+        if (!emailResult.success) {
+          return res
+            .status(500)
+            .json({ error: "Failed to send credentials email. Password was not changed." });
+        }
+
+        await db
+          .update(usersTable)
+          .set({ passwordHash: hash, mustChangePassword: true })
+          .where(eq(usersTable.id, userId));
+
+        console.log(
+          `[Admin] Credentials sent to ${user.email} by ${(req as any).adminUser?.email}`
+        );
+        res.json({ ok: true, email: user.email });
+      } catch (err) {
+        handleError(res, err);
       }
-
-      await db.update(usersTable)
-        .set({ passwordHash: hash, mustChangePassword: true })
-        .where(eq(usersTable.id, userId));
-
-      console.log(`[Admin] Credentials sent to ${user.email} by ${(req as any).adminUser?.email}`);
-      res.json({ ok: true, email: user.email });
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
   app.patch("/api/admin/companies/:id", isAdmin, async (req: Request, res: Response) => {
     try {
@@ -882,13 +1228,15 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const { name, email, phone, address, routeCredits } = req.body;
       const updates: Record<string, any> = {};
       if (name !== undefined) {
-        if (typeof name !== "string" || name.trim().length < 2) return res.status(400).json({ error: "Company name must be at least 2 characters" });
+        if (typeof name !== "string" || name.trim().length < 2)
+          return res.status(400).json({ error: "Company name must be at least 2 characters" });
         updates.name = name.trim();
       }
       if (email !== undefined) {
         if (email && typeof email === "string" && email.trim()) {
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-          if (!emailRegex.test(email.trim())) return res.status(400).json({ error: "Invalid email address" });
+          if (!emailRegex.test(email.trim()))
+            return res.status(400).json({ error: "Invalid email address" });
           updates.email = email.trim();
         } else {
           updates.email = null;
@@ -899,90 +1247,141 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       if (routeCredits !== undefined) {
         const creditsStr = String(routeCredits);
         const credits = parseInt(creditsStr, 10);
-        if (isNaN(credits) || credits < 0 || String(credits) !== creditsStr.trim()) return res.status(400).json({ error: "Route credits must be a non-negative integer" });
+        if (isNaN(credits) || credits < 0 || String(credits) !== creditsStr.trim())
+          return res.status(400).json({ error: "Route credits must be a non-negative integer" });
         updates.routeCredits = credits;
       }
 
-      if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No fields to update" });
+      if (Object.keys(updates).length === 0)
+        return res.status(400).json({ error: "No fields to update" });
 
       const { companies: companiesTable } = await import("@shared/schema");
       await db.update(companiesTable).set(updates).where(eq(companiesTable.id, companyId));
 
       if (updates.routeCredits !== undefined) {
         const adminEmail = (req as any).adminUser?.email || "unknown";
-        await db.insert(auditTrail).values({
-          companyId,
-          userId: null,
-          entityType: "company",
-          entityId: companyId,
-          action: "update",
-          changes: {
-            old: { routeCredits: company.routeCredits ?? 0 },
-            new: { routeCredits: updates.routeCredits },
-          },
-          ipAddress: req.ip || null,
-        }).catch(() => {});
-        await db.insert(adminAuditLogs).values({
-          adminUserId: (req as any).adminUser?.id || null,
-          adminEmail,
-          action: "update_route_credits",
-          resourceType: "company",
-          resourceId: companyId,
-          details: { old: company.routeCredits ?? 0, new: updates.routeCredits },
-          ipAddress: req.ip || null,
-        }).catch(() => {});
+        await db
+          .insert(auditTrail)
+          .values({
+            companyId,
+            userId: null,
+            entityType: "company",
+            entityId: companyId,
+            action: "update",
+            changes: {
+              old: { routeCredits: company.routeCredits ?? 0 },
+              new: { routeCredits: updates.routeCredits },
+            },
+            ipAddress: req.ip || null,
+          })
+          .catch(() => {});
+        await db
+          .insert(adminAuditLogs)
+          .values({
+            adminUserId: (req as any).adminUser?.id || null,
+            adminEmail,
+            action: "update_route_credits",
+            resourceType: "company",
+            resourceId: companyId,
+            details: { old: company.routeCredits ?? 0, new: updates.routeCredits },
+            ipAddress: req.ip || null,
+          })
+          .catch(() => {});
       }
 
-      console.log(`[Admin] Company ${companyId} updated by ${(req as any).adminUser?.email}: ${JSON.stringify(updates)}`);
+      console.log(
+        `[Admin] Company ${companyId} updated by ${(req as any).adminUser?.email}: ${JSON.stringify(updates)}`
+      );
       res.json({ ok: true, ...updates });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.patch("/api/admin/companies/:id/users/:userId", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const companyId = p(req.params.id); const userId = p(req.params.userId);
-      const companyUsers = await storage.getCompanyUsers(companyId);
-      const cu = companyUsers.find((u) => u.userId === userId);
-      if (!cu) return res.status(404).json({ error: "User not found in this company" });
+  app.patch(
+    "/api/admin/companies/:id/users/:userId",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const companyId = p(req.params.id);
+        const userId = p(req.params.userId);
+        const companyUsers = await storage.getCompanyUsers(companyId);
+        const cu = companyUsers.find((u) => u.userId === userId);
+        if (!cu) return res.status(404).json({ error: "User not found in this company" });
 
-      const { firstName, lastName, email, role } = req.body;
-      const userUpdates: Record<string, any> = {};
-      if (firstName !== undefined) userUpdates.firstName = firstName?.trim() || null;
-      if (lastName !== undefined) userUpdates.lastName = lastName?.trim() || null;
-      if (email !== undefined) {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) return res.status(400).json({ error: "Invalid email address" });
-        const existing = await getUserByEmail(email.toLowerCase());
-        if (existing && existing.id !== userId) return res.status(409).json({ error: "Email already in use by another account" });
-        userUpdates.email = email.toLowerCase().trim();
+        const { firstName, lastName, email, role } = req.body;
+        const userUpdates: Record<string, any> = {};
+        if (firstName !== undefined) userUpdates.firstName = firstName?.trim() || null;
+        if (lastName !== undefined) userUpdates.lastName = lastName?.trim() || null;
+        if (email !== undefined) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email))
+            return res.status(400).json({ error: "Invalid email address" });
+          const existing = await getUserByEmail(email.toLowerCase());
+          if (existing && existing.id !== userId)
+            return res.status(409).json({ error: "Email already in use by another account" });
+          userUpdates.email = email.toLowerCase().trim();
+        }
+
+        if (Object.keys(userUpdates).length > 0) {
+          const { users: usersTable } = await import("@shared/schema");
+          await db.update(usersTable).set(userUpdates).where(eq(usersTable.id, userId));
+        }
+
+        if (role !== undefined) {
+          const validRoles = ["owner", "admin", "tech"];
+          if (!validRoles.includes(role)) return res.status(400).json({ error: "Invalid role" });
+          const { companyUsers: companyUsersTable } = await import("@shared/schema");
+          await db
+            .update(companyUsersTable)
+            .set({ role })
+            .where(
+              and(eq(companyUsersTable.userId, userId), eq(companyUsersTable.companyId, companyId))
+            );
+        }
+
+        const oldData: Record<string, any> = {};
+        const newData: Record<string, any> = {};
+        if (firstName !== undefined) {
+          oldData.firstName = (cu as any).firstName;
+          newData.firstName = firstName?.trim() || null;
+        }
+        if (lastName !== undefined) {
+          oldData.lastName = (cu as any).lastName;
+          newData.lastName = lastName?.trim() || null;
+        }
+        if (email !== undefined) {
+          oldData.email = (cu as any).email;
+          newData.email = email.toLowerCase().trim();
+        }
+        if (role !== undefined) {
+          oldData.role = cu.role;
+          newData.role = role;
+        }
+        auditLog(
+          companyId,
+          null,
+          "user",
+          userId,
+          "update",
+          {
+            old: oldData,
+            new: newData,
+            actor: "platform_admin",
+            adminEmail: (req as any).adminUser?.email,
+          },
+          req.ip || undefined
+        );
+
+        console.log(
+          `[Admin] User ${userId} in company ${companyId} updated by ${(req as any).adminUser?.email}`
+        );
+        res.json({ ok: true });
+      } catch (err) {
+        handleError(res, err);
       }
-
-      if (Object.keys(userUpdates).length > 0) {
-        const { users: usersTable } = await import("@shared/schema");
-        await db.update(usersTable).set(userUpdates).where(eq(usersTable.id, userId));
-      }
-
-      if (role !== undefined) {
-        const validRoles = ["owner", "admin", "tech"];
-        if (!validRoles.includes(role)) return res.status(400).json({ error: "Invalid role" });
-        const { companyUsers: companyUsersTable } = await import("@shared/schema");
-        await db.update(companyUsersTable)
-          .set({ role })
-          .where(and(eq(companyUsersTable.userId, userId), eq(companyUsersTable.companyId, companyId)));
-      }
-
-      const oldData: Record<string, any> = {};
-      const newData: Record<string, any> = {};
-      if (firstName !== undefined) { oldData.firstName = (cu as any).firstName; newData.firstName = firstName?.trim() || null; }
-      if (lastName !== undefined) { oldData.lastName = (cu as any).lastName; newData.lastName = lastName?.trim() || null; }
-      if (email !== undefined) { oldData.email = (cu as any).email; newData.email = email.toLowerCase().trim(); }
-      if (role !== undefined) { oldData.role = cu.role; newData.role = role; }
-      auditLog(companyId, null, "user", userId, "update", { old: oldData, new: newData, actor: "platform_admin", adminEmail: (req as any).adminUser?.email }, req.ip || undefined);
-
-      console.log(`[Admin] User ${userId} in company ${companyId} updated by ${(req as any).adminUser?.email}`);
-      res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
   app.delete("/api/admin/companies/:id", isAdmin, async (req: Request, res: Response) => {
     try {
@@ -990,12 +1389,17 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
       const companyUsersList = await storage.getCompanyUsers(companyId);
-      const { companies: companiesTable, users: usersTable, companyUsers: companyUsersTable } = await import("@shared/schema");
+      const {
+        companies: companiesTable,
+        users: usersTable,
+        companyUsers: companyUsersTable,
+      } = await import("@shared/schema");
 
       await db.transaction(async (tx) => {
         await tx.delete(companiesTable).where(eq(companiesTable.id, companyId));
         for (const cu of companyUsersList) {
-          const [remaining] = await tx.select({ count: sql<number>`count(*)` })
+          const [remaining] = await tx
+            .select({ count: sql<number>`count(*)` })
             .from(companyUsersTable)
             .where(eq(companyUsersTable.userId, cu.userId));
           if (!remaining || Number(remaining.count) === 0) {
@@ -1004,16 +1408,22 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         }
       });
 
-      console.log(`[Admin] Tenant "${company.name}" (${companyId}) deleted by ${(req as any).adminUser?.email}`);
+      console.log(
+        `[Admin] Tenant "${company.name}" (${companyId}) deleted by ${(req as any).adminUser?.email}`
+      );
       res.json({ ok: true, deletedCompany: company.name });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/companies/:id/notes", isAdmin, async (req: Request, res: Response) => {
     try {
       const notes = await storage.getAdminNotes(p(req.params.id));
       res.json(notes);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/companies/:id/notes", isAdmin, async (req: Request, res: Response) => {
@@ -1026,14 +1436,18 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         createdBy: (req as any).adminUser.email,
       });
       res.json(note);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/admin/notes/:noteId", isAdmin, async (req: Request, res: Response) => {
     try {
       await storage.deleteAdminNote(p(req.params.noteId));
       res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/companies/:id/usage", isAdmin, async (req: Request, res: Response) => {
@@ -1045,32 +1459,58 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const now = new Date();
       const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const smsResult = await db.select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
+      const smsResult = await db
+        .select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
         .from(usageEvents)
-        .where(and(eq(usageEvents.companyId, companyId), eq(usageEvents.eventType, "sms_segment"), gte(usageEvents.recordedAt, periodStart)));
-      const voiceResult = await db.select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
+        .where(
+          and(
+            eq(usageEvents.companyId, companyId),
+            eq(usageEvents.eventType, "sms_segment"),
+            gte(usageEvents.recordedAt, periodStart)
+          )
+        );
+      const voiceResult = await db
+        .select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
         .from(usageEvents)
-        .where(and(eq(usageEvents.companyId, companyId), eq(usageEvents.eventType, "voice_minute"), gte(usageEvents.recordedAt, periodStart)));
+        .where(
+          and(
+            eq(usageEvents.companyId, companyId),
+            eq(usageEvents.eventType, "voice_minute"),
+            gte(usageEvents.recordedAt, periodStart)
+          )
+        );
 
       const companyUsersList = await storage.getCompanyUsers(companyId);
-      const activeUsers = companyUsersList.filter(cu => cu.isActive).length;
+      const activeUsers = companyUsersList.filter((cu) => cu.isActive).length;
 
       const { TIER_CONFIG: tierCfg } = await import("@shared/schema");
       const tierKey = company.subscriptionTier as keyof typeof tierCfg;
       const maxUsers = company.customMaxUsers ?? tierCfg[tierKey]?.maxUsers ?? 1;
 
-      const apiCallResult = await db.select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
+      const apiCallResult = await db
+        .select({ total: sql<number>`COALESCE(SUM(${usageEvents.quantity}), 0)` })
         .from(usageEvents)
-        .where(and(eq(usageEvents.companyId, companyId), eq(usageEvents.eventType, "api_call"), gte(usageEvents.recordedAt, periodStart)));
+        .where(
+          and(
+            eq(usageEvents.companyId, companyId),
+            eq(usageEvents.eventType, "api_call"),
+            gte(usageEvents.recordedAt, periodStart)
+          )
+        );
 
-      const msgCount = await db.select({ total: sql<number>`count(*)` })
+      const msgCount = await db
+        .select({ total: sql<number>`count(*)` })
         .from(messagesTable)
-        .where(and(eq(messagesTable.companyId, companyId), gte(messagesTable.createdAt, periodStart)));
+        .where(
+          and(eq(messagesTable.companyId, companyId), gte(messagesTable.createdAt, periodStart))
+        );
 
-      const contactCount = await db.select({ total: sql<number>`count(*)` })
+      const contactCount = await db
+        .select({ total: sql<number>`count(*)` })
         .from(contacts)
         .where(eq(contacts.companyId, companyId));
-      const visitCount = await db.select({ total: sql<number>`count(*)` })
+      const visitCount = await db
+        .select({ total: sql<number>`count(*)` })
         .from(visits)
         .where(eq(visits.companyId, companyId));
 
@@ -1085,7 +1525,9 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         totalContacts: Number(contactCount[0]?.total || 0),
         totalVisits: Number(visitCount[0]?.total || 0),
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/companies/:id/voice-calls", isAdmin, async (req: Request, res: Response) => {
@@ -1096,7 +1538,9 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
       const calls = await storage.getVoiceCalls(companyId, limit);
       res.json(calls);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/companies/:id/audit-logs", isAdmin, async (req: Request, res: Response) => {
@@ -1112,30 +1556,34 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       let conditions = [eq(auditTrail.companyId, companyId)];
       if (entityType) conditions.push(eq(auditTrail.entityType, entityType));
 
-      const [countResult] = await db.select({ total: sql<number>`count(*)` })
+      const [countResult] = await db
+        .select({ total: sql<number>`count(*)` })
         .from(auditTrail)
         .where(and(...conditions));
-      const logs = await db.select()
+      const logs = await db
+        .select()
         .from(auditTrail)
         .where(and(...conditions))
         .orderBy(desc(auditTrail.createdAt))
         .limit(limit)
         .offset(offset);
 
-      const userIds = Array.from(new Set(logs.filter(l => l.userId).map(l => l.userId!)));
+      const userIds = Array.from(new Set(logs.filter((l) => l.userId).map((l) => l.userId!)));
       const userMap = new Map<string, string>();
       for (const uid of userIds) {
         const user = await getUserById(uid);
         if (user) userMap.set(uid, user.email || "");
       }
 
-      const enrichedLogs = logs.map(l => ({
+      const enrichedLogs = logs.map((l) => ({
         ...l,
         userEmail: l.userId ? userMap.get(l.userId) || "unknown" : null,
       }));
 
       res.json({ logs: enrichedLogs, total: Number(countResult?.total || 0) });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/companies/:id/export", isAdmin, async (req: Request, res: Response) => {
@@ -1145,7 +1593,10 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       if (!company) return res.status(404).json({ error: "Company not found" });
 
       const contactList = await storage.getContacts(companyId);
-      const allProperties = await db.select().from(properties).where(eq(properties.companyId, companyId));
+      const allProperties = await db
+        .select()
+        .from(properties)
+        .where(eq(properties.companyId, companyId));
       const plans = await storage.getServicePlans(companyId, {});
       const invoiceList = await storage.getInvoices(companyId);
       const allVisits = await db.select().from(visits).where(eq(visits.companyId, companyId));
@@ -1155,7 +1606,12 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
 
       const exportData = {
         exportedAt: new Date().toISOString(),
-        company: { id: company.id, name: company.name, subscriptionTier: company.subscriptionTier, createdAt: company.createdAt },
+        company: {
+          id: company.id,
+          name: company.name,
+          subscriptionTier: company.subscriptionTier,
+          createdAt: company.createdAt,
+        },
         users: companyUsersList,
         contacts: contactList,
         properties: allProperties,
@@ -1166,12 +1622,29 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         messages: allMessages,
       };
 
-      auditLog(companyId, null, "data_export", companyId, "create", { tables: Object.keys(exportData).filter(k => k !== "exportedAt"), actor: "platform_admin", adminEmail: (req as any).adminUser?.email }, req.ip || undefined);
+      auditLog(
+        companyId,
+        null,
+        "data_export",
+        companyId,
+        "create",
+        {
+          tables: Object.keys(exportData).filter((k) => k !== "exportedAt"),
+          actor: "platform_admin",
+          adminEmail: (req as any).adminUser?.email,
+        },
+        req.ip || undefined
+      );
 
       res.setHeader("Content-Type", "application/json");
-      res.setHeader("Content-Disposition", `attachment; filename="tenant-export-${companyId}-${new Date().toISOString().slice(0,10)}.json"`);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="tenant-export-${companyId}-${new Date().toISOString().slice(0, 10)}.json"`
+      );
       res.json(exportData);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/rollup", isAdmin, async (_req: Request, res: Response) => {
@@ -1179,7 +1652,9 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const { runNightlyRollup } = await import("../jobs/nightly-rollup");
       await runNightlyRollup();
       res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/retell/webhook-status", isAdmin, async (_req: Request, res: Response) => {
@@ -1200,25 +1675,34 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       } catch (err: unknown) {
         fetchError = err instanceof Error ? err.message : String(err);
       }
-      const inSync = !fetchError && !!(expectedUrl && registeredUrl && registeredUrl === expectedUrl);
+      const inSync =
+        !fetchError && !!(expectedUrl && registeredUrl && registeredUrl === expectedUrl);
       res.json({ configured: true, agentId, registeredUrl, expectedUrl, inSync, fetchError });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/retell/sync-webhook", isAdmin, async (req: Request, res: Response) => {
     try {
       const agentId = (req.body?.agentId as string | undefined) || process.env.RETELL_AGENT_ID;
       if (!agentId) {
-        return res.status(400).json({ error: "No Retell agent ID provided and RETELL_AGENT_ID is not set" });
+        return res
+          .status(400)
+          .json({ error: "No Retell agent ID provided and RETELL_AGENT_ID is not set" });
       }
       const baseUrl = getAppBaseUrl();
       if (!baseUrl) {
-        return res.status(400).json({ error: "APP_BASE_URL is not configured — cannot determine the correct webhook URL" });
+        return res.status(400).json({
+          error: "APP_BASE_URL is not configured — cannot determine the correct webhook URL",
+        });
       }
       await registerRetellWebhook(agentId);
       const webhookUrl = `${baseUrl}/api/webhooks/retell`;
       res.json({ ok: true, agentId, webhookUrl });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/debug/run-reminders", isAdmin, async (_req: Request, res: Response) => {
@@ -1226,7 +1710,9 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const { runReminders } = await import("../jobs/reminders");
       await runReminders();
       res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/debug/run-auto-visits", isAdmin, async (_req: Request, res: Response) => {
@@ -1234,7 +1720,9 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const { runAutoVisits } = await import("../jobs/auto-visits");
       const result = await runAutoVisits();
       res.json({ ok: true, ...result });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/admin/debug/run-auto-invoice", isAdmin, async (_req: Request, res: Response) => {
@@ -1242,15 +1730,26 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const { runAutoInvoice } = await import("../jobs/auto-invoice");
       const result = await runAutoInvoice();
       res.json({ ok: true, ...result });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Admin Security & Subscription Routes ================
 
-  async function logAdminAudit(req: Request, action: string, resourceType?: string, resourceId?: string, details?: any) {
+  async function logAdminAudit(
+    req: Request,
+    action: string,
+    resourceType?: string,
+    resourceId?: string,
+    details?: any
+  ) {
     const adminUser = (req as any).adminUser;
     if (!adminUser) return;
-    const ip = req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+    const ip =
+      req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ||
+      req.socket.remoteAddress ||
+      "unknown";
     await db.insert(adminAuditLogs).values({
       adminUserId: adminUser.userId,
       adminEmail: adminUser.email,
@@ -1277,16 +1776,24 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         .where(sql`${adminSessions.expiresAt} > NOW()`)
         .orderBy(sql`${adminSessions.createdAt} DESC`);
       res.json(sessions);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.delete("/api/admin/security/sessions/:sessionId", isAdmin, async (req: Request, res: Response) => {
-    try {
-      await db.delete(adminSessions).where(eq(adminSessions.id, p(req.params.sessionId)));
-      await logAdminAudit(req, "revoke_session", "admin_session", p(req.params.sessionId));
-      res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
-  });
+  app.delete(
+    "/api/admin/security/sessions/:sessionId",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        await db.delete(adminSessions).where(eq(adminSessions.id, p(req.params.sessionId)));
+        await logAdminAudit(req, "revoke_session", "admin_session", p(req.params.sessionId));
+        res.json({ ok: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.get("/api/admin/security/audit-log", isAdmin, async (req: Request, res: Response) => {
     try {
@@ -1298,9 +1805,13 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         .orderBy(sql`${adminAuditLogs.createdAt} DESC`)
         .limit(limit)
         .offset(offset);
-      const [{ count: total }] = await db.select({ count: sql<number>`count(*)` }).from(adminAuditLogs);
+      const [{ count: total }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(adminAuditLogs);
       res.json({ logs, total: Number(total) });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/security/admin-users", isAdmin, async (_req: Request, res: Response) => {
@@ -1313,17 +1824,27 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
           createdAt: adminUsers.createdAt,
         })
         .from(adminUsers);
-      const enriched = usrs.map(u => {
-        const daysSinceChange = (Date.now() - new Date(u.passwordChangedAt).getTime()) / (1000 * 60 * 60 * 24);
-        return { ...u, passwordExpired: daysSinceChange >= 90, daysSincePasswordChange: Math.floor(daysSinceChange) };
+      const enriched = usrs.map((u) => {
+        const daysSinceChange =
+          (Date.now() - new Date(u.passwordChangedAt).getTime()) / (1000 * 60 * 60 * 24);
+        return {
+          ...u,
+          passwordExpired: daysSinceChange >= 90,
+          daysSincePasswordChange: Math.floor(daysSinceChange),
+        };
       });
       res.json(enriched);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/admin/subscription-tiers", isAdmin, async (_req: Request, res: Response) => {
     try {
-      const tiers = await db.select().from(subscriptionTiers).orderBy(sql`${subscriptionTiers.price} ASC`);
+      const tiers = await db
+        .select()
+        .from(subscriptionTiers)
+        .orderBy(sql`${subscriptionTiers.price} ASC`);
       if (tiers.length === 0) {
         const defaults = Object.entries(TIER_CONFIG).map(([key, cfg]) => ({
           tierKey: key,
@@ -1335,11 +1856,16 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         for (const d of defaults) {
           await db.insert(subscriptionTiers).values(d).onConflictDoNothing();
         }
-        const seeded = await db.select().from(subscriptionTiers).orderBy(sql`${subscriptionTiers.price} ASC`);
+        const seeded = await db
+          .select()
+          .from(subscriptionTiers)
+          .orderBy(sql`${subscriptionTiers.price} ASC`);
         return res.json(seeded);
       }
       res.json(tiers);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/admin/subscription-tiers/:id", isAdmin, async (req: Request, res: Response) => {
@@ -1350,149 +1876,208 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       if (maxUsers !== undefined) updates.maxUsers = parseInt(maxUsers);
       if (price !== undefined) updates.price = parseFloat(price).toFixed(2);
       if (isActive !== undefined) updates.isActive = isActive;
-      const [updated] = await db.update(subscriptionTiers).set(updates).where(eq(subscriptionTiers.id, p(req.params.id))).returning();
+      const [updated] = await db
+        .update(subscriptionTiers)
+        .set(updates)
+        .where(eq(subscriptionTiers.id, p(req.params.id)))
+        .returning();
       if (!updated) return res.status(404).json({ error: "Tier not found" });
-      await logAdminAudit(req, "update_subscription_tier", "subscription_tier", updated.tierKey, { name: updated.name, price: updated.price, maxUsers: updated.maxUsers });
+      await logAdminAudit(req, "update_subscription_tier", "subscription_tier", updated.tierKey, {
+        name: updated.name,
+        price: updated.price,
+        maxUsers: updated.maxUsers,
+      });
       res.json(updated);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Import / Migration Routes ================
   const { parseSweepAndGoInvoices } = await import("../services/sweepandgo-parser");
-  const { aiMapColumns, getDeterministicMapping, hashFileContent, CONTACT_FIELDS, INVOICE_FIELDS, ROUTE_FIELDS } = await import("../services/ai-mapper");
-  const { applyTransformations, parseCSV: parseCSVUtil } = await import("../services/import-transforms");
+  const {
+    aiMapColumns,
+    getDeterministicMapping,
+    hashFileContent,
+    CONTACT_FIELDS,
+    INVOICE_FIELDS,
+    ROUTE_FIELDS,
+  } = await import("../services/ai-mapper");
+  const { applyTransformations, parseCSV: parseCSVUtil } =
+    await import("../services/import-transforms");
   const { parseCompetitorCSV } = await import("../services/competitor-import");
-  const { enqueueCompetitorImport, enqueueCsvContactsImport, enqueueSweepAndGoInvoicesImport, enqueueCsvRoutesImport } = await import("../services/import-runner");
+  const {
+    enqueueCompetitorImport,
+    enqueueCsvContactsImport,
+    enqueueSweepAndGoInvoicesImport,
+    enqueueCsvRoutesImport,
+  } = await import("../services/import-runner");
 
   const VALID_PLATFORMS = ["sweepandgo", "jobber"] as const;
 
-  app.post("/api/migrations/competitor/detect", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { csvText, platform } = req.body;
-      if (!csvText || typeof csvText !== "string") return res.status(400).json({ error: "csvText is required" });
-      if (platform && !VALID_PLATFORMS.includes(platform)) return res.status(400).json({ error: "Invalid platform" });
-      const result = parseCompetitorCSV(csvText, platform || undefined);
-      res.json(result);
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/migrations/competitor/import", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const { csvText, platform, duplicateHandling } = req.body;
-      if (!csvText || typeof csvText !== "string") return res.status(400).json({ error: "csvText is required" });
-      if (platform && !VALID_PLATFORMS.includes(platform)) return res.status(400).json({ error: "Invalid platform" });
-      if (duplicateHandling && !["skip", "update"].includes(duplicateHandling)) return res.status(400).json({ error: "Invalid duplicateHandling value" });
-
-      const result = parseCompetitorCSV(csvText, platform || undefined, 0);
-      if (result.errors.some(e => e.row === 0)) {
-        return res.status(400).json({ error: result.errors[0].message });
+  app.post(
+    "/api/migrations/competitor/detect",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { csvText, platform } = req.body;
+        if (!csvText || typeof csvText !== "string")
+          return res.status(400).json({ error: "csvText is required" });
+        if (platform && !VALID_PLATFORMS.includes(platform))
+          return res.status(400).json({ error: "Invalid platform" });
+        const result = parseCompetitorCSV(csvText, platform || undefined);
+        res.json(result);
+      } catch (err) {
+        handleError(res, err);
       }
+    }
+  );
 
-      const fileHash = hashFileContent(csvText);
-      const importRun = await storage.createImportRun({
-        companyId,
-        type: `${result.platform}_contacts` as any,
-        status: "processing",
-        fileName: `${result.platform}-contacts.csv`,
-        fileHash,
-        totalRows: result.totalRows,
-        importedRows: 0,
-        skippedRows: 0,
-      });
+  app.post(
+    "/api/migrations/competitor/import",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const { csvText, platform, duplicateHandling } = req.body;
+        if (!csvText || typeof csvText !== "string")
+          return res.status(400).json({ error: "csvText is required" });
+        if (platform && !VALID_PLATFORMS.includes(platform))
+          return res.status(400).json({ error: "Invalid platform" });
+        if (duplicateHandling && !["skip", "update"].includes(duplicateHandling))
+          return res.status(400).json({ error: "Invalid duplicateHandling value" });
 
-      const leadSourceName = result.platformLabel;
-      const leadSources = await storage.getLeadSources(companyId);
-      if (!leadSources.find(ls => ls.name.toLowerCase() === leadSourceName.toLowerCase())) {
-        await storage.createLeadSource({ companyId, name: leadSourceName });
-      }
+        const result = parseCompetitorCSV(csvText, platform || undefined, 0);
+        if (result.errors.some((e) => e.row === 0)) {
+          return res.status(400).json({ error: result.errors[0].message });
+        }
 
-      await enqueueCompetitorImport({
-        companyId,
-        jobId: importRun.id,
-        contacts: result.preview,
-        platform: result.platform,
-        platformLabel: result.platformLabel,
-        duplicateHandling: (duplicateHandling || "skip") as "skip" | "update",
-        leadSourceName,
-      });
-
-      res.json({ jobId: importRun.id, totalRows: result.totalRows });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/migrations/sweepandgo/parse-invoices", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { csvText } = req.body;
-      if (!csvText || typeof csvText !== "string") return res.status(400).json({ error: "csvText is required" });
-
-      const result = parseSweepAndGoInvoices(csvText);
-
-      const sampleInvoices = result.invoices.slice(0, 10).map(inv => ({
-        invoiceNumber: inv.invoiceNumber,
-        contactName: inv.contactName,
-        contactEmail: inv.contactEmail,
-        status: inv.status,
-        total: inv.total,
-        lineItemCount: inv.lineItems.length,
-        paymentCount: inv.payments.length,
-      }));
-
-      res.json({
-        summary: result.summary,
-        sampleInvoices,
-        errors: result.errors,
-        warnings: result.warnings,
-      });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/migrations/sweepandgo/run-invoices", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const { csvText, allowDuplicates, includeInReminders } = req.body;
-      if (!csvText) return res.status(400).json({ error: "csvText is required" });
-
-      const parseResult = parseSweepAndGoInvoices(csvText);
-      if (parseResult.errors.length > 0 && !req.body.forceImport) {
-        return res.status(400).json({
-          errors: parseResult.errors,
-          message: "Validation errors found. Send forceImport: true to skip invalid rows.",
+        const fileHash = hashFileContent(csvText);
+        const importRun = await storage.createImportRun({
+          companyId,
+          type: `${result.platform}_contacts` as any,
+          status: "processing",
+          fileName: `${result.platform}-contacts.csv`,
+          fileHash,
+          totalRows: result.totalRows,
+          importedRows: 0,
+          skippedRows: 0,
         });
+
+        const leadSourceName = result.platformLabel;
+        const leadSources = await storage.getLeadSources(companyId);
+        if (!leadSources.find((ls) => ls.name.toLowerCase() === leadSourceName.toLowerCase())) {
+          await storage.createLeadSource({ companyId, name: leadSourceName });
+        }
+
+        await enqueueCompetitorImport({
+          companyId,
+          jobId: importRun.id,
+          contacts: result.preview,
+          platform: result.platform,
+          platformLabel: result.platformLabel,
+          duplicateHandling: (duplicateHandling || "skip") as "skip" | "update",
+          leadSourceName,
+        });
+
+        res.json({ jobId: importRun.id, totalRows: result.totalRows });
+      } catch (err) {
+        handleError(res, err);
       }
+    }
+  );
 
-      const fileHash = hashFileContent(csvText);
-      const importRun = await storage.createImportRun({
-        companyId,
-        type: "sweepandgo_invoices",
-        status: "processing",
-        fileName: "sweepandgo-invoices.csv",
-        fileHash,
-        totalRows: parseResult.invoices.length,
-        importedRows: 0,
-        skippedRows: 0,
-      });
+  app.post(
+    "/api/migrations/sweepandgo/parse-invoices",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { csvText } = req.body;
+        if (!csvText || typeof csvText !== "string")
+          return res.status(400).json({ error: "csvText is required" });
 
-      await enqueueSweepAndGoInvoicesImport({
-        companyId,
-        jobId: importRun.id,
-        csvText,
-        allowDuplicates: !!allowDuplicates,
-        includeInReminders: !!includeInReminders,
-      });
+        const result = parseSweepAndGoInvoices(csvText);
 
-      res.json({ jobId: importRun.id, totalRows: parseResult.invoices.length });
-    } catch (err) { handleError(res, err); }
-  });
+        const sampleInvoices = result.invoices.slice(0, 10).map((inv) => ({
+          invoiceNumber: inv.invoiceNumber,
+          contactName: inv.contactName,
+          contactEmail: inv.contactEmail,
+          status: inv.status,
+          total: inv.total,
+          lineItemCount: inv.lineItems.length,
+          paymentCount: inv.payments.length,
+        }));
 
-  app.get("/api/migrations/:id/invoices-report", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const importRun = await storage.getImportRun(p(req.params.id), companyId);
-      if (!importRun) return res.status(404).json({ error: "Import run not found" });
-      res.json(importRun);
-    } catch (err) { handleError(res, err); }
-  });
+        res.json({
+          summary: result.summary,
+          sampleInvoices,
+          errors: result.errors,
+          warnings: result.warnings,
+        });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/migrations/sweepandgo/run-invoices",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const { csvText, allowDuplicates, includeInReminders } = req.body;
+        if (!csvText) return res.status(400).json({ error: "csvText is required" });
+
+        const parseResult = parseSweepAndGoInvoices(csvText);
+        if (parseResult.errors.length > 0 && !req.body.forceImport) {
+          return res.status(400).json({
+            errors: parseResult.errors,
+            message: "Validation errors found. Send forceImport: true to skip invalid rows.",
+          });
+        }
+
+        const fileHash = hashFileContent(csvText);
+        const importRun = await storage.createImportRun({
+          companyId,
+          type: "sweepandgo_invoices",
+          status: "processing",
+          fileName: "sweepandgo-invoices.csv",
+          fileHash,
+          totalRows: parseResult.invoices.length,
+          importedRows: 0,
+          skippedRows: 0,
+        });
+
+        await enqueueSweepAndGoInvoicesImport({
+          companyId,
+          jobId: importRun.id,
+          csvText,
+          allowDuplicates: !!allowDuplicates,
+          includeInReminders: !!includeInReminders,
+        });
+
+        res.json({ jobId: importRun.id, totalRows: parseResult.invoices.length });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.get(
+    "/api/migrations/:id/invoices-report",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const importRun = await storage.getImportRun(p(req.params.id), companyId);
+        if (!importRun) return res.status(404).json({ error: "Import run not found" });
+        res.json(importRun);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.get("/api/invoices/:id/payments", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -1501,7 +2086,9 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       const payments = await storage.getInvoicePayments(p(req.params.id));
       res.json(payments);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Document Import (AI Categorization) ================
@@ -1543,27 +2130,44 @@ Respond with exactly one category from the list above and nothing else.`;
       });
 
       const raw = completion.choices[0]?.message?.content?.trim() || "";
-      const category = DOCUMENT_CATEGORIES.find(c => raw.toLowerCase().includes(c.toLowerCase())) || "Other";
+      const category =
+        DOCUMENT_CATEGORIES.find((c) => raw.toLowerCase().includes(c.toLowerCase())) || "Other";
       res.json({ category });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  const ALLOWED_DOCUMENT_CATEGORIES = ["Invoice", "Service Record", "Contract", "License", "Insurance Certificate", "Photo", "Other"] as const;
+  const ALLOWED_DOCUMENT_CATEGORIES = [
+    "Invoice",
+    "Service Record",
+    "Contract",
+    "License",
+    "Insurance Certificate",
+    "Photo",
+    "Other",
+  ] as const;
 
   app.post("/api/documents", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { fileName, fileUrl, fileType, fileSize, documentCategory, notes, contactId } = req.body;
+      const { fileName, fileUrl, fileType, fileSize, documentCategory, notes, contactId } =
+        req.body;
       if (!fileName) return res.status(400).json({ error: "fileName is required" });
       if (!fileUrl) return res.status(400).json({ error: "fileUrl is required" });
       if (documentCategory && !ALLOWED_DOCUMENT_CATEGORIES.includes(documentCategory)) {
-        return res.status(400).json({ error: `Invalid documentCategory. Allowed values: ${ALLOWED_DOCUMENT_CATEGORIES.join(", ")}` });
+        return res.status(400).json({
+          error: `Invalid documentCategory. Allowed values: ${ALLOWED_DOCUMENT_CATEGORIES.join(", ")}`,
+        });
       }
 
       let resolvedContactId: string | null = null;
       if (contactId) {
         const contact = await storage.getContact(contactId, companyId);
-        if (!contact) return res.status(400).json({ error: "Contact not found or does not belong to this company" });
+        if (!contact)
+          return res
+            .status(400)
+            .json({ error: "Contact not found or does not belong to this company" });
         resolvedContactId = contact.id;
       }
 
@@ -1580,32 +2184,46 @@ Respond with exactly one category from the list above and nothing else.`;
         visitId: null,
       });
       res.json(doc);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/documents", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const docs = await storage.getDocumentImports(companyId);
-      const contactIds = Array.from(new Set(docs.filter(d => d.contactId).map(d => d.contactId!)));
-      const contactMap: Record<string, { firstName: string; lastName: string; email: string | null }> = {};
+      const contactIds = Array.from(
+        new Set(docs.filter((d) => d.contactId).map((d) => d.contactId!))
+      );
+      const contactMap: Record<
+        string,
+        { firstName: string; lastName: string; email: string | null }
+      > = {};
       if (contactIds.length > 0) {
         const contactRecords = await storage.getContacts(companyId);
         for (const c of contactRecords) {
           if (contactIds.includes(c.id)) {
-            contactMap[c.id] = { firstName: c.firstName, lastName: c.lastName, email: c.email ?? null };
+            contactMap[c.id] = {
+              firstName: c.firstName,
+              lastName: c.lastName,
+              email: c.email ?? null,
+            };
           }
         }
       }
-      const result = docs.map(d => ({
+      const result = docs.map((d) => ({
         ...d,
-        contactName: d.contactId && contactMap[d.contactId]
-          ? `${contactMap[d.contactId].firstName} ${contactMap[d.contactId].lastName}`.trim()
-          : null,
+        contactName:
+          d.contactId && contactMap[d.contactId]
+            ? `${contactMap[d.contactId].firstName} ${contactMap[d.contactId].lastName}`.trim()
+            : null,
         contactEmail: d.contactId ? (contactMap[d.contactId]?.email ?? null) : null,
       }));
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/imports/ai-map", isAuthenticated, async (req: Request, res: Response) => {
@@ -1613,22 +2231,34 @@ Respond with exactly one category from the list above and nothing else.`;
       const { companyId } = await getCompanyContext(req);
       const { headers, sampleRows, targetSchema } = req.body;
 
-      if (!headers || !Array.isArray(headers)) return res.status(400).json({ error: "headers array is required" });
-      if (!sampleRows || !Array.isArray(sampleRows)) return res.status(400).json({ error: "sampleRows array is required" });
+      if (!headers || !Array.isArray(headers))
+        return res.status(400).json({ error: "headers array is required" });
+      if (!sampleRows || !Array.isArray(sampleRows))
+        return res.status(400).json({ error: "sampleRows array is required" });
 
       const company = await storage.getCompany(companyId);
-      const targetFields = targetSchema === "invoices" ? INVOICE_FIELDS
-        : targetSchema === "routes" ? ROUTE_FIELDS
-        : CONTACT_FIELDS;
+      const targetFields =
+        targetSchema === "invoices"
+          ? INVOICE_FIELDS
+          : targetSchema === "routes"
+            ? ROUTE_FIELDS
+            : CONTACT_FIELDS;
 
       if (company?.aiImportMappingEnabled) {
-        const result = await aiMapColumns(headers, sampleRows.slice(0, 25), targetSchema || "contacts", targetFields);
+        const result = await aiMapColumns(
+          headers,
+          sampleRows.slice(0, 25),
+          targetSchema || "contacts",
+          targetFields
+        );
         res.json(result);
       } else {
         const result = getDeterministicMapping(headers, targetFields);
         res.json(result);
       }
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/imports/preview", isAuthenticated, async (req: Request, res: Response) => {
@@ -1654,18 +2284,25 @@ Respond with exactly one category from the list above and nothing else.`;
         return res.status(400).json({ error: "Either csvText or headers+rows are required" });
       }
 
-      const requiredFields = targetSchema === "invoices"
-        ? ["invoiceNumber"]
-        : targetSchema === "routes"
-        ? ["routeName"]
-        : ["firstName"];
+      const requiredFields =
+        targetSchema === "invoices"
+          ? ["invoiceNumber"]
+          : targetSchema === "routes"
+            ? ["routeName"]
+            : ["firstName"];
 
-      const transformed = applyTransformations(rows, headers, mappings, transformations, requiredFields);
+      const transformed = applyTransformations(
+        rows,
+        headers,
+        mappings,
+        transformations,
+        requiredFields
+      );
 
       const preview = transformed.slice(0, 50);
-      const validCount = transformed.filter(r => r.isValid).length;
-      const invalidCount = transformed.filter(r => !r.isValid).length;
-      const allErrors = transformed.flatMap(r => r.errors);
+      const validCount = transformed.filter((r) => r.isValid).length;
+      const invalidCount = transformed.filter((r) => !r.isValid).length;
+      const allErrors = transformed.flatMap((r) => r.errors);
 
       res.json({
         totalRows: rows.length,
@@ -1676,7 +2313,9 @@ Respond with exactly one category from the list above and nothing else.`;
         errors: allErrors.slice(0, 100),
         headers,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/imports/apply", isAuthenticated, async (req: Request, res: Response) => {
@@ -1706,9 +2345,12 @@ Respond with exactly one category from the list above and nothing else.`;
         return res.status(400).json({ error: "Either csvText or headers+rows are required" });
       }
 
-      const importType = targetSchema === "invoices" ? "sweepandgo_invoices"
-        : targetSchema === "routes" ? "csv_routes"
-        : "csv_contacts";
+      const importType =
+        targetSchema === "invoices"
+          ? "sweepandgo_invoices"
+          : targetSchema === "routes"
+            ? "csv_routes"
+            : "csv_contacts";
 
       const mappingConfig = { mappings, transformations };
       const importRun = await storage.createImportRun({
@@ -1752,7 +2394,9 @@ Respond with exactly one category from the list above and nothing else.`;
       }
 
       res.json({ jobId: importRun.id, totalRows: rows.length });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/imports", isAuthenticated, async (req: Request, res: Response) => {
@@ -1760,7 +2404,9 @@ Respond with exactly one category from the list above and nothing else.`;
       const { companyId } = await getCompanyContext(req);
       const runs = await storage.getImportRuns(companyId);
       res.json(runs);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/imports/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -1769,7 +2415,9 @@ Respond with exactly one category from the list above and nothing else.`;
       const run = await storage.getImportRun(p(req.params.id), companyId);
       if (!run) return res.status(404).json({ error: "Import run not found" });
       res.json(run);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/imports/:jobId/status", isAuthenticated, async (req: Request, res: Response) => {
@@ -1778,7 +2426,9 @@ Respond with exactly one category from the list above and nothing else.`;
       const run = await storage.getImportRun(p(req.params.jobId), companyId);
       if (!run) return res.status(404).json({ error: "Import run not found" });
       res.json(run);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Rover Chatbot Routes ================
@@ -1801,8 +2451,13 @@ Respond with exactly one category from the list above and nothing else.`;
   app.get("/api/rover/status", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const aiKeyAvailable = !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY);
-      const [company] = await db.select({ roverAiEnabled: companies.roverAiEnabled }).from(companies).where(eq(companies.id, companyId));
+      const aiKeyAvailable = !!(
+        process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
+      );
+      const [company] = await db
+        .select({ roverAiEnabled: companies.roverAiEnabled })
+        .from(companies)
+        .where(eq(companies.id, companyId));
       res.json({
         aiAvailable: aiKeyAvailable && (company?.roverAiEnabled ?? false),
         aiEnabled: company?.roverAiEnabled ?? false,
@@ -1813,101 +2468,194 @@ Respond with exactly one category from the list above and nothing else.`;
     }
   });
 
-  app.post("/api/rover/chat", isAuthenticated, roverRateLimiter as any, async (req: Request, res: Response) => {
-    try {
-      const { userId, companyId } = await getCompanyContext(req);
-      const { messages: chatMessages } = req.body;
+  app.post(
+    "/api/rover/chat",
+    isAuthenticated,
+    roverRateLimiter as any,
+    async (req: Request, res: Response) => {
+      try {
+        const { userId, companyId } = await getCompanyContext(req);
+        const { messages: chatMessages } = req.body;
 
-      if (!Array.isArray(chatMessages) || chatMessages.length === 0) {
-        return res.status(400).json({ error: "Messages array is required" });
-      }
+        if (!Array.isArray(chatMessages) || chatMessages.length === 0) {
+          return res.status(400).json({ error: "Messages array is required" });
+        }
 
-      const lastMsg = chatMessages[chatMessages.length - 1];
-      if (!lastMsg || lastMsg.role !== "user" || typeof lastMsg.content !== "string" || lastMsg.content.trim().length < 1) {
-        return res.status(400).json({ error: "Last message must be a non-empty user message" });
-      }
+        const lastMsg = chatMessages[chatMessages.length - 1];
+        if (
+          !lastMsg ||
+          lastMsg.role !== "user" ||
+          typeof lastMsg.content !== "string" ||
+          lastMsg.content.trim().length < 1
+        ) {
+          return res.status(400).json({ error: "Last message must be a non-empty user message" });
+        }
 
-      const aiKeyAvailable = !!(process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY);
-      const [company] = await db.select({ roverAiEnabled: companies.roverAiEnabled }).from(companies).where(eq(companies.id, companyId));
+        const aiKeyAvailable = !!(
+          process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
+        );
+        const [company] = await db
+          .select({ roverAiEnabled: companies.roverAiEnabled })
+          .from(companies)
+          .where(eq(companies.id, companyId));
 
-      if (!company?.roverAiEnabled || !aiKeyAvailable) {
-        return res.status(400).json({ error: "AI chat is disabled", fallback: true });
-      }
+        if (!company?.roverAiEnabled || !aiKeyAvailable) {
+          return res.status(400).json({ error: "AI chat is disabled", fallback: true });
+        }
 
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
 
-      const sanitizedMessages = chatMessages.slice(-20).map((m: any) => ({
-        role: m.role === "user" ? "user" as const : "assistant" as const,
-        content: String(m.content).slice(0, 2000),
-      }));
+        const sanitizedMessages = chatMessages.slice(-20).map((m: any) => ({
+          role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+          content: String(m.content).slice(0, 2000),
+        }));
 
-      const { streamRoverChat } = await import("../services/rover-ai");
+        const { streamRoverChat } = await import("../services/rover-ai");
 
-      const abortSignal = { aborted: false };
-      req.on("close", () => { abortSignal.aborted = true; });
+        const abortSignal = { aborted: false };
+        req.on("close", () => {
+          abortSignal.aborted = true;
+        });
 
-      await streamRoverChat(
-        sanitizedMessages,
-        companyId,
-        userId,
-        (text: string) => {
-          if (!abortSignal.aborted) {
-            res.write(`data: ${JSON.stringify({ type: "chunk", content: text })}\n\n`);
-          }
-        },
-        (fullText: string) => {
-          if (!abortSignal.aborted) {
-            res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
-            res.end();
-          }
-        },
-        (error: string) => {
-          if (!abortSignal.aborted) {
-            res.write(`data: ${JSON.stringify({ type: "error", content: error })}\n\n`);
-            res.end();
-          }
-        },
-        abortSignal
-      );
-    } catch (err) {
-      if (!res.headersSent) {
-        handleError(res, err);
-      } else {
-        res.write(`data: ${JSON.stringify({ type: "error", content: "An error occurred" })}\n\n`);
-        res.end();
+        await streamRoverChat(
+          sanitizedMessages,
+          companyId,
+          userId,
+          (text: string) => {
+            if (!abortSignal.aborted) {
+              res.write(`data: ${JSON.stringify({ type: "chunk", content: text })}\n\n`);
+            }
+          },
+          (fullText: string) => {
+            if (!abortSignal.aborted) {
+              res.write(`data: ${JSON.stringify({ type: "done", content: fullText })}\n\n`);
+              res.end();
+            }
+          },
+          (error: string) => {
+            if (!abortSignal.aborted) {
+              res.write(`data: ${JSON.stringify({ type: "error", content: error })}\n\n`);
+              res.end();
+            }
+          },
+          abortSignal
+        );
+      } catch (err) {
+        if (!res.headersSent) {
+          handleError(res, err);
+        } else {
+          res.write(`data: ${JSON.stringify({ type: "error", content: "An error occurred" })}\n\n`);
+          res.end();
+        }
       }
     }
-  });
+  );
 
   const ROVER_KNOWLEDGE_BASE: { keywords: string[]; answer: string }[] = [
-    { keywords: ["dashboard", "overview", "home", "main"], answer: "The Dashboard is your home screen showing key metrics like active clients, scheduled visits, revenue, and recent activity. It gives you a quick snapshot of your business operations." },
-    { keywords: ["contact", "client", "crm", "lead", "customer"], answer: "The Contacts section is your CRM hub. You can add and manage clients, track their status (lead, estimate, active, paused, cancelled), assign properties, add tags, and manage their scheduled services. Use the search bar to find contacts quickly." },
-    { keywords: ["property", "address", "yard", "dog", "location"], answer: "Properties are service locations tied to contacts. Each property can have details like address, gate code, yard size, number of dogs, and special instructions. Properties are geocoded automatically for route optimization." },
-    { keywords: ["route", "routing", "optimize", "optimization", "dispatch"], answer: "Routes let you organize daily service stops. Use the Route Builder to drag-and-drop visits, optimize the order using our route optimization algorithm, and dispatch routes to technicians. You can optimize routes using credits from your account." },
-    { keywords: ["schedule", "service plan", "recurring", "visit", "appointment", "job"], answer: "Jobs set up recurring or one-off schedules for your clients (weekly, biweekly, monthly, or one-time). Each job auto-generates visits that appear on routes and auto-assigns to the least-loaded route for their day." },
-    { keywords: ["invoice", "billing", "payment", "charge", "stripe"], answer: "The Invoicing section lets you create and manage invoices with line items, tax, and discounts. Invoices can be sent to clients and paid via Stripe. You can also void invoices and track payment status." },
-    { keywords: ["technician", "tech", "field", "mobile", "crew"], answer: "Technicians use a simplified mobile view showing only their assigned routes and client info. They can mark visits as complete, add notes, and upload proof-of-service photos. Invite technicians from the Settings page." },
-    { keywords: ["portal", "client portal", "self-service"], answer: "The Client Portal gives your customers a self-service view where they can see their schedule, past visits, invoices, pause/resume service, and send messages to you. Enable portal access from a contact's detail page." },
-    { keywords: ["email", "sms", "text", "message", "communicate"], answer: "Communication tools let you send emails and SMS messages to clients. All communications are logged in the Messages tab. You can set up automation rules to send messages automatically on events like new leads or completed services." },
-    { keywords: ["automation", "rule", "trigger", "automatic"], answer: "Automation Rules let you automate actions based on events. For example, auto-send a welcome email when a new lead is created, or create a task when a service is completed. Set these up from the Automation section." },
-    { keywords: ["settings", "account", "profile", "company"], answer: "Settings lets you manage your company profile, team members, service pricing, notification preferences, API keys, and integrations. You can also change your password and manage your subscription here." },
-    { keywords: ["import", "csv", "upload", "bulk"], answer: "You can bulk-import contacts using CSV files. Go to Contacts, click Import, upload your CSV, map the columns, review the data, and import. Unknown lead sources from CSV files are automatically added." },
-    { keywords: ["tag", "label", "categorize", "group"], answer: "Tags help you organize and categorize contacts. Create custom tags with colors, then assign them to contacts for easy filtering and grouping." },
-    { keywords: ["notification", "alert", "bell"], answer: "The notification bell in the top bar shows real-time alerts for events like new leads, completed visits, overdue invoices, and portal messages. Click a notification to navigate to the relevant item." },
-    { keywords: ["api", "webhook", "integration", "key"], answer: "ScooPilot has a REST API with scoped API keys for external integrations. You can also set up webhooks to receive real-time notifications when events occur in your account. Manage these from Settings > API & Webhooks." },
-    { keywords: ["password", "login", "forgot", "reset", "change password"], answer: "To change your password, go to Settings and use the Change Password card. If you forgot your password, use the Forgot Password link on the login page to receive a reset email." },
-    { keywords: ["subscription", "plan", "tier", "pricing", "upgrade"], answer: "Your subscription tier determines your user limit and features. Plans range from Free Trial to Enterprise. Contact your admin or check Settings to manage your subscription." },
-    { keywords: ["map", "geocode", "mapbox", "directions"], answer: "ScooPilot uses maps for route visualization and optimization. Properties are automatically geocoded when created. The route optimizer uses real road distances to find the most efficient service order." },
-    { keywords: ["proof", "photo", "picture", "evidence"], answer: "Technicians can upload proof-of-service photos when completing visits. These photos are attached to the visit record and visible in the visit history for the client's property." },
+    {
+      keywords: ["dashboard", "overview", "home", "main"],
+      answer:
+        "The Dashboard is your home screen showing key metrics like active clients, scheduled visits, revenue, and recent activity. It gives you a quick snapshot of your business operations.",
+    },
+    {
+      keywords: ["contact", "client", "crm", "lead", "customer"],
+      answer:
+        "The Contacts section is your CRM hub. You can add and manage clients, track their status (lead, estimate, active, paused, cancelled), assign properties, add tags, and manage their scheduled services. Use the search bar to find contacts quickly.",
+    },
+    {
+      keywords: ["property", "address", "yard", "dog", "location"],
+      answer:
+        "Properties are service locations tied to contacts. Each property can have details like address, gate code, yard size, number of dogs, and special instructions. Properties are geocoded automatically for route optimization.",
+    },
+    {
+      keywords: ["route", "routing", "optimize", "optimization", "dispatch"],
+      answer:
+        "Routes let you organize daily service stops. Use the Route Builder to drag-and-drop visits, optimize the order using our route optimization algorithm, and dispatch routes to technicians. You can optimize routes using credits from your account.",
+    },
+    {
+      keywords: ["schedule", "service plan", "recurring", "visit", "appointment", "job"],
+      answer:
+        "Jobs set up recurring or one-off schedules for your clients (weekly, biweekly, monthly, or one-time). Each job auto-generates visits that appear on routes and auto-assigns to the least-loaded route for their day.",
+    },
+    {
+      keywords: ["invoice", "billing", "payment", "charge", "stripe"],
+      answer:
+        "The Invoicing section lets you create and manage invoices with line items, tax, and discounts. Invoices can be sent to clients and paid via Stripe. You can also void invoices and track payment status.",
+    },
+    {
+      keywords: ["technician", "tech", "field", "mobile", "crew"],
+      answer:
+        "Technicians use a simplified mobile view showing only their assigned routes and client info. They can mark visits as complete, add notes, and upload proof-of-service photos. Invite technicians from the Settings page.",
+    },
+    {
+      keywords: ["portal", "client portal", "self-service"],
+      answer:
+        "The Client Portal gives your customers a self-service view where they can see their schedule, past visits, invoices, pause/resume service, and send messages to you. Enable portal access from a contact's detail page.",
+    },
+    {
+      keywords: ["email", "sms", "text", "message", "communicate"],
+      answer:
+        "Communication tools let you send emails and SMS messages to clients. All communications are logged in the Messages tab. You can set up automation rules to send messages automatically on events like new leads or completed services.",
+    },
+    {
+      keywords: ["automation", "rule", "trigger", "automatic"],
+      answer:
+        "Automation Rules let you automate actions based on events. For example, auto-send a welcome email when a new lead is created, or create a task when a service is completed. Set these up from the Automation section.",
+    },
+    {
+      keywords: ["settings", "account", "profile", "company"],
+      answer:
+        "Settings lets you manage your company profile, team members, service pricing, notification preferences, API keys, and integrations. You can also change your password and manage your subscription here.",
+    },
+    {
+      keywords: ["import", "csv", "upload", "bulk"],
+      answer:
+        "You can bulk-import contacts using CSV files. Go to Contacts, click Import, upload your CSV, map the columns, review the data, and import. Unknown lead sources from CSV files are automatically added.",
+    },
+    {
+      keywords: ["tag", "label", "categorize", "group"],
+      answer:
+        "Tags help you organize and categorize contacts. Create custom tags with colors, then assign them to contacts for easy filtering and grouping.",
+    },
+    {
+      keywords: ["notification", "alert", "bell"],
+      answer:
+        "The notification bell in the top bar shows real-time alerts for events like new leads, completed visits, overdue invoices, and portal messages. Click a notification to navigate to the relevant item.",
+    },
+    {
+      keywords: ["api", "webhook", "integration", "key"],
+      answer:
+        "ScooPilot has a REST API with scoped API keys for external integrations. You can also set up webhooks to receive real-time notifications when events occur in your account. Manage these from Settings > API & Webhooks.",
+    },
+    {
+      keywords: ["password", "login", "forgot", "reset", "change password"],
+      answer:
+        "To change your password, go to Settings and use the Change Password card. If you forgot your password, use the Forgot Password link on the login page to receive a reset email.",
+    },
+    {
+      keywords: ["subscription", "plan", "tier", "pricing", "upgrade"],
+      answer:
+        "Your subscription tier determines your user limit and features. Plans range from Free Trial to Enterprise. Contact your admin or check Settings to manage your subscription.",
+    },
+    {
+      keywords: ["map", "geocode", "mapbox", "directions"],
+      answer:
+        "ScooPilot uses maps for route visualization and optimization. Properties are automatically geocoded when created. The route optimizer uses real road distances to find the most efficient service order.",
+    },
+    {
+      keywords: ["proof", "photo", "picture", "evidence"],
+      answer:
+        "Technicians can upload proof-of-service photos when completing visits. These photos are attached to the visit record and visible in the visit history for the client's property.",
+    },
   ];
 
   function findAnswer(question: string): string | null {
     const q = question.toLowerCase();
     let bestMatch: { answer: string; score: number } | null = null;
     for (const entry of ROVER_KNOWLEDGE_BASE) {
-      const score = entry.keywords.filter(kw => q.includes(kw)).length;
+      const score = entry.keywords.filter((kw) => q.includes(kw)).length;
       if (score > 0 && (!bestMatch || score > bestMatch.score)) {
         bestMatch = { answer: entry.answer, score };
       }
@@ -1928,10 +2676,13 @@ Respond with exactly one category from the list above and nothing else.`;
       }
 
       res.json({
-        answer: "I'm not sure about that one. Would you like to submit a trouble ticket or feature request? I'll make sure the team sees it.",
+        answer:
+          "I'm not sure about that one. Would you like to submit a trouble ticket or feature request? I'll make sure the team sees it.",
         matched: false,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/rover/ticket", isAuthenticated, async (req: Request, res: Response) => {
@@ -1949,31 +2700,50 @@ Respond with exactly one category from the list above and nothing else.`;
       }
 
       const { roverTickets } = await import("@shared/schema");
-      const [ticket] = await db.insert(roverTickets).values({
-        companyId,
-        userId,
-        type,
-        subject: subject.trim(),
-        description: description.trim(),
-      }).returning();
+      const [ticket] = await db
+        .insert(roverTickets)
+        .values({
+          companyId,
+          userId,
+          type,
+          subject: subject.trim(),
+          description: description.trim(),
+        })
+        .returning();
 
-      const typeLabel = type === "bug" ? "Trouble Ticket" : type === "feature_request" ? "Feature Request" : "Question";
-      notify(companyId, "general", `New ${typeLabel}`, `${typeLabel}: ${subject.trim()}`, undefined);
+      const typeLabel =
+        type === "bug"
+          ? "Trouble Ticket"
+          : type === "feature_request"
+            ? "Feature Request"
+            : "Question";
+      notify(
+        companyId,
+        "general",
+        `New ${typeLabel}`,
+        `${typeLabel}: ${subject.trim()}`,
+        undefined
+      );
 
       res.json({ ok: true, ticket });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/rover/tickets", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const { roverTickets } = await import("@shared/schema");
-      const tickets = await db.select().from(roverTickets)
+      const tickets = await db
+        .select()
+        .from(roverTickets)
         .where(eq(roverTickets.companyId, companyId))
         .orderBy(sql`${roverTickets.createdAt} DESC`)
         .limit(50);
       res.json(tickets);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
-
 }

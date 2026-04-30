@@ -57,31 +57,28 @@ export function useUpload(options: UseUploadOptions = {}) {
   const [error, setError] = useState<Error | null>(null);
   const [progress, setProgress] = useState(0);
 
-  const uploadFileDirect = useCallback(
-    async (file: File): Promise<UploadResponse | null> => {
-      const token = localStorage.getItem("sessionToken");
-      const hdrs: Record<string, string> = {};
-      if (token) hdrs["Authorization"] = `Bearer ${token}`;
+  const uploadFileDirect = useCallback(async (file: File): Promise<UploadResponse | null> => {
+    const token = localStorage.getItem("sessionToken");
+    const hdrs: Record<string, string> = {};
+    if (token) hdrs["Authorization"] = `Bearer ${token}`;
 
-      const formData = new FormData();
-      formData.append("file", file);
+    const formData = new FormData();
+    formData.append("file", file);
 
-      const response = await fetch("/api/uploads/direct", {
-        method: "POST",
-        credentials: "include",
-        headers: hdrs,
-        body: formData,
-      });
+    const response = await fetch("/api/uploads/direct", {
+      method: "POST",
+      credentials: "include",
+      headers: hdrs,
+      body: formData,
+    });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Upload failed");
-      }
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || "Upload failed");
+    }
 
-      return response.json();
-    },
-    []
-  );
+    return response.json();
+  }, []);
 
   /**
    * Upload a file. Uses server-side proxy to avoid CORS issues with presigned URLs.
@@ -174,4 +171,3 @@ export function useUpload(options: UseUploadOptions = {}) {
     progress,
   };
 }
-

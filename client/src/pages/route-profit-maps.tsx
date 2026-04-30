@@ -3,15 +3,49 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
-import { MapPin, Eye, Layers, ChevronRight, ChevronDown, DollarSign, Map as MapIcon, Sparkles, X, ArrowRight, Fuel, Clock, Route, Loader2, ArrowLeftRight, CheckCircle, Download, Send, Bell, MessageSquare, Mail, XCircle } from "lucide-react";
+import {
+  MapPin,
+  Eye,
+  Layers,
+  ChevronRight,
+  ChevronDown,
+  DollarSign,
+  Map as MapIcon,
+  Sparkles,
+  X,
+  ArrowRight,
+  Fuel,
+  Clock,
+  Route,
+  Loader2,
+  ArrowLeftRight,
+  CheckCircle,
+  Download,
+  Send,
+  Bell,
+  MessageSquare,
+  Mail,
+  XCircle,
+} from "lucide-react";
 import ProfitabilityMap, { type MapRoute, type MapStop } from "@/components/profitability-map";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -19,7 +53,15 @@ import type { Route as RouteRecord } from "@shared/schema";
 type RouteWithOptStatus = RouteRecord & { isOptimizedCurrent?: boolean };
 
 type ViewMode = "stops" | "zones";
-type DayFilter = "all" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+type DayFilter =
+  | "all"
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
 type CompareView = "current" | "optimized";
 
 type RouteFuel = {
@@ -52,7 +94,13 @@ type FuelCostData = {
 type OptProposedRoute = {
   routeLabel: string;
   day: string;
-  stops: { servicePlanId: string; contactName: string; address: string; latitude: number; longitude: number }[];
+  stops: {
+    servicePlanId: string;
+    contactName: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+  }[];
   estimatedMiles: number;
   estimatedMinutes: number;
   stopCount: number;
@@ -78,7 +126,12 @@ type LaborCostData = {
 
 type OptResult = {
   current: { days: OptDayProposal[]; totalMiles: number; totalMinutes: number; totalStops: number };
-  proposed: { days: OptDayProposal[]; totalMiles: number; totalMinutes: number; totalStops: number };
+  proposed: {
+    days: OptDayProposal[];
+    totalMiles: number;
+    totalMinutes: number;
+    totalStops: number;
+  };
   improvementPct: number;
   milesSaved: number;
   minutesSaved: number;
@@ -88,7 +141,16 @@ type OptResult = {
   laborCost?: LaborCostData;
 };
 
-const ROUTE_COLORS = ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#f97316"];
+const ROUTE_COLORS = [
+  "#3b82f6",
+  "#ef4444",
+  "#22c55e",
+  "#f59e0b",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#f97316",
+];
 
 function formatDollars(cents: number): string {
   const abs = Math.abs(cents);
@@ -103,7 +165,11 @@ function statusBadge(status: "profitable" | "marginal" | "unprofitable") {
     unprofitable: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   };
   return (
-    <Badge variant="outline" className={`text-xs ${variants[status]}`} data-testid={`badge-status-${status}`}>
+    <Badge
+      variant="outline"
+      className={`text-xs ${variants[status]}`}
+      data-testid={`badge-status-${status}`}
+    >
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </Badge>
   );
@@ -111,8 +177,9 @@ function statusBadge(status: "profitable" | "marginal" | "unprofitable") {
 
 function buildOptimizedMapRoutes(optResult: OptResult, view: "current" | "proposed"): MapRoute[] {
   const schedule = view === "current" ? optResult.current : optResult.proposed;
-  const fuelPerDay = view === "current" ? optResult.fuelCost.currentPerDay : optResult.fuelCost.proposedPerDay;
-  const fuelByDay = new Map(fuelPerDay.map(d => [d.day, d]));
+  const fuelPerDay =
+    view === "current" ? optResult.fuelCost.currentPerDay : optResult.fuelCost.proposedPerDay;
+  const fuelByDay = new Map(fuelPerDay.map((d) => [d.day, d]));
 
   const mapRoutes: MapRoute[] = [];
   let colorIdx = 0;
@@ -167,7 +234,9 @@ export default function RouteProfitMaps() {
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>("stops");
   const [dayFilter, setDayFilter] = useState<DayFilter>("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "profitable" | "marginal" | "unprofitable">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "profitable" | "marginal" | "unprofitable"
+  >("all");
   const [visibleRouteIds, setVisibleRouteIds] = useState<Set<string>>(new Set());
   const [focusRouteId, setFocusRouteId] = useState<string | null>(null);
   const [expandedRouteId, setExpandedRouteId] = useState<string | null>(null);
@@ -190,11 +259,15 @@ export default function RouteProfitMaps() {
 
   const optimizationStateMap = useMemo(() => {
     const map = new Map<string, { isOptimized: boolean; date: string | null }>();
-    for (const r of (routeRecords ?? [])) {
+    for (const r of routeRecords ?? []) {
       const isOptimized = r.isOptimizedCurrent ?? !!(r.lastOptimizedAt && r.optimizedStopHash);
-      const date = isOptimized && r.lastOptimizedAt
-        ? new Date(r.lastOptimizedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
-        : null;
+      const date =
+        isOptimized && r.lastOptimizedAt
+          ? new Date(r.lastOptimizedAt).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            })
+          : null;
       map.set(r.id, { isOptimized, date });
     }
     return map;
@@ -222,11 +295,11 @@ export default function RouteProfitMaps() {
     mutationFn: async () => {
       if (!optResult) throw new Error("No optimization to commit");
       const res = await apiRequest("POST", "/api/routes/apply-weekly-plan", {
-        proposedDays: optResult.proposed.days.map(d => ({
+        proposedDays: optResult.proposed.days.map((d) => ({
           day: d.day,
-          routes: d.routes.map(r => ({
+          routes: d.routes.map((r) => ({
             routeLabel: r.routeLabel,
-            stops: r.stops.map(s => ({ servicePlanId: s.servicePlanId })),
+            stops: r.stops.map((s) => ({ servicePlanId: s.servicePlanId })),
           })),
         })),
       });
@@ -263,7 +336,7 @@ export default function RouteProfitMaps() {
   }, [optResult, compareView]);
 
   const optimizedVisibleIds = useMemo(() => {
-    return new Set(optimizedMapRoutes.map(r => r.routeId));
+    return new Set(optimizedMapRoutes.map((r) => r.routeId));
   }, [optimizedMapRoutes]);
 
   const filteredRoutes = useMemo(() => {
@@ -318,17 +391,22 @@ export default function RouteProfitMaps() {
     .filter((r) => effectiveVisibleIds.has(r.routeId))
     .reduce((sum, r) => sum + r.totalRevenueCents, 0);
 
-  const avgMarginVisible = totalRevenueVisible > 0
-    ? Math.round((totalProfitVisible / totalRevenueVisible) * 10000) / 100
-    : 0;
+  const avgMarginVisible =
+    totalRevenueVisible > 0
+      ? Math.round((totalProfitVisible / totalRevenueVisible) * 10000) / 100
+      : 0;
 
-  const visibleRoutes = filteredRoutes.filter(r => effectiveVisibleIds.has(r.routeId));
-  const allVisibleOptimized = visibleRoutes.length > 0 &&
-    visibleRoutes.every(r => optimizationStateMap.get(r.routeId)?.isOptimized === true);
+  const visibleRoutes = filteredRoutes.filter((r) => effectiveVisibleIds.has(r.routeId));
+  const allVisibleOptimized =
+    visibleRoutes.length > 0 &&
+    visibleRoutes.every((r) => optimizationStateMap.get(r.routeId)?.isOptimized === true);
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center" data-testid="loading-route-profit-maps">
+      <div
+        className="h-full flex items-center justify-center"
+        data-testid="loading-route-profit-maps"
+      >
         <Skeleton className="w-full h-full" />
       </div>
     );
@@ -342,7 +420,9 @@ export default function RouteProfitMaps() {
       <div className="flex items-center justify-between gap-2 p-3 border-b bg-background shrink-0">
         <div className="flex items-center gap-2">
           <MapIcon className="h-5 w-5 text-primary" />
-          <h1 className="text-lg font-semibold" data-testid="text-page-title">Route Profit Maps</h1>
+          <h1 className="text-lg font-semibold" data-testid="text-page-title">
+            Route Profit Maps
+          </h1>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {!isComparing && (
@@ -354,7 +434,10 @@ export default function RouteProfitMaps() {
               <div className="text-xs text-muted-foreground" data-testid="text-visible-routes">
                 {effectiveVisibleIds.size}/{filteredRoutes.length} routes
               </div>
-              <div className={`text-xs font-medium ${avgMarginVisible >= 15 ? "text-green-600 dark:text-green-400" : avgMarginVisible >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-avg-margin">
+              <div
+                className={`text-xs font-medium ${avgMarginVisible >= 15 ? "text-green-600 dark:text-green-400" : avgMarginVisible >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}`}
+                data-testid="text-avg-margin"
+              >
                 Avg margin: {avgMarginVisible.toFixed(1)}%
               </div>
 
@@ -374,7 +457,10 @@ export default function RouteProfitMaps() {
                 </SelectContent>
               </Select>
 
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}
+              >
                 <SelectTrigger className="h-8 w-36 text-xs" data-testid="select-status-filter">
                   <SelectValue />
                 </SelectTrigger>
@@ -448,16 +534,22 @@ export default function RouteProfitMaps() {
               variant={isComparing ? "outline" : "default"}
               size="sm"
               className="h-8 text-xs gap-1"
-              onClick={() => isComparing ? exitComparison() : optimizeMutation.mutate()}
+              onClick={() => (isComparing ? exitComparison() : optimizeMutation.mutate())}
               disabled={optimizeMutation.isPending || routes.length === 0}
               data-testid="button-optimize-week"
             >
               {optimizeMutation.isPending ? (
-                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing...</>
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing...
+                </>
               ) : isComparing ? (
-                <><X className="h-3.5 w-3.5" /> Exit Comparison</>
+                <>
+                  <X className="h-3.5 w-3.5" /> Exit Comparison
+                </>
               ) : (
-                <><Sparkles className="h-3.5 w-3.5" /> Optimize Week</>
+                <>
+                  <Sparkles className="h-3.5 w-3.5" /> Optimize Week
+                </>
               )}
             </Button>
           )}
@@ -475,7 +567,10 @@ export default function RouteProfitMaps() {
       </div>
 
       {isComparing && optResult && (
-        <div className="bg-primary/5 border-b px-4 py-2.5 flex items-center gap-6 shrink-0" data-testid="comparison-savings-banner">
+        <div
+          className="bg-primary/5 border-b px-4 py-2.5 flex items-center gap-6 shrink-0"
+          data-testid="comparison-savings-banner"
+        >
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-4 w-4 text-primary" />
             <span className="text-sm font-semibold text-primary" data-testid="text-improvement-pct">
@@ -484,12 +579,15 @@ export default function RouteProfitMaps() {
           </div>
           <Separator orientation="vertical" className="h-5" />
           {(() => {
-            const totalSavedCents = optResult.fuelCost.savedCents + (optResult.laborCost?.savedCents ?? 0);
+            const totalSavedCents =
+              optResult.fuelCost.savedCents + (optResult.laborCost?.savedCents ?? 0);
             return (
               <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-1.5" data-testid="text-total-saved">
                   <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className={`font-semibold ${totalSavedCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                  <span
+                    className={`font-semibold ${totalSavedCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+                  >
                     {totalSavedCents >= 0
                       ? `${formatDollars(totalSavedCents)}/wk saved`
                       : `${formatDollars(Math.abs(totalSavedCents))}/wk increase`}
@@ -501,20 +599,30 @@ export default function RouteProfitMaps() {
                 </div>
                 <div className="flex items-center gap-1.5" data-testid="text-fuel-saved">
                   <Fuel className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="font-medium">{formatDollars(Math.abs(optResult.fuelCost.savedCents))} fuel</span>
+                  <span className="font-medium">
+                    {formatDollars(Math.abs(optResult.fuelCost.savedCents))} fuel
+                  </span>
                 </div>
                 {optResult.laborCost && (
                   <div className="flex items-center gap-1.5" data-testid="text-labor-saved">
                     <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="font-medium">{optResult.minutesSaved} min ({formatDollars(Math.abs(optResult.laborCost.savedCents))} labor)</span>
+                    <span className="font-medium">
+                      {optResult.minutesSaved} min (
+                      {formatDollars(Math.abs(optResult.laborCost.savedCents))} labor)
+                    </span>
                   </div>
                 )}
-                <div className="flex items-center gap-1.5 text-muted-foreground" data-testid="text-fuel-rate">
+                <div
+                  className="flex items-center gap-1.5 text-muted-foreground"
+                  data-testid="text-fuel-rate"
+                >
                   <span>
                     {optResult.fuelCost.source === "gas_mpg"
                       ? `$${(optResult.fuelCost.gasPriceCentsPerGallon / 100).toFixed(2)}/gal, ${optResult.fuelCost.vehicleMPG} MPG`
                       : `${formatDollars(optResult.fuelCost.centsPerMile)}/mi`}
-                    {optResult.laborCost ? ` | $${(optResult.laborCost.burdenedHourlyRateCents / 100).toFixed(2)}/hr` : ""}
+                    {optResult.laborCost
+                      ? ` | $${(optResult.laborCost.burdenedHourlyRateCents / 100).toFixed(2)}/hr`
+                      : ""}
                   </span>
                 </div>
               </div>
@@ -524,7 +632,10 @@ export default function RouteProfitMaps() {
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <ArrowLeftRight className="h-3.5 w-3.5" />
               <span>
-                Viewing: <span className="font-medium text-foreground">{compareView === "current" ? "Current" : "Optimized"}</span>
+                Viewing:{" "}
+                <span className="font-medium text-foreground">
+                  {compareView === "current" ? "Current" : "Optimized"}
+                </span>
               </span>
             </div>
             <Button
@@ -535,9 +646,13 @@ export default function RouteProfitMaps() {
               data-testid="button-commit-optimization"
             >
               {commitMutation.isPending ? (
-                <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Applying...</>
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" /> Applying...
+                </>
               ) : (
-                <><CheckCircle className="h-3 w-3 mr-1" /> Commit Changes</>
+                <>
+                  <CheckCircle className="h-3 w-3 mr-1" /> Commit Changes
+                </>
               )}
             </Button>
           </div>
@@ -547,7 +662,10 @@ export default function RouteProfitMaps() {
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 relative">
           {displayRoutes.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-8" data-testid="empty-map-state">
+            <div
+              className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 p-8"
+              data-testid="empty-map-state"
+            >
               <MapIcon className="h-12 w-12 opacity-30" />
               <p className="text-lg font-medium">
                 {isComparing ? "No mappable stops in this view" : "No route data available"}
@@ -567,14 +685,20 @@ export default function RouteProfitMaps() {
               useRouteColors={isComparing}
               onStopClick={(stop) => {
                 if (!isComparing) {
-                  setExpandedRouteId(routes.find(r => r.stops.some(s => s.propertyId === stop.propertyId))?.routeId ?? null);
+                  setExpandedRouteId(
+                    routes.find((r) => r.stops.some((s) => s.propertyId === stop.propertyId))
+                      ?.routeId ?? null
+                  );
                 }
               }}
             />
           )}
 
           {!isComparing && (
-            <div className="absolute bottom-4 left-4 bg-background/90 rounded-lg border shadow-sm p-3 text-xs space-y-1.5 z-20" data-testid="map-legend">
+            <div
+              className="absolute bottom-4 left-4 bg-background/90 rounded-lg border shadow-sm p-3 text-xs space-y-1.5 z-20"
+              data-testid="map-legend"
+            >
               <p className="font-medium text-foreground">Legend</p>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-green-500 inline-block shrink-0"></span>
@@ -597,7 +721,10 @@ export default function RouteProfitMaps() {
           )}
 
           {isComparing && (
-            <div className="absolute bottom-4 left-4 bg-background/90 rounded-lg border shadow-sm p-3 text-xs space-y-1.5 z-20" data-testid="map-compare-legend">
+            <div
+              className="absolute bottom-4 left-4 bg-background/90 rounded-lg border shadow-sm p-3 text-xs space-y-1.5 z-20"
+              data-testid="map-compare-legend"
+            >
               <p className="font-medium text-foreground">
                 {compareView === "current" ? "Current Routes" : "Optimized Routes"}
               </p>
@@ -612,7 +739,10 @@ export default function RouteProfitMaps() {
         </div>
 
         {sidebarOpen && !isComparing && (
-          <div className="w-80 border-l bg-background overflow-y-auto shrink-0" data-testid="route-sidebar-panel">
+          <div
+            className="w-80 border-l bg-background overflow-y-auto shrink-0"
+            data-testid="route-sidebar-panel"
+          >
             <div className="p-3 border-b sticky top-0 bg-background z-10">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-sm font-semibold">Routes ({filteredRoutes.length})</h2>
@@ -623,28 +753,45 @@ export default function RouteProfitMaps() {
                   onClick={toggleAll}
                   data-testid="button-toggle-all-routes"
                 >
-                  {filteredRoutes.every((r) => visibleRouteIds.has(r.routeId)) ? "Hide All" : "Show All"}
+                  {filteredRoutes.every((r) => visibleRouteIds.has(r.routeId))
+                    ? "Hide All"
+                    : "Show All"}
                 </Button>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-muted/50 rounded p-1.5">
                   <p className="text-[10px] text-muted-foreground">Stops</p>
-                  <p className="text-sm font-semibold" data-testid="text-sidebar-total-stops">{totalStopsVisible}</p>
+                  <p className="text-sm font-semibold" data-testid="text-sidebar-total-stops">
+                    {totalStopsVisible}
+                  </p>
                 </div>
                 <div className="bg-muted/50 rounded p-1.5">
                   <p className="text-[10px] text-muted-foreground">Profit</p>
-                  <p className={`text-sm font-semibold ${totalProfitVisible >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-sidebar-total-profit">{formatDollars(totalProfitVisible)}</p>
+                  <p
+                    className={`text-sm font-semibold ${totalProfitVisible >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+                    data-testid="text-sidebar-total-profit"
+                  >
+                    {formatDollars(totalProfitVisible)}
+                  </p>
                 </div>
                 <div className="bg-muted/50 rounded p-1.5">
                   <p className="text-[10px] text-muted-foreground">Margin</p>
-                  <p className={`text-sm font-semibold ${avgMarginVisible >= 15 ? "text-green-600 dark:text-green-400" : avgMarginVisible >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-sidebar-avg-margin">{avgMarginVisible.toFixed(1)}%</p>
+                  <p
+                    className={`text-sm font-semibold ${avgMarginVisible >= 15 ? "text-green-600 dark:text-green-400" : avgMarginVisible >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}`}
+                    data-testid="text-sidebar-avg-margin"
+                  >
+                    {avgMarginVisible.toFixed(1)}%
+                  </p>
                 </div>
               </div>
             </div>
 
             <div className="divide-y">
               {filteredRoutes.length === 0 && (
-                <div className="p-4 text-center text-sm text-muted-foreground" data-testid="text-no-routes">
+                <div
+                  className="p-4 text-center text-sm text-muted-foreground"
+                  data-testid="text-no-routes"
+                >
                   No routes match your filters.
                 </div>
               )}
@@ -655,7 +802,11 @@ export default function RouteProfitMaps() {
                 const routeIsOptimized = routeOptState?.isOptimized ?? false;
                 const routeOptDate = routeOptState?.date ?? null;
                 return (
-                  <div key={route.routeId} className={`${!isVisible ? "opacity-50" : ""}`} data-testid={`route-panel-${route.routeId}`}>
+                  <div
+                    key={route.routeId}
+                    className={`${!isVisible ? "opacity-50" : ""}`}
+                    data-testid={`route-panel-${route.routeId}`}
+                  >
                     <div className="flex items-center gap-2 p-2.5 hover:bg-muted/50 transition-colors">
                       <Checkbox
                         checked={isVisible}
@@ -676,7 +827,12 @@ export default function RouteProfitMaps() {
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-medium truncate" data-testid={`text-route-name-${route.routeId}`}>{route.routeName}</span>
+                            <span
+                              className="text-sm font-medium truncate"
+                              data-testid={`text-route-name-${route.routeId}`}
+                            >
+                              {route.routeName}
+                            </span>
                             {statusBadge(route.status)}
                             {routeIsOptimized && (
                               <span
@@ -689,7 +845,9 @@ export default function RouteProfitMaps() {
                             )}
                           </div>
                           <div className="text-[11px] text-muted-foreground mt-0.5">
-                            {route.dayOfWeek.charAt(0).toUpperCase() + route.dayOfWeek.slice(1)} | {route.totalStops} stops | {formatDollars(route.totalProfitCents)} profit
+                            {route.dayOfWeek.charAt(0).toUpperCase() + route.dayOfWeek.slice(1)} |{" "}
+                            {route.totalStops} stops | {formatDollars(route.totalProfitCents)}{" "}
+                            profit
                           </div>
                         </div>
                         {isExpanded ? (
@@ -704,23 +862,45 @@ export default function RouteProfitMaps() {
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 text-xs">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Revenue/visit:</span>
-                            <span className="font-medium" data-testid={`text-route-revenue-${route.routeId}`}>{formatDollars(route.totalRevenueCents)}</span>
+                            <span
+                              className="font-medium"
+                              data-testid={`text-route-revenue-${route.routeId}`}
+                            >
+                              {formatDollars(route.totalRevenueCents)}
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Cost/visit:</span>
-                            <span className="font-medium" data-testid={`text-route-cost-${route.routeId}`}>{formatDollars(route.totalCostCents)}</span>
+                            <span
+                              className="font-medium"
+                              data-testid={`text-route-cost-${route.routeId}`}
+                            >
+                              {formatDollars(route.totalCostCents)}
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Profit/visit:</span>
-                            <span className={`font-medium ${route.totalProfitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid={`text-route-profit-${route.routeId}`}>{formatDollars(route.totalProfitCents)}</span>
+                            <span
+                              className={`font-medium ${route.totalProfitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+                              data-testid={`text-route-profit-${route.routeId}`}
+                            >
+                              {formatDollars(route.totalProfitCents)}
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Margin:</span>
-                            <span className={`font-medium ${route.avgMarginPct >= 15 ? "text-green-600 dark:text-green-400" : route.avgMarginPct >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}`} data-testid={`text-route-margin-${route.routeId}`}>{route.avgMarginPct.toFixed(1)}%</span>
+                            <span
+                              className={`font-medium ${route.avgMarginPct >= 15 ? "text-green-600 dark:text-green-400" : route.avgMarginPct >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}`}
+                              data-testid={`text-route-margin-${route.routeId}`}
+                            >
+                              {route.avgMarginPct.toFixed(1)}%
+                            </span>
                           </div>
                         </div>
                         <div className="px-3 pb-2">
-                          <p className="text-[11px] font-medium text-muted-foreground mb-1">Stops</p>
+                          <p className="text-[11px] font-medium text-muted-foreground mb-1">
+                            Stops
+                          </p>
                           <div className="space-y-1">
                             {route.stops.map((stop) => (
                               <div
@@ -731,11 +911,26 @@ export default function RouteProfitMaps() {
                                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                   <span
                                     className="w-2 h-2 rounded-full shrink-0"
-                                    style={{ backgroundColor: stop.status === "profitable" ? "#22c55e" : stop.status === "marginal" ? "#eab308" : "#ef4444" }}
+                                    style={{
+                                      backgroundColor:
+                                        stop.status === "profitable"
+                                          ? "#22c55e"
+                                          : stop.status === "marginal"
+                                            ? "#eab308"
+                                            : "#ef4444",
+                                    }}
                                   />
-                                  <span className="truncate" data-testid={`text-stop-name-${stop.propertyId}`}>{stop.contactName}</span>
+                                  <span
+                                    className="truncate"
+                                    data-testid={`text-stop-name-${stop.propertyId}`}
+                                  >
+                                    {stop.contactName}
+                                  </span>
                                 </div>
-                                <span className={`shrink-0 ml-2 font-medium ${stop.profitPerVisitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid={`text-stop-profit-${stop.propertyId}`}>
+                                <span
+                                  className={`shrink-0 ml-2 font-medium ${stop.profitPerVisitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+                                  data-testid={`text-stop-profit-${stop.propertyId}`}
+                                >
                                   {formatDollars(stop.profitPerVisitCents)}
                                 </span>
                               </div>
@@ -752,7 +947,11 @@ export default function RouteProfitMaps() {
         )}
 
         {sidebarOpen && isComparing && optResult && (
-          <ComparisonSidebar optResult={optResult} onCommit={() => commitMutation.mutate()} isCommitting={commitMutation.isPending} />
+          <ComparisonSidebar
+            optResult={optResult}
+            onCommit={() => commitMutation.mutate()}
+            isCommitting={commitMutation.isPending}
+          />
         )}
       </div>
     </div>
@@ -763,7 +962,11 @@ const DEFAULT_NOTIFY_TEMPLATE = `Hey [Name]! To keep our routes efficient and ou
 
 type NotifyResult = { contactName: string; channel: string; success: boolean; error?: string };
 
-function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
+function BulkNotifyDialog({
+  movedStops,
+  open,
+  onOpenChange,
+}: {
   movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -777,7 +980,7 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
   const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
   const previewMessages = useMemo(() => {
-    return movedStops.map(stop => ({
+    return movedStops.map((stop) => ({
       contactName: stop.contactName,
       fromDay: capitalize(stop.fromDay),
       toDay: capitalize(stop.toDay),
@@ -797,7 +1000,10 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
       });
       return res.json();
     },
-    onSuccess: (data: { results: NotifyResult[]; summary: { sent: number; failed: number; total: number } }) => {
+    onSuccess: (data: {
+      results: NotifyResult[];
+      summary: { sent: number; failed: number; total: number };
+    }) => {
       setResults(data.results);
       queryClient.invalidateQueries({ queryKey: ["/api/system-messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/system-messages/unread-count"] });
@@ -838,40 +1044,58 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-green-600" data-testid="text-notify-success-count">{results.filter(r => r.success).length}</p>
+                <p
+                  className="text-2xl font-bold text-green-600"
+                  data-testid="text-notify-success-count"
+                >
+                  {results.filter((r) => r.success).length}
+                </p>
                 <p className="text-xs text-muted-foreground">Sent</p>
               </div>
               <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold text-red-600" data-testid="text-notify-fail-count">{results.filter(r => !r.success).length}</p>
+                <p className="text-2xl font-bold text-red-600" data-testid="text-notify-fail-count">
+                  {results.filter((r) => !r.success).length}
+                </p>
                 <p className="text-xs text-muted-foreground">Failed</p>
               </div>
             </div>
-            {results.filter(r => !r.success).length > 0 && (
+            {results.filter((r) => !r.success).length > 0 && (
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-muted-foreground">Failures:</p>
-                {results.filter(r => !r.success).map((r, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs p-2 bg-destructive/10 rounded">
-                    <XCircle className="h-3 w-3 text-destructive shrink-0" />
-                    <span className="font-medium">{r.contactName}</span>
-                    <span className="text-muted-foreground">({r.channel})</span>
-                    <span className="text-destructive truncate">{r.error}</span>
-                  </div>
-                ))}
-                <p className="text-xs text-muted-foreground">Check System Messages on your dashboard for details.</p>
+                {results
+                  .filter((r) => !r.success)
+                  .map((r, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 text-xs p-2 bg-destructive/10 rounded"
+                    >
+                      <XCircle className="h-3 w-3 text-destructive shrink-0" />
+                      <span className="font-medium">{r.contactName}</span>
+                      <span className="text-muted-foreground">({r.channel})</span>
+                      <span className="text-destructive truncate">{r.error}</span>
+                    </div>
+                  ))}
+                <p className="text-xs text-muted-foreground">
+                  Check System Messages on your dashboard for details.
+                </p>
               </div>
             )}
             <DialogFooter>
-              <Button onClick={() => handleClose(false)} data-testid="button-notify-done">Done</Button>
+              <Button onClick={() => handleClose(false)} data-testid="button-notify-done">
+                Done
+              </Button>
             </DialogFooter>
           </div>
         ) : (
           <div className="space-y-4">
             <div>
               <Label className="text-sm font-medium">Message Template</Label>
-              <p className="text-xs text-muted-foreground mb-1.5">Use [Name], [OldDay], [NewDay] as placeholders</p>
+              <p className="text-xs text-muted-foreground mb-1.5">
+                Use [Name], [OldDay], [NewDay] as placeholders
+              </p>
               <Textarea
                 value={template}
-                onChange={e => setTemplate(e.target.value)}
+                onChange={(e) => setTemplate(e.target.value)}
                 rows={4}
                 className="text-sm"
                 data-testid="textarea-notify-template"
@@ -881,7 +1105,7 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
             <div>
               <Label className="text-sm font-medium">Send via</Label>
               <div className="flex gap-2 mt-1.5">
-                {(["sms", "email", "both"] as const).map(ch => (
+                {(["sms", "email", "both"] as const).map((ch) => (
                   <Button
                     key={ch}
                     variant={channel === ch ? "default" : "outline"}
@@ -892,7 +1116,12 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
                   >
                     {ch === "sms" && <MessageSquare className="h-3.5 w-3.5" />}
                     {ch === "email" && <Mail className="h-3.5 w-3.5" />}
-                    {ch === "both" && <><MessageSquare className="h-3.5 w-3.5" /><Mail className="h-3.5 w-3.5" /></>}
+                    {ch === "both" && (
+                      <>
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <Mail className="h-3.5 w-3.5" />
+                      </>
+                    )}
                     {ch === "both" ? "Both" : ch.toUpperCase()}
                   </Button>
                 ))}
@@ -905,7 +1134,11 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
                 className="text-xs font-medium text-primary flex items-center gap-1"
                 data-testid="button-toggle-preview"
               >
-                {showPreview ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                {showPreview ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
                 Preview All Messages ({movedStops.length} recipients)
               </button>
               {showPreview && (
@@ -914,9 +1147,13 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
                     <div key={i} className="bg-muted/50 rounded p-2.5 text-xs space-y-1">
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold">{pm.contactName}</span>
-                        <Badge variant="secondary" className="text-[10px]">{pm.fromDay}</Badge>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {pm.fromDay}
+                        </Badge>
                         <ArrowRight className="h-2.5 w-2.5 text-muted-foreground" />
-                        <Badge variant="default" className="text-[10px]">{pm.toDay}</Badge>
+                        <Badge variant="default" className="text-[10px]">
+                          {pm.toDay}
+                        </Badge>
                       </div>
                       <p className="text-muted-foreground italic">{pm.message}</p>
                     </div>
@@ -926,7 +1163,13 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
             </div>
 
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => handleClose(false)} data-testid="button-notify-cancel">Cancel</Button>
+              <Button
+                variant="outline"
+                onClick={() => handleClose(false)}
+                data-testid="button-notify-cancel"
+              >
+                Cancel
+              </Button>
               <Button
                 onClick={() => sendMutation.mutate()}
                 disabled={sendMutation.isPending || !template.trim()}
@@ -934,9 +1177,13 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
                 data-testid="button-notify-send"
               >
                 {sendMutation.isPending ? (
-                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending...</>
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending...
+                  </>
                 ) : (
-                  <><Send className="h-3.5 w-3.5" /> Send to {movedStops.length} Customers</>
+                  <>
+                    <Send className="h-3.5 w-3.5" /> Send to {movedStops.length} Customers
+                  </>
                 )}
               </Button>
             </DialogFooter>
@@ -947,7 +1194,11 @@ function BulkNotifyDialog({ movedStops, open, onOpenChange }: {
   );
 }
 
-function MovedStopsSection({ movedStops }: { movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[] }) {
+function MovedStopsSection({
+  movedStops,
+}: {
+  movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[];
+}) {
   const [showAll, setShowAll] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const PREVIEW_COUNT = 10;
@@ -956,9 +1207,9 @@ function MovedStopsSection({ movedStops }: { movedStops: { stopId: string; fromD
 
   const exportCSV = () => {
     const header = "Customer Name,Previous Day,New Day\n";
-    const rows = movedStops.map(m =>
-      `"${m.contactName.replace(/"/g, '""')}",${m.fromDay},${m.toDay}`
-    ).join("\n");
+    const rows = movedStops
+      .map((m) => `"${m.contactName.replace(/"/g, '""')}",${m.fromDay},${m.toDay}`)
+      .join("\n");
     const blob = new Blob([header + rows], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -975,7 +1226,13 @@ function MovedStopsSection({ movedStops }: { movedStops: { stopId: string; fromD
           Moved Stops ({movedStops.length})
         </p>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={exportCSV} data-testid="btn-export-moved-stops">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs gap-1"
+            onClick={exportCSV}
+            data-testid="btn-export-moved-stops"
+          >
             <Download className="h-3 w-3" />
             Export
           </Button>
@@ -994,11 +1251,19 @@ function MovedStopsSection({ movedStops }: { movedStops: { stopId: string; fromD
         </Button>
       </div>
       {displayedStops.map((move, idx) => (
-        <div key={idx} className="flex items-center gap-2 px-3 py-2 text-xs" data-testid={`compare-move-${idx}`}>
+        <div
+          key={idx}
+          className="flex items-center gap-2 px-3 py-2 text-xs"
+          data-testid={`compare-move-${idx}`}
+        >
           <span className="truncate flex-1 font-medium">{move.contactName}</span>
-          <Badge variant="secondary" className="text-[10px] capitalize shrink-0">{move.fromDay}</Badge>
+          <Badge variant="secondary" className="text-[10px] capitalize shrink-0">
+            {move.fromDay}
+          </Badge>
           <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-          <Badge variant="default" className="text-[10px] capitalize shrink-0">{move.toDay}</Badge>
+          <Badge variant="default" className="text-[10px] capitalize shrink-0">
+            {move.toDay}
+          </Badge>
         </div>
       ))}
       {hasMore && (
@@ -1015,51 +1280,83 @@ function MovedStopsSection({ movedStops }: { movedStops: { stopId: string; fromD
   );
 }
 
-function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: OptResult; onCommit: () => void; isCommitting: boolean }) {
+function ComparisonSidebar({
+  optResult,
+  onCommit,
+  isCommitting,
+}: {
+  optResult: OptResult;
+  onCommit: () => void;
+  isCommitting: boolean;
+}) {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const currentSchedule = optResult.current;
   const proposedSchedule = optResult.proposed;
   const fuel = optResult.fuelCost;
 
-  const currentFuelByDay = new Map(fuel.currentPerDay.map(d => [d.day, d]));
-  const proposedFuelByDay = new Map(fuel.proposedPerDay.map(d => [d.day, d]));
+  const currentFuelByDay = new Map(fuel.currentPerDay.map((d) => [d.day, d]));
+  const proposedFuelByDay = new Map(fuel.proposedPerDay.map((d) => [d.day, d]));
 
   return (
-    <div className="w-80 border-l bg-background overflow-y-auto shrink-0" data-testid="comparison-sidebar-panel">
+    <div
+      className="w-80 border-l bg-background overflow-y-auto shrink-0"
+      data-testid="comparison-sidebar-panel"
+    >
       <div className="p-3 border-b sticky top-0 bg-background z-10">
         <h2 className="text-sm font-semibold mb-2">Before vs After</h2>
 
         <div className="grid grid-cols-2 gap-2 text-center mb-2">
           <div className="bg-muted/50 rounded p-2">
             <p className="text-[10px] text-muted-foreground mb-0.5">Current Miles</p>
-            <p className="text-sm font-semibold" data-testid="text-compare-current-miles">{currentSchedule.totalMiles}</p>
+            <p className="text-sm font-semibold" data-testid="text-compare-current-miles">
+              {currentSchedule.totalMiles}
+            </p>
           </div>
           <div className="bg-primary/10 rounded p-2">
             <p className="text-[10px] text-muted-foreground mb-0.5">Optimized Miles</p>
-            <p className="text-sm font-semibold text-primary" data-testid="text-compare-proposed-miles">{proposedSchedule.totalMiles}</p>
+            <p
+              className="text-sm font-semibold text-primary"
+              data-testid="text-compare-proposed-miles"
+            >
+              {proposedSchedule.totalMiles}
+            </p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-center mb-2">
           <div className="bg-muted/50 rounded p-2">
             <p className="text-[10px] text-muted-foreground mb-0.5">Current Fuel</p>
-            <p className="text-sm font-semibold" data-testid="text-compare-current-fuel">{formatDollars(fuel.currentTotalCents)}</p>
+            <p className="text-sm font-semibold" data-testid="text-compare-current-fuel">
+              {formatDollars(fuel.currentTotalCents)}
+            </p>
           </div>
           <div className="bg-primary/10 rounded p-2">
             <p className="text-[10px] text-muted-foreground mb-0.5">Optimized Fuel</p>
-            <p className="text-sm font-semibold text-primary" data-testid="text-compare-proposed-fuel">{formatDollars(fuel.proposedTotalCents)}</p>
+            <p
+              className="text-sm font-semibold text-primary"
+              data-testid="text-compare-proposed-fuel"
+            >
+              {formatDollars(fuel.proposedTotalCents)}
+            </p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-center">
           <div className="bg-muted/50 rounded p-2">
             <p className="text-[10px] text-muted-foreground mb-0.5">Current Time</p>
-            <p className="text-sm font-semibold" data-testid="text-compare-current-time">{currentSchedule.totalMinutes} min</p>
+            <p className="text-sm font-semibold" data-testid="text-compare-current-time">
+              {currentSchedule.totalMinutes} min
+            </p>
           </div>
           <div className="bg-primary/10 rounded p-2">
             <p className="text-[10px] text-muted-foreground mb-0.5">Optimized Time</p>
-            <p className="text-sm font-semibold text-primary" data-testid="text-compare-proposed-time">{proposedSchedule.totalMinutes} min</p>
+            <p
+              className="text-sm font-semibold text-primary"
+              data-testid="text-compare-proposed-time"
+            >
+              {proposedSchedule.totalMinutes} min
+            </p>
           </div>
         </div>
 
@@ -1067,11 +1364,18 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
           <div className="grid grid-cols-2 gap-2 text-center">
             <div className="bg-muted/50 rounded p-2">
               <p className="text-[10px] text-muted-foreground mb-0.5">Current Labor</p>
-              <p className="text-sm font-semibold" data-testid="text-compare-current-labor">{formatDollars(optResult.laborCost.currentTotalCents)}</p>
+              <p className="text-sm font-semibold" data-testid="text-compare-current-labor">
+                {formatDollars(optResult.laborCost.currentTotalCents)}
+              </p>
             </div>
             <div className="bg-primary/10 rounded p-2">
               <p className="text-[10px] text-muted-foreground mb-0.5">Optimized Labor</p>
-              <p className="text-sm font-semibold text-primary" data-testid="text-compare-proposed-labor">{formatDollars(optResult.laborCost.proposedTotalCents)}</p>
+              <p
+                className="text-sm font-semibold text-primary"
+                data-testid="text-compare-proposed-labor"
+              >
+                {formatDollars(optResult.laborCost.proposedTotalCents)}
+              </p>
             </div>
           </div>
         )}
@@ -1079,13 +1383,21 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
         {(() => {
           const totalSaved = fuel.savedCents + (optResult.laborCost?.savedCents ?? 0);
           return (
-            <div className="mt-2 bg-green-50 dark:bg-green-900/20 rounded p-2 text-center" data-testid="savings-summary-box">
+            <div
+              className="mt-2 bg-green-50 dark:bg-green-900/20 rounded p-2 text-center"
+              data-testid="savings-summary-box"
+            >
               <p className="text-[10px] text-muted-foreground mb-0.5">Weekly Savings (Total)</p>
-              <p className={`text-lg font-bold ${totalSaved >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                {totalSaved >= 0 ? formatDollars(totalSaved) : `-${formatDollars(Math.abs(totalSaved))}`}
+              <p
+                className={`text-lg font-bold ${totalSaved >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+              >
+                {totalSaved >= 0
+                  ? formatDollars(totalSaved)
+                  : `-${formatDollars(Math.abs(totalSaved))}`}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                {formatDollars(Math.abs(fuel.savedCents))} fuel + {formatDollars(Math.abs(optResult.laborCost?.savedCents ?? 0))} labor
+                {formatDollars(Math.abs(fuel.savedCents))} fuel +{" "}
+                {formatDollars(Math.abs(optResult.laborCost?.savedCents ?? 0))} labor
               </p>
               <p className="text-[10px] text-muted-foreground">
                 {optResult.milesSaved} mi, {optResult.minutesSaved} min saved
@@ -1098,9 +1410,13 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
                 data-testid="button-commit-optimization-sidebar"
               >
                 {isCommitting ? (
-                  <><Loader2 className="h-3 w-3 animate-spin mr-1" /> Applying...</>
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" /> Applying...
+                  </>
                 ) : (
-                  <><CheckCircle className="h-3 w-3 mr-1" /> Commit Changes</>
+                  <>
+                    <CheckCircle className="h-3 w-3 mr-1" /> Commit Changes
+                  </>
                 )}
               </Button>
             </div>
@@ -1110,13 +1426,19 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
 
       <div className="divide-y">
         <div className="p-3 border-b">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Day-by-Day Comparison</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+            Day-by-Day Comparison
+          </p>
         </div>
 
         {currentSchedule.days
-          .filter(d => d.totalStops > 0 || (proposedSchedule.days.find(pd => pd.day === d.day)?.totalStops || 0) > 0)
-          .map(currentDay => {
-            const proposedDay = proposedSchedule.days.find(d => d.day === currentDay.day);
+          .filter(
+            (d) =>
+              d.totalStops > 0 ||
+              (proposedSchedule.days.find((pd) => pd.day === d.day)?.totalStops || 0) > 0
+          )
+          .map((currentDay) => {
+            const proposedDay = proposedSchedule.days.find((d) => d.day === currentDay.day);
             const isExpanded = expandedDay === currentDay.day;
             const curFuelDay = currentFuelByDay.get(currentDay.day);
             const propFuelDay = proposedFuelByDay.get(currentDay.day);
@@ -1135,22 +1457,34 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium capitalize">{currentDay.day}</p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[11px] text-muted-foreground">{currentDay.totalStops} stops</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {currentDay.totalStops} stops
+                      </span>
                       <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-[11px] text-muted-foreground">{proposedDay?.totalStops || 0} stops</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {proposedDay?.totalStops || 0} stops
+                      </span>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
                     {fuelDelta > 0 ? (
-                      <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      >
                         -{formatDollars(fuelDelta)}
                       </Badge>
                     ) : fuelDelta < 0 ? (
-                      <Badge variant="outline" className="text-[10px] bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                      >
                         +{formatDollars(Math.abs(fuelDelta))}
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-[10px]">--</Badge>
+                      <Badge variant="outline" className="text-[10px]">
+                        --
+                      </Badge>
                     )}
                   </div>
                   {isExpanded ? (
@@ -1164,7 +1498,9 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
                   <div className="bg-muted/30 border-t p-3 space-y-3">
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
-                        <p className="text-[10px] font-medium text-muted-foreground mb-1">Current</p>
+                        <p className="text-[10px] font-medium text-muted-foreground mb-1">
+                          Current
+                        </p>
                         <div className="space-y-0.5">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Miles:</span>
@@ -1189,19 +1525,27 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
                         <div className="space-y-0.5">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Miles:</span>
-                            <span className="font-medium text-primary">{proposedDay?.totalMiles || 0}</span>
+                            <span className="font-medium text-primary">
+                              {proposedDay?.totalMiles || 0}
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Time:</span>
-                            <span className="font-medium text-primary">{proposedDay?.totalMinutes || 0} min</span>
+                            <span className="font-medium text-primary">
+                              {proposedDay?.totalMinutes || 0} min
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Fuel:</span>
-                            <span className="font-medium text-primary">{formatDollars(propFuel)}</span>
+                            <span className="font-medium text-primary">
+                              {formatDollars(propFuel)}
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Routes:</span>
-                            <span className="font-medium text-primary">{proposedDay?.routes.length || 0}</span>
+                            <span className="font-medium text-primary">
+                              {proposedDay?.routes.length || 0}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1209,33 +1553,72 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
 
                     {milesDelta > 0 && (
                       <div className="bg-green-50 dark:bg-green-900/20 rounded p-1.5 text-center text-[11px] text-green-700 dark:text-green-400">
-                        Saves {Math.round(milesDelta * 10) / 10} mi / {formatDollars(fuelDelta)} fuel
+                        Saves {Math.round(milesDelta * 10) / 10} mi / {formatDollars(fuelDelta)}{" "}
+                        fuel
                       </div>
                     )}
 
                     <Separator />
 
                     <div>
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Current Routes</p>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                        Current Routes
+                      </p>
                       <div className="space-y-1.5">
                         {currentDay.routes.map((curRoute, rIdx) => {
                           const curRouteFuel = curFuelDay?.routes?.[rIdx];
                           return (
-                            <div key={`cur-${rIdx}`} className="border rounded p-2 text-xs" data-testid={`route-compare-current-${currentDay.day}-${rIdx}`}>
+                            <div
+                              key={`cur-${rIdx}`}
+                              className="border rounded p-2 text-xs"
+                              data-testid={`route-compare-current-${currentDay.day}-${rIdx}`}
+                            >
                               <div className="flex items-center justify-between mb-1">
                                 <span className="font-medium">{curRoute.routeLabel}</span>
-                                <Badge variant="secondary" className="text-[9px]">Current</Badge>
+                                <Badge variant="secondary" className="text-[9px]">
+                                  Current
+                                </Badge>
                               </div>
                               <div className="grid grid-cols-3 gap-1 text-[11px]">
-                                <div><span className="text-muted-foreground">{curRoute.stopCount} stops</span></div>
-                                <div><span className="text-muted-foreground">{curRoute.estimatedMiles} mi</span></div>
-                                <div><span className="text-muted-foreground">{formatDollars(curRouteFuel?.fuelCostCents || 0)} fuel</span></div>
+                                <div>
+                                  <span className="text-muted-foreground">
+                                    {curRoute.stopCount} stops
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">
+                                    {curRoute.estimatedMiles} mi
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">
+                                    {formatDollars(curRouteFuel?.fuelCostCents || 0)} fuel
+                                  </span>
+                                </div>
                               </div>
                               {curRouteFuel && curRouteFuel.totalRevenueCents > 0 && (
                                 <div className="grid grid-cols-3 gap-1 text-[11px] mt-0.5">
-                                  <div><span className="text-muted-foreground">{formatDollars(curRouteFuel.totalRevenueCents)} rev</span></div>
-                                  <div><span className="text-muted-foreground">{formatDollars(curRouteFuel.totalCostCents)} cost</span></div>
-                                  <div><span className={curRouteFuel.totalProfitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>{formatDollars(curRouteFuel.totalProfitCents)} profit</span></div>
+                                  <div>
+                                    <span className="text-muted-foreground">
+                                      {formatDollars(curRouteFuel.totalRevenueCents)} rev
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">
+                                      {formatDollars(curRouteFuel.totalCostCents)} cost
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span
+                                      className={
+                                        curRouteFuel.totalProfitCents >= 0
+                                          ? "text-green-600 dark:text-green-400"
+                                          : "text-red-600 dark:text-red-400"
+                                      }
+                                    >
+                                      {formatDollars(curRouteFuel.totalProfitCents)} profit
+                                    </span>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1246,32 +1629,78 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
 
                     {proposedDay && proposedDay.routes.length > 0 && (
                       <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Optimized Routes</p>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                          Optimized Routes
+                        </p>
                         <div className="space-y-1.5">
                           {proposedDay.routes.map((propRoute, rIdx) => {
                             const propRouteFuel = propFuelDay?.routes?.[rIdx];
                             return (
-                              <div key={`prop-${rIdx}`} className="border border-primary/30 rounded p-2 text-xs bg-primary/5" data-testid={`route-compare-proposed-${currentDay.day}-${rIdx}`}>
+                              <div
+                                key={`prop-${rIdx}`}
+                                className="border border-primary/30 rounded p-2 text-xs bg-primary/5"
+                                data-testid={`route-compare-proposed-${currentDay.day}-${rIdx}`}
+                              >
                                 <div className="flex items-center justify-between mb-1">
-                                  <span className="font-medium text-primary">{propRoute.routeLabel}</span>
-                                  <Badge variant="default" className="text-[9px]">Optimized</Badge>
+                                  <span className="font-medium text-primary">
+                                    {propRoute.routeLabel}
+                                  </span>
+                                  <Badge variant="default" className="text-[9px]">
+                                    Optimized
+                                  </Badge>
                                 </div>
                                 <div className="grid grid-cols-3 gap-1 text-[11px]">
-                                  <div><span className="text-muted-foreground">{propRoute.stopCount} stops</span></div>
-                                  <div><span className="text-muted-foreground">{propRoute.estimatedMiles} mi</span></div>
-                                  <div><span className="text-muted-foreground">{formatDollars(propRouteFuel?.fuelCostCents || 0)} fuel</span></div>
+                                  <div>
+                                    <span className="text-muted-foreground">
+                                      {propRoute.stopCount} stops
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">
+                                      {propRoute.estimatedMiles} mi
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">
+                                      {formatDollars(propRouteFuel?.fuelCostCents || 0)} fuel
+                                    </span>
+                                  </div>
                                 </div>
                                 {propRouteFuel && propRouteFuel.totalRevenueCents > 0 && (
                                   <div className="grid grid-cols-3 gap-1 text-[11px] mt-0.5">
-                                    <div><span className="text-muted-foreground">{formatDollars(propRouteFuel.totalRevenueCents)} rev</span></div>
-                                    <div><span className="text-muted-foreground">{formatDollars(propRouteFuel.totalCostCents)} cost</span></div>
-                                    <div><span className={propRouteFuel.totalProfitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>{formatDollars(propRouteFuel.totalProfitCents)} profit</span></div>
+                                    <div>
+                                      <span className="text-muted-foreground">
+                                        {formatDollars(propRouteFuel.totalRevenueCents)} rev
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">
+                                        {formatDollars(propRouteFuel.totalCostCents)} cost
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span
+                                        className={
+                                          propRouteFuel.totalProfitCents >= 0
+                                            ? "text-green-600 dark:text-green-400"
+                                            : "text-red-600 dark:text-red-400"
+                                        }
+                                      >
+                                        {formatDollars(propRouteFuel.totalProfitCents)} profit
+                                      </span>
+                                    </div>
                                   </div>
                                 )}
                                 <div className="mt-1.5 space-y-0.5">
                                   {propRoute.stops.map((stop, sIdx) => (
-                                    <div key={stop.servicePlanId} className="flex items-center gap-1.5 text-[11px] py-0.5">
-                                      <Badge variant="outline" className="text-[9px] px-1 py-0 w-4 h-4 flex items-center justify-center shrink-0">
+                                    <div
+                                      key={stop.servicePlanId}
+                                      className="flex items-center gap-1.5 text-[11px] py-0.5"
+                                    >
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[9px] px-1 py-0 w-4 h-4 flex items-center justify-center shrink-0"
+                                      >
                                         {sIdx + 1}
                                       </Badge>
                                       <span className="truncate">{stop.contactName}</span>
@@ -1284,18 +1713,39 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
                         </div>
 
                         {(() => {
-                          const curTotalMiles = currentDay.routes.reduce((s, r) => s + r.estimatedMiles, 0);
-                          const propTotalMiles = proposedDay.routes.reduce((s, r) => s + r.estimatedMiles, 0);
+                          const curTotalMiles = currentDay.routes.reduce(
+                            (s, r) => s + r.estimatedMiles,
+                            0
+                          );
+                          const propTotalMiles = proposedDay.routes.reduce(
+                            (s, r) => s + r.estimatedMiles,
+                            0
+                          );
                           const milesDeltaRoutes = curTotalMiles - propTotalMiles;
-                          const curFuelTotal = (curFuelDay?.routes || []).reduce((s, r) => s + r.fuelCostCents, 0);
-                          const propFuelTotal = (propFuelDay?.routes || []).reduce((s, r) => s + r.fuelCostCents, 0);
+                          const curFuelTotal = (curFuelDay?.routes || []).reduce(
+                            (s, r) => s + r.fuelCostCents,
+                            0
+                          );
+                          const propFuelTotal = (propFuelDay?.routes || []).reduce(
+                            (s, r) => s + r.fuelCostCents,
+                            0
+                          );
                           const fuelDeltaRoutes = curFuelTotal - propFuelTotal;
-                          const curProfitTotal = (curFuelDay?.routes || []).reduce((s, r) => s + r.totalProfitCents, 0);
-                          const propProfitTotal = (propFuelDay?.routes || []).reduce((s, r) => s + r.totalProfitCents, 0);
+                          const curProfitTotal = (curFuelDay?.routes || []).reduce(
+                            (s, r) => s + r.totalProfitCents,
+                            0
+                          );
+                          const propProfitTotal = (propFuelDay?.routes || []).reduce(
+                            (s, r) => s + r.totalProfitCents,
+                            0
+                          );
                           const profitDelta = propProfitTotal - curProfitTotal;
                           if (milesDeltaRoutes === 0 && fuelDeltaRoutes === 0) return null;
                           return (
-                            <div className={`mt-1.5 rounded p-1.5 text-center text-[11px] ${fuelDeltaRoutes >= 0 ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"}`} data-testid={`route-delta-${currentDay.day}`}>
+                            <div
+                              className={`mt-1.5 rounded p-1.5 text-center text-[11px] ${fuelDeltaRoutes >= 0 ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"}`}
+                              data-testid={`route-delta-${currentDay.day}`}
+                            >
                               <div>
                                 {milesDeltaRoutes >= 0
                                   ? `${Math.round(milesDeltaRoutes * 10) / 10} mi fewer`
@@ -1307,10 +1757,19 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
                               </div>
                               {(curProfitTotal > 0 || propProfitTotal > 0) && (
                                 <div className="mt-0.5">
-                                  Profit: {formatDollars(curProfitTotal)} {" -> "} {formatDollars(propProfitTotal)}
+                                  Profit: {formatDollars(curProfitTotal)} {" -> "}{" "}
+                                  {formatDollars(propProfitTotal)}
                                   {profitDelta !== 0 && (
-                                    <span className={profitDelta > 0 ? " text-green-700 dark:text-green-400" : " text-red-700 dark:text-red-400"}>
-                                      {" "}({profitDelta > 0 ? "+" : ""}{formatDollars(profitDelta)})
+                                    <span
+                                      className={
+                                        profitDelta > 0
+                                          ? " text-green-700 dark:text-green-400"
+                                          : " text-red-700 dark:text-red-400"
+                                      }
+                                    >
+                                      {" "}
+                                      ({profitDelta > 0 ? "+" : ""}
+                                      {formatDollars(profitDelta)})
                                     </span>
                                   )}
                                 </div>
@@ -1326,9 +1785,7 @@ function ComparisonSidebar({ optResult, onCommit, isCommitting }: { optResult: O
             );
           })}
 
-        {optResult.movedStops.length > 0 && (
-          <MovedStopsSection movedStops={optResult.movedStops} />
-        )}
+        {optResult.movedStops.length > 0 && <MovedStopsSection movedStops={optResult.movedStops} />}
       </div>
     </div>
   );

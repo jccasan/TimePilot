@@ -23,7 +23,12 @@ type RouteMapViewProps = {
 const DEFAULT_COLOR = "#22c55e";
 const SELECTED_COLOR = "#f59e0b";
 
-export default function RouteMapView({ stops, routeName, selectedStopId, onStopClick }: RouteMapViewProps) {
+export default function RouteMapView({
+  stops,
+  routeName,
+  selectedStopId,
+  onStopClick,
+}: RouteMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerMapRef = useRef<Map<string, { marker: any; color: string }>>(new Map());
@@ -46,9 +51,7 @@ export default function RouteMapView({ stops, routeName, selectedStopId, onStopC
       mapboxgl.accessToken = tokenData.token;
 
       const center: [number, number] =
-        stops.length > 0
-          ? [stops[0].longitude, stops[0].latitude]
-          : [-98.5795, 39.8283];
+        stops.length > 0 ? [stops[0].longitude, stops[0].latitude] : [-98.5795, 39.8283];
 
       const map = new mapboxgl.Map({
         container: mapContainerRef.current!,
@@ -63,7 +66,7 @@ export default function RouteMapView({ stops, routeName, selectedStopId, onStopC
         if (cancelled) return;
         setMapLoaded(true);
 
-        const validStops = stops.filter(s => s.latitude && s.longitude);
+        const validStops = stops.filter((s) => s.latitude && s.longitude);
 
         validStops.forEach((stop) => {
           const color = stop.routeColor || DEFAULT_COLOR;
@@ -117,7 +120,7 @@ export default function RouteMapView({ stops, routeName, selectedStopId, onStopC
         });
 
         const colorGroups = new Map<string, RouteStop[]>();
-        validStops.forEach(stop => {
+        validStops.forEach((stop) => {
           const color = stop.routeColor || DEFAULT_COLOR;
           if (!colorGroups.has(color)) colorGroups.set(color, []);
           colorGroups.get(color)!.push(stop);
@@ -126,7 +129,7 @@ export default function RouteMapView({ stops, routeName, selectedStopId, onStopC
         let lineIndex = 0;
         colorGroups.forEach((groupStops, color) => {
           if (groupStops.length < 2) return;
-          const coordinates = groupStops.map(s => [s.longitude, s.latitude]);
+          const coordinates = groupStops.map((s) => [s.longitude, s.latitude]);
           const sourceId = `route-line-${lineIndex}`;
           const layerId = `route-line-layer-${lineIndex}`;
           map.addSource(sourceId, {
@@ -149,7 +152,7 @@ export default function RouteMapView({ stops, routeName, selectedStopId, onStopC
 
         if (validStops.length > 1) {
           const bounds = new mapboxgl.LngLatBounds();
-          validStops.forEach(s => bounds.extend([s.longitude, s.latitude]));
+          validStops.forEach((s) => bounds.extend([s.longitude, s.latitude]));
           map.fitBounds(bounds, { padding: 60 });
         }
       });
@@ -177,7 +180,7 @@ export default function RouteMapView({ stops, routeName, selectedStopId, onStopC
       el.style.border = isSelected ? "3px solid white" : "2px solid white";
     });
     if (selectedStopId && mapRef.current) {
-      const selectedStop = stops.find(s => s.id === selectedStopId);
+      const selectedStop = stops.find((s) => s.id === selectedStopId);
       if (selectedStop) {
         mapRef.current.flyTo({
           center: [selectedStop.longitude, selectedStop.latitude],
@@ -198,7 +201,10 @@ export default function RouteMapView({ stops, routeName, selectedStopId, onStopC
 
   if (!tokenData?.token) {
     return (
-      <div className="w-full h-full flex items-center justify-center text-muted-foreground" data-testid="map-no-token">
+      <div
+        className="w-full h-full flex items-center justify-center text-muted-foreground"
+        data-testid="map-no-token"
+      >
         Mapbox token not configured. Set MAPBOX_PUBLIC_TOKEN to enable map view.
       </div>
     );
@@ -211,7 +217,10 @@ export default function RouteMapView({ stops, routeName, selectedStopId, onStopC
           <Skeleton className="w-full h-full" />
         </div>
       )}
-      <div className="absolute top-3 left-3 z-20 bg-background/90 px-3 py-1.5 rounded-md text-sm font-medium shadow" data-testid="map-route-name">
+      <div
+        className="absolute top-3 left-3 z-20 bg-background/90 px-3 py-1.5 rounded-md text-sm font-medium shadow"
+        data-testid="map-route-name"
+      >
         {routeName} — {stops.length} {stops.length === 1 ? "stop" : "stops"}
       </div>
       <div ref={mapContainerRef} className="w-full h-full" data-testid="map-canvas" />

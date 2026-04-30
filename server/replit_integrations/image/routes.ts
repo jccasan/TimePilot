@@ -31,4 +31,3 @@ export function registerImageRoutes(app: Express): void {
     }
   });
 }
-

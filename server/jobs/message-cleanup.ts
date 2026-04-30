@@ -7,11 +7,13 @@ export async function runMessageCleanup() {
   console.log("[MessageCleanup] Starting daily message retention cleanup...");
 
   try {
-    const allCompanies = await db.select({
-      id: companies.id,
-      name: companies.name,
-      messageRetentionDays: companies.messageRetentionDays,
-    }).from(companies);
+    const allCompanies = await db
+      .select({
+        id: companies.id,
+        name: companies.name,
+        messageRetentionDays: companies.messageRetentionDays,
+      })
+      .from(companies);
 
     let totalMessagesDeleted = 0;
     let totalAttachmentsDeleted = 0;
@@ -27,48 +29,54 @@ export async function runMessageCleanup() {
       cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
 
       try {
-        const expiredMessages = await db.select({
-          id: messages.id,
-        }).from(messages).where(
-          and(
-            eq(messages.companyId, company.id),
-            lt(messages.createdAt, cutoffDate)
-          )
-        );
+        const expiredMessages = await db
+          .select({
+            id: messages.id,
+          })
+          .from(messages)
+          .where(and(eq(messages.companyId, company.id), lt(messages.createdAt, cutoffDate)));
 
         if (expiredMessages.length === 0) {
-          const smsResult = await db.delete(smsMessages).where(
-            and(
-              eq(smsMessages.companyId, company.id),
-              lt(smsMessages.createdAt, cutoffDate)
+          const smsResult = await db
+            .delete(smsMessages)
+            .where(
+              and(eq(smsMessages.companyId, company.id), lt(smsMessages.createdAt, cutoffDate))
             )
-          ).returning({ id: smsMessages.id });
+            .returning({ id: smsMessages.id });
           totalSmsRecordsDeleted += smsResult.length;
           continue;
         }
 
-        const expiredIds = expiredMessages.map(m => m.id);
+        const expiredIds = expiredMessages.map((m) => m.id);
 
         const BATCH_SIZE = 500;
-        const attachments: { id: string; storageUrl: string; compressedSizeBytes: number | null }[] = [];
+        const attachments: {
+          id: string;
+          storageUrl: string;
+          compressedSizeBytes: number | null;
+        }[] = [];
         for (let i = 0; i < expiredIds.length; i += BATCH_SIZE) {
           const batch = expiredIds.slice(i, i + BATCH_SIZE);
-          const batchAttachments = await db.select({
-            id: messageAttachments.id,
-            storageUrl: messageAttachments.storageUrl,
-            compressedSizeBytes: messageAttachments.compressedSizeBytes,
-          }).from(messageAttachments).where(
-            and(
-              eq(messageAttachments.companyId, company.id),
-              inArray(messageAttachments.messageId, batch)
-            )
-          );
+          const batchAttachments = await db
+            .select({
+              id: messageAttachments.id,
+              storageUrl: messageAttachments.storageUrl,
+              compressedSizeBytes: messageAttachments.compressedSizeBytes,
+            })
+            .from(messageAttachments)
+            .where(
+              and(
+                eq(messageAttachments.companyId, company.id),
+                inArray(messageAttachments.messageId, batch)
+              )
+            );
           attachments.push(...batchAttachments);
         }
 
         if (attachments.length > 0) {
           try {
-            const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+            const { ObjectStorageService } =
+              await import("../replit_integrations/object_storage/objectStorage");
             const objStorage = new ObjectStorageService();
 
             for (const att of attachments) {
@@ -77,14 +85,20 @@ export async function runMessageCleanup() {
                 await file.delete();
                 totalStorageBytesReclaimed += att.compressedSizeBytes ?? 0;
               } catch (err) {
-                console.warn(`[MessageCleanup] Failed to delete object storage file ${att.storageUrl}:`, (err as Error).message);
+                console.warn(
+                  `[MessageCleanup] Failed to delete object storage file ${att.storageUrl}:`,
+                  (err as Error).message
+                );
               }
             }
           } catch (err) {
-            console.warn("[MessageCleanup] Object storage unavailable, skipping file deletion:", (err as Error).message);
+            console.warn(
+              "[MessageCleanup] Object storage unavailable, skipping file deletion:",
+              (err as Error).message
+            );
           }
 
-          const attIds = attachments.map(a => a.id);
+          const attIds = attachments.map((a) => a.id);
           for (let i = 0; i < attIds.length; i += BATCH_SIZE) {
             const batch = attIds.slice(i, i + BATCH_SIZE);
             await db.delete(messageAttachments).where(inArray(messageAttachments.id, batch));
@@ -94,21 +108,24 @@ export async function runMessageCleanup() {
 
         for (let i = 0; i < expiredIds.length; i += BATCH_SIZE) {
           const batch = expiredIds.slice(i, i + BATCH_SIZE);
-          await db.delete(messages).where(and(inArray(messages.id, batch), eq(messages.companyId, company.id)));
+          await db
+            .delete(messages)
+            .where(and(inArray(messages.id, batch), eq(messages.companyId, company.id)));
         }
         totalMessagesDeleted += expiredIds.length;
 
-        const smsResult = await db.delete(smsMessages).where(
-          and(
-            eq(smsMessages.companyId, company.id),
-            lt(smsMessages.createdAt, cutoffDate)
-          )
-        ).returning({ id: smsMessages.id });
+        const smsResult = await db
+          .delete(smsMessages)
+          .where(and(eq(smsMessages.companyId, company.id), lt(smsMessages.createdAt, cutoffDate)))
+          .returning({ id: smsMessages.id });
         totalSmsRecordsDeleted += smsResult.length;
 
         companiesProcessed++;
       } catch (err) {
-        console.error(`[MessageCleanup] Error processing company ${company.name} (${company.id}):`, err);
+        console.error(
+          `[MessageCleanup] Error processing company ${company.name} (${company.id}):`,
+          err
+        );
       }
     }
 
@@ -116,7 +133,9 @@ export async function runMessageCleanup() {
     const storageMB = (totalStorageBytesReclaimed / (1024 * 1024)).toFixed(2);
 
     console.log(`[MessageCleanup] Completed in ${elapsed}s`);
-    console.log(`[MessageCleanup]   Companies processed: ${companiesProcessed}/${allCompanies.length}`);
+    console.log(
+      `[MessageCleanup]   Companies processed: ${companiesProcessed}/${allCompanies.length}`
+    );
     console.log(`[MessageCleanup]   Messages deleted: ${totalMessagesDeleted}`);
     console.log(`[MessageCleanup]   Attachments deleted: ${totalAttachmentsDeleted}`);
     console.log(`[MessageCleanup]   SMS records deleted: ${totalSmsRecordsDeleted}`);

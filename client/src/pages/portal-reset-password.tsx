@@ -24,11 +24,19 @@ export default function PortalResetPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password || !confirmPassword) {
-      toast({ title: "Required", description: "Please fill in both password fields.", variant: "destructive" });
+      toast({
+        title: "Required",
+        description: "Please fill in both password fields.",
+        variant: "destructive",
+      });
       return;
     }
     if (password.length < 6) {
-      toast({ title: "Too short", description: "Password must be at least 6 characters.", variant: "destructive" });
+      toast({
+        title: "Too short",
+        description: "Password must be at least 6 characters.",
+        variant: "destructive",
+      });
       return;
     }
     if (password !== confirmPassword) {
@@ -36,7 +44,11 @@ export default function PortalResetPassword() {
       return;
     }
     if (!token) {
-      toast({ title: "Invalid link", description: "This reset link is invalid. Please request a new one.", variant: "destructive" });
+      toast({
+        title: "Invalid link",
+        description: "This reset link is invalid. Please request a new one.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -53,7 +65,10 @@ export default function PortalResetPassword() {
         throw new Error(data.error || "Reset failed");
       }
 
-      toast({ title: "Password updated", description: "Your password has been reset. You can now sign in with your new password." });
+      toast({
+        title: "Password updated",
+        description: "Your password has been reset. You can now sign in with your new password.",
+      });
       navigate("/portal/login");
     } catch (err: any) {
       toast({ title: "Reset failed", description: err.message, variant: "destructive" });
@@ -66,10 +81,10 @@ export default function PortalResetPassword() {
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl" data-testid="text-reset-password-title">Reset Password</CardTitle>
-          <CardDescription>
-            Enter your new password below.
-          </CardDescription>
+          <CardTitle className="text-2xl" data-testid="text-reset-password-title">
+            Reset Password
+          </CardTitle>
+          <CardDescription>Enter your new password below.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -95,7 +110,12 @@ export default function PortalResetPassword() {
                 data-testid="input-confirm-password"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-reset-password">
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isLoading}
+              data-testid="button-reset-password"
+            >
               <KeyRound className="mr-2 h-4 w-4" />
               {isLoading ? "Resetting..." : "Reset Password"}
             </Button>

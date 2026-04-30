@@ -62,13 +62,18 @@ export async function convertToWav(audioBuffer: Buffer): Promise<Buffer> {
     // Run ffmpeg with file paths
     await new Promise<void>((resolve, reject) => {
       const ffmpeg = spawn("ffmpeg", [
-        "-i", inputPath,
-        "-vn",              // Extract audio only (ignore video track)
-        "-f", "wav",
-        "-ar", "16000",     // 16kHz sample rate (good for speech)
-        "-ac", "1",         // Mono
-        "-acodec", "pcm_s16le",
-        "-y",               // Overwrite output
+        "-i",
+        inputPath,
+        "-vn", // Extract audio only (ignore video track)
+        "-f",
+        "wav",
+        "-ar",
+        "16000", // 16kHz sample rate (good for speech)
+        "-ac",
+        "1", // Mono
+        "-acodec",
+        "pcm_s16le",
+        "-y", // Overwrite output
         outputPath,
       ]);
 
@@ -121,12 +126,12 @@ export async function voiceChat(
     model: "gpt-audio",
     modalities: ["text", "audio"],
     audio: { voice, format: outputFormat },
-    messages: [{
-      role: "user",
-      content: [
-        { type: "input_audio", input_audio: { data: audioBase64, format: inputFormat } },
-      ],
-    }],
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "input_audio", input_audio: { data: audioBase64, format: inputFormat } }],
+      },
+    ],
   });
   const message = response.choices[0]?.message as any;
   const transcript = message?.audio?.transcript || message?.content || "";
@@ -157,12 +162,12 @@ export async function voiceChatStream(
     model: "gpt-audio",
     modalities: ["text", "audio"],
     audio: { voice, format: "pcm16" },
-    messages: [{
-      role: "user",
-      content: [
-        { type: "input_audio", input_audio: { data: audioBase64, format: inputFormat } },
-      ],
-    }],
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "input_audio", input_audio: { data: audioBase64, format: inputFormat } }],
+      },
+    ],
     stream: true,
   });
 

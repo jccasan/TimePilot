@@ -74,7 +74,9 @@ function sqftToAcres(sqft: number): number {
   return sqft / 43560;
 }
 
-function mapFrequency(freq: string | null | undefined): "weekly" | "biweekly" | "monthly" | "onetime" {
+function mapFrequency(
+  freq: string | null | undefined
+): "weekly" | "biweekly" | "monthly" | "onetime" {
   if (!freq) return "weekly";
   if (freq === "1_per_week" || freq === "2_per_week" || freq === "weekly") return "weekly";
   if (freq === "biweekly") return "biweekly";
@@ -94,7 +96,9 @@ export function PriceCalculatorCard({ property, servicePlans }: PriceCalculatorC
 
   const activePlan = servicePlans?.find((sp) => sp.isActive);
   const frequency = activePlan ? mapFrequency(activePlan.frequency) : "weekly";
-  const currentPriceCents = activePlan ? Math.round(parseFloat(activePlan.pricePerVisit) * 100) : undefined;
+  const currentPriceCents = activePlan
+    ? Math.round(parseFloat(activePlan.pricePerVisit) * 100)
+    : undefined;
 
   const yardSizeAcres = property.measuredYardSqft
     ? sqftToAcres(property.measuredYardSqft)
@@ -135,10 +139,17 @@ export function PriceCalculatorCard({ property, servicePlans }: PriceCalculatorC
             disabled={calculateMutation.isPending}
             data-testid={`button-calculate-price-${property.id}`}
           >
-            <RefreshCw className={`h-3.5 w-3.5 mr-1 ${calculateMutation.isPending ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-3.5 w-3.5 mr-1 ${calculateMutation.isPending ? "animate-spin" : ""}`}
+            />
             {hasCalculated ? "Recalculate" : "Calculate"}
           </Button>
-          <Button variant="ghost" size="sm" asChild data-testid={`link-full-calculator-${property.id}`}>
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            data-testid={`link-full-calculator-${property.id}`}
+          >
             <Link href="/pricing-calculator">
               Full Tool <ArrowRight className="h-3.5 w-3.5 ml-1" />
             </Link>
@@ -162,17 +173,30 @@ export function PriceCalculatorCard({ property, servicePlans }: PriceCalculatorC
         {result && !calculateMutation.isPending && (
           <>
             <div className="grid grid-cols-3 gap-2" data-testid={`grid-price-tiers-${property.id}`}>
-              <div className="text-center p-2 rounded-md border" data-testid={`tier-minimum-${property.id}`}>
+              <div
+                className="text-center p-2 rounded-md border"
+                data-testid={`tier-minimum-${property.id}`}
+              >
                 <p className="text-xs text-muted-foreground">Minimum</p>
-                <p className="text-lg font-bold text-destructive">{centsToDisplay(result.minimumPriceCents)}</p>
+                <p className="text-lg font-bold text-destructive">
+                  {centsToDisplay(result.minimumPriceCents)}
+                </p>
               </div>
-              <div className="text-center p-2 rounded-md border border-primary/30 bg-primary/5" data-testid={`tier-recommended-${property.id}`}>
+              <div
+                className="text-center p-2 rounded-md border border-primary/30 bg-primary/5"
+                data-testid={`tier-recommended-${property.id}`}
+              >
                 <p className="text-xs text-muted-foreground">Recommended</p>
                 <p className="text-lg font-bold">{centsToDisplay(result.recommendedPriceCents)}</p>
               </div>
-              <div className="text-center p-2 rounded-md border" data-testid={`tier-premium-${property.id}`}>
+              <div
+                className="text-center p-2 rounded-md border"
+                data-testid={`tier-premium-${property.id}`}
+              >
                 <p className="text-xs text-muted-foreground">Premium</p>
-                <p className="text-lg font-bold text-green-600 dark:text-green-400">{centsToDisplay(result.premiumPriceCents)}</p>
+                <p className="text-lg font-bold text-green-600 dark:text-green-400">
+                  {centsToDisplay(result.premiumPriceCents)}
+                </p>
               </div>
             </div>
 
@@ -191,9 +215,12 @@ export function PriceCalculatorCard({ property, servicePlans }: PriceCalculatorC
                   <TrendingUp className="h-4 w-4 mt-0.5 shrink-0" />
                 )}
                 <div>
-                  <p className="font-medium" data-testid={`text-profit-message-${property.id}`}>{result.profitWarning.message}</p>
+                  <p className="font-medium" data-testid={`text-profit-message-${property.id}`}>
+                    {result.profitWarning.message}
+                  </p>
                   <p className="text-xs opacity-75">
-                    Current: {centsToDisplay(currentPriceCents)} | Profit/hr: {centsToDisplay(result.profitWarning.profitPerHourCents)}
+                    Current: {centsToDisplay(currentPriceCents)} | Profit/hr:{" "}
+                    {centsToDisplay(result.profitWarning.profitPerHourCents)}
                   </p>
                 </div>
               </div>
@@ -217,21 +244,40 @@ export function PriceCalculatorCard({ property, servicePlans }: PriceCalculatorC
               )}
             </div>
 
-            <div className="text-xs text-muted-foreground space-y-0.5" data-testid={`text-breakdown-${property.id}`}>
-              <p>Service: {result.breakdown.serviceMinutes.toFixed(1)} min | Travel: {result.breakdown.adjustedTravelMinutes.toFixed(1)} min | Total: {result.derived.jobMinutes.toFixed(1)} min</p>
-              <p>Labor: {centsToDisplay(result.breakdown.laborCostCents)} | Equipment: {centsToDisplay(result.breakdown.equipmentCostCents)} | Overhead: {centsToDisplay(result.breakdown.overheadPerVisitCents)}</p>
+            <div
+              className="text-xs text-muted-foreground space-y-0.5"
+              data-testid={`text-breakdown-${property.id}`}
+            >
+              <p>
+                Service: {result.breakdown.serviceMinutes.toFixed(1)} min | Travel:{" "}
+                {result.breakdown.adjustedTravelMinutes.toFixed(1)} min | Total:{" "}
+                {result.derived.jobMinutes.toFixed(1)} min
+              </p>
+              <p>
+                Labor: {centsToDisplay(result.breakdown.laborCostCents)} | Equipment:{" "}
+                {centsToDisplay(result.breakdown.equipmentCostCents)} | Overhead:{" "}
+                {centsToDisplay(result.breakdown.overheadPerVisitCents)}
+              </p>
             </div>
           </>
         )}
 
         {!result && !calculateMutation.isPending && !calculateMutation.isError && (
-          <p className="text-xs text-muted-foreground" data-testid={`text-calc-prompt-${property.id}`}>
-            Click Calculate to see recommended pricing for this property based on yard size ({(yardSizeAcres).toFixed(2)} acres), {property.numberOfDogs || 1} dog(s), {property.yardDifficulty || "flat"} terrain.
+          <p
+            className="text-xs text-muted-foreground"
+            data-testid={`text-calc-prompt-${property.id}`}
+          >
+            Click Calculate to see recommended pricing for this property based on yard size (
+            {yardSizeAcres.toFixed(2)} acres), {property.numberOfDogs || 1} dog(s),{" "}
+            {property.yardDifficulty || "flat"} terrain.
           </p>
         )}
 
         {hasNoOverhead && (
-          <div className="flex items-start gap-2 p-2 rounded-md bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300 text-xs" data-testid="alert-no-overhead-warning">
+          <div
+            className="flex items-start gap-2 p-2 rounded-md bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300 text-xs"
+            data-testid="alert-no-overhead-warning"
+          >
             <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
             <p>
               Monthly business expenses not configured — results may underestimate true costs.{" "}

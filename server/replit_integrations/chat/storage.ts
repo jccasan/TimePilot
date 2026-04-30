@@ -22,7 +22,9 @@ export const chatStorage: IChatStorage = {
   },
 
   async createConversation(title: string) {
-    const result = await db.execute(sql`INSERT INTO conversations (title) VALUES (${title}) RETURNING *`);
+    const result = await db.execute(
+      sql`INSERT INTO conversations (title) VALUES (${title}) RETURNING *`
+    );
     return result.rows[0];
   },
 
@@ -32,13 +34,16 @@ export const chatStorage: IChatStorage = {
   },
 
   async getMessagesByConversation(conversationId: number) {
-    const result = await db.execute(sql`SELECT * FROM messages WHERE conversation_id = ${conversationId} ORDER BY created_at ASC`);
+    const result = await db.execute(
+      sql`SELECT * FROM messages WHERE conversation_id = ${conversationId} ORDER BY created_at ASC`
+    );
     return result.rows as any[];
   },
 
   async createMessage(conversationId: number, role: string, content: string) {
-    const result = await db.execute(sql`INSERT INTO messages (conversation_id, role, content) VALUES (${conversationId}, ${role}, ${content}) RETURNING *`);
+    const result = await db.execute(
+      sql`INSERT INTO messages (conversation_id, role, content) VALUES (${conversationId}, ${role}, ${content}) RETURNING *`
+    );
     return result.rows[0];
   },
 };
-

@@ -1,4 +1,3 @@
-
 export const BILLING_CADENCE_LABELS: Record<string, string> = {
   per_visit: "Per Visit",
   weekly: "Weekly",
@@ -43,11 +42,19 @@ const ORIGIN_COLORS: Record<BillingOrigin, string> = {
   override: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200",
 };
 
-export function BillingRuleInheritance({ label, value, labels, origin, sourceName, muted }: BillingRuleInheritanceProps) {
-  const displayValue = value ? (labels[value] || value) : "—";
-  const originLabel = origin === "service" && sourceName
-    ? `${ORIGIN_LABELS[origin]}: ${sourceName}`
-    : ORIGIN_LABELS[origin];
+export function BillingRuleInheritance({
+  label,
+  value,
+  labels,
+  origin,
+  sourceName,
+  muted,
+}: BillingRuleInheritanceProps) {
+  const displayValue = value ? labels[value] || value : "—";
+  const originLabel =
+    origin === "service" && sourceName
+      ? `${ORIGIN_LABELS[origin]}: ${sourceName}`
+      : ORIGIN_LABELS[origin];
   return (
     <div className={`flex items-center justify-between gap-2 ${muted ? "opacity-60" : ""}`}>
       <span className="text-xs text-muted-foreground">{label}</span>
@@ -64,7 +71,7 @@ export function BillingRuleInheritance({ label, value, labels, origin, sourceNam
 export function resolveBillingField(
   contactOverride: string | null | undefined,
   serviceRule: string | null | undefined,
-  systemDefault: string,
+  systemDefault: string
 ): { value: string; origin: BillingOrigin } {
   if (contactOverride) return { value: contactOverride, origin: "override" };
   if (serviceRule) return { value: serviceRule, origin: "service" };

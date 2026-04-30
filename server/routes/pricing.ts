@@ -1,16 +1,30 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES } from "@shared/schema";
-import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, parseLotSizeStringToAcres, type PriceCalculatorInputs } from "../services/pricing-calculator";
+import {
+  DEFAULT_PRICING_CONFIG,
+  type PricingConfig,
+  type PricingRulesConfig,
+  DEFAULT_PRICING_RULES,
+} from "@shared/schema";
+import {
+  calculatePrice,
+  sqftToAcres,
+  yardSizeLabelToAcres,
+  parseLotSizeStringToAcres,
+  type PriceCalculatorInputs,
+} from "../services/pricing-calculator";
 import { z } from "zod";
 import { calculateTotalDistance, getRouteMetricsWithLegs } from "../services/route-optimizer";
+import { insertServicePricingSchema, insertServicePackageSchema } from "@shared/schema";
+
 import {
-  insertServicePricingSchema,
-  insertServicePackageSchema,
-} from "@shared/schema";
-
-import { isAuthenticated, getCompanyContext, requireRole, handleError, sanitizeDecimal, p } from "./shared";
-
+  isAuthenticated,
+  getCompanyContext,
+  requireRole,
+  handleError,
+  sanitizeDecimal,
+  p,
+} from "./shared";
 
 export async function registerPricingRoutes(app: Express): Promise<void> {
   // ================ Service Pricing ================
@@ -20,7 +34,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const category = req.query.category as string | undefined;
       const items = await storage.getServicePricing(companyId, category);
       res.json(items);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/pricing", isAuthenticated, async (req: Request, res: Response) => {
@@ -32,7 +48,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const parsed = insertServicePricingSchema.parse(body);
       const item = await storage.createServicePricingItem(parsed);
       res.status(201).json(item);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -44,7 +62,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const parsed = insertServicePricingSchema.partial().parse(body);
       const item = await storage.updateServicePricingItem(p(req.params.id), companyId, parsed);
       res.json(item);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -53,7 +73,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       requireRole(role);
       await storage.deleteServicePricingItem(p(req.params.id), companyId);
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/service-billing-rules", isAuthenticated, async (req: Request, res: Response) => {
@@ -61,41 +83,67 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const rules = await storage.getServiceBillingRules(companyId);
       res.json(rules);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.put("/api/service-billing-rules/:servicePricingId", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const validCadences = ["per_visit", "weekly", "monthly", "manual"];
-      const validTriggers = ["after_job", "end_of_week", "end_of_month", "manual"];
-      const validBehaviors = ["autopay_immediate", "autopay_scheduled", "send_invoice", "review_only"];
-      const pricingItems = await storage.getServicePricing(companyId);
-      if (!pricingItems.some(item => item.id === p(req.params.servicePricingId))) {
-        return res.status(404).json({ error: "Service pricing item not found" });
+  app.put(
+    "/api/service-billing-rules/:servicePricingId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const validCadences = ["per_visit", "weekly", "monthly", "manual"];
+        const validTriggers = ["after_job", "end_of_week", "end_of_month", "manual"];
+        const validBehaviors = [
+          "autopay_immediate",
+          "autopay_scheduled",
+          "send_invoice",
+          "review_only",
+        ];
+        const pricingItems = await storage.getServicePricing(companyId);
+        if (!pricingItems.some((item) => item.id === p(req.params.servicePricingId))) {
+          return res.status(404).json({ error: "Service pricing item not found" });
+        }
+        const { billingCadence, billingTrigger, paymentBehavior } = req.body;
+        if (billingCadence && !validCadences.includes(billingCadence))
+          return res.status(400).json({ error: "Invalid billingCadence" });
+        if (billingTrigger && !validTriggers.includes(billingTrigger))
+          return res.status(400).json({ error: "Invalid billingTrigger" });
+        if (paymentBehavior && !validBehaviors.includes(paymentBehavior))
+          return res.status(400).json({ error: "Invalid paymentBehavior" });
+        const rule = await storage.upsertServiceBillingRule(
+          companyId,
+          p(req.params.servicePricingId),
+          {
+            billingCadence: billingCadence || null,
+            billingTrigger: billingTrigger || null,
+            paymentBehavior: paymentBehavior || null,
+          }
+        );
+        res.json(rule);
+      } catch (err) {
+        handleError(res, err);
       }
-      const { billingCadence, billingTrigger, paymentBehavior } = req.body;
-      if (billingCadence && !validCadences.includes(billingCadence)) return res.status(400).json({ error: "Invalid billingCadence" });
-      if (billingTrigger && !validTriggers.includes(billingTrigger)) return res.status(400).json({ error: "Invalid billingTrigger" });
-      if (paymentBehavior && !validBehaviors.includes(paymentBehavior)) return res.status(400).json({ error: "Invalid paymentBehavior" });
-      const rule = await storage.upsertServiceBillingRule(companyId, p(req.params.servicePricingId), {
-        billingCadence: billingCadence || null,
-        billingTrigger: billingTrigger || null,
-        paymentBehavior: paymentBehavior || null,
-      });
-      res.json(rule);
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
-  app.delete("/api/service-billing-rules/:servicePricingId", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      await storage.deleteServiceBillingRule(companyId, p(req.params.servicePricingId));
-      res.json({ success: true });
-    } catch (err) { handleError(res, err); }
-  });
+  app.delete(
+    "/api/service-billing-rules/:servicePricingId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        await storage.deleteServiceBillingRule(companyId, p(req.params.servicePricingId));
+        res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.post("/api/pricing/seed", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -103,185 +151,228 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       requireRole(role);
       await storage.seedDefaultPricing(companyId);
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/pricing/generate-from-rules", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
+  app.post(
+    "/api/pricing/generate-from-rules",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
 
-      const rulesSchema = z.object({
-        basePrices: z.object({
-          weekly: z.number().min(0),
-          biWeekly: z.number().min(0),
-          twiceWeekly: z.number().min(0),
-        }),
-        perDogRule: z.object({
-          incrementDogs: z.number().int().min(1),
-          surchargeAmount: z.number().min(0),
-          maxDogs: z.number().int().min(1).max(20),
-        }),
-        yardSizeTiers: z.array(z.object({
-          upToAcres: z.number().min(0),
-          surcharge: z.number().min(0),
-        })),
-      });
+        const rulesSchema = z.object({
+          basePrices: z.object({
+            weekly: z.number().min(0),
+            biWeekly: z.number().min(0),
+            twiceWeekly: z.number().min(0),
+          }),
+          perDogRule: z.object({
+            incrementDogs: z.number().int().min(1),
+            surchargeAmount: z.number().min(0),
+            maxDogs: z.number().int().min(1).max(20),
+          }),
+          yardSizeTiers: z.array(
+            z.object({
+              upToAcres: z.number().min(0),
+              surcharge: z.number().min(0),
+            })
+          ),
+        });
 
-      const rules: PricingRulesConfig = rulesSchema.parse(req.body);
+        const rules: PricingRulesConfig = rulesSchema.parse(req.body);
 
-      const company = await storage.getCompany(companyId);
-      if (!company) return res.status(404).json({ error: "Company not found" });
-      const existingConfig: PricingConfig = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
-      await storage.updateCompany(companyId, {
-        pricingConfig: { ...existingConfig, pricingRules: rules },
-      });
+        const company = await storage.getCompany(companyId);
+        if (!company) return res.status(404).json({ error: "Company not found" });
+        const existingConfig: PricingConfig = {
+          ...DEFAULT_PRICING_CONFIG,
+          ...(company.pricingConfig || {}),
+        };
+        await storage.updateCompany(companyId, {
+          pricingConfig: { ...existingConfig, pricingRules: rules },
+        });
 
-      const existingPricing = await storage.getServicePricing(companyId, "recurring_service");
-      const existingByName = new Map<string, typeof existingPricing[0]>();
-      for (const item of existingPricing) {
-        existingByName.set(item.name, item);
-      }
+        const existingPricing = await storage.getServicePricing(companyId, "recurring_service");
+        const existingByName = new Map<string, (typeof existingPricing)[0]>();
+        for (const item of existingPricing) {
+          existingByName.set(item.name, item);
+        }
 
-      const frequencies = [
-        { key: "weekly", label: "Weekly Scooping", base: rules.basePrices.weekly, unit: "per_week" },
-        { key: "twiceWeekly", label: "Twice Weekly Scooping", base: rules.basePrices.twiceWeekly, unit: "per_visit" },
-        { key: "biWeekly", label: "Bi-Weekly Scooping", base: rules.basePrices.biWeekly, unit: "per_visit" },
-      ];
+        const frequencies = [
+          {
+            key: "weekly",
+            label: "Weekly Scooping",
+            base: rules.basePrices.weekly,
+            unit: "per_week",
+          },
+          {
+            key: "twiceWeekly",
+            label: "Twice Weekly Scooping",
+            base: rules.basePrices.twiceWeekly,
+            unit: "per_visit",
+          },
+          {
+            key: "biWeekly",
+            label: "Bi-Weekly Scooping",
+            base: rules.basePrices.biWeekly,
+            unit: "per_visit",
+          },
+        ];
 
-      let sortOrder = 1;
-      const generatedNames = new Set<string>();
-      const inc = rules.perDogRule.incrementDogs;
+        let sortOrder = 1;
+        const generatedNames = new Set<string>();
+        const inc = rules.perDogRule.incrementDogs;
 
-      for (const freq of frequencies) {
-        for (let dogs = 1; dogs <= rules.perDogRule.maxDogs; dogs++) {
-          const surchargeSteps = Math.floor((dogs - 1) / inc);
-          const price = freq.base + surchargeSteps * rules.perDogRule.surchargeAmount;
-          const name = `${freq.label} ${dogs} ${dogs === 1 ? "Dog" : "Dogs"}`;
-          generatedNames.add(name);
+        for (const freq of frequencies) {
+          for (let dogs = 1; dogs <= rules.perDogRule.maxDogs; dogs++) {
+            const surchargeSteps = Math.floor((dogs - 1) / inc);
+            const price = freq.base + surchargeSteps * rules.perDogRule.surchargeAmount;
+            const name = `${freq.label} ${dogs} ${dogs === 1 ? "Dog" : "Dogs"}`;
+            generatedNames.add(name);
 
-          const existing = existingByName.get(name);
-          if (existing) {
-            const isOverridden = (existing.metadata as Record<string, unknown>)?.manualOverride === true;
-            if (!isOverridden) {
-              await storage.updateServicePricingItem(existing.id, companyId, {
-                basePrice: price.toFixed(2),
-                sortOrder,
-                unit: freq.unit,
-                metadata: { ...((existing.metadata as Record<string, unknown>) || {}), callForQuote: false, ruleGenerated: true },
-              });
+            const existing = existingByName.get(name);
+            if (existing) {
+              const isOverridden =
+                (existing.metadata as Record<string, unknown>)?.manualOverride === true;
+              if (!isOverridden) {
+                await storage.updateServicePricingItem(existing.id, companyId, {
+                  basePrice: price.toFixed(2),
+                  sortOrder,
+                  unit: freq.unit,
+                  metadata: {
+                    ...((existing.metadata as Record<string, unknown>) || {}),
+                    callForQuote: false,
+                    ruleGenerated: true,
+                  },
+                });
+              } else {
+                await storage.updateServicePricingItem(existing.id, companyId, {
+                  sortOrder,
+                });
+              }
             } else {
-              await storage.updateServicePricingItem(existing.id, companyId, {
+              await storage.createServicePricingItem({
+                companyId,
+                category: "recurring_service",
+                name,
+                description: `${freq.label.replace("Scooping", "").trim()} service for ${dogs} ${dogs === 1 ? "dog" : "dogs"}`,
+                basePrice: price.toFixed(2),
+                unit: freq.unit,
                 sortOrder,
+                metadata: { ruleGenerated: true },
               });
             }
+            sortOrder++;
+          }
+
+          const callName = `${freq.label} ${rules.perDogRule.maxDogs + 1}+ Dogs`;
+          generatedNames.add(callName);
+          const existingCall = existingByName.get(callName);
+          if (existingCall) {
+            await storage.updateServicePricingItem(existingCall.id, companyId, {
+              sortOrder,
+              metadata: {
+                ...((existingCall.metadata as Record<string, unknown>) || {}),
+                callForQuote: true,
+                ruleGenerated: true,
+              },
+            });
           } else {
             await storage.createServicePricingItem({
               companyId,
               category: "recurring_service",
-              name,
-              description: `${freq.label.replace("Scooping", "").trim()} service for ${dogs} ${dogs === 1 ? "dog" : "dogs"}`,
-              basePrice: price.toFixed(2),
+              name: callName,
+              description: `${freq.label.replace("Scooping", "").trim()} service for ${rules.perDogRule.maxDogs + 1}+ dogs - call for quote`,
+              basePrice: "0.00",
               unit: freq.unit,
               sortOrder,
-              metadata: { ruleGenerated: true },
+              metadata: { callForQuote: true, ruleGenerated: true },
             });
           }
           sortOrder++;
         }
 
-        const callName = `${freq.label} ${rules.perDogRule.maxDogs + 1}+ Dogs`;
-        generatedNames.add(callName);
-        const existingCall = existingByName.get(callName);
-        if (existingCall) {
-          await storage.updateServicePricingItem(existingCall.id, companyId, {
-            sortOrder,
-            metadata: { ...((existingCall.metadata as Record<string, unknown>) || {}), callForQuote: true, ruleGenerated: true },
-          });
-        } else {
-          await storage.createServicePricingItem({
-            companyId,
-            category: "recurring_service",
-            name: callName,
-            description: `${freq.label.replace("Scooping", "").trim()} service for ${rules.perDogRule.maxDogs + 1}+ dogs - call for quote`,
-            basePrice: "0.00",
-            unit: freq.unit,
-            sortOrder,
-            metadata: { callForQuote: true, ruleGenerated: true },
-          });
+        for (const item of existingPricing) {
+          const meta = (item.metadata as Record<string, unknown>) || {};
+          if (!generatedNames.has(item.name) && meta.ruleGenerated && !meta.manualOverride) {
+            await storage.deleteServicePricingItem(item.id, companyId);
+          }
         }
-        sortOrder++;
-      }
 
-      for (const item of existingPricing) {
-        const meta = (item.metadata as Record<string, unknown>) || {};
-        if (!generatedNames.has(item.name) && meta.ruleGenerated && !meta.manualOverride) {
-          await storage.deleteServicePricingItem(item.id, companyId);
+        const allAddOns = await storage.getServicePricing(companyId, "add_on");
+
+        const parseLotAcres = (name: string): number | null => {
+          const m = name.match(/Lot Size up to\s+([.\d]+)\s*Acre/i);
+          return m ? parseFloat(m[1]) : null;
+        };
+        const existingLotByAcres = new Map<number, (typeof allAddOns)[0]>();
+        const existingAddOnsByName = new Map<string, (typeof allAddOns)[0]>();
+        for (const a of allAddOns) {
+          existingAddOnsByName.set(a.name, a);
+          const acres = parseLotAcres(a.name);
+          if (acres !== null) existingLotByAcres.set(acres, a);
         }
-      }
-
-      const allAddOns = await storage.getServicePricing(companyId, "add_on");
-
-      const parseLotAcres = (name: string): number | null => {
-        const m = name.match(/Lot Size up to\s+([.\d]+)\s*Acre/i);
-        return m ? parseFloat(m[1]) : null;
-      };
-      const existingLotByAcres = new Map<number, typeof allAddOns[0]>();
-      const existingAddOnsByName = new Map<string, typeof allAddOns[0]>();
-      for (const a of allAddOns) {
-        existingAddOnsByName.set(a.name, a);
-        const acres = parseLotAcres(a.name);
-        if (acres !== null) existingLotByAcres.set(acres, a);
-      }
-      const generatedYardAcres = new Set<number>();
-      let yardSort = 100;
-      for (const tier of rules.yardSizeTiers) {
-        const tierName = `Lot Size up to ${tier.upToAcres} Acre`;
-        generatedYardAcres.add(tier.upToAcres);
-        const existingAddon = existingLotByAcres.get(tier.upToAcres) || existingAddOnsByName.get(tierName);
-        if (existingAddon) {
-          const isOverridden = (existingAddon.metadata as Record<string, unknown>)?.manualOverride === true;
-          if (!isOverridden) {
-            await storage.updateServicePricingItem(existingAddon.id, companyId, {
+        const generatedYardAcres = new Set<number>();
+        let yardSort = 100;
+        for (const tier of rules.yardSizeTiers) {
+          const tierName = `Lot Size up to ${tier.upToAcres} Acre`;
+          generatedYardAcres.add(tier.upToAcres);
+          const existingAddon =
+            existingLotByAcres.get(tier.upToAcres) || existingAddOnsByName.get(tierName);
+          if (existingAddon) {
+            const isOverridden =
+              (existingAddon.metadata as Record<string, unknown>)?.manualOverride === true;
+            if (!isOverridden) {
+              await storage.updateServicePricingItem(existingAddon.id, companyId, {
+                basePrice: tier.surcharge.toFixed(2),
+                sortOrder: yardSort,
+                metadata: {
+                  ...((existingAddon.metadata as Record<string, unknown>) || {}),
+                  ruleGenerated: true,
+                },
+              });
+            }
+          } else {
+            await storage.createServicePricingItem({
+              companyId,
+              category: "add_on",
+              name: tierName,
+              description:
+                tier.surcharge === 0
+                  ? `No additional charge for lots up to ${tier.upToAcres} acre`
+                  : `Additional charge for lots up to ${tier.upToAcres} acre`,
               basePrice: tier.surcharge.toFixed(2),
+              unit: "per_visit",
               sortOrder: yardSort,
-              metadata: { ...((existingAddon.metadata as Record<string, unknown>) || {}), ruleGenerated: true },
+              metadata: { ruleGenerated: true },
             });
           }
-        } else {
-          await storage.createServicePricingItem({
-            companyId,
-            category: "add_on",
-            name: tierName,
-            description: tier.surcharge === 0
-              ? `No additional charge for lots up to ${tier.upToAcres} acre`
-              : `Additional charge for lots up to ${tier.upToAcres} acre`,
-            basePrice: tier.surcharge.toFixed(2),
-            unit: "per_visit",
-            sortOrder: yardSort,
-            metadata: { ruleGenerated: true },
-          });
+          yardSort++;
         }
-        yardSort++;
-      }
 
-      for (const addon of allAddOns) {
-        const addonMeta = (addon.metadata as Record<string, unknown>) || {};
-        const addonAcres = parseLotAcres(addon.name);
-        if (
-          addonAcres !== null &&
-          !generatedYardAcres.has(addonAcres) &&
-          addonMeta.ruleGenerated &&
-          !addonMeta.manualOverride
-        ) {
-          await storage.deleteServicePricingItem(addon.id, companyId);
+        for (const addon of allAddOns) {
+          const addonMeta = (addon.metadata as Record<string, unknown>) || {};
+          const addonAcres = parseLotAcres(addon.name);
+          if (
+            addonAcres !== null &&
+            !generatedYardAcres.has(addonAcres) &&
+            addonMeta.ruleGenerated &&
+            !addonMeta.manualOverride
+          ) {
+            await storage.deleteServicePricingItem(addon.id, companyId);
+          }
         }
-      }
 
-      const updatedPricing = await storage.getServicePricing(companyId, "recurring_service");
-      res.json({ success: true, itemsGenerated: generatedNames.size, items: updatedPricing });
-    } catch (err) { handleError(res, err); }
-  });
+        const updatedPricing = await storage.getServicePricing(companyId, "recurring_service");
+        res.json({ success: true, itemsGenerated: generatedNames.size, items: updatedPricing });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // ================ Service Packages ================
   app.get("/api/packages", isAuthenticated, async (req: Request, res: Response) => {
@@ -289,7 +380,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const packages = await storage.getServicePackages(companyId);
       res.json(packages);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/packages", isAuthenticated, async (req: Request, res: Response) => {
@@ -299,7 +392,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const parsed = insertServicePackageSchema.parse({ ...req.body, companyId });
       const pkg = await storage.createServicePackage(parsed);
       res.status(201).json(pkg);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/packages/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -309,7 +404,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const parsed = insertServicePackageSchema.partial().parse(req.body);
       const pkg = await storage.updateServicePackage(p(req.params.id), companyId, parsed);
       res.json(pkg);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/packages/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -318,78 +415,89 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       requireRole(role);
       await storage.deleteServicePackage(p(req.params.id), companyId);
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/pricing/confirm-and-generate-packages", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const pricing = await storage.getServicePricing(companyId);
-      const recurringItems = pricing.filter(
-        (p) => p.category === "recurring_service" && p.isActive && !(p.metadata as any)?.callForQuote
-      );
+  app.post(
+    "/api/pricing/confirm-and-generate-packages",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const pricing = await storage.getServicePricing(companyId);
+        const recurringItems = pricing.filter(
+          (p) =>
+            p.category === "recurring_service" && p.isActive && !(p.metadata as any)?.callForQuote
+        );
 
-      const existingPackages = await storage.getServicePackages(companyId);
-      for (const pkg of existingPackages) {
-        await storage.deleteServicePackage(pkg.id, companyId);
-      }
-
-      const addOns = pricing.filter((p) => p.category === "add_on" && p.isActive);
-      const lotAddOn = addOns.find((a) => a.name.toLowerCase().includes("lot size"));
-      const wasteAddOn = addOns.find((a) => a.name.toLowerCase().includes("waste"));
-      const deodorizingAddOn = addOns.find((a) => a.name.toLowerCase().includes("deodori"));
-
-      const frequencyGroups: Record<string, typeof recurringItems> = {};
-      for (const item of recurringItems) {
-        const nameLower = item.name.toLowerCase();
-        let freq = "weekly";
-        if (nameLower.includes("twice")) freq = "twice_weekly";
-        else if (nameLower.includes("bi-weekly") || nameLower.includes("biweekly")) freq = "biweekly";
-        if (!frequencyGroups[freq]) frequencyGroups[freq] = [];
-        frequencyGroups[freq].push(item);
-      }
-
-      let sortOrder = 1;
-      for (const [freq, items] of Object.entries(frequencyGroups)) {
-        const freqLabel = freq === "twice_weekly" ? "Twice Weekly" : freq === "biweekly" ? "Bi-Weekly" : "Weekly";
-        const displayFreq = freq === "twice_weekly" ? "weekly" : freq;
-
-        for (const item of items) {
-          const includedItems: string[] = [item.name];
-          if (lotAddOn) includedItems.push(lotAddOn.name);
-
-          const dogMatch = item.name.match(/(\d+)\+?\s*Dogs?/i);
-          const dogCount = dogMatch ? parseInt(dogMatch[1]) : 1;
-
-          let totalPrice = parseFloat(item.basePrice);
-          if (freq === "twice_weekly") totalPrice = totalPrice * 2;
-
-          if (dogCount >= 3 && wasteAddOn) {
-            includedItems.push(wasteAddOn.name);
-            totalPrice += parseFloat(wasteAddOn.basePrice);
-          }
-          if (dogCount >= 4 && deodorizingAddOn) {
-            includedItems.push(deodorizingAddOn.name);
-            totalPrice += parseFloat(deodorizingAddOn.basePrice);
-          }
-
-          await storage.createServicePackage({
-            companyId,
-            name: `${freqLabel} - ${dogMatch ? dogMatch[0] : "1 Dog"}`,
-            description: `${freqLabel} service for ${dogMatch ? dogMatch[0].toLowerCase() : "1 dog"}`,
-            frequency: displayFreq,
-            basePrice: totalPrice.toFixed(2),
-            includedItems,
-            sortOrder: sortOrder++,
-          });
+        const existingPackages = await storage.getServicePackages(companyId);
+        for (const pkg of existingPackages) {
+          await storage.deleteServicePackage(pkg.id, companyId);
         }
-      }
 
-      const newPackages = await storage.getServicePackages(companyId);
-      res.json({ success: true, packagesCreated: newPackages.length, packages: newPackages });
-    } catch (err) { handleError(res, err); }
-  });
+        const addOns = pricing.filter((p) => p.category === "add_on" && p.isActive);
+        const lotAddOn = addOns.find((a) => a.name.toLowerCase().includes("lot size"));
+        const wasteAddOn = addOns.find((a) => a.name.toLowerCase().includes("waste"));
+        const deodorizingAddOn = addOns.find((a) => a.name.toLowerCase().includes("deodori"));
+
+        const frequencyGroups: Record<string, typeof recurringItems> = {};
+        for (const item of recurringItems) {
+          const nameLower = item.name.toLowerCase();
+          let freq = "weekly";
+          if (nameLower.includes("twice")) freq = "twice_weekly";
+          else if (nameLower.includes("bi-weekly") || nameLower.includes("biweekly"))
+            freq = "biweekly";
+          if (!frequencyGroups[freq]) frequencyGroups[freq] = [];
+          frequencyGroups[freq].push(item);
+        }
+
+        let sortOrder = 1;
+        for (const [freq, items] of Object.entries(frequencyGroups)) {
+          const freqLabel =
+            freq === "twice_weekly" ? "Twice Weekly" : freq === "biweekly" ? "Bi-Weekly" : "Weekly";
+          const displayFreq = freq === "twice_weekly" ? "weekly" : freq;
+
+          for (const item of items) {
+            const includedItems: string[] = [item.name];
+            if (lotAddOn) includedItems.push(lotAddOn.name);
+
+            const dogMatch = item.name.match(/(\d+)\+?\s*Dogs?/i);
+            const dogCount = dogMatch ? parseInt(dogMatch[1]) : 1;
+
+            let totalPrice = parseFloat(item.basePrice);
+            if (freq === "twice_weekly") totalPrice = totalPrice * 2;
+
+            if (dogCount >= 3 && wasteAddOn) {
+              includedItems.push(wasteAddOn.name);
+              totalPrice += parseFloat(wasteAddOn.basePrice);
+            }
+            if (dogCount >= 4 && deodorizingAddOn) {
+              includedItems.push(deodorizingAddOn.name);
+              totalPrice += parseFloat(deodorizingAddOn.basePrice);
+            }
+
+            await storage.createServicePackage({
+              companyId,
+              name: `${freqLabel} - ${dogMatch ? dogMatch[0] : "1 Dog"}`,
+              description: `${freqLabel} service for ${dogMatch ? dogMatch[0].toLowerCase() : "1 dog"}`,
+              frequency: displayFreq,
+              basePrice: totalPrice.toFixed(2),
+              includedItems,
+              sortOrder: sortOrder++,
+            });
+          }
+        }
+
+        const newPackages = await storage.getServicePackages(companyId);
+        res.json({ success: true, packagesCreated: newPackages.length, packages: newPackages });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // ================ Pricing Calculator ================
 
@@ -403,25 +511,31 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         raw.pricingRules = DEFAULT_PRICING_RULES;
       }
       res.json(raw);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  const pricingRulesSchema = z.object({
-    basePrices: z.object({
-      weekly: z.number().min(0),
-      biWeekly: z.number().min(0),
-      twiceWeekly: z.number().min(0),
-    }),
-    perDogRule: z.object({
-      incrementDogs: z.number().int().min(1),
-      surchargeAmount: z.number().min(0),
-      maxDogs: z.number().int().min(1).max(20),
-    }),
-    yardSizeTiers: z.array(z.object({
-      upToAcres: z.number().min(0),
-      surcharge: z.number().min(0),
-    })),
-  }).optional();
+  const pricingRulesSchema = z
+    .object({
+      basePrices: z.object({
+        weekly: z.number().min(0),
+        biWeekly: z.number().min(0),
+        twiceWeekly: z.number().min(0),
+      }),
+      perDogRule: z.object({
+        incrementDogs: z.number().int().min(1),
+        surchargeAmount: z.number().min(0),
+        maxDogs: z.number().int().min(1).max(20),
+      }),
+      yardSizeTiers: z.array(
+        z.object({
+          upToAcres: z.number().min(0),
+          surcharge: z.number().min(0),
+        })
+      ),
+    })
+    .optional();
 
   const pricingConfigSchema = z.object({
     pricingRules: pricingRulesSchema,
@@ -486,7 +600,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const merged: PricingConfig = { ...DEFAULT_PRICING_CONFIG, ...existing, ...config };
       await storage.updateCompany(companyId, { pricingConfig: merged });
       res.json(merged);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/pricing-config", isAuthenticated, async (req: Request, res: Response) => {
@@ -495,12 +611,17 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       requireRole(role);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
-      const existing: PricingConfig = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
+      const existing: PricingConfig = {
+        ...DEFAULT_PRICING_CONFIG,
+        ...(company.pricingConfig || {}),
+      };
       const updates = pricingConfigSchema.parse(req.body);
       const merged: PricingConfig = { ...existing, ...updates };
       await storage.updateCompany(companyId, { pricingConfig: merged });
       res.json(merged);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/pricing/calculate", isAuthenticated, async (req: Request, res: Response) => {
@@ -544,93 +665,110 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
 
       const result = calculatePrice(inputs, tenantConfig);
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/pricing/calculate-and-save", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, userId } = await getCompanyContext(req);
-      const company = await storage.getCompany(companyId);
-      if (!company) return res.status(404).json({ error: "Company not found" });
+  app.post(
+    "/api/pricing/calculate-and-save",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, userId } = await getCompanyContext(req);
+        const company = await storage.getCompany(companyId);
+        if (!company) return res.status(404).json({ error: "Company not found" });
 
-      const body = calcInputSchema.parse(req.body);
+        const body = calcInputSchema.parse(req.body);
 
-      let acres = body.yardSizeAcres;
-      if (!acres && body.yardSizeSqft) acres = sqftToAcres(body.yardSizeSqft);
-      if (!acres && body.yardSizeLabel) acres = yardSizeLabelToAcres(body.yardSizeLabel);
-      if (!acres && body.propertyId) {
-        const prop = await storage.getProperty(body.propertyId, companyId);
-        if (prop) {
-          if (prop.measuredYardSqft) {
-            acres = sqftToAcres(prop.measuredYardSqft);
-          } else {
-            const parsed = parseLotSizeStringToAcres((prop as any).lotSize);
-            acres = parsed !== null ? parsed : yardSizeLabelToAcres(prop.yardSize);
+        let acres = body.yardSizeAcres;
+        if (!acres && body.yardSizeSqft) acres = sqftToAcres(body.yardSizeSqft);
+        if (!acres && body.yardSizeLabel) acres = yardSizeLabelToAcres(body.yardSizeLabel);
+        if (!acres && body.propertyId) {
+          const prop = await storage.getProperty(body.propertyId, companyId);
+          if (prop) {
+            if (prop.measuredYardSqft) {
+              acres = sqftToAcres(prop.measuredYardSqft);
+            } else {
+              const parsed = parseLotSizeStringToAcres((prop as any).lotSize);
+              acres = parsed !== null ? parsed : yardSizeLabelToAcres(prop.yardSize);
+            }
           }
         }
+        if (!acres) acres = 0.1;
+
+        let tenantConfig = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
+        if (body.pricingModeOverride) {
+          tenantConfig.pricingMode = body.pricingModeOverride;
+        }
+
+        const inputs: PriceCalculatorInputs = {
+          yardSizeAcres: acres,
+          dogCount: body.dogCount,
+          serviceFrequency: body.serviceFrequency,
+          yardDifficulty: body.yardDifficulty,
+          distanceFromNearestStopMiles: body.distanceFromNearestStopMiles,
+          routeStopsPerMile: body.routeStopsPerMile,
+          currentPriceCents: body.currentPriceCents,
+        };
+
+        const result = calculatePrice(inputs, tenantConfig);
+
+        const rec = await storage.createPriceRecommendation({
+          companyId,
+          propertyId: body.propertyId || null,
+          serviceFrequency: body.serviceFrequency,
+          yardSizeAcres: String(acres),
+          dogCount: body.dogCount,
+          yardDifficulty: body.yardDifficulty,
+          routeId: body.routeId || null,
+          minimumPriceCents: result.minimumPriceCents,
+          recommendedPriceCents: result.recommendedPriceCents,
+          premiumPriceCents: result.premiumPriceCents,
+          jobMinutes: String(result.derived.jobMinutes),
+          serviceMinutes: String(result.breakdown.serviceMinutes),
+          travelMinutes: String(result.breakdown.travelMinutes),
+          densityMultiplier: String(result.breakdown.densityMultiplier),
+          breakdownJson: result.breakdown as any,
+          inputsJson: result.inputsUsed as any,
+          calculationVersion: "1.0",
+          createdByUserId: userId,
+          source: "manual",
+        });
+
+        res.json({ ...result, recommendationId: rec.id });
+      } catch (err) {
+        handleError(res, err);
       }
-      if (!acres) acres = 0.1;
+    }
+  );
 
-      let tenantConfig = { ...DEFAULT_PRICING_CONFIG, ...(company.pricingConfig || {}) };
-      if (body.pricingModeOverride) {
-        tenantConfig.pricingMode = body.pricingModeOverride;
+  app.get(
+    "/api/pricing/recommendations/:propertyId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const recs = await storage.getPriceRecommendations(companyId, p(req.params.propertyId));
+        res.json(recs);
+      } catch (err) {
+        handleError(res, err);
       }
-
-      const inputs: PriceCalculatorInputs = {
-        yardSizeAcres: acres,
-        dogCount: body.dogCount,
-        serviceFrequency: body.serviceFrequency,
-        yardDifficulty: body.yardDifficulty,
-        distanceFromNearestStopMiles: body.distanceFromNearestStopMiles,
-        routeStopsPerMile: body.routeStopsPerMile,
-        currentPriceCents: body.currentPriceCents,
-      };
-
-      const result = calculatePrice(inputs, tenantConfig);
-
-      const rec = await storage.createPriceRecommendation({
-        companyId,
-        propertyId: body.propertyId || null,
-        serviceFrequency: body.serviceFrequency,
-        yardSizeAcres: String(acres),
-        dogCount: body.dogCount,
-        yardDifficulty: body.yardDifficulty,
-        routeId: body.routeId || null,
-        minimumPriceCents: result.minimumPriceCents,
-        recommendedPriceCents: result.recommendedPriceCents,
-        premiumPriceCents: result.premiumPriceCents,
-        jobMinutes: String(result.derived.jobMinutes),
-        serviceMinutes: String(result.breakdown.serviceMinutes),
-        travelMinutes: String(result.breakdown.travelMinutes),
-        densityMultiplier: String(result.breakdown.densityMultiplier),
-        breakdownJson: result.breakdown as any,
-        inputsJson: result.inputsUsed as any,
-        calculationVersion: "1.0",
-        createdByUserId: userId,
-        source: "manual",
-      });
-
-      res.json({ ...result, recommendationId: rec.id });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.get("/api/pricing/recommendations/:propertyId", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const recs = await storage.getPriceRecommendations(companyId, p(req.params.propertyId));
-      res.json(recs);
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
   // ================ Customer Profitability ================
 
   app.get("/api/profitability/summary", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { calculateAllCustomerProfitability } = await import("../services/profitability-calculator");
+      const { calculateAllCustomerProfitability } =
+        await import("../services/profitability-calculator");
       const results = await calculateAllCustomerProfitability(companyId);
       res.json(results);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ─── Business Overview ────────────────────────────────────────────────────
@@ -644,9 +782,11 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const allContactsRaw = await storage.getContacts(companyId);
       const allInvoices = await storage.getInvoices(companyId);
       const allPlansRaw = await storage.getServicePlans(companyId, {});
-      const allActivePlans = allPlansRaw.filter(p => p.isActive && !p.isStopOnly);
+      const allActivePlans = allPlansRaw.filter((p) => p.isActive && !p.isStopOnly);
 
-      const analyticsPlanPriceMap = new Map(allPlansRaw.map(p => [p.id, parseFloat(p.pricePerVisit) || 0]));
+      const analyticsPlanPriceMap = new Map(
+        allPlansRaw.map((p) => [p.id, parseFloat(p.pricePerVisit) || 0])
+      );
 
       // 12-month revenue
       const monthlyRevenue: { month: string; revenue: number }[] = [];
@@ -658,7 +798,8 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         if (revenue === 0) {
           const periodVisits = await storage.getVisitsForDateRange(companyId, start, end);
           for (const v of periodVisits) {
-            if (v.status === "completed") revenue += analyticsPlanPriceMap.get(v.servicePlanId) || 0;
+            if (v.status === "completed")
+              revenue += analyticsPlanPriceMap.get(v.servicePlanId) || 0;
           }
           revenue = Math.round(revenue * 100) / 100;
         }
@@ -677,7 +818,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         contactsByCreatedMonth[key] = (contactsByCreatedMonth[key] || 0) + 1;
       }
       const windowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-      let runningTotal = allContactsRaw.filter(c => new Date(c.createdAt) < windowStart).length;
+      let runningTotal = allContactsRaw.filter((c) => new Date(c.createdAt) < windowStart).length;
       for (let i = 11; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
@@ -695,7 +836,12 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const dow = currentMonday.getDay();
       currentMonday.setDate(currentMonday.getDate() - (dow === 0 ? 6 : dow - 1));
       currentMonday.setHours(0, 0, 0, 0);
-      const weeklyCompletion: { week: string; completed: number; total: number; completionRate: number }[] = [];
+      const weeklyCompletion: {
+        week: string;
+        completed: number;
+        total: number;
+        completionRate: number;
+      }[] = [];
       for (let w = 7; w >= 0; w--) {
         const ws = new Date(currentMonday);
         ws.setDate(ws.getDate() - w * 7);
@@ -704,7 +850,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         const wss = `${ws.getFullYear()}-${String(ws.getMonth() + 1).padStart(2, "0")}-${String(ws.getDate()).padStart(2, "0")}`;
         const wes = `${we.getFullYear()}-${String(we.getMonth() + 1).padStart(2, "0")}-${String(we.getDate()).padStart(2, "0")}`;
         const wv = await storage.getVisitsForDateRange(companyId, wss, wes);
-        const comp = wv.filter(v => v.status === "completed").length;
+        const comp = wv.filter((v) => v.status === "completed").length;
         const tot = wv.length;
         weeklyCompletion.push({
           week: `${ws.toLocaleString("default", { month: "short" })} ${ws.getDate()}`,
@@ -715,10 +861,14 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       }
 
       // Profitability mix
-      const { calculateAllCustomerProfitability } = await import("../services/profitability-calculator");
+      const { calculateAllCustomerProfitability } =
+        await import("../services/profitability-calculator");
       const profitResults = await calculateAllCustomerProfitability(companyId);
-      let profitableCount = 0, marginalCount = 0, unprofitableCount = 0;
-      let totalMonthlyRevenueCents = 0, totalMonthlyCostCents = 0;
+      let profitableCount = 0,
+        marginalCount = 0,
+        unprofitableCount = 0;
+      let totalMonthlyRevenueCents = 0,
+        totalMonthlyCostCents = 0;
       for (const p of profitResults) {
         if (p.status === "profitable") profitableCount++;
         else if (p.status === "marginal") marginalCount++;
@@ -726,9 +876,12 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         totalMonthlyRevenueCents += p.monthlyRevenueCents;
         totalMonthlyCostCents += p.monthlyCostCents;
       }
-      const avgProfitMarginPct = totalMonthlyRevenueCents > 0
-        ? Math.round(((totalMonthlyRevenueCents - totalMonthlyCostCents) / totalMonthlyRevenueCents) * 1000) / 10
-        : 0;
+      const avgProfitMarginPct =
+        totalMonthlyRevenueCents > 0
+          ? Math.round(
+              ((totalMonthlyRevenueCents - totalMonthlyCostCents) / totalMonthlyRevenueCents) * 1000
+            ) / 10
+          : 0;
       const profitabilityMix = [
         { name: "Profitable", value: profitableCount, color: "#22c55e" },
         { name: "Marginal", value: marginalCount, color: "#eab308" },
@@ -736,7 +889,12 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       ];
 
       // MRR from active service plans
-      const visitsPerMonthByFreq: Record<string, number> = { weekly: 4.33, biweekly: 2.17, monthly: 1, onetime: 0 };
+      const visitsPerMonthByFreq: Record<string, number> = {
+        weekly: 4.33,
+        biweekly: 2.17,
+        monthly: 1,
+        onetime: 0,
+      };
       let mrrCents = 0;
       for (const p of allActivePlans) {
         const freq = visitsPerMonthByFreq[p.frequency] ?? 0;
@@ -744,14 +902,19 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       }
 
       // Invoice collection rate
-      const paidTotal = allInvoices.filter(i => i.status === "paid").reduce((s, i) => s + parseFloat(i.total), 0);
-      const outstandingTotal = allInvoices.filter(i => i.status === "sent" || i.status === "pending").reduce((s, i) => s + parseFloat(i.total), 0);
-      const collectionRate = (paidTotal + outstandingTotal) > 0
-        ? Math.round((paidTotal / (paidTotal + outstandingTotal)) * 100)
-        : 100;
+      const paidTotal = allInvoices
+        .filter((i) => i.status === "paid")
+        .reduce((s, i) => s + parseFloat(i.total), 0);
+      const outstandingTotal = allInvoices
+        .filter((i) => i.status === "sent" || i.status === "pending")
+        .reduce((s, i) => s + parseFloat(i.total), 0);
+      const collectionRate =
+        paidTotal + outstandingTotal > 0
+          ? Math.round((paidTotal / (paidTotal + outstandingTotal)) * 100)
+          : 100;
 
       // Active customers
-      const activeCustomers = allContactsRaw.filter(c => c.status === "active").length;
+      const activeCustomers = allContactsRaw.filter((c) => c.status === "active").length;
 
       // Recent completion rate (30 days)
       const thirtyAgo = new Date(now);
@@ -759,11 +922,15 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const recentVisits = await storage.getVisitsForDateRange(
         companyId,
         thirtyAgo.toISOString().split("T")[0],
-        now.toISOString().split("T")[0],
+        now.toISOString().split("T")[0]
       );
-      const visitCompletionRate = recentVisits.length > 0
-        ? Math.round((recentVisits.filter(v => v.status === "completed").length / recentVisits.length) * 100)
-        : 0;
+      const visitCompletionRate =
+        recentVisits.length > 0
+          ? Math.round(
+              (recentVisits.filter((v) => v.status === "completed").length / recentVisits.length) *
+                100
+            )
+          : 0;
 
       res.json({
         kpis: {
@@ -781,82 +948,136 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         profitabilityMix,
         weeklyCompletion,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.get("/api/business-overview/assessment", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const company = await storage.getCompany(companyId);
-      const tz = company?.timezone || "America/New_York";
-      const now = new Date();
+  app.get(
+    "/api/business-overview/assessment",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const company = await storage.getCompany(companyId);
+        const tz = company?.timezone || "America/New_York";
+        const now = new Date();
 
-      const allContacts = await storage.getContacts(companyId);
-      const allInvoices = await storage.getInvoices(companyId);
-      const allPlansRaw = await storage.getServicePlans(companyId, {});
-      const allActivePlans = allPlansRaw.filter(p => p.isActive && !p.isStopOnly);
+        const allContacts = await storage.getContacts(companyId);
+        const allInvoices = await storage.getInvoices(companyId);
+        const allPlansRaw = await storage.getServicePlans(companyId, {});
+        const allActivePlans = allPlansRaw.filter((p) => p.isActive && !p.isStopOnly);
 
-      const activeCustomers = allContacts.filter(c => c.status === "active").length;
-      const cancelledCustomers = allContacts.filter(c => c.status === "cancelled").length;
+        const activeCustomers = allContacts.filter((c) => c.status === "active").length;
+        const cancelledCustomers = allContacts.filter((c) => c.status === "cancelled").length;
 
-      const visitsPerMonthByFreq: Record<string, number> = { weekly: 4.33, biweekly: 2.17, monthly: 1, onetime: 0 };
-      let mrrCents = 0;
-      for (const p of allActivePlans) {
-        mrrCents += Math.round(parseFloat(p.pricePerVisit) * 100 * (visitsPerMonthByFreq[p.frequency] ?? 0));
-      }
+        const visitsPerMonthByFreq: Record<string, number> = {
+          weekly: 4.33,
+          biweekly: 2.17,
+          monthly: 1,
+          onetime: 0,
+        };
+        let mrrCents = 0;
+        for (const p of allActivePlans) {
+          mrrCents += Math.round(
+            parseFloat(p.pricePerVisit) * 100 * (visitsPerMonthByFreq[p.frequency] ?? 0)
+          );
+        }
 
-      const paidInvoices = allInvoices.filter(i => i.status === "paid");
-      const paidTotal = paidInvoices.reduce((s, i) => s + parseFloat(i.total), 0);
-      const outstandingTotal = allInvoices.filter(i => i.status === "sent" || i.status === "pending").reduce((s, i) => s + parseFloat(i.total), 0);
-      const collectionRate = (paidTotal + outstandingTotal) > 0 ? Math.round((paidTotal / (paidTotal + outstandingTotal)) * 100) : 100;
+        const paidInvoices = allInvoices.filter((i) => i.status === "paid");
+        const paidTotal = paidInvoices.reduce((s, i) => s + parseFloat(i.total), 0);
+        const outstandingTotal = allInvoices
+          .filter((i) => i.status === "sent" || i.status === "pending")
+          .reduce((s, i) => s + parseFloat(i.total), 0);
+        const collectionRate =
+          paidTotal + outstandingTotal > 0
+            ? Math.round((paidTotal / (paidTotal + outstandingTotal)) * 100)
+            : 100;
 
-      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-      const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
-      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0];
-      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0];
-      const thisMonthRev = await storage.getRevenueForPeriod(companyId, thisMonthStart, thisMonthEnd, tz);
-      const lastMonthRev = await storage.getRevenueForPeriod(companyId, lastMonthStart, lastMonthEnd, tz);
-      const revenueGrowthPct = lastMonthRev > 0 ? Math.round(((thisMonthRev - lastMonthRev) / lastMonthRev) * 100) : 0;
+        const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+          .toISOString()
+          .split("T")[0];
+        const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+          .toISOString()
+          .split("T")[0];
+        const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+          .toISOString()
+          .split("T")[0];
+        const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
+          .toISOString()
+          .split("T")[0];
+        const thisMonthRev = await storage.getRevenueForPeriod(
+          companyId,
+          thisMonthStart,
+          thisMonthEnd,
+          tz
+        );
+        const lastMonthRev = await storage.getRevenueForPeriod(
+          companyId,
+          lastMonthStart,
+          lastMonthEnd,
+          tz
+        );
+        const revenueGrowthPct =
+          lastMonthRev > 0 ? Math.round(((thisMonthRev - lastMonthRev) / lastMonthRev) * 100) : 0;
 
-      const thirtyAgo = new Date(now);
-      thirtyAgo.setDate(thirtyAgo.getDate() - 30);
-      const recentVisits = await storage.getVisitsForDateRange(companyId, thirtyAgo.toISOString().split("T")[0], now.toISOString().split("T")[0]);
-      const visitCompletionRate = recentVisits.length > 0
-        ? Math.round((recentVisits.filter(v => v.status === "completed").length / recentVisits.length) * 100) : 0;
+        const thirtyAgo = new Date(now);
+        thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+        const recentVisits = await storage.getVisitsForDateRange(
+          companyId,
+          thirtyAgo.toISOString().split("T")[0],
+          now.toISOString().split("T")[0]
+        );
+        const visitCompletionRate =
+          recentVisits.length > 0
+            ? Math.round(
+                (recentVisits.filter((v) => v.status === "completed").length /
+                  recentVisits.length) *
+                  100
+              )
+            : 0;
 
-      const { calculateAllCustomerProfitability } = await import("../services/profitability-calculator");
-      const profitResults = await calculateAllCustomerProfitability(companyId);
-      let profitableCount = 0, marginalCount = 0, unprofitableCount = 0;
-      let totalMonthlyRevCents = 0, totalMonthlyCostCents = 0;
-      for (const p of profitResults) {
-        if (p.status === "profitable") profitableCount++;
-        else if (p.status === "marginal") marginalCount++;
-        else unprofitableCount++;
-        totalMonthlyRevCents += p.monthlyRevenueCents;
-        totalMonthlyCostCents += p.monthlyCostCents;
-      }
-      const avgProfitMarginPct = totalMonthlyRevCents > 0
-        ? Math.round(((totalMonthlyRevCents - totalMonthlyCostCents) / totalMonthlyRevCents) * 1000) / 10 : 0;
+        const { calculateAllCustomerProfitability } =
+          await import("../services/profitability-calculator");
+        const profitResults = await calculateAllCustomerProfitability(companyId);
+        let profitableCount = 0,
+          marginalCount = 0,
+          unprofitableCount = 0;
+        let totalMonthlyRevCents = 0,
+          totalMonthlyCostCents = 0;
+        for (const p of profitResults) {
+          if (p.status === "profitable") profitableCount++;
+          else if (p.status === "marginal") marginalCount++;
+          else unprofitableCount++;
+          totalMonthlyRevCents += p.monthlyRevenueCents;
+          totalMonthlyCostCents += p.monthlyCostCents;
+        }
+        const avgProfitMarginPct =
+          totalMonthlyRevCents > 0
+            ? Math.round(
+                ((totalMonthlyRevCents - totalMonthlyCostCents) / totalMonthlyRevCents) * 1000
+              ) / 10
+            : 0;
 
-      const factSheet = {
-        businessName: company?.name || "Your Business",
-        activeCustomers,
-        cancelledCustomers,
-        totalCustomers: allContacts.length,
-        mrrDollars: Math.round(mrrCents / 100),
-        collectionRatePct: collectionRate,
-        visitCompletionRatePct: visitCompletionRate,
-        avgProfitMarginPct,
-        profitableCustomers: profitableCount,
-        marginalCustomers: marginalCount,
-        unprofitableCustomers: unprofitableCount,
-        thisMonthRevenueDollars: Math.round(thisMonthRev),
-        lastMonthRevenueDollars: Math.round(lastMonthRev),
-        revenueGrowthPct,
-        paidInvoiceCount: paidInvoices.length,
-      };
+        const factSheet = {
+          businessName: company?.name || "Your Business",
+          activeCustomers,
+          cancelledCustomers,
+          totalCustomers: allContacts.length,
+          mrrDollars: Math.round(mrrCents / 100),
+          collectionRatePct: collectionRate,
+          visitCompletionRatePct: visitCompletionRate,
+          avgProfitMarginPct,
+          profitableCustomers: profitableCount,
+          marginalCustomers: marginalCount,
+          unprofitableCustomers: unprofitableCount,
+          thisMonthRevenueDollars: Math.round(thisMonthRev),
+          lastMonthRevenueDollars: Math.round(lastMonthRev),
+          revenueGrowthPct,
+          paidInvoiceCount: paidInvoices.length,
+        };
 
-      const systemPrompt = `You are a business performance analyst (CFO + COO dual perspective) for a pet waste removal company.
+        const systemPrompt = `You are a business performance analyst (CFO + COO dual perspective) for a pet waste removal company.
 You will receive a fact sheet with key business metrics. Produce a structured assessment in JSON.
 
 Return exactly this JSON shape:
@@ -883,194 +1104,278 @@ Rules:
 - recommendations: max 4, ranked by priority, cite exact numbers from the fact sheet
 - NEVER invent numbers not present in the fact sheet`;
 
-      const OpenAI = (await import("openai")).default;
-      const ai = new OpenAI({
-        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
-      });
+        const OpenAI = (await import("openai")).default;
+        const ai = new OpenAI({
+          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
+        });
 
-      const completion = await ai.chat.completions.create({
-        model: "gpt-4o-mini",
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-        max_tokens: 1500,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: JSON.stringify(factSheet, null, 2) },
-        ],
-      });
+        const completion = await ai.chat.completions.create({
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          temperature: 0.2,
+          max_tokens: 1500,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: JSON.stringify(factSheet, null, 2) },
+          ],
+        });
 
-      const raw = completion.choices[0]?.message?.content ?? "{}";
-      let parsed: any;
-      try { parsed = JSON.parse(raw); } catch { return res.status(503).json({ message: "Failed to parse AI response" }); }
-
-      const healthScore = typeof parsed.healthScore === "number" ? parsed.healthScore : null;
-      const verdict = typeof parsed.verdict === "string" ? parsed.verdict : "";
-
-      let scoreDelta: number | null = null;
-      if (healthScore !== null) {
-        const history = await storage.getBusinessAssessments(companyId, 50);
-        const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const priorMonthAssessment = history.find(h => new Date(h.createdAt) < currentMonthStart);
-        if (priorMonthAssessment) {
-          scoreDelta = healthScore - priorMonthAssessment.score;
+        const raw = completion.choices[0]?.message?.content ?? "{}";
+        let parsed: any;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          return res.status(503).json({ message: "Failed to parse AI response" });
         }
-        await storage.saveBusinessAssessment({ companyId, score: healthScore, verdict });
-      }
 
-      res.json({ ...parsed, scoreDelta });
-    } catch (err) {
-      if ((err as any)?.status === 429 || (err as any)?.code === "insufficient_quota") {
-        return res.status(503).json({ message: "AI service temporarily unavailable" });
+        const healthScore = typeof parsed.healthScore === "number" ? parsed.healthScore : null;
+        const verdict = typeof parsed.verdict === "string" ? parsed.verdict : "";
+
+        let scoreDelta: number | null = null;
+        if (healthScore !== null) {
+          const history = await storage.getBusinessAssessments(companyId, 50);
+          const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const priorMonthAssessment = history.find(
+            (h) => new Date(h.createdAt) < currentMonthStart
+          );
+          if (priorMonthAssessment) {
+            scoreDelta = healthScore - priorMonthAssessment.score;
+          }
+          await storage.saveBusinessAssessment({ companyId, score: healthScore, verdict });
+        }
+
+        res.json({ ...parsed, scoreDelta });
+      } catch (err) {
+        if ((err as any)?.status === 429 || (err as any)?.code === "insufficient_quota") {
+          return res.status(503).json({ message: "AI service temporarily unavailable" });
+        }
+        handleError(res, err);
       }
-      handleError(res, err);
     }
-  });
+  );
 
-  app.get("/api/business-overview/assessment-history", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const history = await storage.getBusinessAssessments(companyId, 13);
-      res.json(history);
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.get("/api/profitability/customer/:contactId", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const { calculateCustomerProfitability } = await import("../services/profitability-calculator");
-      const result = await calculateCustomerProfitability(companyId, p(req.params.contactId));
-      if (!result) return res.status(404).json({ message: "No profitability data for this customer" });
-      res.json(result);
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.get("/api/profitability/customer/:contactId/suggestions", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const { generateProfitabilitySuggestions } = await import("../services/profitability-advisor");
-      const suggestions = await generateProfitabilitySuggestions(companyId, p(req.params.contactId));
-      res.json({ suggestions });
-    } catch (err: any) {
-      if (err?.status === 429 || err?.code === "insufficient_quota" || (err?.message && err.message.includes("OpenAI"))) {
-        return res.status(503).json({ message: "AI service temporarily unavailable. Please try again later." });
+  app.get(
+    "/api/business-overview/assessment-history",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const history = await storage.getBusinessAssessments(companyId, 13);
+        res.json(history);
+      } catch (err) {
+        handleError(res, err);
       }
-      handleError(res, err);
     }
-  });
+  );
 
-  app.get("/api/contacts/:id/cost-overrides", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ message: "Contact not found" });
-      res.json({ costOverrides: contact.costOverrides || null });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.patch("/api/contacts/:id/cost-overrides", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ message: "Contact not found" });
-      const costOverridesSchema = z.object({
-        techHourlyWageCents: z.number().min(0).optional().nullable(),
-        burdenMultiplier: z.number().min(1).max(5).optional().nullable(),
-        distanceFromNearestStopMiles: z.number().min(0).max(100).optional().nullable(),
-        overheadAllocationCents: z.number().min(0).optional().nullable(),
-      });
-      const parsed = costOverridesSchema.parse(req.body);
-      const cleaned: Record<string, number> = {};
-      for (const [k, v] of Object.entries(parsed)) {
-        if (v !== null && v !== undefined) cleaned[k] = v;
+  app.get(
+    "/api/profitability/customer/:contactId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const { calculateCustomerProfitability } =
+          await import("../services/profitability-calculator");
+        const result = await calculateCustomerProfitability(companyId, p(req.params.contactId));
+        if (!result)
+          return res.status(404).json({ message: "No profitability data for this customer" });
+        res.json(result);
+      } catch (err) {
+        handleError(res, err);
       }
-      const overrides = Object.keys(cleaned).length > 0 ? cleaned : null;
-      await storage.updateContact(p(req.params.id), companyId, { costOverrides: overrides });
-      res.json({ costOverrides: overrides });
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
+
+  app.get(
+    "/api/profitability/customer/:contactId/suggestions",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const { generateProfitabilitySuggestions } =
+          await import("../services/profitability-advisor");
+        const suggestions = await generateProfitabilitySuggestions(
+          companyId,
+          p(req.params.contactId)
+        );
+        res.json({ suggestions });
+      } catch (err: any) {
+        if (
+          err?.status === 429 ||
+          err?.code === "insufficient_quota" ||
+          (err?.message && err.message.includes("OpenAI"))
+        ) {
+          return res
+            .status(503)
+            .json({ message: "AI service temporarily unavailable. Please try again later." });
+        }
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.get(
+    "/api/contacts/:id/cost-overrides",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ message: "Contact not found" });
+        res.json({ costOverrides: contact.costOverrides || null });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.patch(
+    "/api/contacts/:id/cost-overrides",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ message: "Contact not found" });
+        const costOverridesSchema = z.object({
+          techHourlyWageCents: z.number().min(0).optional().nullable(),
+          burdenMultiplier: z.number().min(1).max(5).optional().nullable(),
+          distanceFromNearestStopMiles: z.number().min(0).max(100).optional().nullable(),
+          overheadAllocationCents: z.number().min(0).optional().nullable(),
+        });
+        const parsed = costOverridesSchema.parse(req.body);
+        const cleaned: Record<string, number> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          if (v !== null && v !== undefined) cleaned[k] = v;
+        }
+        const overrides = Object.keys(cleaned).length > 0 ? cleaned : null;
+        await storage.updateContact(p(req.params.id), companyId, { costOverrides: overrides });
+        res.json({ costOverrides: overrides });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.get("/api/overhead-costs/total", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const total = await storage.getTotalMonthlyOverheadCents(companyId);
       res.json({ totalMonthlyOverheadCents: total });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.get("/api/profitability/route-summary", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const { calculateAllCustomerProfitability } = await import("../services/profitability-calculator");
-      const allProfitability = await calculateAllCustomerProfitability(companyId);
-      const routes = await storage.getRoutes(companyId);
-      const plans = await storage.getServicePlans(companyId, { isActive: true });
+  app.get(
+    "/api/profitability/route-summary",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const { calculateAllCustomerProfitability } =
+          await import("../services/profitability-calculator");
+        const allProfitability = await calculateAllCustomerProfitability(companyId);
+        const routes = await storage.getRoutes(companyId);
+        const plans = await storage.getServicePlans(companyId, { isActive: true });
 
-      const planRouteMap = new Map<string, string>();
-      const planContactMap = new Map<string, string>();
-      for (const plan of plans) {
-        if (plan.routeId) planRouteMap.set(plan.id, plan.routeId);
-        planContactMap.set(plan.id, plan.contactId);
-      }
-
-      const routeMap = new Map<string, { routeId: string; routeName: string; dayOfWeek: string; totalStops: number; totalRevenueCents: number; totalCostCents: number; totalProfitCents: number; customers: Array<{ contactId: string; firstName: string; lastName: string; revenueCents: number; costCents: number }> }>();
-
-      for (const route of routes) {
-        routeMap.set(route.id, {
-          routeId: route.id,
-          routeName: route.name,
-          dayOfWeek: route.dayOfWeek ?? "tbd",
-          totalStops: 0,
-          totalRevenueCents: 0,
-          totalCostCents: 0,
-          totalProfitCents: 0,
-          customers: [],
-        });
-      }
-
-      for (const customer of allProfitability) {
-        for (const prop of customer.properties) {
-          const routeId = planRouteMap.get(prop.servicePlanId);
-          if (!routeId || !routeMap.has(routeId)) continue;
-          const routeEntry = routeMap.get(routeId)!;
-          routeEntry.totalStops++;
-          routeEntry.totalRevenueCents += prop.revenuePerVisitCents;
-          routeEntry.totalCostCents += prop.costPerVisitCents;
-          routeEntry.totalProfitCents += prop.profitPerVisitCents;
-
-          let existing = routeEntry.customers.find(c => c.contactId === customer.contactId);
-          if (!existing) {
-            existing = { contactId: customer.contactId, firstName: customer.contactName.split(" ")[0], lastName: customer.contactName.split(" ").slice(1).join(" "), revenueCents: 0, costCents: 0 };
-            routeEntry.customers.push(existing);
-          }
-          existing.revenueCents += prop.revenuePerVisitCents;
-          existing.costCents += prop.costPerVisitCents;
+        const planRouteMap = new Map<string, string>();
+        const planContactMap = new Map<string, string>();
+        for (const plan of plans) {
+          if (plan.routeId) planRouteMap.set(plan.id, plan.routeId);
+          planContactMap.set(plan.id, plan.contactId);
         }
+
+        const routeMap = new Map<
+          string,
+          {
+            routeId: string;
+            routeName: string;
+            dayOfWeek: string;
+            totalStops: number;
+            totalRevenueCents: number;
+            totalCostCents: number;
+            totalProfitCents: number;
+            customers: Array<{
+              contactId: string;
+              firstName: string;
+              lastName: string;
+              revenueCents: number;
+              costCents: number;
+            }>;
+          }
+        >();
+
+        for (const route of routes) {
+          routeMap.set(route.id, {
+            routeId: route.id,
+            routeName: route.name,
+            dayOfWeek: route.dayOfWeek ?? "tbd",
+            totalStops: 0,
+            totalRevenueCents: 0,
+            totalCostCents: 0,
+            totalProfitCents: 0,
+            customers: [],
+          });
+        }
+
+        for (const customer of allProfitability) {
+          for (const prop of customer.properties) {
+            const routeId = planRouteMap.get(prop.servicePlanId);
+            if (!routeId || !routeMap.has(routeId)) continue;
+            const routeEntry = routeMap.get(routeId)!;
+            routeEntry.totalStops++;
+            routeEntry.totalRevenueCents += prop.revenuePerVisitCents;
+            routeEntry.totalCostCents += prop.costPerVisitCents;
+            routeEntry.totalProfitCents += prop.profitPerVisitCents;
+
+            let existing = routeEntry.customers.find((c) => c.contactId === customer.contactId);
+            if (!existing) {
+              existing = {
+                contactId: customer.contactId,
+                firstName: customer.contactName.split(" ")[0],
+                lastName: customer.contactName.split(" ").slice(1).join(" "),
+                revenueCents: 0,
+                costCents: 0,
+              };
+              routeEntry.customers.push(existing);
+            }
+            existing.revenueCents += prop.revenuePerVisitCents;
+            existing.costCents += prop.costPerVisitCents;
+          }
+        }
+
+        const result = Array.from(routeMap.values())
+          .filter((r) => r.totalStops > 0)
+          .map((r) => ({
+            ...r,
+            avgMarginPct:
+              r.totalRevenueCents > 0
+                ? Math.round((r.totalProfitCents / r.totalRevenueCents) * 10000) / 100
+                : 0,
+          }));
+
+        res.json(result);
+      } catch (err) {
+        handleError(res, err);
       }
-
-      const result = Array.from(routeMap.values())
-        .filter(r => r.totalStops > 0)
-        .map(r => ({
-          ...r,
-          avgMarginPct: r.totalRevenueCents > 0 ? Math.round((r.totalProfitCents / r.totalRevenueCents) * 10000) / 100 : 0,
-        }));
-
-      res.json(result);
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
   app.get("/api/profitability/route-map", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { calculateAllCustomerProfitability } = await import("../services/profitability-calculator");
+      const { calculateAllCustomerProfitability } =
+        await import("../services/profitability-calculator");
       const allProfitability = await calculateAllCustomerProfitability(companyId);
       const routes = await storage.getRoutes(companyId);
       const plans = await storage.getServicePlans(companyId, { isActive: true });
       const properties = await storage.getProperties(companyId);
       const contacts = await storage.getContacts(companyId);
 
-      const propertyMap = new Map(properties.map(p => [p.id, p]));
-      const contactMap = new Map(contacts.map(c => [c.id, c]));
+      const propertyMap = new Map(properties.map((p) => [p.id, p]));
+      const contactMap = new Map(contacts.map((c) => [c.id, c]));
 
       const plansByRoute = new Map<string, typeof plans>();
       for (const plan of plans) {
@@ -1079,7 +1384,7 @@ Rules:
         plansByRoute.get(plan.routeId)!.push(plan);
       }
 
-      const profByContact = new Map<string, typeof allProfitability[0]>();
+      const profByContact = new Map<string, (typeof allProfitability)[0]>();
       for (const cp of allProfitability) {
         profByContact.set(cp.contactId, cp);
       }
@@ -1121,20 +1426,23 @@ Rules:
       for (const route of routes) {
         const routePlans = plansByRoute.get(route.id) || [];
         const stops: MapStop[] = [];
-        let totalRev = 0, totalCost = 0, totalProfit = 0;
+        let totalRev = 0,
+          totalCost = 0,
+          totalProfit = 0;
 
         for (const plan of routePlans) {
           const prop = propertyMap.get(plan.propertyId);
           if (!prop || !prop.latitude || !prop.longitude) continue;
           const contact = contactMap.get(plan.contactId);
           const custProf = profByContact.get(plan.contactId);
-          const propProf = custProf?.properties.find(p => p.servicePlanId === plan.id);
+          const propProf = custProf?.properties.find((p) => p.servicePlanId === plan.id);
 
           const rev = propProf?.revenuePerVisitCents ?? 0;
           const cost = propProf?.costPerVisitCents ?? 0;
           const profit = propProf?.profitPerVisitCents ?? 0;
           const margin = rev > 0 ? (profit / rev) * 100 : 0;
-          const status: "profitable" | "marginal" | "unprofitable" = margin > 15 ? "profitable" : margin >= 0 ? "marginal" : "unprofitable";
+          const status: "profitable" | "marginal" | "unprofitable" =
+            margin > 15 ? "profitable" : margin >= 0 ? "marginal" : "unprofitable";
 
           totalRev += rev;
           totalCost += cost;
@@ -1163,7 +1471,8 @@ Rules:
 
         stops.sort((a, b) => a.stopOrder - b.stopOrder);
         const avgMargin = totalRev > 0 ? Math.round((totalProfit / totalRev) * 10000) / 100 : 0;
-        const routeStatus: "profitable" | "marginal" | "unprofitable" = avgMargin > 15 ? "profitable" : avgMargin >= 0 ? "marginal" : "unprofitable";
+        const routeStatus: "profitable" | "marginal" | "unprofitable" =
+          avgMargin > 15 ? "profitable" : avgMargin >= 0 ? "marginal" : "unprofitable";
 
         result.push({
           routeId: route.id,
@@ -1181,90 +1490,136 @@ Rules:
       }
 
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/profitability/recalculate", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const { generateProfitabilitySnapshots } = await import("../services/profitability-calculator");
-      const count = await generateProfitabilitySnapshots(companyId);
-      res.json({ success: true, snapshotsCreated: count });
-    } catch (err) { handleError(res, err); }
-  });
+  app.post(
+    "/api/profitability/recalculate",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const { generateProfitabilitySnapshots } =
+          await import("../services/profitability-calculator");
+        const count = await generateProfitabilitySnapshots(companyId);
+        res.json({ success: true, snapshotsCreated: count });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
-  app.get("/api/profitability/history/:contactId", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const snapshots = await storage.getProfitabilitySnapshots(companyId, {
-        contactId: p(req.params.contactId),
-      });
-      res.json(snapshots);
-    } catch (err) { handleError(res, err); }
-  });
+  app.get(
+    "/api/profitability/history/:contactId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const snapshots = await storage.getProfitabilitySnapshots(companyId, {
+          contactId: p(req.params.contactId),
+        });
+        res.json(snapshots);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
-  app.post("/api/profitability/bulk-recommendations", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const { calculateAllCustomerProfitability, generateBulkRecommendations } = await import("../services/profitability-calculator");
-      const allProfitability = await calculateAllCustomerProfitability(companyId);
-      const recommendations = generateBulkRecommendations(allProfitability);
-      res.json(recommendations);
-    } catch (err) { handleError(res, err); }
-  });
+  app.post(
+    "/api/profitability/bulk-recommendations",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const { calculateAllCustomerProfitability, generateBulkRecommendations } =
+          await import("../services/profitability-calculator");
+        const allProfitability = await calculateAllCustomerProfitability(companyId);
+        const recommendations = generateBulkRecommendations(allProfitability);
+        res.json(recommendations);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // ================ Pricing Simulator ================
 
-  app.post("/api/pricing-simulator/simulate", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const schema = z.object({
-        targetMarginPct: z.number().min(1).max(80),
-        overheadAdjustmentPct: z.number().min(-50).max(100),
-        laborRateAdjustmentPct: z.number().min(-50).max(100),
-        travelCostFactor: z.number().min(0.1).max(5),
-      });
-      const params = schema.parse(req.body);
-      const { runPricingSimulation } = await import("../services/pricing-simulator");
-      const result = await runPricingSimulation(companyId, params);
-      res.json(result);
-    } catch (err) { handleError(res, err); }
-  });
+  app.post(
+    "/api/pricing-simulator/simulate",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const schema = z.object({
+          targetMarginPct: z.number().min(1).max(80),
+          overheadAdjustmentPct: z.number().min(-50).max(100),
+          laborRateAdjustmentPct: z.number().min(-50).max(100),
+          travelCostFactor: z.number().min(0.1).max(5),
+        });
+        const params = schema.parse(req.body);
+        const { runPricingSimulation } = await import("../services/pricing-simulator");
+        const result = await runPricingSimulation(companyId, params);
+        res.json(result);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
-  app.post("/api/pricing-simulator/elasticity", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const schema = z.object({
-        propertyId: z.string().optional(),
-      });
-      const { propertyId } = schema.parse(req.body);
-      const { runPriceElasticitySimulation } = await import("../services/pricing-simulator");
-      const result = await runPriceElasticitySimulation(companyId, propertyId || undefined);
-      res.json(result);
-    } catch (err) { handleError(res, err); }
-  });
+  app.post(
+    "/api/pricing-simulator/elasticity",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const schema = z.object({
+          propertyId: z.string().optional(),
+        });
+        const { propertyId } = schema.parse(req.body);
+        const { runPriceElasticitySimulation } = await import("../services/pricing-simulator");
+        const result = await runPriceElasticitySimulation(companyId, propertyId || undefined);
+        res.json(result);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
-  app.post("/api/pricing-simulator/competitor-analysis", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const schema = z.object({
-        zipCode: z.string().optional(),
-      });
-      const { zipCode } = schema.parse(req.body);
-      const { runCompetitorAnalysis } = await import("../services/pricing-simulator");
-      const result = await runCompetitorAnalysis(companyId, zipCode || undefined);
-      res.json(result);
-    } catch (err) { handleError(res, err); }
-  });
+  app.post(
+    "/api/pricing-simulator/competitor-analysis",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const schema = z.object({
+          zipCode: z.string().optional(),
+        });
+        const { zipCode } = schema.parse(req.body);
+        const { runCompetitorAnalysis } = await import("../services/pricing-simulator");
+        const result = await runCompetitorAnalysis(companyId, zipCode || undefined);
+        res.json(result);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
-  app.get("/api/pricing-simulator/zip-codes", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const props = await storage.getProperties(companyId);
-      const zipSet = new Set(props.map(p => p.zipCode).filter(Boolean));
-      res.json([...zipSet].sort());
-    } catch (err) { handleError(res, err); }
-  });
+  app.get(
+    "/api/pricing-simulator/zip-codes",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const props = await storage.getProperties(companyId);
+        const zipSet = new Set(props.map((p) => p.zipCode).filter(Boolean));
+        res.json([...zipSet].sort());
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // ================ Competitor Pricing ================
 
@@ -1274,7 +1629,9 @@ Rules:
       const zipCode = req.query.zipCode as string | undefined;
       const items = await storage.getCompetitorPricing(companyId, zipCode);
       res.json(items);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/competitor-pricing", isAuthenticated, async (req: Request, res: Response) => {
@@ -1293,7 +1650,9 @@ Rules:
       const data = schema.parse(req.body);
       const item = await storage.createCompetitorPricing({ ...data, companyId });
       res.json(item);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/competitor-pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -1313,17 +1672,25 @@ Rules:
       const data = schema.parse(req.body);
       const item = await storage.updateCompetitorPricing(id, companyId, data);
       res.json(item);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.delete("/api/competitor-pricing/:id", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const id = p(req.params.id);
-      await storage.deleteCompetitorPricing(id, companyId);
-      res.json({ success: true });
-    } catch (err) { handleError(res, err); }
-  });
+  app.delete(
+    "/api/competitor-pricing/:id",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const id = p(req.params.id);
+        await storage.deleteCompetitorPricing(id, companyId);
+        res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // ================ Overhead Costs ================
 
@@ -1333,7 +1700,9 @@ Rules:
       const items = await storage.getOverheadCosts(companyId);
       const totalMonthlyOverheadCents = items.reduce((sum, i) => sum + i.monthlyCostCents, 0);
       res.json({ items, totalMonthlyOverheadCents });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/overhead-costs", isAuthenticated, async (req: Request, res: Response) => {
@@ -1343,7 +1712,10 @@ Rules:
       if (!category || typeof category !== "string" || !name || typeof name !== "string") {
         return res.status(400).json({ error: "category and name are required strings" });
       }
-      const costCents = typeof monthlyCostCents === "number" && monthlyCostCents >= 0 ? Math.round(monthlyCostCents) : 0;
+      const costCents =
+        typeof monthlyCostCents === "number" && monthlyCostCents >= 0
+          ? Math.round(monthlyCostCents)
+          : 0;
       const validType = type === "variable" ? "variable" : "fixed";
       const item = await storage.createOverheadCost({
         companyId,
@@ -1355,7 +1727,9 @@ Rules:
         sortOrder: typeof sortOrder === "number" ? sortOrder : 0,
       });
       res.json(item);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/overhead-costs/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -1370,11 +1744,14 @@ Rules:
       if (req.body.type === "fixed" || req.body.type === "variable") updates.type = req.body.type;
       if (typeof req.body.category === "string") updates.category = req.body.category.trim();
       if (typeof req.body.sortOrder === "number") updates.sortOrder = req.body.sortOrder;
-      if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
+      if (Object.keys(updates).length === 0)
+        return res.status(400).json({ error: "No valid fields to update" });
       const item = await storage.updateOverheadCost(id, companyId, updates);
       if (!item) return res.status(404).json({ error: "Item not found" });
       res.json(item);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/overhead-costs/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -1382,151 +1759,299 @@ Rules:
       const { companyId } = await getCompanyContext(req);
       await storage.deleteOverheadCost(p(req.params.id), companyId);
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/overhead-costs/seed-defaults", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const existing = await storage.getOverheadCosts(companyId);
-      if (existing.length > 0) {
-        return res.json({ seeded: false, message: "Items already exist", count: existing.length });
+  app.post(
+    "/api/overhead-costs/seed-defaults",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const existing = await storage.getOverheadCosts(companyId);
+        if (existing.length > 0) {
+          return res.json({
+            seeded: false,
+            message: "Items already exist",
+            count: existing.length,
+          });
+        }
+
+        const company = await storage.getCompany(companyId);
+        const { TIER_CONFIG } = await import("@shared/schema");
+        const tier = (company?.subscriptionTier || "free_trial") as keyof typeof TIER_CONFIG;
+        const subscriptionPriceCents = Math.round((TIER_CONFIG[tier]?.price ?? 0) * 100);
+
+        const defaults: Array<{
+          category: string;
+          name: string;
+          type: "fixed" | "variable";
+          sortOrder: number;
+          monthlyCostCents?: number;
+        }> = [
+          {
+            category: "Office + Admin",
+            name: "Scheduling/CRM software",
+            type: "fixed",
+            sortOrder: 0,
+          },
+          {
+            category: "Office + Admin",
+            name: "Website hosting and domain",
+            type: "fixed",
+            sortOrder: 1,
+          },
+          {
+            category: "Office + Admin",
+            name: "Phone line/business number",
+            type: "fixed",
+            sortOrder: 2,
+          },
+          {
+            category: "Office + Admin",
+            name: "Email and workspace tools",
+            type: "fixed",
+            sortOrder: 3,
+          },
+          {
+            category: "Office + Admin",
+            name: "Bookkeeping/accounting software",
+            type: "fixed",
+            sortOrder: 4,
+          },
+          {
+            category: "Office + Admin",
+            name: "Payment processing fees",
+            type: "variable",
+            sortOrder: 5,
+          },
+          { category: "Office + Admin", name: "Business insurance", type: "fixed", sortOrder: 6 },
+          { category: "Office + Admin", name: "Licenses and permits", type: "fixed", sortOrder: 7 },
+          { category: "Office + Admin", name: "Legal and tax prep", type: "fixed", sortOrder: 8 },
+          {
+            category: "Office + Admin",
+            name: "ScooPilot subscription",
+            type: "fixed",
+            sortOrder: 9,
+            monthlyCostCents: subscriptionPriceCents,
+          },
+          { category: "Marketing", name: "Google Ads", type: "variable", sortOrder: 0 },
+          { category: "Marketing", name: "Facebook/Instagram ads", type: "variable", sortOrder: 1 },
+          { category: "Marketing", name: "Yard signs", type: "variable", sortOrder: 2 },
+          { category: "Marketing", name: "Flyers/door hangers", type: "variable", sortOrder: 3 },
+          { category: "Marketing", name: "Vehicle magnets or wraps", type: "fixed", sortOrder: 4 },
+          { category: "Marketing", name: "Referral rewards", type: "variable", sortOrder: 5 },
+          {
+            category: "Marketing",
+            name: "Print materials and business cards",
+            type: "variable",
+            sortOrder: 6,
+          },
+          { category: "Vehicles + Transportation", name: "Fuel", type: "variable", sortOrder: 0 },
+          {
+            category: "Vehicles + Transportation",
+            name: "Vehicle payment or lease",
+            type: "fixed",
+            sortOrder: 1,
+          },
+          {
+            category: "Vehicles + Transportation",
+            name: "Vehicle insurance",
+            type: "fixed",
+            sortOrder: 2,
+          },
+          {
+            category: "Vehicles + Transportation",
+            name: "Repairs and maintenance",
+            type: "variable",
+            sortOrder: 3,
+          },
+          { category: "Vehicles + Transportation", name: "Tires", type: "variable", sortOrder: 4 },
+          {
+            category: "Vehicles + Transportation",
+            name: "Registration",
+            type: "fixed",
+            sortOrder: 5,
+          },
+          {
+            category: "Vehicles + Transportation",
+            name: "Route optimization software",
+            type: "fixed",
+            sortOrder: 6,
+          },
+          {
+            category: "Tools + Field Supplies",
+            name: "Rakes, bins, scoopers, bags",
+            type: "variable",
+            sortOrder: 0,
+          },
+          { category: "Tools + Field Supplies", name: "Gloves", type: "variable", sortOrder: 1 },
+          {
+            category: "Tools + Field Supplies",
+            name: "Disinfectant and sanitizer",
+            type: "variable",
+            sortOrder: 2,
+          },
+          {
+            category: "Tools + Field Supplies",
+            name: "Boot spray/cleaning supplies",
+            type: "variable",
+            sortOrder: 3,
+          },
+          {
+            category: "Tools + Field Supplies",
+            name: "Uniforms/branded shirts",
+            type: "fixed",
+            sortOrder: 4,
+          },
+          {
+            category: "Tools + Field Supplies",
+            name: "Replacement tools from wear and tear",
+            type: "variable",
+            sortOrder: 5,
+          },
+          { category: "Labor", name: "Employee wages", type: "variable", sortOrder: 0 },
+          { category: "Labor", name: "Payroll taxes", type: "variable", sortOrder: 1 },
+          { category: "Labor", name: "Workers' comp", type: "fixed", sortOrder: 2 },
+          { category: "Labor", name: "Training time", type: "variable", sortOrder: 3 },
+          { category: "Labor", name: "Bonuses/incentives", type: "variable", sortOrder: 4 },
+          { category: "Labor", name: "Hiring costs", type: "variable", sortOrder: 5 },
+          { category: "Labor", name: "Background checks", type: "variable", sortOrder: 6 },
+          { category: "Operations", name: "Mobile data plans", type: "fixed", sortOrder: 0 },
+          { category: "Operations", name: "GPS/time tracking apps", type: "fixed", sortOrder: 1 },
+          {
+            category: "Operations",
+            name: "Customer notification tools",
+            type: "fixed",
+            sortOrder: 2,
+          },
+          {
+            category: "Operations",
+            name: "Storage bins or small storage unit",
+            type: "fixed",
+            sortOrder: 3,
+          },
+          {
+            category: "Operations",
+            name: "Equipment cleaning area/supplies",
+            type: "variable",
+            sortOrder: 4,
+          },
+          { category: "Financial Overhead", name: "Bank fees", type: "fixed", sortOrder: 0 },
+          {
+            category: "Financial Overhead",
+            name: "Merchant service fees",
+            type: "variable",
+            sortOrder: 1,
+          },
+          {
+            category: "Financial Overhead",
+            name: "Bad debt/unpaid invoices",
+            type: "variable",
+            sortOrder: 2,
+          },
+          {
+            category: "Financial Overhead",
+            name: "Refunds or service credits",
+            type: "variable",
+            sortOrder: 3,
+          },
+        ];
+
+        for (const item of defaults) {
+          await storage.createOverheadCost({
+            companyId,
+            category: item.category,
+            name: item.name,
+            monthlyCostCents: item.monthlyCostCents ?? 0,
+            type: item.type,
+            isDefault: true,
+            sortOrder: item.sortOrder,
+          });
+        }
+
+        const items = await storage.getOverheadCosts(companyId);
+        res.json({ seeded: true, count: items.length, items });
+      } catch (err) {
+        handleError(res, err);
       }
+    }
+  );
 
-      const company = await storage.getCompany(companyId);
-      const { TIER_CONFIG } = await import("@shared/schema");
-      const tier = (company?.subscriptionTier || "free_trial") as keyof typeof TIER_CONFIG;
-      const subscriptionPriceCents = Math.round((TIER_CONFIG[tier]?.price ?? 0) * 100);
+  app.get(
+    "/api/overhead-costs/monthly-fuel",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
 
-      const defaults: Array<{ category: string; name: string; type: "fixed" | "variable"; sortOrder: number; monthlyCostCents?: number }> = [
-        { category: "Office + Admin", name: "Scheduling/CRM software", type: "fixed", sortOrder: 0 },
-        { category: "Office + Admin", name: "Website hosting and domain", type: "fixed", sortOrder: 1 },
-        { category: "Office + Admin", name: "Phone line/business number", type: "fixed", sortOrder: 2 },
-        { category: "Office + Admin", name: "Email and workspace tools", type: "fixed", sortOrder: 3 },
-        { category: "Office + Admin", name: "Bookkeeping/accounting software", type: "fixed", sortOrder: 4 },
-        { category: "Office + Admin", name: "Payment processing fees", type: "variable", sortOrder: 5 },
-        { category: "Office + Admin", name: "Business insurance", type: "fixed", sortOrder: 6 },
-        { category: "Office + Admin", name: "Licenses and permits", type: "fixed", sortOrder: 7 },
-        { category: "Office + Admin", name: "Legal and tax prep", type: "fixed", sortOrder: 8 },
-        { category: "Office + Admin", name: "ScooPilot subscription", type: "fixed", sortOrder: 9, monthlyCostCents: subscriptionPriceCents },
-        { category: "Marketing", name: "Google Ads", type: "variable", sortOrder: 0 },
-        { category: "Marketing", name: "Facebook/Instagram ads", type: "variable", sortOrder: 1 },
-        { category: "Marketing", name: "Yard signs", type: "variable", sortOrder: 2 },
-        { category: "Marketing", name: "Flyers/door hangers", type: "variable", sortOrder: 3 },
-        { category: "Marketing", name: "Vehicle magnets or wraps", type: "fixed", sortOrder: 4 },
-        { category: "Marketing", name: "Referral rewards", type: "variable", sortOrder: 5 },
-        { category: "Marketing", name: "Print materials and business cards", type: "variable", sortOrder: 6 },
-        { category: "Vehicles + Transportation", name: "Fuel", type: "variable", sortOrder: 0 },
-        { category: "Vehicles + Transportation", name: "Vehicle payment or lease", type: "fixed", sortOrder: 1 },
-        { category: "Vehicles + Transportation", name: "Vehicle insurance", type: "fixed", sortOrder: 2 },
-        { category: "Vehicles + Transportation", name: "Repairs and maintenance", type: "variable", sortOrder: 3 },
-        { category: "Vehicles + Transportation", name: "Tires", type: "variable", sortOrder: 4 },
-        { category: "Vehicles + Transportation", name: "Registration", type: "fixed", sortOrder: 5 },
-        { category: "Vehicles + Transportation", name: "Route optimization software", type: "fixed", sortOrder: 6 },
-        { category: "Tools + Field Supplies", name: "Rakes, bins, scoopers, bags", type: "variable", sortOrder: 0 },
-        { category: "Tools + Field Supplies", name: "Gloves", type: "variable", sortOrder: 1 },
-        { category: "Tools + Field Supplies", name: "Disinfectant and sanitizer", type: "variable", sortOrder: 2 },
-        { category: "Tools + Field Supplies", name: "Boot spray/cleaning supplies", type: "variable", sortOrder: 3 },
-        { category: "Tools + Field Supplies", name: "Uniforms/branded shirts", type: "fixed", sortOrder: 4 },
-        { category: "Tools + Field Supplies", name: "Replacement tools from wear and tear", type: "variable", sortOrder: 5 },
-        { category: "Labor", name: "Employee wages", type: "variable", sortOrder: 0 },
-        { category: "Labor", name: "Payroll taxes", type: "variable", sortOrder: 1 },
-        { category: "Labor", name: "Workers' comp", type: "fixed", sortOrder: 2 },
-        { category: "Labor", name: "Training time", type: "variable", sortOrder: 3 },
-        { category: "Labor", name: "Bonuses/incentives", type: "variable", sortOrder: 4 },
-        { category: "Labor", name: "Hiring costs", type: "variable", sortOrder: 5 },
-        { category: "Labor", name: "Background checks", type: "variable", sortOrder: 6 },
-        { category: "Operations", name: "Mobile data plans", type: "fixed", sortOrder: 0 },
-        { category: "Operations", name: "GPS/time tracking apps", type: "fixed", sortOrder: 1 },
-        { category: "Operations", name: "Customer notification tools", type: "fixed", sortOrder: 2 },
-        { category: "Operations", name: "Storage bins or small storage unit", type: "fixed", sortOrder: 3 },
-        { category: "Operations", name: "Equipment cleaning area/supplies", type: "variable", sortOrder: 4 },
-        { category: "Financial Overhead", name: "Bank fees", type: "fixed", sortOrder: 0 },
-        { category: "Financial Overhead", name: "Merchant service fees", type: "variable", sortOrder: 1 },
-        { category: "Financial Overhead", name: "Bad debt/unpaid invoices", type: "variable", sortOrder: 2 },
-        { category: "Financial Overhead", name: "Refunds or service credits", type: "variable", sortOrder: 3 },
-      ];
+        const allRoutes = await storage.getRoutes(companyId);
 
-      for (const item of defaults) {
-        await storage.createOverheadCost({
-          companyId,
-          category: item.category,
-          name: item.name,
-          monthlyCostCents: item.monthlyCostCents ?? 0,
-          type: item.type,
-          isDefault: true,
-          sortOrder: item.sortOrder,
-        });
-      }
+        if (allRoutes.length === 0) {
+          return res.json({ totalMiles: 0, weeklyMiles: 0, fuelCostCents: 0, routeCount: 0 });
+        }
 
-      const items = await storage.getOverheadCosts(companyId);
-      res.json({ seeded: true, count: items.length, items });
-    } catch (err) { handleError(res, err); }
-  });
+        const company = await storage.getCompany(companyId);
+        const config = (company?.pricingConfig as any) || {};
+        const gasPriceCents = config.averageGasPriceCentsPerGallon ?? 350;
+        const mpg = config.vehicleMPG ?? null;
+        const costPerMileCents = config.vehicleCostPerMileCents ?? 65;
 
-  app.get("/api/overhead-costs/monthly-fuel", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
+        const effectiveCostPerMileCents =
+          mpg && mpg > 0 ? Math.round(gasPriceCents / mpg) : costPerMileCents;
 
-      const allRoutes = await storage.getRoutes(companyId);
+        const allPlans = await storage.getServicePlans(companyId, { isActive: true });
+        const allProperties = await storage.getProperties(companyId);
+        const propMap = new Map(allProperties.map((p) => [p.id, p]));
+        const startPoint =
+          company?.startLatitude && company?.startLongitude
+            ? { latitude: Number(company.startLatitude), longitude: Number(company.startLongitude) }
+            : undefined;
 
-      if (allRoutes.length === 0) {
-        return res.json({ totalMiles: 0, weeklyMiles: 0, fuelCostCents: 0, routeCount: 0 });
-      }
+        let weeklyMiles = 0;
+        let routeCount = 0;
 
-      const company = await storage.getCompany(companyId);
-      const config = (company?.pricingConfig as any) || {};
-      const gasPriceCents = config.averageGasPriceCentsPerGallon ?? 350;
-      const mpg = config.vehicleMPG ?? null;
-      const costPerMileCents = config.vehicleCostPerMileCents ?? 65;
+        for (const route of allRoutes) {
+          const routePlans = allPlans
+            .filter((sp) => sp.routeId === route.id)
+            .sort((a, b) => a.stopOrder - b.stopOrder);
 
-      const effectiveCostPerMileCents = (mpg && mpg > 0)
-        ? Math.round((gasPriceCents / mpg))
-        : costPerMileCents;
+          if (routePlans.length < 2) continue;
 
-      const allPlans = await storage.getServicePlans(companyId, { isActive: true });
-      const allProperties = await storage.getProperties(companyId);
-      const propMap = new Map(allProperties.map(p => [p.id, p]));
-      const startPoint = company?.startLatitude && company?.startLongitude
-        ? { latitude: Number(company.startLatitude), longitude: Number(company.startLongitude) }
-        : undefined;
+          const stops: { id: string; latitude: number; longitude: number }[] = [];
+          for (const sp of routePlans) {
+            const prop = propMap.get(sp.propertyId);
+            if (prop?.latitude && prop?.longitude) {
+              stops.push({
+                id: sp.id,
+                latitude: Number(prop.latitude),
+                longitude: Number(prop.longitude),
+              });
+            }
+          }
 
-      let weeklyMiles = 0;
-      let routeCount = 0;
+          if (stops.length < 2) continue;
 
-      for (const route of allRoutes) {
-        const routePlans = allPlans
-          .filter(sp => sp.routeId === route.id)
-          .sort((a, b) => a.stopOrder - b.stopOrder);
-
-        if (routePlans.length < 2) continue;
-
-        const stops: { id: string; latitude: number; longitude: number }[] = [];
-        for (const sp of routePlans) {
-          const prop = propMap.get(sp.propertyId);
-          if (prop?.latitude && prop?.longitude) {
-            stops.push({ id: sp.id, latitude: Number(prop.latitude), longitude: Number(prop.longitude) });
+          routeCount++;
+          const metrics = await getRouteMetricsWithLegs(stops, startPoint);
+          if (metrics) {
+            weeklyMiles += metrics.totalDistance;
+          } else {
+            weeklyMiles += calculateTotalDistance(stops, startPoint);
           }
         }
 
-        if (stops.length < 2) continue;
+        weeklyMiles = Math.round(weeklyMiles * 10) / 10;
+        const WEEKS_PER_MONTH = 4.33;
+        const totalMiles = Math.round(weeklyMiles * WEEKS_PER_MONTH * 10) / 10;
+        const fuelCostCents = Math.round(totalMiles * effectiveCostPerMileCents);
 
-        routeCount++;
-        const metrics = await getRouteMetricsWithLegs(stops, startPoint);
-        if (metrics) {
-          weeklyMiles += metrics.totalDistance;
-        } else {
-          weeklyMiles += calculateTotalDistance(stops, startPoint);
-        }
+        res.json({ totalMiles, weeklyMiles, fuelCostCents, routeCount });
+      } catch (err) {
+        handleError(res, err);
       }
-
-      weeklyMiles = Math.round(weeklyMiles * 10) / 10;
-      const WEEKS_PER_MONTH = 4.33;
-      const totalMiles = Math.round(weeklyMiles * WEEKS_PER_MONTH * 10) / 10;
-      const fuelCostCents = Math.round(totalMiles * effectiveCostPerMileCents);
-
-      res.json({ totalMiles, weeklyMiles, fuelCostCents, routeCount });
-    } catch (err) { handleError(res, err); }
-  });
-
+    }
+  );
 }

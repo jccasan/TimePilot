@@ -23,9 +23,7 @@ interface ObjectUploaderProps {
     url: string;
     headers?: Record<string, string>;
   }>;
-  onComplete?: (
-    result: UploadResult<Record<string, unknown>, Record<string, unknown>>
-  ) => void;
+  onComplete?: (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => void;
   buttonClassName?: string;
   children: ReactNode;
 }
@@ -100,4 +98,3 @@ export function ObjectUploader({
     </div>
   );
 }
-

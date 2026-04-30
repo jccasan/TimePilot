@@ -7,12 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { X, ChevronRight, ChevronLeft, GraduationCap, RotateCcw } from "lucide-react";
 import { useLocation } from "wouter";
 
-export type TutorialStepAction =
-  | "click"
-  | "input"
-  | "select"
-  | "observe"
-  | "navigate";
+export type TutorialStepAction = "click" | "input" | "select" | "observe" | "navigate";
 
 export type TutorialStep = {
   target: string;
@@ -46,26 +41,30 @@ const ROUTE_BUILDER_TUTORIAL: TutorialDefinition = {
   id: "tutorial_route_builder",
   version: "1.1",
   title: "Route Builder",
-  description: "Learn how to create routes, add stops, reorder them, and optimize your daily schedule.",
+  description:
+    "Learn how to create routes, add stops, reorder them, and optimize your daily schedule.",
   requiredPage: "/routes",
   steps: [
     {
       target: '[data-testid="button-create-route"]',
       title: "Create a New Route",
-      content: "Start by clicking here to create a new route. Routes organize your stops by day and help you plan efficient schedules.",
+      content:
+        "Start by clicking here to create a new route. Routes organize your stops by day and help you plan efficient schedules.",
       action: "click",
     },
     {
       target: '[data-testid="input-route-name"]',
       title: "Name Your Route",
-      content: "Give your route a descriptive name, like 'Monday - North Side' or 'Thursday PM'. This helps you and your team stay organized.",
+      content:
+        "Give your route a descriptive name, like 'Monday - North Side' or 'Thursday PM'. This helps you and your team stay organized.",
       action: "input",
       validate: (el: HTMLElement) => (el as HTMLInputElement).value.length > 0,
     },
     {
       target: '[data-testid="select-route-day"]',
       title: "Pick a Day",
-      content: "Select which day of the week this route runs. Jobs assigned to this day will appear as available stops.",
+      content:
+        "Select which day of the week this route runs. Jobs assigned to this day will appear as available stops.",
       action: "select",
     },
     {
@@ -77,28 +76,32 @@ const ROUTE_BUILDER_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="card-unassigned"]',
       title: "Unassigned Stops",
-      content: "Jobs that match this day but aren't on a route yet appear here. Drag them onto your route to add them as stops. You can reorder stops by dragging them up or down in the list.",
+      content:
+        "Jobs that match this day but aren't on a route yet appear here. Drag them onto your route to add them as stops. You can reorder stops by dragging them up or down in the list.",
       action: "observe",
       waitForElement: true,
     },
     {
       target: '[data-testid^="button-optimize-"]',
       title: "Optimize Route Order",
-      content: "Click Optimize to automatically reorder your stops for the shortest driving distance. The system calculates the most efficient sequence based on real road distances.",
+      content:
+        "Click Optimize to automatically reorder your stops for the shortest driving distance. The system calculates the most efficient sequence based on real road distances.",
       action: "click",
       waitForElement: true,
     },
     {
       target: '[data-testid="button-confirm-optimize"]',
       title: "Confirm Optimization",
-      content: "Click Confirm to run the optimization. The route will be reordered to minimize total drive time and distance between stops.",
+      content:
+        "Click Confirm to run the optimization. The route will be reordered to minimize total drive time and distance between stops.",
       action: "click",
       waitForElement: true,
     },
     {
       target: '[data-testid="button-toggle-view"]',
       title: "View Optimized Route on Map",
-      content: "Click to switch to map view and see your optimized route displayed on the map. The stops are now ordered for the most efficient path.",
+      content:
+        "Click to switch to map view and see your optimized route displayed on the map. The stops are now ordered for the most efficient path.",
       action: "click",
     },
   ],
@@ -108,53 +111,61 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
   id: "tutorial_invoice_creation",
   version: "1.3",
   title: "Creating Invoices",
-  description: "Learn how to manually create a custom invoice — for one-off charges, service add-ons, or any amount you want to bill. To bill clients for completed service visits, use the Generate Invoices tutorial instead.",
+  description:
+    "Learn how to manually create a custom invoice — for one-off charges, service add-ons, or any amount you want to bill. To bill clients for completed service visits, use the Generate Invoices tutorial instead.",
   requiredPage: "/invoices",
   steps: [
     {
       target: '[data-testid="revenue-dashboard"]',
       title: "Revenue Dashboard",
-      content: "At the top of the Invoices page you'll find four live metric cards: This Week's revenue, Outstanding balance, Overdue amount, and Collected totals. These update as you create and process invoices.",
+      content:
+        "At the top of the Invoices page you'll find four live metric cards: This Week's revenue, Outstanding balance, Overdue amount, and Collected totals. These update as you create and process invoices.",
       action: "observe",
       waitForElement: true,
     },
     {
       target: '[data-testid="tab-invoice-uninvoiced"]',
       title: "Uninvoiced Tab",
-      content: "Before creating anything, check the Uninvoiced tab. It shows every client who has completed service visits that haven't been billed yet. Use the Generate button to create invoices from those visits — it's faster than building them manually.",
+      content:
+        "Before creating anything, check the Uninvoiced tab. It shows every client who has completed service visits that haven't been billed yet. Use the Generate button to create invoices from those visits — it's faster than building them manually.",
       action: "observe",
       waitForElement: true,
     },
     {
       target: '[data-testid="persistent-batch-actions"]',
       title: "Batch Actions",
-      content: "Use the batch action bar to process multiple invoices at once. Select invoices with checkboxes, then click Send All to email them, Charge All to run autopay, or Mark Paid to record offline payments — no need to open each invoice individually.",
+      content:
+        "Use the batch action bar to process multiple invoices at once. Select invoices with checkboxes, then click Send All to email them, Charge All to run autopay, or Mark Paid to record offline payments — no need to open each invoice individually.",
       action: "observe",
       waitForElement: true,
     },
     {
       target: '[data-testid="button-create-invoice"]',
       title: "Create a Custom Invoice",
-      content: "Click here to build a fully custom invoice. Use this for one-off charges, materials, additional services, or anything not tied to a scheduled visit. For visit-based billing, use the Generate button instead.",
+      content:
+        "Click here to build a fully custom invoice. Use this for one-off charges, materials, additional services, or anything not tied to a scheduled visit. For visit-based billing, use the Generate button instead.",
       action: "click",
     },
     {
       target: '[data-testid="select-invoice-contact"]',
       title: "Select a Customer",
-      content: "Choose which customer to bill. The invoice will be linked to their account and they can view and pay it through the client portal.",
+      content:
+        "Choose which customer to bill. The invoice will be linked to their account and they can view and pay it through the client portal.",
       action: "select",
     },
     {
       target: '[data-testid="button-add-custom-item"]',
       title: "Add a Line Item",
-      content: "Click 'Add Custom Charge' to create a line item on the invoice. Each line item represents a service or product you're billing for. You can add as many as you need.",
+      content:
+        "Click 'Add Custom Charge' to create a line item on the invoice. Each line item represents a service or product you're billing for. You can add as many as you need.",
       action: "click",
       waitForElement: true,
     },
     {
       target: '[data-testid="input-line-desc-0"]',
       title: "Describe the Charge",
-      content: "Enter a description for this line item. Be specific — customers see this on the invoice and in the portal.",
+      content:
+        "Enter a description for this line item. Be specific — customers see this on the invoice and in the portal.",
       action: "input",
       waitForElement: true,
       validate: (el: HTMLElement) => (el as HTMLInputElement).value.length > 0,
@@ -162,7 +173,8 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="input-line-price-0"]',
       title: "Set the Price",
-      content: "Enter the price for this line item. Add multiple line items for different services on the same invoice — they all add up to the invoice total automatically.",
+      content:
+        "Enter the price for this line item. Add multiple line items for different services on the same invoice — they all add up to the invoice total automatically.",
       action: "input",
       validate: (el: HTMLElement) => {
         const val = (el as HTMLInputElement).value;
@@ -172,13 +184,15 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="button-submit-invoice"]',
       title: "Create the Invoice",
-      content: "Click to create the invoice as a draft. New drafts appear in the Draft section on the main Invoices page — review them before sending.",
+      content:
+        "Click to create the invoice as a draft. New drafts appear in the Draft section on the main Invoices page — review them before sending.",
       action: "click",
     },
     {
       target: '[data-testid="button-send-invoice-email"]',
       title: "Send to Customer",
-      content: "Click to email the invoice to your customer. They'll receive a link to view and pay online through the client portal.",
+      content:
+        "Click to email the invoice to your customer. They'll receive a link to view and pay online through the client portal.",
       action: "click",
       waitForElement: true,
     },
@@ -189,48 +203,55 @@ const GENERATE_INVOICES_TUTORIAL: TutorialDefinition = {
   id: "tutorial_generate_invoices",
   version: "1.0",
   title: "Generating Invoices from Visits",
-  description: "Learn how to bill clients for their completed service visits using the Generate flow — the fastest way to invoice your whole customer base at month-end.",
+  description:
+    "Learn how to bill clients for their completed service visits using the Generate flow — the fastest way to invoice your whole customer base at month-end.",
   requiredPage: "/invoices",
   steps: [
     {
       target: '[data-testid="tab-invoice-uninvoiced"]',
       title: "The Uninvoiced Tab",
-      content: "Start here. The Uninvoiced tab shows every client who has completed visits that haven't been billed yet, along with the total amount ready to invoice. Use this as your billing checklist at the end of each month.",
+      content:
+        "Start here. The Uninvoiced tab shows every client who has completed visits that haven't been billed yet, along with the total amount ready to invoice. Use this as your billing checklist at the end of each month.",
       action: "observe",
       waitForElement: true,
     },
     {
       target: '[data-testid="button-generate-dropdown-trigger"]',
       title: "Open the Generate Menu",
-      content: "Click the Generate dropdown button. You'll see two options: Generate for a single client (pick which visits to include) or Generate by Date Range (invoice all clients for a specific billing period at once).",
+      content:
+        "Click the Generate dropdown button. You'll see two options: Generate for a single client (pick which visits to include) or Generate by Date Range (invoice all clients for a specific billing period at once).",
       action: "click",
       waitForElement: true,
     },
     {
       target: '[data-testid="text-generate-invoice-title"]',
       title: "Generate Invoice Dialog",
-      content: "This dialog lets you build an invoice from completed, uninvoiced visits for one client. First, pick the client you want to bill from the dropdown.",
+      content:
+        "This dialog lets you build an invoice from completed, uninvoiced visits for one client. First, pick the client you want to bill from the dropdown.",
       action: "observe",
       waitForElement: true,
     },
     {
       target: '[data-testid="section-date-filter"]',
       title: "Filter by Date Range",
-      content: "Choose which visits to include: This Month, Last Month, the past two months, or a custom date range. The visit list updates instantly so you see exactly what will be on the invoice.",
+      content:
+        "Choose which visits to include: This Month, Last Month, the past two months, or a custom date range. The visit list updates instantly so you see exactly what will be on the invoice.",
       action: "observe",
       waitForElement: true,
     },
     {
       target: '[data-testid="section-uninvoiced-visits"]',
       title: "Select Visits to Bill",
-      content: "Check or uncheck individual visits to include them on the invoice. The running total at the bottom updates as you select. Use 'Select All' to include every visit in the filtered date range.",
+      content:
+        "Check or uncheck individual visits to include them on the invoice. The running total at the bottom updates as you select. Use 'Select All' to include every visit in the filtered date range.",
       action: "observe",
       waitForElement: true,
     },
     {
       target: '[data-testid="button-create-invoice-from-visits"]',
       title: "Create the Invoice",
-      content: "Click to generate the invoice. It will be created as a draft, pre-filled with every selected visit as a line item. From there you can review, edit, send, or charge it just like any other invoice.",
+      content:
+        "Click to generate the invoice. It will be created as a draft, pre-filled with every selected visit as a line item. From there you can review, edit, send, or charge it just like any other invoice.",
       action: "click",
       waitForElement: true,
     },
@@ -241,46 +262,53 @@ const COMPLETE_VISIT_TUTORIAL: TutorialDefinition = {
   id: "tutorial_complete_visit",
   version: "1.0",
   title: "Completing a Visit",
-  description: "Learn how to mark a service visit as complete — with or without a proof photo — and automatically notify the customer.",
+  description:
+    "Learn how to mark a service visit as complete — with or without a proof photo — and automatically notify the customer.",
   requiredPage: "/routes",
   steps: [
     {
       target: '[data-testid^="button-day-"]',
       title: "Select a Service Day",
-      content: "Click any day tab at the top of the Routes page to see the stops scheduled for that day. Today's date is selected by default.",
+      content:
+        "Click any day tab at the top of the Routes page to see the stops scheduled for that day. Today's date is selected by default.",
       action: "click",
       waitForElement: true,
     },
     {
       target: '[data-testid^="button-complete-"]',
       title: "Complete a Stop",
-      content: "Click the green Complete button on any stop card to open the completion dialog. This works for any stop on today's or a past day's route.",
+      content:
+        "Click the green Complete button on any stop card to open the completion dialog. This works for any stop on today's or a past day's route.",
       action: "click",
       waitForElement: true,
     },
     {
       target: '[data-testid="dialog-complete-visit"]',
       title: "Complete Visit Dialog",
-      content: "This dialog collects proof-of-service info and prepares a customer notification. You can attach a proof photo, add notes, and choose the No Gate option if the property doesn't have a gate.",
+      content:
+        "This dialog collects proof-of-service info and prepares a customer notification. You can attach a proof photo, add notes, and choose the No Gate option if the property doesn't have a gate.",
       action: "observe",
       waitForElement: true,
     },
     {
       target: '[data-testid="label-no-gate"]',
       title: "No Gate Option",
-      content: "Check 'No gate' if this property doesn't have a gate or if you're logging a past visit without a photo. When checked, the photo is optional and the customer message is adjusted — no photo link will be included.",
+      content:
+        "Check 'No gate' if this property doesn't have a gate or if you're logging a past visit without a photo. When checked, the photo is optional and the customer message is adjusted — no photo link will be included.",
       action: "observe",
     },
     {
       target: '[data-testid="input-completion-notes"]',
       title: "Add Notes (Optional)",
-      content: "Enter any notes about the visit — gate codes you used, issues you noticed, or anything the customer should know. Notes are saved to the visit record.",
+      content:
+        "Enter any notes about the visit — gate codes you used, issues you noticed, or anything the customer should know. Notes are saved to the visit record.",
       action: "input",
     },
     {
       target: '[data-testid="button-send-complete"]',
       title: "Complete & Notify",
-      content: "Click to mark the visit complete and send the customer a text message (for today's visits only). For past dates, the visit is recorded without sending a notification.",
+      content:
+        "Click to mark the visit complete and send the customer a text message (for today's visits only). For past dates, the visit is recorded without sending a notification.",
       action: "click",
     },
   ],
@@ -296,26 +324,30 @@ const IMPORT_WIZARD_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="button-download-sample-csv"]',
       title: "Download a Template",
-      content: "Start by downloading the import template. Click here to get a CSV file with the expected column format. Fill it in with your customer data, or export from your existing CRM.",
+      content:
+        "Start by downloading the import template. Click here to get a CSV file with the expected column format. Fill it in with your customer data, or export from your existing CRM.",
       action: "click",
     },
     {
       target: '[data-testid="button-import-csv"]',
       title: "Upload Your CSV",
-      content: "Click here to upload your CSV file. The import wizard will open and automatically detect your column headers for mapping.",
+      content:
+        "Click here to upload your CSV file. The import wizard will open and automatically detect your column headers for mapping.",
       action: "click",
     },
     {
       target: '[data-testid="text-import-title"]',
       title: "Map Columns",
-      content: "The wizard maps your CSV columns to contact fields. Review the mapping to make sure names, addresses, and service details are matched correctly. AI-assisted matching handles most columns automatically.",
+      content:
+        "The wizard maps your CSV columns to contact fields. Review the mapping to make sure names, addresses, and service details are matched correctly. AI-assisted matching handles most columns automatically.",
       action: "observe",
       waitForElement: true,
     },
     {
       target: '[data-testid="button-confirm-import"]',
       title: "Review & Confirm Import",
-      content: "After mapping columns and reviewing the preview, click Import to add all contacts to your account. You can edit individual contacts after import.",
+      content:
+        "After mapping columns and reviewing the preview, click Import to add all contacts to your account. You can edit individual contacts after import.",
       action: "click",
       waitForElement: true,
     },
@@ -332,20 +364,23 @@ const STRIPE_CONNECT_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="card-payment-processing"]',
       title: "Payment Processing",
-      content: "This section lets you connect your Stripe account so customers can pay invoices online. Funds go directly to your bank account.",
+      content:
+        "This section lets you connect your Stripe account so customers can pay invoices online. Funds go directly to your bank account.",
       action: "observe",
     },
     {
       target: '[data-testid="button-connect-stripe"]',
       title: "Connect Stripe",
-      content: "Click this button to start the Stripe onboarding process. You'll be redirected to Stripe to enter your business and banking details.",
+      content:
+        "Click this button to start the Stripe onboarding process. You'll be redirected to Stripe to enter your business and banking details.",
       action: "click",
       validate: (el: HTMLElement) => !el.hasAttribute("disabled"),
     },
     {
       target: '[data-testid="badge-stripe-status"]',
       title: "Check Connection Status",
-      content: "This badge shows your Stripe connection status. When it says 'Connected', your customers can pay invoices online automatically.",
+      content:
+        "This badge shows your Stripe connection status. When it says 'Connected', your customers can pay invoices online automatically.",
       action: "observe",
       waitForElement: true,
     },
@@ -356,13 +391,15 @@ const PRICING_CALCULATOR_TUTORIAL: TutorialDefinition = {
   id: "tutorial_pricing_calculator",
   version: "1.1",
   title: "Pricing Calculator",
-  description: "Learn how to use the pricing calculator to set accurate, profitable prices for every job.",
+  description:
+    "Learn how to use the pricing calculator to set accurate, profitable prices for every job.",
   requiredPage: "/pricing-calculator",
   steps: [
     {
       target: '[data-testid="input-calc-yard-size"]',
       title: "Enter Yard Size",
-      content: "Enter the yard size in acres. A typical small residential yard is about 0.1 acres (4,350 sq ft). This determines how long the job takes.",
+      content:
+        "Enter the yard size in acres. A typical small residential yard is about 0.1 acres (4,350 sq ft). This determines how long the job takes.",
       action: "input",
       validate: (el: HTMLElement) => {
         const input = el as HTMLInputElement;
@@ -372,7 +409,8 @@ const PRICING_CALCULATOR_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="input-calc-dog-count"]',
       title: "Enter Dog Count",
-      content: "Enter how many dogs are at the property. More dogs means more cleanup time, which factors into the recommended price.",
+      content:
+        "Enter how many dogs are at the property. More dogs means more cleanup time, which factors into the recommended price.",
       action: "input",
       validate: (el: HTMLElement) => {
         const input = el as HTMLInputElement;
@@ -382,19 +420,22 @@ const PRICING_CALCULATOR_TUTORIAL: TutorialDefinition = {
     {
       target: '[data-testid="select-calc-frequency"]',
       title: "Service Frequency",
-      content: "Choose how often the service happens. Weekly service costs less per visit than biweekly or monthly because there's less buildup.",
+      content:
+        "Choose how often the service happens. Weekly service costs less per visit than biweekly or monthly because there's less buildup.",
       action: "select",
     },
     {
       target: '[data-testid="button-calculate"]',
       title: "Calculate the Price",
-      content: "Click Calculate to see your price recommendation. The calculator factors in labor, travel, supplies, and overhead to give you three price points.",
+      content:
+        "Click Calculate to see your price recommendation. The calculator factors in labor, travel, supplies, and overhead to give you three price points.",
       action: "click",
     },
     {
       target: '[data-testid="tab-settings"]',
       title: "Customize Your Settings",
-      content: "Click the Settings tab to adjust your base costs — hourly wage, gas price, overhead, profit margins, and more. These settings affect every calculation.",
+      content:
+        "Click the Settings tab to adjust your base costs — hourly wage, gas price, overhead, profit margins, and more. These settings affect every calculation.",
       action: "click",
     },
   ],
@@ -427,7 +468,12 @@ export function useTutorials() {
   });
 
   const progressMutation = useMutation({
-    mutationFn: async (payload: { tutorialId: string; currentStep: number; completed: boolean; version: string }) => {
+    mutationFn: async (payload: {
+      tutorialId: string;
+      currentStep: number;
+      completed: boolean;
+      version: string;
+    }) => {
       await apiRequest("POST", "/api/tutorials/progress", payload);
     },
     onSuccess: () => {
@@ -439,43 +485,56 @@ export function useTutorials() {
   const completions = tourStatus?.completions || {};
   const savedProgress = progressData?.progress || {};
 
-  const isTutorialCompleted = useCallback((tutorialId: string) => {
-    const tutorial = ALL_TUTORIALS.find(t => t.id === tutorialId);
-    if (!tutorial) return false;
-    const versionKey = `${tutorialId}_version`;
-    return !!(completions[tutorialId] && completions[versionKey] === tutorial.version);
-  }, [completions]);
+  const isTutorialCompleted = useCallback(
+    (tutorialId: string) => {
+      const tutorial = ALL_TUTORIALS.find((t) => t.id === tutorialId);
+      if (!tutorial) return false;
+      const versionKey = `${tutorialId}_version`;
+      return !!(completions[tutorialId] && completions[versionKey] === tutorial.version);
+    },
+    [completions]
+  );
 
-  const getTutorialProgress = useCallback((tutorialId: string): TutorialProgress | null => {
-    return savedProgress[tutorialId] || null;
-  }, [savedProgress]);
+  const getTutorialProgress = useCallback(
+    (tutorialId: string): TutorialProgress | null => {
+      return savedProgress[tutorialId] || null;
+    },
+    [savedProgress]
+  );
 
-  const saveProgress = useCallback((tutorialId: string, step: number, completed: boolean) => {
-    const tutorial = ALL_TUTORIALS.find(t => t.id === tutorialId);
-    if (!tutorial) return;
-    progressMutation.mutate({
-      tutorialId,
-      currentStep: step,
-      completed,
-      version: tutorial.version,
-    });
-  }, [progressMutation]);
+  const saveProgress = useCallback(
+    (tutorialId: string, step: number, completed: boolean) => {
+      const tutorial = ALL_TUTORIALS.find((t) => t.id === tutorialId);
+      if (!tutorial) return;
+      progressMutation.mutate({
+        tutorialId,
+        currentStep: step,
+        completed,
+        version: tutorial.version,
+      });
+    },
+    [progressMutation]
+  );
 
-  const startTutorial = useCallback((tutorialId: string) => {
-    const tutorial = ALL_TUTORIALS.find(t => t.id === tutorialId);
-    if (!tutorial) return;
-    if (tutorial.requiredPage) {
-      navigate(tutorial.requiredPage);
-    }
-    const existing = savedProgress[tutorialId];
-    const resumeStep = (existing && !existing.completed && existing.version === tutorial.version)
-      ? existing.currentStep
-      : 0;
-    setTimeout(() => {
-      setActiveTutorialId(tutorialId);
-      setCurrentStep(resumeStep);
-    }, 300);
-  }, [navigate, savedProgress]);
+  const startTutorial = useCallback(
+    (tutorialId: string) => {
+      const tutorial = ALL_TUTORIALS.find((t) => t.id === tutorialId);
+      if (!tutorial) return;
+      if (tutorial.requiredPage) {
+        navigate(tutorial.requiredPage);
+      }
+      const existing = savedProgress[tutorialId];
+      const resumeStep =
+        existing && !existing.completed && existing.version === tutorial.version
+          ? existing.currentStep
+          : 0;
+      setTimeout(() => {
+        setActiveTutorialId(tutorialId);
+        setCurrentStep(resumeStep);
+      }, 300);
+    },
+    [navigate, savedProgress]
+  );
 
   const stopTutorial = useCallback(() => {
     if (activeTutorialId) {
@@ -485,14 +544,17 @@ export function useTutorials() {
     setCurrentStep(0);
   }, [activeTutorialId, currentStep, saveProgress]);
 
-  const completeTutorial = useCallback((tutorialId: string) => {
-    saveProgress(tutorialId, 0, true);
-    setActiveTutorialId(null);
-    setCurrentStep(0);
-  }, [saveProgress]);
+  const completeTutorial = useCallback(
+    (tutorialId: string) => {
+      saveProgress(tutorialId, 0, true);
+      setActiveTutorialId(null);
+      setCurrentStep(0);
+    },
+    [saveProgress]
+  );
 
   const activeTutorial = activeTutorialId
-    ? ALL_TUTORIALS.find(t => t.id === activeTutorialId) || null
+    ? ALL_TUTORIALS.find((t) => t.id === activeTutorialId) || null
     : null;
 
   return {
@@ -792,8 +854,13 @@ export function TutorialOverlay({
         <Progress value={progress} className="h-1 mx-4 mb-2" data-testid="tutorial-progress" />
 
         <div className="px-4 pb-2">
-          <h4 className="font-semibold text-sm mb-1" data-testid="tutorial-step-title">{step.title}</h4>
-          <p className="text-sm text-muted-foreground leading-relaxed" data-testid="tutorial-step-content">
+          <h4 className="font-semibold text-sm mb-1" data-testid="tutorial-step-title">
+            {step.title}
+          </h4>
+          <p
+            className="text-sm text-muted-foreground leading-relaxed"
+            data-testid="tutorial-step-content"
+          >
             {step.content}
           </p>
         </div>
@@ -867,7 +934,7 @@ export function LearnHowButton({
   className = "",
   label,
 }: LearnHowButtonProps) {
-  const tutorial = ALL_TUTORIALS.find(t => t.id === tutorialId);
+  const tutorial = ALL_TUTORIALS.find((t) => t.id === tutorialId);
   if (!tutorial) return null;
 
   return (

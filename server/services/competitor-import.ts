@@ -43,9 +43,24 @@ const SWEEPANDGO_HEADERS: Record<string, string[]> = {
   city: ["city"],
   state: ["state", "st", "province"],
   zipCode: ["zip", "zip code", "zipcode", "zip_code", "postal code", "postal_code"],
-  numberOfDogs: ["# of dogs", "# dogs", "number of dogs", "dogs", "dog count", "num dogs", "number_of_dogs", "numberof dogs"],
+  numberOfDogs: [
+    "# of dogs",
+    "# dogs",
+    "number of dogs",
+    "dogs",
+    "dog count",
+    "num dogs",
+    "number_of_dogs",
+    "numberof dogs",
+  ],
   yardSize: ["yard size", "yard_size", "lot size", "yard"],
-  serviceFrequency: ["frequency", "service frequency", "service_frequency", "svc frequency", "svc freq"],
+  serviceFrequency: [
+    "frequency",
+    "service frequency",
+    "service_frequency",
+    "svc frequency",
+    "svc freq",
+  ],
   serviceDay: ["service day", "service_day", "day", "svc day", "day of week", "preferred day"],
   gateCode: ["gate code", "gate_code", "gate", "access code", "entry code"],
   notes: ["notes", "comments", "memo", "special instructions"],
@@ -57,8 +72,23 @@ const JOBBER_HEADERS: Record<string, string[]> = {
   firstName: ["client first name", "client firstname", "first name", "firstname"],
   lastName: ["client last name", "client lastname", "last name", "lastname"],
   email: ["client email", "email", "client email address", "email address"],
-  phone: ["client phone number", "client phone", "phone number", "phone", "home phone", "mobile phone", "cell phone"],
-  streetAddress: ["property street 1", "property address", "property street", "street 1", "address line 1", "street address"],
+  phone: [
+    "client phone number",
+    "client phone",
+    "phone number",
+    "phone",
+    "home phone",
+    "mobile phone",
+    "cell phone",
+  ],
+  streetAddress: [
+    "property street 1",
+    "property address",
+    "property street",
+    "street 1",
+    "address line 1",
+    "street address",
+  ],
   address2: ["property street 2", "street 2", "address line 2", "unit", "apt"],
   city: ["property city", "city"],
   state: ["property state/province", "property state", "state/province", "state", "province"],
@@ -75,33 +105,49 @@ const JOBBER_HEADERS: Record<string, string[]> = {
 };
 
 function detectPlatform(headers: string[]): Platform {
-  const normalized = headers.map(h => h.toLowerCase().trim());
+  const normalized = headers.map((h) => h.toLowerCase().trim());
 
   const jobberSignals = [
-    "client first name", "client last name", "client email",
-    "client phone number", "property street 1", "property city",
-    "property state/province", "property postal code",
+    "client first name",
+    "client last name",
+    "client email",
+    "client phone number",
+    "property street 1",
+    "property city",
+    "property state/province",
+    "property postal code",
   ];
-  const jobberMatches = jobberSignals.filter(s => normalized.includes(s)).length;
+  const jobberMatches = jobberSignals.filter((s) => normalized.includes(s)).length;
   if (jobberMatches >= 3) return "jobber";
 
   const sweepandgoSignals = [
-    "first name", "last name", "gate code", "# of dogs",
-    "yard size", "service day", "service frequency",
+    "first name",
+    "last name",
+    "gate code",
+    "# of dogs",
+    "yard size",
+    "service day",
+    "service frequency",
   ];
-  const sweepandgoMatches = sweepandgoSignals.filter(s => normalized.includes(s)).length;
+  const sweepandgoMatches = sweepandgoSignals.filter((s) => normalized.includes(s)).length;
   if (sweepandgoMatches >= 3) return "sweepandgo";
 
-  if (normalized.some(h => h.includes("client ")) || normalized.some(h => h.includes("property "))) {
+  if (
+    normalized.some((h) => h.includes("client ")) ||
+    normalized.some((h) => h.includes("property "))
+  ) {
     return "jobber";
   }
 
   return "sweepandgo";
 }
 
-function mapHeaders(headers: string[], headerMap: Record<string, string[]>): Record<string, number> {
+function mapHeaders(
+  headers: string[],
+  headerMap: Record<string, string[]>
+): Record<string, number> {
   const mapping: Record<string, number> = {};
-  const normalized = headers.map(h => h.toLowerCase().trim());
+  const normalized = headers.map((h) => h.toLowerCase().trim());
 
   for (const [field, aliases] of Object.entries(headerMap)) {
     for (let i = 0; i < normalized.length; i++) {
@@ -125,7 +171,14 @@ function normalizeFrequency(value: string): string {
   const v = value.toLowerCase().trim();
   if (!v) return "";
   if (v.includes("week") && !v.includes("bi")) return "weekly";
-  if (v.includes("biweek") || v.includes("bi-week") || v.includes("every other") || v.includes("2 week") || v.includes("every 2")) return "biweekly";
+  if (
+    v.includes("biweek") ||
+    v.includes("bi-week") ||
+    v.includes("every other") ||
+    v.includes("2 week") ||
+    v.includes("every 2")
+  )
+    return "biweekly";
   if (v.includes("month")) return "monthly";
   if (v.includes("one") || v.includes("once") || v.includes("single")) return "onetime";
   return v;
@@ -135,10 +188,20 @@ function normalizeDay(value: string): string {
   const v = value.toLowerCase().trim();
   if (!v) return "";
   const days: Record<string, string> = {
-    mon: "monday", tue: "tuesday", wed: "wednesday", thu: "thursday",
-    fri: "friday", sat: "saturday", sun: "sunday",
-    monday: "monday", tuesday: "tuesday", wednesday: "wednesday",
-    thursday: "thursday", friday: "friday", saturday: "saturday", sunday: "sunday",
+    mon: "monday",
+    tue: "tuesday",
+    wed: "wednesday",
+    thu: "thursday",
+    fri: "friday",
+    sat: "saturday",
+    sun: "sunday",
+    monday: "monday",
+    tuesday: "tuesday",
+    wednesday: "wednesday",
+    thursday: "thursday",
+    friday: "friday",
+    saturday: "saturday",
+    sunday: "sunday",
     tbd: "tbd",
   };
   for (const [key, val] of Object.entries(days)) {
@@ -152,12 +215,17 @@ function normalizeStatus(value: string): string {
   if (!v) return "lead";
   if (v === "active" || v === "current" || v === "subscribed") return "active";
   if (v === "paused" || v === "on hold" || v === "suspended" || v === "inactive") return "paused";
-  if (v === "cancelled" || v === "canceled" || v === "deleted" || v === "removed") return "cancelled";
+  if (v === "cancelled" || v === "canceled" || v === "deleted" || v === "removed")
+    return "cancelled";
   if (v === "estimate" || v === "quote" || v === "pending") return "estimate";
   return "lead";
 }
 
-export function parseCompetitorCSV(csvText: string, platformOverride?: Platform, previewLimit?: number): DetectResult {
+export function parseCompetitorCSV(
+  csvText: string,
+  platformOverride?: Platform,
+  previewLimit?: number
+): DetectResult {
   const { headers, rows } = parseCSV(csvText);
 
   if (headers.length === 0) {
@@ -185,16 +253,27 @@ export function parseCompetitorCSV(csvText: string, platformOverride?: Platform,
   const errors: Array<{ row: number; message: string }> = [];
 
   if (mapping.firstName === undefined && mapping.lastName === undefined) {
-    const nameIdx = headers.findIndex(h => {
+    const nameIdx = headers.findIndex((h) => {
       const n = h.toLowerCase().trim();
-      return n === "name" || n === "full name" || n === "client name" || n === "customer name" || n === "customer";
+      return (
+        n === "name" ||
+        n === "full name" ||
+        n === "client name" ||
+        n === "customer name" ||
+        n === "customer"
+      );
     });
     if (nameIdx >= 0) {
       mapping["fullName"] = nameIdx;
       fieldMapping["fullName"] = headers[nameIdx];
-      warnings.push(`No separate first/last name columns found. Using "${headers[nameIdx]}" and splitting automatically.`);
+      warnings.push(
+        `No separate first/last name columns found. Using "${headers[nameIdx]}" and splitting automatically.`
+      );
     } else {
-      errors.push({ row: 0, message: "No name columns found in CSV. At least a first name column is required." });
+      errors.push({
+        row: 0,
+        message: "No name columns found in CSV. At least a first name column is required.",
+      });
     }
   }
 
@@ -255,8 +334,10 @@ export function parseCompetitorCSV(csvText: string, platformOverride?: Platform,
     unknown: "Unknown",
   };
 
-  if (mapping.email === undefined) warnings.push("No email column detected. Duplicate detection by email will not be available.");
-  if (mapping.streetAddress === undefined) warnings.push("No address column detected. Properties will not be created.");
+  if (mapping.email === undefined)
+    warnings.push("No email column detected. Duplicate detection by email will not be available.");
+  if (mapping.streetAddress === undefined)
+    warnings.push("No address column detected. Properties will not be created.");
   if (mapping.numberOfDogs === undefined) warnings.push("No dog count column detected.");
 
   const limit = previewLimit ?? 10;

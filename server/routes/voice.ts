@@ -2,12 +2,19 @@ import type { Express, Request, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { registerRetellWebhook, getRetellAgentWebhookUrl, getAppBaseUrl } from "../services/retell";
+import { insertWebhookSchema } from "@shared/schema";
+
 import {
-  insertWebhookSchema,
-} from "@shared/schema";
-
-import { isAuthenticated, getCompanyContext, requireRole, handleError, auditLog, p, notify, createPropertyWithGeocode, suggestServiceDay } from "./shared";
-
+  isAuthenticated,
+  getCompanyContext,
+  requireRole,
+  handleError,
+  auditLog,
+  p,
+  notify,
+  createPropertyWithGeocode,
+  suggestServiceDay,
+} from "./shared";
 
 export async function registerVoiceRoutes(app: Express): Promise<void> {
   // ================ Retell AI Voice Agent Routes ================
@@ -43,18 +50,21 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const packages = await storage.getServicePackages(company.id);
       const serviceZones = await storage.getServiceZones(company.id);
 
-      const pricingSummary = company.voiceAgentPricingSummary || servicePricingItems
-        .filter(sp => sp.isActive)
-        .map(sp => `${sp.name}: $${sp.basePrice}/${sp.unit.replace("per_", "")}`)
-        .join("; ") || "Contact us for pricing";
+      const pricingSummary =
+        company.voiceAgentPricingSummary ||
+        servicePricingItems
+          .filter((sp) => sp.isActive)
+          .map((sp) => `${sp.name}: $${sp.basePrice}/${sp.unit.replace("per_", "")}`)
+          .join("; ") ||
+        "Contact us for pricing";
 
       const packagesSummary = packages
-        .filter(p => p.isActive)
-        .map(p => `${p.name} (${p.frequency}): $${p.basePrice}`)
+        .filter((p) => p.isActive)
+        .map((p) => `${p.name} (${p.frequency}): $${p.basePrice}`)
         .join("; ");
 
       const zipRouting: Record<string, string[]> = {};
-      for (const zone of serviceZones.filter(z => z.isActive)) {
+      for (const zone of serviceZones.filter((z) => z.isActive)) {
         if (!zipRouting[zone.zipCode]) zipRouting[zone.zipCode] = [];
         const dayLabel = zone.dayOfWeek.charAt(0).toUpperCase() + zone.dayOfWeek.slice(1);
         if (!zipRouting[zone.zipCode].includes(dayLabel)) {
@@ -64,7 +74,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       const policiesRaw = company.voiceAgentPolicies || "";
       const policies = policiesRaw
-        ? policiesRaw.split(/\n+/).map(l => l.trim()).filter(Boolean)
+        ? policiesRaw
+            .split(/\n+/)
+            .map((l) => l.trim())
+            .filter(Boolean)
         : [];
 
       res.json({
@@ -78,15 +91,31 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         packages: packagesSummary || undefined,
         policies,
         specialLines: company.voiceAgentSpecialLines || "",
-        greeting: company.voiceAgentGreeting || `Thank you for calling ${company.name}! How can I help you today?`,
+        greeting:
+          company.voiceAgentGreeting ||
+          `Thank you for calling ${company.name}! How can I help you today?`,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/retell/create-lead", async (req: Request, res: Response) => {
     if (!verifyRetellApiKey(req, res)) return;
     try {
-      const { tenantId, firstName, lastName, email, phone, street, city, state, zipCode, notes, numberOfDogs } = req.body;
+      const {
+        tenantId,
+        firstName,
+        lastName,
+        email,
+        phone,
+        street,
+        city,
+        state,
+        zipCode,
+        notes,
+        numberOfDogs,
+      } = req.body;
       if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
       if (!firstName) return res.status(400).json({ error: "firstName is required" });
 
@@ -116,14 +145,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         });
       }
 
-      notify(tenantId, "new_lead", "New Lead (Voice Agent)", `${firstName} ${lastName || ""} called in and was added as a new lead.`.trim(), `/contacts/${contact.id}`);
+      notify(
+        tenantId,
+        "new_lead",
+        "New Lead (Voice Agent)",
+        `${firstName} ${lastName || ""} called in and was added as a new lead.`.trim(),
+        `/contacts/${contact.id}`
+      );
 
       res.status(201).json({
         success: true,
         contactId: contact.id,
         message: `Lead created: ${firstName} ${lastName || ""}`.trim(),
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/retell/lookup-customer", async (req: Request, res: Response) => {
@@ -141,13 +178,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       if (phone) {
         const digits = phone.replace(/\D/g, "");
-        match = allContacts.find(c => {
+        match = allContacts.find((c) => {
           const cDigits = (c.phone || "").replace(/\D/g, "");
           return cDigits.length >= 10 && digits.length >= 10 && digits.endsWith(cDigits.slice(-10));
         });
       }
       if (!match && email) {
-        match = allContacts.find(c => c.email?.toLowerCase() === email.toLowerCase());
+        match = allContacts.find((c) => c.email?.toLowerCase() === email.toLowerCase());
       }
 
       if (!match) {
@@ -155,7 +192,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       const properties = await storage.getProperties(tenantId, match.id);
-      const servicePlans = await storage.getServicePlans(tenantId, { contactId: match.id, isActive: true });
+      const servicePlans = await storage.getServicePlans(tenantId, {
+        contactId: match.id,
+        isActive: true,
+      });
 
       res.json({
         found: true,
@@ -166,12 +206,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           email: match.email,
           phone: match.phone,
           status: match.status,
-          properties: properties.map(p => ({
+          properties: properties.map((p) => ({
             address: p.streetAddress,
             city: p.city,
             numberOfDogs: p.numberOfDogs,
           })),
-          servicePlans: servicePlans.map(sp => ({
+          servicePlans: servicePlans.map((sp) => ({
             frequency: sp.frequency,
             dayOfWeek: sp.dayOfWeek,
             price: sp.pricePerVisit,
@@ -179,7 +219,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           })),
         },
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/retell/log-call", async (req: Request, res: Response) => {
@@ -207,19 +249,38 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         });
       }
 
-      notify(tenantId, "new_message", "Voice Agent Call", `Call ${outcome || "completed"}: ${summary || "No summary provided"}`, contactId ? `/contacts/${contactId}` : undefined);
+      notify(
+        tenantId,
+        "new_message",
+        "Voice Agent Call",
+        `Call ${outcome || "completed"}: ${summary || "No summary provided"}`,
+        contactId ? `/contacts/${contactId}` : undefined
+      );
 
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/retell/create-booking", async (req: Request, res: Response) => {
     if (!verifyRetellApiKey(req, res)) return;
     try {
       const {
-        tenantId, callerName, phone, email, address, zip,
-        dogs, yardSize, fenced, serviceType, frequency,
-        preferredDayOfWeek, accessNotes, specialInstructions,
+        tenantId,
+        callerName,
+        phone,
+        email,
+        address,
+        zip,
+        dogs,
+        yardSize,
+        fenced,
+        serviceType,
+        frequency,
+        preferredDayOfWeek,
+        accessNotes,
+        specialInstructions,
       } = req.body;
       if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
       if (!callerName) return res.status(400).json({ error: "callerName is required" });
@@ -236,13 +297,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const allContacts = await storage.getContacts(tenantId);
         if (phone) {
           const digits = phone.replace(/\D/g, "");
-          contact = allContacts.find(c => {
+          contact = allContacts.find((c) => {
             const cDigits = (c.phone || "").replace(/\D/g, "");
-            return cDigits.length >= 10 && digits.length >= 10 && digits.endsWith(cDigits.slice(-10));
+            return (
+              cDigits.length >= 10 && digits.length >= 10 && digits.endsWith(cDigits.slice(-10))
+            );
           });
         }
         if (!contact && email) {
-          contact = allContacts.find(c => c.email?.toLowerCase() === email.toLowerCase());
+          contact = allContacts.find((c) => c.email?.toLowerCase() === email.toLowerCase());
         }
       }
 
@@ -266,7 +329,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         fenced != null ? `Fenced: ${fenced}` : null,
         accessNotes ? `Access: ${accessNotes}` : null,
         specialInstructions ? `Instructions: ${specialInstructions}` : null,
-      ].filter(Boolean).join("\n");
+      ]
+        .filter(Boolean)
+        .join("\n");
 
       let property = null;
       if (address) {
@@ -306,7 +371,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         propertyId: property?.id || null,
         message: "Booking request recorded; team will confirm by email.",
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/retell/suggest-day", async (req: Request, res: Response) => {
@@ -327,19 +394,33 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
         if (token && query) {
           try {
-            const params = new URLSearchParams({ q: query, access_token: token, types: "address,postcode", limit: "1" });
-            const geoRes = await fetch(`https://api.mapbox.com/search/geocode/v6/forward?${params}`);
+            const params = new URLSearchParams({
+              q: query,
+              access_token: token,
+              types: "address,postcode",
+              limit: "1",
+            });
+            const geoRes = await fetch(
+              `https://api.mapbox.com/search/geocode/v6/forward?${params}`
+            );
             if (geoRes.ok) {
               const geoData = await geoRes.json();
               const coords = geoData.features?.[0]?.geometry?.coordinates;
-              if (coords) { resolvedLng = coords[0]; resolvedLat = coords[1]; }
+              if (coords) {
+                resolvedLng = coords[0];
+                resolvedLat = coords[1];
+              }
             }
-          } catch { /* ignore geocode failure, fall through to fallback */ }
+          } catch {
+            /* ignore geocode failure, fall through to fallback */
+          }
         }
       }
 
       if (!resolvedLat || !resolvedLng) {
-        return res.status(400).json({ error: "Could not determine coordinates. Provide lat/lng or a valid address/zipCode." });
+        return res.status(400).json({
+          error: "Could not determine coordinates. Provide lat/lng or a valid address/zipCode.",
+        });
       }
 
       const result = await suggestServiceDay(tenantId, resolvedLat, resolvedLng);
@@ -356,92 +437,139 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           ? `Based on your location, ${dayLabel} works best — our nearest stop is about ${distanceMi} miles away.`
           : `Based on your location, ${dayLabel} is recommended.`,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Retell Webhook Status (Settings) ================
 
-  app.get("/api/settings/retell-webhook-status", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-
-      const retellApiKey = process.env.RETELL_API_KEY;
-      if (!retellApiKey) {
-        return res.json({ configured: false, reason: "RETELL_API_KEY not set" });
-      }
-
-      const company = await storage.getCompany(companyId);
-      const agentId = company?.retellAgentId || process.env.RETELL_AGENT_ID || null;
-      if (!agentId) {
-        return res.json({ configured: false, reason: "No Retell agent ID configured for this account" });
-      }
-
-      const expectedUrl = getAppBaseUrl() ? `${getAppBaseUrl()}/api/webhooks/retell` : null;
-
-      const agentRes = await fetch(`https://api.retellai.com/get-agent/${agentId}`, {
-        headers: {
-          Authorization: `Bearer ${retellApiKey}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!agentRes.ok) {
-        const body = await agentRes.text();
-        return res.json({ configured: true, agentId, registered: false, reason: `Retell API error (${agentRes.status}): ${body}`, expectedUrl, currentUrl: null });
-      }
-
-      const agentData = await agentRes.json() as { webhook_url?: string };
-      const currentUrl: string | null = agentData.webhook_url || null;
-      const registered = !!currentUrl && !!expectedUrl && currentUrl === expectedUrl;
-
-      res.json({ configured: true, agentId, registered, currentUrl, expectedUrl });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/settings/retell-register-webhook", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-
-      const retellApiKey = process.env.RETELL_API_KEY;
-      if (!retellApiKey) {
-        return res.status(400).json({ error: "RETELL_API_KEY not configured" });
-      }
-
-      const company = await storage.getCompany(companyId);
-      const agentId = company?.retellAgentId || process.env.RETELL_AGENT_ID || null;
-      if (!agentId) {
-        return res.status(400).json({ error: "No Retell agent ID configured for this account" });
-      }
-
-      let oldUrl: string | null = null;
+  app.get(
+    "/api/settings/retell-webhook-status",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
       try {
-        oldUrl = await getRetellAgentWebhookUrl(agentId);
-      } catch (fetchErr) {
-        console.warn(`[retell-register-webhook] Could not fetch current webhook URL for agent ${agentId}:`, fetchErr instanceof Error ? fetchErr.message : fetchErr);
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+
+        const retellApiKey = process.env.RETELL_API_KEY;
+        if (!retellApiKey) {
+          return res.json({ configured: false, reason: "RETELL_API_KEY not set" });
+        }
+
+        const company = await storage.getCompany(companyId);
+        const agentId = company?.retellAgentId || process.env.RETELL_AGENT_ID || null;
+        if (!agentId) {
+          return res.json({
+            configured: false,
+            reason: "No Retell agent ID configured for this account",
+          });
+        }
+
+        const expectedUrl = getAppBaseUrl() ? `${getAppBaseUrl()}/api/webhooks/retell` : null;
+
+        const agentRes = await fetch(`https://api.retellai.com/get-agent/${agentId}`, {
+          headers: {
+            Authorization: `Bearer ${retellApiKey}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!agentRes.ok) {
+          const body = await agentRes.text();
+          return res.json({
+            configured: true,
+            agentId,
+            registered: false,
+            reason: `Retell API error (${agentRes.status}): ${body}`,
+            expectedUrl,
+            currentUrl: null,
+          });
+        }
+
+        const agentData = (await agentRes.json()) as { webhook_url?: string };
+        const currentUrl: string | null = agentData.webhook_url || null;
+        const registered = !!currentUrl && !!expectedUrl && currentUrl === expectedUrl;
+
+        res.json({ configured: true, agentId, registered, currentUrl, expectedUrl });
+      } catch (err) {
+        handleError(res, err);
       }
+    }
+  );
 
-      await registerRetellWebhook(agentId);
-      const { userId } = await getCompanyContext(req);
-      const baseUrl = getAppBaseUrl();
-      const newUrl = `${baseUrl}/api/webhooks/retell`;
+  app.post(
+    "/api/settings/retell-register-webhook",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
 
-      await storage.createRetellWebhookRepair({ companyId, agentId, oldUrl: oldUrl ?? undefined, newUrl, triggeredBy: "manual" });
-      auditLog(companyId, userId, "settings", companyId, "update", { new: { retellWebhook: newUrl } }, req.ip || undefined);
+        const retellApiKey = process.env.RETELL_API_KEY;
+        if (!retellApiKey) {
+          return res.status(400).json({ error: "RETELL_API_KEY not configured" });
+        }
 
-      res.json({ success: true, webhookUrl: newUrl });
-    } catch (err) { handleError(res, err); }
-  });
+        const company = await storage.getCompany(companyId);
+        const agentId = company?.retellAgentId || process.env.RETELL_AGENT_ID || null;
+        if (!agentId) {
+          return res.status(400).json({ error: "No Retell agent ID configured for this account" });
+        }
 
-  app.get("/api/settings/retell-webhook-repairs", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const repairs = await storage.listRetellWebhookRepairs(companyId, 50);
-      res.json(repairs);
-    } catch (err) { handleError(res, err); }
-  });
+        let oldUrl: string | null = null;
+        try {
+          oldUrl = await getRetellAgentWebhookUrl(agentId);
+        } catch (fetchErr) {
+          console.warn(
+            `[retell-register-webhook] Could not fetch current webhook URL for agent ${agentId}:`,
+            fetchErr instanceof Error ? fetchErr.message : fetchErr
+          );
+        }
+
+        await registerRetellWebhook(agentId);
+        const { userId } = await getCompanyContext(req);
+        const baseUrl = getAppBaseUrl();
+        const newUrl = `${baseUrl}/api/webhooks/retell`;
+
+        await storage.createRetellWebhookRepair({
+          companyId,
+          agentId,
+          oldUrl: oldUrl ?? undefined,
+          newUrl,
+          triggeredBy: "manual",
+        });
+        auditLog(
+          companyId,
+          userId,
+          "settings",
+          companyId,
+          "update",
+          { new: { retellWebhook: newUrl } },
+          req.ip || undefined
+        );
+
+        res.json({ success: true, webhookUrl: newUrl });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.get(
+    "/api/settings/retell-webhook-repairs",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const repairs = await storage.listRetellWebhookRepairs(companyId, 50);
+        res.json(repairs);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // ================ Voice Agent Webhook Status (voice-plan-gated) ================
 
@@ -462,7 +590,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       const agentId = company.retellAgentId || process.env.RETELL_AGENT_ID || null;
       if (!agentId) {
-        return res.json({ configured: false, reason: "No Retell agent ID configured for this account" });
+        return res.json({
+          configured: false,
+          reason: "No Retell agent ID configured for this account",
+        });
       }
 
       const expectedUrl = getAppBaseUrl() ? `${getAppBaseUrl()}/api/webhooks/retell` : null;
@@ -476,15 +607,24 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       if (!agentRes.ok) {
         const body = await agentRes.text();
-        return res.json({ configured: true, agentId, registered: false, reason: `Retell API error (${agentRes.status}): ${body}`, expectedUrl, currentUrl: null });
+        return res.json({
+          configured: true,
+          agentId,
+          registered: false,
+          reason: `Retell API error (${agentRes.status}): ${body}`,
+          expectedUrl,
+          currentUrl: null,
+        });
       }
 
-      const agentData = await agentRes.json() as { webhook_url?: string };
+      const agentData = (await agentRes.json()) as { webhook_url?: string };
       const currentUrl: string | null = agentData.webhook_url || null;
       const registered = !!currentUrl && !!expectedUrl && currentUrl === expectedUrl;
 
       res.json({ configured: true, agentId, registered, currentUrl, expectedUrl });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/voice/register-webhook", isAuthenticated, async (req: Request, res: Response) => {
@@ -509,24 +649,45 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       const baseUrl = getAppBaseUrl();
       if (!baseUrl) {
-        return res.status(400).json({ error: "APP_BASE_URL is not configured — cannot determine the correct webhook URL" });
+        return res.status(400).json({
+          error: "APP_BASE_URL is not configured — cannot determine the correct webhook URL",
+        });
       }
 
       let oldUrl: string | null = null;
       try {
         oldUrl = await getRetellAgentWebhookUrl(agentId);
       } catch (fetchErr) {
-        console.warn(`[voice-register-webhook] Could not fetch current webhook URL for agent ${agentId}:`, fetchErr instanceof Error ? fetchErr.message : fetchErr);
+        console.warn(
+          `[voice-register-webhook] Could not fetch current webhook URL for agent ${agentId}:`,
+          fetchErr instanceof Error ? fetchErr.message : fetchErr
+        );
       }
 
       await registerRetellWebhook(agentId);
       const newUrl = `${baseUrl}/api/webhooks/retell`;
 
-      await storage.createRetellWebhookRepair({ companyId, agentId, oldUrl: oldUrl ?? undefined, newUrl, triggeredBy: "manual" });
-      auditLog(companyId, userId, "settings", companyId, "update", { new: { retellWebhook: newUrl } }, req.ip || undefined);
+      await storage.createRetellWebhookRepair({
+        companyId,
+        agentId,
+        oldUrl: oldUrl ?? undefined,
+        newUrl,
+        triggeredBy: "manual",
+      });
+      auditLog(
+        companyId,
+        userId,
+        "settings",
+        companyId,
+        "update",
+        { new: { retellWebhook: newUrl } },
+        req.ip || undefined
+      );
 
       res.json({ success: true, webhookUrl: newUrl });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Webhook Routes ================
@@ -537,7 +698,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       requireRole(role);
       const webhooksList = await storage.getWebhooks(companyId);
       res.json(webhooksList);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/webhooks", isAuthenticated, async (req: Request, res: Response) => {
@@ -548,9 +711,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const parsed = insertWebhookSchema.parse({ ...req.body, companyId, secret });
       const webhook = await storage.createWebhook(parsed);
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "webhook", webhook.id, "create", { new: { url: parsed.url, events: parsed.events } }, req.ip || undefined);
+      auditLog(
+        companyId,
+        userId,
+        "webhook",
+        webhook.id,
+        "create",
+        { new: { url: parsed.url, events: parsed.events } },
+        req.ip || undefined
+      );
       res.status(201).json(webhook);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/webhooks/deliveries", isAuthenticated, async (req: Request, res: Response) => {
@@ -560,7 +733,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const limit = parseInt(req.query.limit as string) || 100;
       const deliveries = await storage.getWebhookDeliveriesForCompany(companyId, limit);
       res.json(deliveries);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/webhooks/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -568,13 +743,23 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const existingWebhooks = await storage.getWebhooks(companyId);
-      const existingWh = existingWebhooks.find(w => w.id === p(req.params.id));
+      const existingWh = existingWebhooks.find((w) => w.id === p(req.params.id));
       if (!existingWh) return res.status(404).json({ error: "Webhook not found" });
       const webhook = await storage.updateWebhook(p(req.params.id), companyId, req.body);
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "webhook", p(req.params.id), "update", { old: { url: existingWh.url, isActive: existingWh.isActive }, new: req.body }, req.ip || undefined);
+      auditLog(
+        companyId,
+        userId,
+        "webhook",
+        p(req.params.id),
+        "update",
+        { old: { url: existingWh.url, isActive: existingWh.isActive }, new: req.body },
+        req.ip || undefined
+      );
       res.json(webhook);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/webhooks/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -582,12 +767,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const allWebhooks = await storage.getWebhooks(companyId);
-      const whToDelete = allWebhooks.find(w => w.id === p(req.params.id));
+      const whToDelete = allWebhooks.find((w) => w.id === p(req.params.id));
       await storage.deleteWebhook(p(req.params.id), companyId);
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "webhook", p(req.params.id), "delete", { deleted: { url: whToDelete?.url, events: whToDelete?.events } }, req.ip || undefined);
+      auditLog(
+        companyId,
+        userId,
+        "webhook",
+        p(req.params.id),
+        "delete",
+        { deleted: { url: whToDelete?.url, events: whToDelete?.events } },
+        req.ip || undefined
+      );
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/webhooks/:id/deliveries", isAuthenticated, async (req: Request, res: Response) => {
@@ -595,11 +790,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const existing = await storage.getWebhooks(companyId);
-      if (!existing.find(w => w.id === p(req.params.id))) return res.status(404).json({ error: "Webhook not found" });
+      if (!existing.find((w) => w.id === p(req.params.id)))
+        return res.status(404).json({ error: "Webhook not found" });
       const limit = parseInt(req.query.limit as string) || 50;
       const deliveries = await storage.getWebhookDeliveries(p(req.params.id), limit);
       res.json(deliveries);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
-
 }

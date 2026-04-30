@@ -131,10 +131,14 @@ const FREQUENCIES = [
 
 function frequencyToVisitsPerMonth(freq: string): number {
   switch (freq) {
-    case "weekly": return 4.33;
-    case "biweekly": return 2.17;
-    case "monthly": return 1;
-    default: return 4.33;
+    case "weekly":
+      return 4.33;
+    case "biweekly":
+      return 2.17;
+    case "monthly":
+      return 1;
+    default:
+      return 4.33;
   }
 }
 
@@ -155,12 +159,20 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
     return localStorage.getItem("scoopilot_setup_dismissed") === "true";
   });
 
-  const [createdContactId, setCreatedContactId] = useState<string | null>(onboarding.firstContact?.id || null);
-  const [createdContactName, setCreatedContactName] = useState<string>(
-    onboarding.firstContact ? `${onboarding.firstContact.firstName} ${onboarding.firstContact.lastName}` : ""
+  const [createdContactId, setCreatedContactId] = useState<string | null>(
+    onboarding.firstContact?.id || null
   );
-  const [createdPropertyId, setCreatedPropertyId] = useState<string | null>(onboarding.firstProperty?.id || null);
-  const [propertyAddress, setPropertyAddress] = useState<string>(onboarding.firstProperty?.streetAddress || "");
+  const [createdContactName, setCreatedContactName] = useState<string>(
+    onboarding.firstContact
+      ? `${onboarding.firstContact.firstName} ${onboarding.firstContact.lastName}`
+      : ""
+  );
+  const [createdPropertyId, setCreatedPropertyId] = useState<string | null>(
+    onboarding.firstProperty?.id || null
+  );
+  const [propertyAddress, setPropertyAddress] = useState<string>(
+    onboarding.firstProperty?.streetAddress || ""
+  );
   const [customerFrequency, setCustomerFrequency] = useState<string>("weekly");
   const [customerDay, setCustomerDay] = useState<string>("monday");
   const [customerYardSize, setCustomerYardSize] = useState<string>("");
@@ -173,14 +185,19 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
   const [selectedPrice, setSelectedPrice] = useState<number>(0);
   const [customPrice, setCustomPrice] = useState<string>("");
 
-  const [createdPlanId, setCreatedPlanId] = useState<string | null>(onboarding.firstServicePlan?.id || null);
-  const [completionData, setCompletionData] = useState<{ routeName: string; visitCount: number } | null>(null);
+  const [createdPlanId, setCreatedPlanId] = useState<string | null>(
+    onboarding.firstServicePlan?.id || null
+  );
+  const [completionData, setCompletionData] = useState<{
+    routeName: string;
+    visitCount: number;
+  } | null>(null);
   const [pricingLoading, setPricingLoading] = useState(false);
   const [venmoHandle, setVenmoHandle] = useState("");
   const [venmoSaved, setVenmoSaved] = useState(false);
 
   useEffect(() => {
-    const firstIncomplete = onboarding.steps.findIndex(s => !s.completed);
+    const firstIncomplete = onboarding.steps.findIndex((s) => !s.completed);
     if (firstIncomplete >= 0) {
       setActiveStep((prev) => Math.max(prev, firstIncomplete));
     } else {
@@ -189,7 +206,9 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
 
     if (onboarding.firstContact && !createdContactId) {
       setCreatedContactId(onboarding.firstContact.id);
-      setCreatedContactName(`${onboarding.firstContact.firstName} ${onboarding.firstContact.lastName}`);
+      setCreatedContactName(
+        `${onboarding.firstContact.firstName} ${onboarding.firstContact.lastName}`
+      );
     }
     if (onboarding.firstProperty && !createdPropertyId) {
       setCreatedPropertyId(onboarding.firstProperty.id);
@@ -300,7 +319,12 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
     },
   });
 
-  const runPriceCalculation = async (propId?: string | null, yardSize?: string, dogCount?: number, freq?: string) => {
+  const runPriceCalculation = async (
+    propId?: string | null,
+    yardSize?: string,
+    dogCount?: number,
+    freq?: string
+  ) => {
     setPricingLoading(true);
     try {
       const res = await apiRequest("POST", "/api/pricing/calculate", {
@@ -316,19 +340,29 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       setSelectedPrice(data.recommendedPriceCents);
       setCustomPrice((data.recommendedPriceCents / 100).toFixed(2));
     } catch (err: any) {
-      toast({ title: "Pricing calculation failed", description: err.message, variant: "destructive" });
+      toast({
+        title: "Pricing calculation failed",
+        description: err.message,
+        variant: "destructive",
+      });
     } finally {
       setPricingLoading(false);
     }
   };
 
   const calculatePriceMutation = useMutation({
-    mutationFn: () => runPriceCalculation(createdPropertyId, customerYardSize, customerDogCount, customerFrequency),
+    mutationFn: () =>
+      runPriceCalculation(createdPropertyId, customerYardSize, customerDogCount, customerFrequency),
   });
 
   useEffect(() => {
     if (activeStep === 2 && !pricingResult && onboarding.firstProperty) {
-      runPriceCalculation(onboarding.firstProperty.id, onboarding.firstProperty.yardSize, onboarding.firstProperty.numberOfDogs || 1, customerFrequency);
+      runPriceCalculation(
+        onboarding.firstProperty.id,
+        onboarding.firstProperty.yardSize,
+        onboarding.firstProperty.numberOfDogs || 1,
+        customerFrequency
+      );
     }
   }, [activeStep]);
 
@@ -365,7 +399,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       }
 
       const today = new Date();
-      const dayIndex = DAYS.findIndex(d => d.value === customerDay);
+      const dayIndex = DAYS.findIndex((d) => d.value === customerDay);
       const todayDay = today.getDay();
       const targetDay = dayIndex === 6 ? 0 : dayIndex + 1;
       let daysUntil = targetDay - todayDay;
@@ -409,7 +443,11 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       toast({ title: "Venmo handle saved" });
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to save Venmo handle", description: err.message, variant: "destructive" });
+      toast({
+        title: "Failed to save Venmo handle",
+        description: err.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -418,7 +456,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       if (!createdPlanId) {
         throw new Error("Job not found. Please go back and create one first.");
       }
-      const dayLabel = DAYS.find(d => d.value === customerDay)?.label || "Monday";
+      const dayLabel = DAYS.find((d) => d.value === customerDay)?.label || "Monday";
       const routeRes = await apiRequest("POST", "/api/routes", {
         name: `${dayLabel} Route`,
         dayOfWeek: customerDay,
@@ -454,7 +492,11 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       toast({ title: "Route created with visits" });
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to generate route", description: err.message, variant: "destructive" });
+      toast({
+        title: "Failed to generate route",
+        description: err.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -478,15 +520,24 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-xl" data-testid="text-setup-title">Set up your business in 3 minutes</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1" data-testid="text-setup-progress-label">
+            <CardTitle className="text-xl" data-testid="text-setup-title">
+              Set up your business in 3 minutes
+            </CardTitle>
+            <p
+              className="text-sm text-muted-foreground mt-1"
+              data-testid="text-setup-progress-label"
+            >
               {effectiveCompleted} of 5 complete
             </p>
           </div>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { setDismissed(true); localStorage.setItem("scoopilot_setup_dismissed", "true"); window.dispatchEvent(new CustomEvent("scoopilot:setup-dismissed")); }}
+            onClick={() => {
+              setDismissed(true);
+              localStorage.setItem("scoopilot_setup_dismissed", "true");
+              window.dispatchEvent(new CustomEvent("scoopilot:setup-dismissed"));
+            }}
             className="text-muted-foreground"
             data-testid="button-skip-setup"
           >
@@ -507,9 +558,11 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
             <div
               key={stepIdx}
               className={`rounded-lg border transition-all ${
-                isActive ? "border-primary/30 bg-primary/5 shadow-sm" :
-                isCompleted ? "border-transparent bg-muted/30" :
-                "border-transparent opacity-50"
+                isActive
+                  ? "border-primary/30 bg-primary/5 shadow-sm"
+                  : isCompleted
+                    ? "border-transparent bg-muted/30"
+                    : "border-transparent opacity-50"
               }`}
               data-testid={`setup-step-${stepIdx}`}
             >
@@ -519,11 +572,15 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                 onClick={() => isCompleted && setActiveStep(stepIdx)}
                 data-testid={`button-step-header-${stepIdx}`}
               >
-                <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
-                  isCompleted ? "bg-primary text-primary-foreground" :
-                  isActive ? "bg-primary/10 text-primary" :
-                  "bg-muted text-muted-foreground"
-                }`}>
+                <div
+                  className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
+                    isCompleted
+                      ? "bg-primary text-primary-foreground"
+                      : isActive
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground"
+                  }`}
+                >
                   {isCompleted ? (
                     <CheckCircle2 className="h-4 w-4" />
                   ) : (
@@ -531,7 +588,9 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${isCompleted ? "line-through text-muted-foreground" : ""}`}>
+                  <p
+                    className={`text-sm font-medium ${isCompleted ? "line-through text-muted-foreground" : ""}`}
+                  >
                     {STEP_LABELS[stepIdx]}
                   </p>
                 </div>
@@ -543,16 +602,15 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                   <p className="text-sm text-muted-foreground mb-3">
                     Add the zip codes you service and assign which day you work each area.
                   </p>
-                  <ServiceZoneMap
-                    zones={serviceZones}
-                    onZonesChange={setServiceZones}
-                    compact
-                  />
+                  <ServiceZoneMap zones={serviceZones} onZonesChange={setServiceZones} compact />
                   <div className="flex gap-2 mt-4">
                     <Button
                       variant="outline"
                       className="flex-1"
-                      onClick={() => { setActiveStep(1); queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] }); }}
+                      onClick={() => {
+                        setActiveStep(1);
+                        queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
+                      }}
                       data-testid="button-skip-zones"
                     >
                       Skip for now
@@ -564,7 +622,9 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                         setSavingZones(true);
                         try {
                           const token = localStorage.getItem("sessionToken");
-                          const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
+                          const authHeaders: Record<string, string> = {
+                            "Content-Type": "application/json",
+                          };
                           if (token) authHeaders["Authorization"] = `Bearer ${token}`;
                           const resp = await fetch("/api/service-zones/bulk", {
                             method: "POST",
@@ -578,7 +638,11 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                           setActiveStep(1);
                           toast({ title: "Service zones saved" });
                         } catch (err: any) {
-                          toast({ title: "Error", description: err.message, variant: "destructive" });
+                          toast({
+                            title: "Error",
+                            description: err.message,
+                            variant: "destructive",
+                          });
                         } finally {
                           setSavingZones(false);
                         }
@@ -595,7 +659,10 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
               {isActive && stepIdx === 1 && (
                 <div className="px-4 pb-4" data-testid="step-0-form">
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit((data) => createContactMutation.mutate(data))} className="space-y-3">
+                    <form
+                      onSubmit={form.handleSubmit((data) => createContactMutation.mutate(data))}
+                      className="space-y-3"
+                    >
                       <div className="grid grid-cols-2 gap-3">
                         <FormField
                           control={form.control}
@@ -604,7 +671,11 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                             <FormItem>
                               <FormLabel>First Name</FormLabel>
                               <FormControl>
-                                <Input {...field} placeholder="John" data-testid="input-first-name" />
+                                <Input
+                                  {...field}
+                                  placeholder="John"
+                                  data-testid="input-first-name"
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -617,7 +688,11 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                             <FormItem>
                               <FormLabel>Last Name</FormLabel>
                               <FormControl>
-                                <Input {...field} placeholder="Smith" data-testid="input-last-name" />
+                                <Input
+                                  {...field}
+                                  placeholder="Smith"
+                                  data-testid="input-last-name"
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -665,7 +740,9 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                                 </FormControl>
                                 <SelectContent>
                                   {YARD_SIZES.map((s) => (
-                                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                                    <SelectItem key={s.value} value={s.value}>
+                                      {s.label}
+                                    </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -680,7 +757,13 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                             <FormItem>
                               <FormLabel>Number of Dogs</FormLabel>
                               <FormControl>
-                                <Input type="number" min={1} max={20} {...field} data-testid="input-dog-count" />
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={20}
+                                  {...field}
+                                  data-testid="input-dog-count"
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -703,7 +786,9 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                                 </FormControl>
                                 <SelectContent>
                                   {FREQUENCIES.map((f) => (
-                                    <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                    <SelectItem key={f.value} value={f.value}>
+                                      {f.label}
+                                    </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -725,7 +810,9 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                                 </FormControl>
                                 <SelectContent>
                                   {DAYS.map((d) => (
-                                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                                    <SelectItem key={d.value} value={d.value}>
+                                      {d.label}
+                                    </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -742,9 +829,13 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                         data-testid="button-add-customer"
                       >
                         {createContactMutation.isPending ? (
-                          <><Loader2 className="h-4 w-4 animate-spin" /> Adding...</>
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Adding...
+                          </>
                         ) : (
-                          <>Add Customer <ArrowRight className="h-4 w-4" /></>
+                          <>
+                            Add Customer <ArrowRight className="h-4 w-4" />
+                          </>
                         )}
                       </Button>
                     </form>
@@ -754,7 +845,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
 
               {isActive && stepIdx === 2 && (
                 <div className="px-4 pb-4 space-y-4" data-testid="step-2-pricing">
-                  {(pricingLoading || calculatePriceMutation.isPending) ? (
+                  {pricingLoading || calculatePriceMutation.isPending ? (
                     <div className="space-y-3">
                       <Skeleton className="h-20 w-full" />
                       <Skeleton className="h-12 w-full" />
@@ -763,7 +854,10 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                     <>
                       <div className="rounded-lg bg-primary/5 border border-primary/20 p-4 text-center space-y-2">
                         <p className="text-sm text-muted-foreground">Recommended price</p>
-                        <p className="text-3xl font-bold text-primary" data-testid="text-recommended-price">
+                        <p
+                          className="text-3xl font-bold text-primary"
+                          data-testid="text-recommended-price"
+                        >
                           {cents(pricingResult.recommendedPriceCents)}
                         </p>
                         <p className="text-xs text-muted-foreground">per visit</p>
@@ -771,11 +865,19 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
 
                       <div className="rounded-lg bg-muted/50 border p-4 text-center space-y-1">
                         <p className="text-sm text-muted-foreground">Estimated monthly profit</p>
-                        <p className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-monthly-profit">
-                          {cents(Math.round(pricingResult.derived.profitAtRecommendedCents * visitsPerMonth))}
+                        <p
+                          className="text-2xl font-bold text-green-600 dark:text-green-400"
+                          data-testid="text-monthly-profit"
+                        >
+                          {cents(
+                            Math.round(
+                              pricingResult.derived.profitAtRecommendedCents * visitsPerMonth
+                            )
+                          )}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {cents(pricingResult.derived.profitAtRecommendedCents)} profit x {visitsPerMonth.toFixed(1)} visits/month
+                          {cents(pricingResult.derived.profitAtRecommendedCents)} profit x{" "}
+                          {visitsPerMonth.toFixed(1)} visits/month
                         </p>
                       </div>
 
@@ -786,15 +888,21 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                         </div>
                         <div className="bg-muted/30 rounded p-2 text-center">
                           <p className="text-muted-foreground">Est. time</p>
-                          <p className="font-medium">{Math.round(pricingResult.derived.jobMinutes)} min</p>
+                          <p className="font-medium">
+                            {Math.round(pricingResult.derived.jobMinutes)} min
+                          </p>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
                         <div className="flex-1">
-                          <label className="text-xs text-muted-foreground mb-1 block">Your price</label>
+                          <label className="text-xs text-muted-foreground mb-1 block">
+                            Your price
+                          </label>
                           <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                              $
+                            </span>
                             <Input
                               type="number"
                               step="0.01"
@@ -815,14 +923,18 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                           {acceptPriceMutation.isPending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            <>Use this price <ArrowRight className="h-4 w-4" /></>
+                            <>
+                              Use this price <ArrowRight className="h-4 w-4" />
+                            </>
                           )}
                         </Button>
                       </div>
                     </>
                   ) : (
                     <div className="text-center py-4">
-                      <p className="text-sm text-muted-foreground">Unable to calculate pricing. Please try again.</p>
+                      <p className="text-sm text-muted-foreground">
+                        Unable to calculate pricing. Please try again.
+                      </p>
                       <Button
                         variant="outline"
                         size="sm"
@@ -842,23 +954,33 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                   <div className="rounded-lg bg-muted/30 border p-4 space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Customer</span>
-                      <span className="font-medium" data-testid="text-plan-customer">{createdContactName}</span>
+                      <span className="font-medium" data-testid="text-plan-customer">
+                        {createdContactName}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Property</span>
-                      <span className="font-medium" data-testid="text-plan-address">{propertyAddress || "Primary property"}</span>
+                      <span className="font-medium" data-testid="text-plan-address">
+                        {propertyAddress || "Primary property"}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Frequency</span>
-                      <span className="font-medium capitalize" data-testid="text-plan-frequency">{customerFrequency}</span>
+                      <span className="font-medium capitalize" data-testid="text-plan-frequency">
+                        {customerFrequency}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Price per visit</span>
-                      <span className="font-medium" data-testid="text-plan-price">{cents(selectedPrice)}</span>
+                      <span className="font-medium" data-testid="text-plan-price">
+                        {cents(selectedPrice)}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Service day</span>
-                      <span className="font-medium capitalize" data-testid="text-plan-day">{customerDay}</span>
+                      <span className="font-medium capitalize" data-testid="text-plan-day">
+                        {customerDay}
+                      </span>
                     </div>
                   </div>
                   <Button
@@ -868,9 +990,13 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                     data-testid="button-create-plan"
                   >
                     {createServicePlanMutation.isPending ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" /> Creating...</>
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Creating...
+                      </>
                     ) : (
-                      <>Create Job <ArrowRight className="h-4 w-4" /></>
+                      <>
+                        Create Job <ArrowRight className="h-4 w-4" />
+                      </>
                     )}
                   </Button>
                 </div>
@@ -879,8 +1005,8 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
               {isActive && stepIdx === 4 && (
                 <div className="px-4 pb-4 space-y-3" data-testid="step-4-route">
                   <p className="text-sm text-muted-foreground">
-                    We'll create a {DAYS.find(d => d.value === customerDay)?.label || customerDay} route, 
-                    assign your job to it, and generate visits for the next 4 weeks.
+                    We'll create a {DAYS.find((d) => d.value === customerDay)?.label || customerDay}{" "}
+                    route, assign your job to it, and generate visits for the next 4 weeks.
                   </p>
                   <Button
                     className="w-full gap-2"
@@ -889,9 +1015,13 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                     data-testid="button-generate-route"
                   >
                     {generateRouteMutation.isPending ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</>
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" /> Generating...
+                      </>
                     ) : (
-                      <>Generate Route and Visits <ArrowRight className="h-4 w-4" /></>
+                      <>
+                        Generate Route and Visits <ArrowRight className="h-4 w-4" />
+                      </>
                     )}
                   </Button>
                 </div>
@@ -904,8 +1034,13 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
           <div className="space-y-3" data-testid="setup-complete">
             <div className="rounded-lg bg-primary/5 border border-primary/20 p-6 text-center space-y-3">
               <PartyPopper className="h-10 w-10 text-primary mx-auto" />
-              <h3 className="text-lg font-bold" data-testid="text-setup-complete-title">You're all set!</h3>
-              <p className="text-sm text-muted-foreground" data-testid="text-setup-complete-description">
+              <h3 className="text-lg font-bold" data-testid="text-setup-complete-title">
+                You're all set!
+              </h3>
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="text-setup-complete-description"
+              >
                 {completionData
                   ? `Your "${completionData.routeName}" has 1 stop and ${completionData.visitCount} upcoming visits.`
                   : "Your business is ready to go."}
@@ -931,20 +1066,31 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
               </div>
             </div>
 
-            <div className="rounded-lg border border-dashed border-muted-foreground/30 p-4 space-y-3" data-testid="setup-venmo-step">
+            <div
+              className="rounded-lg border border-dashed border-muted-foreground/30 p-4 space-y-3"
+              data-testid="setup-venmo-step"
+            >
               <div className="flex items-center gap-2">
                 <div className="h-7 w-7 rounded-full flex items-center justify-center bg-[#3D95CE]/10">
                   <Wallet className="h-4 w-4 text-[#3D95CE]" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Add your Venmo handle (optional)</p>
-                  <p className="text-xs text-muted-foreground">Clients will see it on invoices so they can pay you via Venmo</p>
+                  <p className="text-xs text-muted-foreground">
+                    Clients will see it on invoices so they can pay you via Venmo
+                  </p>
                 </div>
               </div>
               {venmoSaved ? (
-                <div className="flex items-center gap-2 text-sm text-green-700" data-testid="text-venmo-saved">
+                <div
+                  className="flex items-center gap-2 text-sm text-green-700"
+                  data-testid="text-venmo-saved"
+                >
                   <CheckCircle2 className="h-4 w-4" />
-                  Venmo handle saved: <span className="font-semibold">@{venmoHandle.startsWith("@") ? venmoHandle.slice(1) : venmoHandle}</span>
+                  Venmo handle saved:{" "}
+                  <span className="font-semibold">
+                    @{venmoHandle.startsWith("@") ? venmoHandle.slice(1) : venmoHandle}
+                  </span>
                 </div>
               ) : (
                 <div className="flex gap-2">
@@ -961,7 +1107,11 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                     onClick={() => saveVenmoMutation.mutate(venmoHandle.trim())}
                     data-testid="button-save-venmo"
                   >
-                    {saveVenmoMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                    {saveVenmoMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Save"
+                    )}
                   </Button>
                 </div>
               )}

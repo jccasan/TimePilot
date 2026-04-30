@@ -1,88 +1,187 @@
-import { eq, and, desc, asc, sql, ilike, or, gte, lte, lt, inArray, count, isNull, isNotNull } from "drizzle-orm";
+import {
+  eq,
+  and,
+  desc,
+  asc,
+  sql,
+  ilike,
+  or,
+  gte,
+  lte,
+  lt,
+  inArray,
+  count,
+  isNull,
+  isNotNull,
+} from "drizzle-orm";
 import { db } from "./db";
 import {
-  companies, companyUsers, contacts, tags, contactTags, leadSources,
-  properties, routes, servicePlans, vacationHolds,
-  agreements, jobs, jobAddOns,
-  visits, invoices, invoiceLineItems, automationRules,
-  automationEventLogs, apiKeys, webhooks, webhookDeliveries, attachments,
-  servicePricing, serviceBillingRules, servicePackages, messages, portalSessions, adminNotes,
-  smsMessages, emailsSent, accountDailyMetrics, saasCostsMonthly, costConfig,
+  companies,
+  companyUsers,
+  contacts,
+  tags,
+  contactTags,
+  leadSources,
+  properties,
+  routes,
+  servicePlans,
+  vacationHolds,
+  agreements,
+  jobs,
+  jobAddOns,
+  visits,
+  invoices,
+  invoiceLineItems,
+  automationRules,
+  automationEventLogs,
+  apiKeys,
+  webhooks,
+  webhookDeliveries,
+  attachments,
+  servicePricing,
+  serviceBillingRules,
+  servicePackages,
+  messages,
+  portalSessions,
+  adminNotes,
+  smsMessages,
+  emailsSent,
+  accountDailyMetrics,
+  saasCostsMonthly,
+  costConfig,
   usageEvents,
-  notifications, timeEntries, activityLog, auditTrail,
-  importRuns, invoicePayments,
-  estimates, serviceChangeRequests,
+  notifications,
+  timeEntries,
+  activityLog,
+  auditTrail,
+  importRuns,
+  invoicePayments,
+  estimates,
+  serviceChangeRequests,
   DEFAULT_PRICING_RULES,
-  type Company, type InsertCompany,
-  type CompanyUser, type InsertCompanyUser,
-  type Contact, type InsertContact,
-  type Tag, type InsertTag,
-  type LeadSource, type InsertLeadSource,
-  type Property, type InsertProperty,
-  type Route, type InsertRoute,
-  type Agreement, type InsertAgreement,
-  type Job, type InsertJob,
+  type Company,
+  type InsertCompany,
+  type CompanyUser,
+  type InsertCompanyUser,
+  type Contact,
+  type InsertContact,
+  type Tag,
+  type InsertTag,
+  type LeadSource,
+  type InsertLeadSource,
+  type Property,
+  type InsertProperty,
+  type Route,
+  type InsertRoute,
+  type Agreement,
+  type InsertAgreement,
+  type Job,
+  type InsertJob,
   type JobAddOn,
   type JobWithAgreement,
-  type ServicePlan, type InsertServicePlan,
+  type ServicePlan,
+  type InsertServicePlan,
   type ServicePlanAddOn,
   servicePlanAddOns,
-  type VacationHold, type InsertVacationHold,
-  type Visit, type InsertVisit,
-  type Invoice, type InsertInvoice,
-  type InvoiceLineItem, type InsertInvoiceLineItem,
-  type AutomationRule, type InsertAutomationRule,
-  type ApiKey, type InsertApiKey,
-  type Webhook, type InsertWebhook,
-  type Attachment, type InsertAttachment,
-  type ServicePricingItem, type InsertServicePricing,
-  type ServiceBillingRule, type InsertServiceBillingRule,
-  type ServicePackage, type InsertServicePackage,
-  type Message, type InsertMessage,
-  type AdminNote, type InsertAdminNote,
-  type Notification, type InsertNotification,
-  type PortalSession, type InsertPortalSession,
-  type SmsMessage, type InsertSmsMessage,
-  type EmailSent, type InsertEmailSent,
-  type AccountDailyMetric, type InsertAccountDailyMetric,
-  type SaasCostMonthly, type InsertSaasCostMonthly,
+  type VacationHold,
+  type InsertVacationHold,
+  type Visit,
+  type InsertVisit,
+  type Invoice,
+  type InsertInvoice,
+  type InvoiceLineItem,
+  type InsertInvoiceLineItem,
+  type AutomationRule,
+  type InsertAutomationRule,
+  type ApiKey,
+  type InsertApiKey,
+  type Webhook,
+  type InsertWebhook,
+  type Attachment,
+  type InsertAttachment,
+  type ServicePricingItem,
+  type InsertServicePricing,
+  type ServiceBillingRule,
+  type InsertServiceBillingRule,
+  type ServicePackage,
+  type InsertServicePackage,
+  type Message,
+  type InsertMessage,
+  type AdminNote,
+  type InsertAdminNote,
+  type Notification,
+  type InsertNotification,
+  type PortalSession,
+  type InsertPortalSession,
+  type SmsMessage,
+  type InsertSmsMessage,
+  type EmailSent,
+  type InsertEmailSent,
+  type AccountDailyMetric,
+  type InsertAccountDailyMetric,
+  type SaasCostMonthly,
+  type InsertSaasCostMonthly,
   type CostConfigItem,
-  type TimeEntry, type InsertTimeEntry,
-  type ActivityLog, type InsertActivityLog,
-  type WebhookDelivery, type InsertWebhookDelivery,
-  type AuditTrail, type InsertAuditTrail,
-  type ImportRun, type InsertImportRun,
-  type InvoicePayment, type InsertInvoicePayment,
-  type PriceRecommendation, type InsertPriceRecommendation,
-  type ProfitabilitySnapshot, type InsertProfitabilitySnapshot,
-  type OverheadCost, type InsertOverheadCost,
-  type CompetitorPricing, type InsertCompetitorPricing,
-  type Estimate, type InsertEstimate,
-  type ServiceChangeRequest, type InsertServiceChangeRequest,
-  type ServiceZone, type InsertServiceZone,
-  type UsageEvent, type InsertUsageEvent,
-  type VoiceCall, type InsertVoiceCall,
+  type TimeEntry,
+  type InsertTimeEntry,
+  type ActivityLog,
+  type InsertActivityLog,
+  type WebhookDelivery,
+  type InsertWebhookDelivery,
+  type AuditTrail,
+  type InsertAuditTrail,
+  type ImportRun,
+  type InsertImportRun,
+  type InvoicePayment,
+  type InsertInvoicePayment,
+  type PriceRecommendation,
+  type InsertPriceRecommendation,
+  type ProfitabilitySnapshot,
+  type InsertProfitabilitySnapshot,
+  type OverheadCost,
+  type InsertOverheadCost,
+  type CompetitorPricing,
+  type InsertCompetitorPricing,
+  type Estimate,
+  type InsertEstimate,
+  type ServiceChangeRequest,
+  type InsertServiceChangeRequest,
+  type ServiceZone,
+  type InsertServiceZone,
+  type UsageEvent,
+  type InsertUsageEvent,
+  type VoiceCall,
+  type InsertVoiceCall,
   voiceCalls,
   priceRecommendations,
   profitabilitySnapshots,
   overheadCosts,
   competitorPricing,
   serviceZones,
-  type Quote, type InsertQuote,
+  type Quote,
+  type InsertQuote,
   quotes,
   messageRouting,
   messageExceptions,
   messageAttachments,
-  type MessageRouting, type InsertMessageRouting,
-  type MessageException, type InsertMessageException,
-  type MessageAttachment, type InsertMessageAttachment,
+  type MessageRouting,
+  type InsertMessageRouting,
+  type MessageException,
+  type InsertMessageException,
+  type MessageAttachment,
+  type InsertMessageAttachment,
   systemMessages,
-  type SystemMessage, type InsertSystemMessage,
+  type SystemMessage,
+  type InsertSystemMessage,
   businessAssessments,
-  type BusinessAssessment, type InsertBusinessAssessment,
-  errorReports, errorFixTasks,
-  type ErrorReport, type InsertErrorReport,
-  type ErrorFixTask, type InsertErrorFixTask,
+  type BusinessAssessment,
+  type InsertBusinessAssessment,
+  errorReports,
+  errorFixTasks,
+  type ErrorReport,
+  type InsertErrorReport,
+  type ErrorFixTask,
+  type InsertErrorFixTask,
   geocodeCacheTable,
   type GeocodeCache,
   autocompleteCacheTable,
@@ -113,7 +212,10 @@ export interface IStorage {
 
   // Contacts
   getContact(id: string, companyId: string): Promise<Contact | undefined>;
-  getContacts(companyId: string, filters?: { status?: string; search?: string }): Promise<Contact[]>;
+  getContacts(
+    companyId: string,
+    filters?: { status?: string; search?: string }
+  ): Promise<Contact[]>;
   createContact(data: InsertContact): Promise<Contact>;
   updateContact(id: string, companyId: string, data: Partial<InsertContact>): Promise<Contact>;
   deleteContact(id: string, companyId: string): Promise<void>;
@@ -146,41 +248,71 @@ export interface IStorage {
   createRoute(data: InsertRoute): Promise<Route>;
   updateRoute(id: string, companyId: string, data: Partial<InsertRoute>): Promise<Route>;
   deleteRoute(id: string, companyId: string): Promise<void>;
-  moveRouteToDate(routeId: string, companyId: string, targetDate: string): Promise<{ movedCount: number; targetRouteId: string }>;
+  moveRouteToDate(
+    routeId: string,
+    companyId: string,
+    targetDate: string
+  ): Promise<{ movedCount: number; targetRouteId: string }>;
   renumberRouteStops(routeId: string, companyId: string): Promise<void>;
   reorderRouteStops(routeId: string, companyId: string, orderedIds: string[]): Promise<void>;
 
   // Agreements
   getAgreement(id: string, companyId: string): Promise<Agreement | undefined>;
-  getAgreements(companyId: string, filters?: { contactId?: string; isActive?: boolean }): Promise<Agreement[]>;
+  getAgreements(
+    companyId: string,
+    filters?: { contactId?: string; isActive?: boolean }
+  ): Promise<Agreement[]>;
   createAgreement(data: InsertAgreement): Promise<Agreement>;
-  updateAgreement(id: string, companyId: string, data: Partial<InsertAgreement>): Promise<Agreement>;
+  updateAgreement(
+    id: string,
+    companyId: string,
+    data: Partial<InsertAgreement>
+  ): Promise<Agreement>;
   deleteAgreement(id: string, companyId: string): Promise<void>;
 
   // Jobs
   getJob(id: string, companyId: string): Promise<Job | undefined>;
-  getJobs(companyId: string, filters?: { agreementId?: string; propertyId?: string; routeId?: string; jobStatus?: string }): Promise<Job[]>;
+  getJobs(
+    companyId: string,
+    filters?: { agreementId?: string; propertyId?: string; routeId?: string; jobStatus?: string }
+  ): Promise<Job[]>;
   createJob(data: InsertJob): Promise<Job>;
   updateJob(id: string, companyId: string, data: Partial<InsertJob>): Promise<Job>;
   deleteJob(id: string, companyId: string): Promise<void>;
   getJobAddOns(jobId: string): Promise<JobAddOn[]>;
-  setJobAddOns(jobId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<JobAddOn[]>;
+  setJobAddOns(
+    jobId: string,
+    addOns: { servicePricingId: string; name: string; price: string }[]
+  ): Promise<JobAddOn[]>;
   getJobByServicePlanId(servicePlanId: string): Promise<Job | undefined>;
   getAgreementByServicePlanId(servicePlanId: string): Promise<Agreement | undefined>;
-  getJobsWithAgreements(companyId: string, filters?: { isActive?: boolean; routeId?: string; propertyId?: string; contactId?: string }): Promise<JobWithAgreement[]>;
+  getJobsWithAgreements(
+    companyId: string,
+    filters?: { isActive?: boolean; routeId?: string; propertyId?: string; contactId?: string }
+  ): Promise<JobWithAgreement[]>;
 
   cancelFutureVisitsForJobs(jobIds: string[], fromDate: string): Promise<number>;
   unassignAllJobStops(routeId: string): Promise<number>;
 
   // Service Plans (legacy — kept during migration)
   getServicePlan(id: string, companyId: string): Promise<ServicePlan | undefined>;
-  getServicePlans(companyId: string, filters?: { contactId?: string; propertyId?: string; isActive?: boolean; routeId?: string }): Promise<ServicePlan[]>;
+  getServicePlans(
+    companyId: string,
+    filters?: { contactId?: string; propertyId?: string; isActive?: boolean; routeId?: string }
+  ): Promise<ServicePlan[]>;
   createServicePlan(data: InsertServicePlan): Promise<ServicePlan>;
-  updateServicePlan(id: string, companyId: string, data: Partial<InsertServicePlan>): Promise<ServicePlan>;
+  updateServicePlan(
+    id: string,
+    companyId: string,
+    data: Partial<InsertServicePlan>
+  ): Promise<ServicePlan>;
   deleteServicePlan(id: string, companyId: string): Promise<void>;
   getServicePlanAddOns(servicePlanId: string): Promise<ServicePlanAddOn[]>;
   getAllServicePlanAddOnsForCompany(planIds: string[]): Promise<Map<string, ServicePlanAddOn[]>>;
-  setServicePlanAddOns(servicePlanId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<ServicePlanAddOn[]>;
+  setServicePlanAddOns(
+    servicePlanId: string,
+    addOns: { servicePricingId: string; name: string; price: string }[]
+  ): Promise<ServicePlanAddOn[]>;
 
   cancelFutureVisitsForPlans(planIds: string[], fromDate: string): Promise<number>;
   deleteFutureScheduledVisitsForPlans(planIds: string[], afterDate: string): Promise<number>;
@@ -197,7 +329,10 @@ export interface IStorage {
 
   // Visits
   getVisit(id: string, companyId: string): Promise<Visit | undefined>;
-  getVisits(companyId: string, filters?: { date?: string; routeId?: string; status?: string }): Promise<Visit[]>;
+  getVisits(
+    companyId: string,
+    filters?: { date?: string; routeId?: string; status?: string }
+  ): Promise<Visit[]>;
   getVisitsForDateRange(companyId: string, startDate: string, endDate: string): Promise<Visit[]>;
   getOverdueVisits(companyId: string, beforeDate: string): Promise<Visit[]>;
   createVisit(data: InsertVisit): Promise<Visit | null>;
@@ -211,12 +346,20 @@ export interface IStorage {
   // Invoices
   getInvoice(id: string, companyId: string): Promise<Invoice | undefined>;
   getInvoiceById(id: string): Promise<Invoice | undefined>;
-  getInvoices(companyId: string, filters?: { contactId?: string; status?: string }): Promise<Invoice[]>;
+  getInvoices(
+    companyId: string,
+    filters?: { contactId?: string; status?: string }
+  ): Promise<Invoice[]>;
   createInvoice(data: InsertInvoice): Promise<Invoice>;
   updateInvoice(id: string, companyId: string, data: Partial<InsertInvoice>): Promise<Invoice>;
   getNextInvoiceNumber(companyId: string): Promise<string>;
   getFailedPaymentsCount(companyId: string): Promise<number>;
-  getRevenueForPeriod(companyId: string, startDate: string, endDate: string, timezone?: string): Promise<number>;
+  getRevenueForPeriod(
+    companyId: string,
+    startDate: string,
+    endDate: string,
+    timezone?: string
+  ): Promise<number>;
 
   // Invoice Line Items
   getInvoiceLineItems(invoiceId: string): Promise<InvoiceLineItem[]>;
@@ -224,20 +367,69 @@ export interface IStorage {
   deleteInvoiceLineItems(invoiceId: string): Promise<void>;
   deleteInvoice(id: string, companyId: string): Promise<void>;
   isVisitInvoiced(visitId: string): Promise<boolean>;
-  getUninvoicedCompletedVisits(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]>;
-  getScheduledVisitsForRange(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]>;
-  createInvoiceWithLineItems(invoiceData: InsertInvoice, lineItems: Omit<InsertInvoiceLineItem, "invoiceId">[]): Promise<Invoice>;
-  getUninvoicedSummary(companyId: string): Promise<{ count: number; totalDollars: number; byContact: { contactId: string; contactName: string; count: number; totalDollars: number }[] }>;
-  getVisitsForContact(companyId: string, contactId: string, limit: number, offset: number): Promise<{ visits: { id: string; scheduledDate: string; status: string; servicePlanName: string; propertyAddress: string; completedAt: Date | null; startedAt: Date | null }[]; total: number }>;
-  getUninvoicedVisitsForContact(companyId: string, contactId: string): Promise<{ visits: (Visit & { servicePlanName: string; pricePerVisit: string; propertyAddress: string })[]; totalDollars: number }>;
+  getUninvoicedCompletedVisits(
+    companyId: string,
+    contactId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Visit[]>;
+  getScheduledVisitsForRange(
+    companyId: string,
+    contactId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Visit[]>;
+  createInvoiceWithLineItems(
+    invoiceData: InsertInvoice,
+    lineItems: Omit<InsertInvoiceLineItem, "invoiceId">[]
+  ): Promise<Invoice>;
+  getUninvoicedSummary(companyId: string): Promise<{
+    count: number;
+    totalDollars: number;
+    byContact: { contactId: string; contactName: string; count: number; totalDollars: number }[];
+  }>;
+  getVisitsForContact(
+    companyId: string,
+    contactId: string,
+    limit: number,
+    offset: number
+  ): Promise<{
+    visits: {
+      id: string;
+      scheduledDate: string;
+      status: string;
+      servicePlanName: string;
+      propertyAddress: string;
+      completedAt: Date | null;
+      startedAt: Date | null;
+    }[];
+    total: number;
+  }>;
+  getUninvoicedVisitsForContact(
+    companyId: string,
+    contactId: string
+  ): Promise<{
+    visits: (Visit & { servicePlanName: string; pricePerVisit: string; propertyAddress: string })[];
+    totalDollars: number;
+  }>;
 
   // Automation Rules
   getAutomationRules(companyId: string): Promise<AutomationRule[]>;
   createAutomationRule(data: InsertAutomationRule): Promise<AutomationRule>;
-  updateAutomationRule(id: string, companyId: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule>;
+  updateAutomationRule(
+    id: string,
+    companyId: string,
+    data: Partial<InsertAutomationRule>
+  ): Promise<AutomationRule>;
   deleteAutomationRule(id: string, companyId?: string): Promise<void>;
   getRulesForTrigger(companyId: string, trigger: string): Promise<AutomationRule[]>;
-  createAutomationEventLog(data: { companyId: string; ruleId?: string; trigger: string; payload?: any; result?: any }): Promise<void>;
+  createAutomationEventLog(data: {
+    companyId: string;
+    ruleId?: string;
+    trigger: string;
+    payload?: any;
+    result?: any;
+  }): Promise<void>;
 
   // API Keys
   getApiKeys(companyId: string): Promise<ApiKey[]>;
@@ -255,29 +447,55 @@ export interface IStorage {
 
   // Attachments
   createAttachment(data: InsertAttachment): Promise<Attachment>;
-  getAttachments(companyId: string, filters?: { contactId?: string; propertyId?: string; visitId?: string }): Promise<Attachment[]>;
+  getAttachments(
+    companyId: string,
+    filters?: { contactId?: string; propertyId?: string; visitId?: string }
+  ): Promise<Attachment[]>;
   createDocument(data: InsertAttachment): Promise<Attachment>;
   getDocumentImports(companyId: string): Promise<Attachment[]>;
 
   // Service Pricing
   getServicePricing(companyId: string, category?: string): Promise<ServicePricingItem[]>;
   createServicePricingItem(data: InsertServicePricing): Promise<ServicePricingItem>;
-  updateServicePricingItem(id: string, companyId: string, data: Partial<InsertServicePricing>): Promise<ServicePricingItem>;
+  updateServicePricingItem(
+    id: string,
+    companyId: string,
+    data: Partial<InsertServicePricing>
+  ): Promise<ServicePricingItem>;
   deleteServicePricingItem(id: string, companyId: string): Promise<void>;
 
   // Service Billing Rules
   getServiceBillingRules(companyId: string): Promise<ServiceBillingRule[]>;
-  upsertServiceBillingRule(companyId: string, servicePricingId: string, data: Partial<InsertServiceBillingRule>): Promise<ServiceBillingRule>;
+  upsertServiceBillingRule(
+    companyId: string,
+    servicePricingId: string,
+    data: Partial<InsertServiceBillingRule>
+  ): Promise<ServiceBillingRule>;
   deleteServiceBillingRule(companyId: string, servicePricingId: string): Promise<void>;
 
   // Service Packages
   getServicePackages(companyId: string): Promise<ServicePackage[]>;
   createServicePackage(data: InsertServicePackage): Promise<ServicePackage>;
-  updateServicePackage(id: string, companyId: string, data: Partial<InsertServicePackage>): Promise<ServicePackage>;
+  updateServicePackage(
+    id: string,
+    companyId: string,
+    data: Partial<InsertServicePackage>
+  ): Promise<ServicePackage>;
   deleteServicePackage(id: string, companyId: string): Promise<void>;
 
   // Messages
-  getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string; emailThreadId?: string; retentionDays?: number }): Promise<Message[]>;
+  getMessages(
+    companyId: string,
+    filters?: {
+      contactId?: string;
+      channel?: string;
+      direction?: string;
+      isRead?: boolean;
+      phone?: string;
+      emailThreadId?: string;
+      retentionDays?: number;
+    }
+  ): Promise<Message[]>;
   markMessageRead(id: string, companyId: string): Promise<Message>;
   markMessagesReadByContact(contactId: string, companyId: string): Promise<void>;
   markMessagesReadByPhone(phone: string, companyId: string): Promise<void>;
@@ -308,8 +526,22 @@ export interface IStorage {
   getAdminNotes(companyId: string): Promise<AdminNote[]>;
   createAdminNote(data: InsertAdminNote): Promise<AdminNote>;
   deleteAdminNote(id: string): Promise<void>;
-  updateCompanySubscription(companyId: string, tier: string, opts?: { subscriptionStatus?: string; trialEndsAt?: Date | null; customMaxUsers?: number | null }): Promise<Company>;
-  getPlatformStats(): Promise<{ totalCompanies: number; totalUsers: number; totalContacts: number; totalVisits: number; mrr: number }>;
+  updateCompanySubscription(
+    companyId: string,
+    tier: string,
+    opts?: {
+      subscriptionStatus?: string;
+      trialEndsAt?: Date | null;
+      customMaxUsers?: number | null;
+    }
+  ): Promise<Company>;
+  getPlatformStats(): Promise<{
+    totalCompanies: number;
+    totalUsers: number;
+    totalContacts: number;
+    totalVisits: number;
+    mrr: number;
+  }>;
 
   // SMS Messages
   createSmsMessage(data: InsertSmsMessage): Promise<SmsMessage>;
@@ -323,7 +555,11 @@ export interface IStorage {
 
   // Account Daily Metrics
   upsertDailyMetrics(data: InsertAccountDailyMetric): Promise<AccountDailyMetric>;
-  getDailyMetrics(companyId: string, startDate: string, endDate: string): Promise<AccountDailyMetric[]>;
+  getDailyMetrics(
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<AccountDailyMetric[]>;
   getAllDailyMetrics(startDate: string, endDate: string): Promise<AccountDailyMetric[]>;
 
   // SaaS Costs
@@ -333,7 +569,12 @@ export interface IStorage {
 
   // Cost Config
   getCostConfig(): Promise<CostConfigItem[]>;
-  upsertCostConfig(key: string, valueCents: number, valuePct?: string, description?: string): Promise<CostConfigItem>;
+  upsertCostConfig(
+    key: string,
+    valueCents: number,
+    valuePct?: string,
+    description?: string
+  ): Promise<CostConfigItem>;
 
   // Notifications
   getNotifications(companyId: string, limit?: number): Promise<Notification[]>;
@@ -348,13 +589,25 @@ export interface IStorage {
 
   // Time Entries
   createTimeEntry(data: InsertTimeEntry): Promise<TimeEntry>;
-  updateTimeEntry(id: string, companyId: string, data: Partial<InsertTimeEntry>): Promise<TimeEntry>;
-  getTimeEntries(companyId: string, filters?: { userId?: string; startDate?: string; endDate?: string }): Promise<TimeEntry[]>;
+  updateTimeEntry(
+    id: string,
+    companyId: string,
+    data: Partial<InsertTimeEntry>
+  ): Promise<TimeEntry>;
+  getTimeEntries(
+    companyId: string,
+    filters?: { userId?: string; startDate?: string; endDate?: string }
+  ): Promise<TimeEntry[]>;
   getActiveTimeEntry(userId: string): Promise<TimeEntry | undefined>;
 
   // Activity Log
   createActivityLog(data: InsertActivityLog): Promise<ActivityLog>;
-  getActivityLogs(companyId: string, contactId: string, limit?: number, offset?: number): Promise<ActivityLog[]>;
+  getActivityLogs(
+    companyId: string,
+    contactId: string,
+    limit?: number,
+    offset?: number
+  ): Promise<ActivityLog[]>;
 
   // Webhook Deliveries
   createWebhookDelivery(data: InsertWebhookDelivery): Promise<WebhookDelivery>;
@@ -365,7 +618,12 @@ export interface IStorage {
 
   // Audit Trail
   createAuditEntry(data: InsertAuditTrail): Promise<AuditTrail>;
-  getAuditTrail(companyId: string, filters?: { entityType?: string; startDate?: string; endDate?: string }, limit?: number, offset?: number): Promise<AuditTrail[]>;
+  getAuditTrail(
+    companyId: string,
+    filters?: { entityType?: string; startDate?: string; endDate?: string },
+    limit?: number,
+    offset?: number
+  ): Promise<AuditTrail[]>;
 
   // Bulk operations
   bulkUpdateContacts(ids: string[], companyId: string, data: Partial<any>): Promise<number>;
@@ -380,25 +638,47 @@ export interface IStorage {
   // Import Runs
   createImportRun(data: InsertImportRun): Promise<ImportRun>;
   getImportRun(id: string, companyId: string): Promise<ImportRun | undefined>;
-  updateImportRun(id: string, data: Partial<InsertImportRun> & { completedAt?: Date }): Promise<ImportRun>;
+  updateImportRun(
+    id: string,
+    data: Partial<InsertImportRun> & { completedAt?: Date }
+  ): Promise<ImportRun>;
   getImportRuns(companyId: string): Promise<ImportRun[]>;
   getImportRunByHash(companyId: string, fileHash: string): Promise<ImportRun | undefined>;
 
   // Invoice Payments
   createInvoicePayment(data: InsertInvoicePayment): Promise<InvoicePayment>;
   getInvoicePayments(invoiceId: string): Promise<InvoicePayment[]>;
-  getInvoicePaymentsByCompany(companyId: string, filters?: { source?: string }): Promise<InvoicePayment[]>;
-  getInvoicePaymentByExternalId(companyId: string, externalId: string): Promise<InvoicePayment | undefined>;
-  getInvoiceByExternalId(companyId: string, externalSource: string, externalId: string): Promise<Invoice | undefined>;
+  getInvoicePaymentsByCompany(
+    companyId: string,
+    filters?: { source?: string }
+  ): Promise<InvoicePayment[]>;
+  getInvoicePaymentByExternalId(
+    companyId: string,
+    externalId: string
+  ): Promise<InvoicePayment | undefined>;
+  getInvoiceByExternalId(
+    companyId: string,
+    externalSource: string,
+    externalId: string
+  ): Promise<Invoice | undefined>;
 
   // Price Recommendations
   createPriceRecommendation(data: InsertPriceRecommendation): Promise<PriceRecommendation>;
   getPriceRecommendations(companyId: string, propertyId?: string): Promise<PriceRecommendation[]>;
-  getLatestPriceRecommendation(companyId: string, propertyId: string): Promise<PriceRecommendation | undefined>;
+  getLatestPriceRecommendation(
+    companyId: string,
+    propertyId: string
+  ): Promise<PriceRecommendation | undefined>;
 
   // Profitability Snapshots
-  getProfitabilitySnapshots(companyId: string, filters?: { startDate?: string; endDate?: string; contactId?: string }): Promise<ProfitabilitySnapshot[]>;
-  getProfitabilitySnapshot(id: string, companyId: string): Promise<ProfitabilitySnapshot | undefined>;
+  getProfitabilitySnapshots(
+    companyId: string,
+    filters?: { startDate?: string; endDate?: string; contactId?: string }
+  ): Promise<ProfitabilitySnapshot[]>;
+  getProfitabilitySnapshot(
+    id: string,
+    companyId: string
+  ): Promise<ProfitabilitySnapshot | undefined>;
   createProfitabilitySnapshot(data: InsertProfitabilitySnapshot): Promise<ProfitabilitySnapshot>;
   deleteProfitabilitySnapshots(companyId: string, olderThan?: string): Promise<void>;
   getCustomerProfitabilitySummary(companyId: string): Promise<any[]>;
@@ -407,31 +687,53 @@ export interface IStorage {
   // Overhead Costs
   getOverheadCosts(companyId: string): Promise<OverheadCost[]>;
   createOverheadCost(data: InsertOverheadCost): Promise<OverheadCost>;
-  updateOverheadCost(id: string, companyId: string, data: Partial<InsertOverheadCost>): Promise<OverheadCost>;
+  updateOverheadCost(
+    id: string,
+    companyId: string,
+    data: Partial<InsertOverheadCost>
+  ): Promise<OverheadCost>;
   deleteOverheadCost(id: string, companyId: string): Promise<void>;
   getTotalMonthlyOverheadCents(companyId: string): Promise<number>;
 
   // Competitor Pricing
   getCompetitorPricing(companyId: string, zipCode?: string): Promise<CompetitorPricing[]>;
   createCompetitorPricing(data: InsertCompetitorPricing): Promise<CompetitorPricing>;
-  updateCompetitorPricing(id: string, companyId: string, data: Partial<InsertCompetitorPricing>): Promise<CompetitorPricing>;
+  updateCompetitorPricing(
+    id: string,
+    companyId: string,
+    data: Partial<InsertCompetitorPricing>
+  ): Promise<CompetitorPricing>;
   deleteCompetitorPricing(id: string, companyId: string): Promise<void>;
 
   // Estimates
   getEstimate(id: string, companyId: string): Promise<Estimate | undefined>;
-  getEstimates(companyId: string, filters?: { contactId?: string; status?: string }): Promise<Estimate[]>;
+  getEstimates(
+    companyId: string,
+    filters?: { contactId?: string; status?: string }
+  ): Promise<Estimate[]>;
   createEstimate(data: InsertEstimate): Promise<Estimate>;
   updateEstimate(id: string, companyId: string, data: Partial<InsertEstimate>): Promise<Estimate>;
 
   // Service Change Requests
   getServiceChangeRequest(id: string, companyId: string): Promise<ServiceChangeRequest | undefined>;
-  getServiceChangeRequests(companyId: string, filters?: { contactId?: string; status?: string }): Promise<ServiceChangeRequest[]>;
+  getServiceChangeRequests(
+    companyId: string,
+    filters?: { contactId?: string; status?: string }
+  ): Promise<ServiceChangeRequest[]>;
   createServiceChangeRequest(data: InsertServiceChangeRequest): Promise<ServiceChangeRequest>;
-  updateServiceChangeRequest(id: string, companyId: string, data: Partial<InsertServiceChangeRequest>): Promise<ServiceChangeRequest>;
+  updateServiceChangeRequest(
+    id: string,
+    companyId: string,
+    data: Partial<InsertServiceChangeRequest>
+  ): Promise<ServiceChangeRequest>;
 
   getServiceZones(companyId: string): Promise<ServiceZone[]>;
   createServiceZone(data: InsertServiceZone): Promise<ServiceZone>;
-  updateServiceZone(id: string, companyId: string, data: Partial<InsertServiceZone>): Promise<ServiceZone>;
+  updateServiceZone(
+    id: string,
+    companyId: string,
+    data: Partial<InsertServiceZone>
+  ): Promise<ServiceZone>;
   deleteServiceZone(id: string, companyId: string): Promise<void>;
 
   // Jobs
@@ -440,14 +742,25 @@ export interface IStorage {
   // Usage Events
   createUsageEvent(data: InsertUsageEvent): Promise<UsageEvent>;
   getUsageEvents(companyId: string, startDate: string, endDate: string): Promise<UsageEvent[]>;
-  getUsageSummary(companyId: string, startDate: string, endDate: string): Promise<{ smsSegments: number; voiceMinutes: number; userSeats: number }>;
+  getUsageSummary(
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<{ smsSegments: number; voiceMinutes: number; userSeats: number }>;
 
   // Voice Calls
   createVoiceCall(data: InsertVoiceCall): Promise<VoiceCall>;
-  updateVoiceCall(id: string, data: Partial<Pick<InsertVoiceCall, "outcome" | "summary" | "metadata">>): Promise<VoiceCall>;
+  updateVoiceCall(
+    id: string,
+    data: Partial<Pick<InsertVoiceCall, "outcome" | "summary" | "metadata">>
+  ): Promise<VoiceCall>;
   getVoiceCalls(companyId: string, limit?: number): Promise<VoiceCall[]>;
   getVoiceCallByRetellId(retellCallId: string): Promise<VoiceCall | undefined>;
-  getVoiceCallSummary(companyId: string, startDate: string, endDate: string): Promise<{ totalCalls: number; totalMinutes: number }>;
+  getVoiceCallSummary(
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<{ totalCalls: number; totalMinutes: number }>;
 
   // Referral helpers
   getContactByReferralCode(code: string): Promise<Contact | undefined>;
@@ -455,7 +768,10 @@ export interface IStorage {
 
   // Quotes
   getQuote(id: string, companyId: string): Promise<Quote | undefined>;
-  getQuotes(companyId: string, filters?: { status?: string; type?: string; contactId?: string }): Promise<Quote[]>;
+  getQuotes(
+    companyId: string,
+    filters?: { status?: string; type?: string; contactId?: string }
+  ): Promise<Quote[]>;
   createQuote(data: InsertQuote): Promise<Quote>;
   updateQuote(id: string, companyId: string, data: Partial<InsertQuote>): Promise<Quote>;
   deleteQuote(id: string, companyId: string): Promise<void>;
@@ -470,14 +786,29 @@ export interface IStorage {
   getMessageAttachments(messageId: string): Promise<MessageAttachment[]>;
 
   // Message Exceptions
-  getMessageExceptions(filters?: { resolved?: boolean; companyId?: string }): Promise<MessageException[]>;
+  getMessageExceptions(filters?: {
+    resolved?: boolean;
+    companyId?: string;
+  }): Promise<MessageException[]>;
   createMessageException(data: InsertMessageException): Promise<MessageException>;
-  resolveMessageException(id: string, resolvedBy: string, companyId: string, skipCandidateCheck?: boolean): Promise<MessageException | undefined>;
-  dismissMessageException(id: string, resolvedBy: string, companyId?: string): Promise<MessageException | undefined>;
+  resolveMessageException(
+    id: string,
+    resolvedBy: string,
+    companyId: string,
+    skipCandidateCheck?: boolean
+  ): Promise<MessageException | undefined>;
+  dismissMessageException(
+    id: string,
+    resolvedBy: string,
+    companyId?: string
+  ): Promise<MessageException | undefined>;
 
   // System Messages
   createSystemMessage(data: InsertSystemMessage): Promise<SystemMessage>;
-  getSystemMessages(companyId: string, filters?: { includeDismissed?: boolean }): Promise<SystemMessage[]>;
+  getSystemMessages(
+    companyId: string,
+    filters?: { includeDismissed?: boolean }
+  ): Promise<SystemMessage[]>;
   getUnreadSystemMessageCount(companyId: string): Promise<number>;
   markSystemMessageRead(id: string, companyId: string): Promise<SystemMessage | undefined>;
   dismissSystemMessage(id: string, companyId: string): Promise<SystemMessage | undefined>;
@@ -489,20 +820,47 @@ export interface IStorage {
 
   // Error Reports
   createErrorReport(data: InsertErrorReport): Promise<ErrorReport>;
-  listErrorReports(filters?: { status?: string; message?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<ErrorReport[]>;
-  listGroupedErrorReports(filters?: { status?: string; severity?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<GroupedErrorReport[]>;
+  listErrorReports(filters?: {
+    status?: string;
+    message?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<ErrorReport[]>;
+  listGroupedErrorReports(filters?: {
+    status?: string;
+    severity?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<GroupedErrorReport[]>;
   getErrorReport(id: string): Promise<ErrorReport | undefined>;
-  updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status" | "severity">>): Promise<ErrorReport>;
-  bulkUpdateErrorReportStatus(message: string, status: "open" | "acknowledged" | "resolved"): Promise<number>;
+  updateErrorReport(
+    id: string,
+    data: Partial<Pick<InsertErrorReport, "status" | "severity">>
+  ): Promise<ErrorReport>;
+  bulkUpdateErrorReportStatus(
+    message: string,
+    status: "open" | "acknowledged" | "resolved"
+  ): Promise<number>;
   createErrorFixTask(data: InsertErrorFixTask): Promise<ErrorFixTask>;
   getErrorFixTask(errorReportId: string): Promise<ErrorFixTask | undefined>;
-  updateErrorFixTask(id: string, data: Partial<Pick<ErrorFixTask, "status">>): Promise<ErrorFixTask>;
+  updateErrorFixTask(
+    id: string,
+    data: Partial<Pick<ErrorFixTask, "status">>
+  ): Promise<ErrorFixTask>;
   getOpenErrorCount(): Promise<number>;
   getLatestErrorTimestamp(): Promise<Date | null>;
 
   // Geocode Cache
   getGeocodeCache(addressKey: string): Promise<GeocodeCache | undefined>;
-  setGeocodeCache(addressKey: string, latitude: string | null, longitude: string | null): Promise<void>;
+  setGeocodeCache(
+    addressKey: string,
+    latitude: string | null,
+    longitude: string | null
+  ): Promise<void>;
   pruneGeocodeCache(olderThanDays: number): Promise<void>;
 
   // Autocomplete Cache
@@ -524,7 +882,10 @@ export type GroupedErrorReport = {
 export class DatabaseStorage implements IStorage {
   // ================ Companies ================
   async getCompany(id: string): Promise<Company | undefined> {
-    const [company] = await db.select().from(companies).where(and(eq(companies.id, id), isNull(companies.deletedAt)));
+    const [company] = await db
+      .select()
+      .from(companies)
+      .where(and(eq(companies.id, id), isNull(companies.deletedAt)));
     return company;
   }
 
@@ -535,7 +896,7 @@ export class DatabaseStorage implements IStorage {
   async getCompanyByPhone(phone: string): Promise<Company | undefined> {
     const digits = phone.replace(/\D/g, "");
     const allCompanies = await db.select().from(companies).where(isNull(companies.deletedAt));
-    return allCompanies.find(c => {
+    return allCompanies.find((c) => {
       if (!c.phone) return false;
       const cDigits = c.phone.replace(/\D/g, "");
       return cDigits.length >= 10 && digits.length >= 10 && digits.endsWith(cDigits.slice(-10));
@@ -543,18 +904,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCompanyBySlug(slug: string): Promise<Company | undefined> {
-    const [company] = await db.select().from(companies).where(and(eq(companies.slug, slug), isNull(companies.deletedAt)));
+    const [company] = await db
+      .select()
+      .from(companies)
+      .where(and(eq(companies.slug, slug), isNull(companies.deletedAt)));
     return company;
   }
 
   async getCompanyByStripeConnectAccountId(accountId: string): Promise<Company | undefined> {
-    const [company] = await db.select().from(companies).where(and(eq(companies.stripeConnectAccountId, accountId), isNull(companies.deletedAt)));
+    const [company] = await db
+      .select()
+      .from(companies)
+      .where(and(eq(companies.stripeConnectAccountId, accountId), isNull(companies.deletedAt)));
     return company;
   }
 
   async createCompany(data: InsertCompany): Promise<Company> {
     if (!data.slug && data.name) {
-      const baseSlug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
+      const baseSlug =
+        data.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "") || "company";
       let slug = baseSlug;
       let suffix = 1;
       while (true) {
@@ -569,13 +940,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateCompany(id: string, data: Partial<InsertCompany>): Promise<Company> {
-    const [company] = await db.update(companies).set({ ...data, updatedAt: new Date() }).where(eq(companies.id, id)).returning();
+    const [company] = await db
+      .update(companies)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(companies.id, id))
+      .returning();
     return company;
   }
 
   // ================ Company Users ================
   async getCompanyUser(companyId: string, userId: string): Promise<CompanyUser | undefined> {
-    const [cu] = await db.select().from(companyUsers).where(and(eq(companyUsers.companyId, companyId), eq(companyUsers.userId, userId)));
+    const [cu] = await db
+      .select()
+      .from(companyUsers)
+      .where(and(eq(companyUsers.companyId, companyId), eq(companyUsers.userId, userId)));
     return cu;
   }
 
@@ -593,38 +971,60 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addUserToCompany(userId: string, companyId: string, role: string): Promise<CompanyUser> {
-    const [cu] = await db.insert(companyUsers).values({ userId, companyId, role: role as "owner" | "admin" | "tech" }).returning();
+    const [cu] = await db
+      .insert(companyUsers)
+      .values({ userId, companyId, role: role as "owner" | "admin" | "tech" })
+      .returning();
     return cu;
   }
 
   async updateCompanyUser(id: string, data: Partial<InsertCompanyUser>): Promise<CompanyUser> {
-    const [cu] = await db.update(companyUsers).set({ ...data, updatedAt: new Date() }).where(eq(companyUsers.id, id)).returning();
+    const [cu] = await db
+      .update(companyUsers)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(companyUsers.id, id))
+      .returning();
     return cu;
   }
 
   async countActiveCompanyUsers(companyId: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(companyUsers).where(and(eq(companyUsers.companyId, companyId), eq(companyUsers.isActive, true)));
+    const [result] = await db
+      .select({ count: count() })
+      .from(companyUsers)
+      .where(and(eq(companyUsers.companyId, companyId), eq(companyUsers.isActive, true)));
     return result?.count ?? 0;
   }
 
   // ================ Contacts ================
   async getContact(id: string, companyId: string): Promise<Contact | undefined> {
-    const [contact] = await db.select().from(contacts).where(and(eq(contacts.id, id), eq(contacts.companyId, companyId)));
+    const [contact] = await db
+      .select()
+      .from(contacts)
+      .where(and(eq(contacts.id, id), eq(contacts.companyId, companyId)));
     return contact;
   }
 
-  async getContacts(companyId: string, filters?: { status?: string; search?: string }): Promise<Contact[]> {
+  async getContacts(
+    companyId: string,
+    filters?: { status?: string; search?: string }
+  ): Promise<Contact[]> {
     const conditions = [eq(contacts.companyId, companyId)];
     if (filters?.status) conditions.push(eq(contacts.status, filters.status as any));
     if (filters?.search) {
-      conditions.push(or(
-        ilike(contacts.firstName, `%${filters.search}%`),
-        ilike(contacts.lastName, `%${filters.search}%`),
-        ilike(contacts.email, `%${filters.search}%`),
-        ilike(contacts.phone, `%${filters.search}%`),
-      )!);
+      conditions.push(
+        or(
+          ilike(contacts.firstName, `%${filters.search}%`),
+          ilike(contacts.lastName, `%${filters.search}%`),
+          ilike(contacts.email, `%${filters.search}%`),
+          ilike(contacts.phone, `%${filters.search}%`)
+        )!
+      );
     }
-    return db.select().from(contacts).where(and(...conditions)).orderBy(asc(contacts.firstName), asc(contacts.lastName));
+    return db
+      .select()
+      .from(contacts)
+      .where(and(...conditions))
+      .orderBy(asc(contacts.firstName), asc(contacts.lastName));
   }
 
   async createContact(data: InsertContact): Promise<Contact> {
@@ -632,8 +1032,16 @@ export class DatabaseStorage implements IStorage {
     return contact;
   }
 
-  async updateContact(id: string, companyId: string, data: Partial<InsertContact>): Promise<Contact> {
-    const [contact] = await db.update(contacts).set({ ...data, updatedAt: new Date() }).where(and(eq(contacts.id, id), eq(contacts.companyId, companyId))).returning();
+  async updateContact(
+    id: string,
+    companyId: string,
+    data: Partial<InsertContact>
+  ): Promise<Contact> {
+    const [contact] = await db
+      .update(contacts)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(contacts.id, id), eq(contacts.companyId, companyId)))
+      .returning();
     return contact;
   }
 
@@ -652,7 +1060,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTag(id: string, companyId?: string): Promise<void> {
-    const conditions = companyId ? and(eq(tags.id, id), eq(tags.companyId, companyId)) : eq(tags.id, id);
+    const conditions = companyId
+      ? and(eq(tags.id, id), eq(tags.companyId, companyId))
+      : eq(tags.id, id);
     await db.delete(tags).where(conditions);
   }
 
@@ -661,43 +1071,64 @@ export class DatabaseStorage implements IStorage {
   }
 
   async removeTagFromContact(contactId: string, tagId: string): Promise<void> {
-    await db.delete(contactTags).where(and(eq(contactTags.contactId, contactId), eq(contactTags.tagId, tagId)));
+    await db
+      .delete(contactTags)
+      .where(and(eq(contactTags.contactId, contactId), eq(contactTags.tagId, tagId)));
   }
 
   async getContactTags(contactId: string): Promise<Tag[]> {
-    const result = await db.select({ tag: tags }).from(contactTags).innerJoin(tags, eq(contactTags.tagId, tags.id)).where(eq(contactTags.contactId, contactId));
-    return result.map(r => r.tag);
+    const result = await db
+      .select({ tag: tags })
+      .from(contactTags)
+      .innerJoin(tags, eq(contactTags.tagId, tags.id))
+      .where(eq(contactTags.contactId, contactId));
+    return result.map((r) => r.tag);
   }
 
   // ================ Lead Sources ================
   async getLeadSources(companyId: string): Promise<LeadSource[]> {
-    return db.select().from(leadSources).where(eq(leadSources.companyId, companyId)).orderBy(leadSources.name);
+    return db
+      .select()
+      .from(leadSources)
+      .where(eq(leadSources.companyId, companyId))
+      .orderBy(leadSources.name);
   }
 
   async createLeadSource(data: InsertLeadSource): Promise<LeadSource> {
     const [source] = await db.insert(leadSources).values(data).onConflictDoNothing().returning();
     if (!source) {
-      const [existing] = await db.select().from(leadSources).where(and(eq(leadSources.companyId, data.companyId), eq(leadSources.name, data.name)));
+      const [existing] = await db
+        .select()
+        .from(leadSources)
+        .where(and(eq(leadSources.companyId, data.companyId), eq(leadSources.name, data.name)));
       return existing;
     }
     return source;
   }
 
   async deleteLeadSource(id: string, companyId?: string): Promise<void> {
-    const conditions = companyId ? and(eq(leadSources.id, id), eq(leadSources.companyId, companyId)) : eq(leadSources.id, id);
+    const conditions = companyId
+      ? and(eq(leadSources.id, id), eq(leadSources.companyId, companyId))
+      : eq(leadSources.id, id);
     await db.delete(leadSources).where(conditions);
   }
 
   // ================ Properties ================
   async getProperty(id: string, companyId: string): Promise<Property | undefined> {
-    const [property] = await db.select().from(properties).where(and(eq(properties.id, id), eq(properties.companyId, companyId)));
+    const [property] = await db
+      .select()
+      .from(properties)
+      .where(and(eq(properties.id, id), eq(properties.companyId, companyId)));
     return property;
   }
 
   async getProperties(companyId: string, contactId?: string): Promise<Property[]> {
     const conditions = [eq(properties.companyId, companyId)];
     if (contactId) conditions.push(eq(properties.contactId, contactId));
-    return db.select().from(properties).where(and(...conditions));
+    return db
+      .select()
+      .from(properties)
+      .where(and(...conditions));
   }
 
   async createProperty(data: InsertProperty): Promise<Property> {
@@ -705,29 +1136,48 @@ export class DatabaseStorage implements IStorage {
     return property;
   }
 
-  async updateProperty(id: string, companyId: string, data: Partial<InsertProperty>): Promise<Property> {
-    const [property] = await db.update(properties).set({ ...data, updatedAt: new Date() }).where(and(eq(properties.id, id), eq(properties.companyId, companyId))).returning();
+  async updateProperty(
+    id: string,
+    companyId: string,
+    data: Partial<InsertProperty>
+  ): Promise<Property> {
+    const [property] = await db
+      .update(properties)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(properties.id, id), eq(properties.companyId, companyId)))
+      .returning();
     return property;
   }
 
   async deleteProperty(id: string, companyId: string): Promise<void> {
-    await db.delete(properties).where(and(eq(properties.id, id), eq(properties.companyId, companyId)));
+    await db
+      .delete(properties)
+      .where(and(eq(properties.id, id), eq(properties.companyId, companyId)));
   }
 
   // ================ Routes ================
   async getRoute(id: string, companyId: string): Promise<Route | undefined> {
-    const [route] = await db.select().from(routes).where(and(eq(routes.id, id), eq(routes.companyId, companyId)));
+    const [route] = await db
+      .select()
+      .from(routes)
+      .where(and(eq(routes.id, id), eq(routes.companyId, companyId)));
     return route;
   }
 
   async getRoutes(companyId: string, dayOfWeek?: string): Promise<Route[]> {
     const conditions = [eq(routes.companyId, companyId)];
     if (dayOfWeek) conditions.push(eq(routes.dayOfWeek, dayOfWeek as any));
-    return db.select().from(routes).where(and(...conditions));
+    return db
+      .select()
+      .from(routes)
+      .where(and(...conditions));
   }
 
   async getRouteByDate(companyId: string, date: string): Promise<Route | undefined> {
-    const [route] = await db.select().from(routes).where(and(eq(routes.companyId, companyId), eq(routes.date, date)));
+    const [route] = await db
+      .select()
+      .from(routes)
+      .where(and(eq(routes.companyId, companyId), eq(routes.date, date)));
     return route;
   }
 
@@ -735,24 +1185,41 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getRouteByDate(companyId, date);
     if (existing) return existing;
     const d = new Date(date + "T00:00:00Z");
-    const dayNameMap: Record<number, "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"> = {
-      0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
-      4: "thursday", 5: "friday", 6: "saturday",
+    const dayNameMap: Record<
+      number,
+      "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"
+    > = {
+      0: "sunday",
+      1: "monday",
+      2: "tuesday",
+      3: "wednesday",
+      4: "thursday",
+      5: "friday",
+      6: "saturday",
     };
     const displayNames: Record<number, string> = {
-      0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday",
-      4: "Thursday", 5: "Friday", 6: "Saturday",
+      0: "Sunday",
+      1: "Monday",
+      2: "Tuesday",
+      3: "Wednesday",
+      4: "Thursday",
+      5: "Friday",
+      6: "Saturday",
     };
     const dayOfWeek = dayNameMap[d.getUTCDay()];
     const displayName = displayNames[d.getUTCDay()];
     const formatted = `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
     const name = `${displayName} ${formatted}`;
-    const [route] = await db.insert(routes).values({
-      companyId,
-      name,
-      date,
-      dayOfWeek,
-    }).onConflictDoNothing().returning();
+    const [route] = await db
+      .insert(routes)
+      .values({
+        companyId,
+        name,
+        date,
+        dayOfWeek,
+      })
+      .onConflictDoNothing()
+      .returning();
     if (route) return route;
     const raceWinner = await this.getRouteByDate(companyId, date);
     if (raceWinner) return raceWinner;
@@ -765,7 +1232,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateRoute(id: string, companyId: string, data: Partial<InsertRoute>): Promise<Route> {
-    const [route] = await db.update(routes).set({ ...data, updatedAt: new Date() }).where(and(eq(routes.id, id), eq(routes.companyId, companyId))).returning();
+    const [route] = await db
+      .update(routes)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(routes.id, id), eq(routes.companyId, companyId)))
+      .returning();
     return route;
   }
 
@@ -773,10 +1244,15 @@ export class DatabaseStorage implements IStorage {
     await db.delete(routes).where(and(eq(routes.id, id), eq(routes.companyId, companyId)));
   }
 
-  async moveRouteToDate(routeId: string, companyId: string, targetDate: string): Promise<{ movedCount: number; targetRouteId: string }> {
+  async moveRouteToDate(
+    routeId: string,
+    companyId: string,
+    targetDate: string
+  ): Promise<{ movedCount: number; targetRouteId: string }> {
     const sourceRoute = await this.getRoute(routeId, companyId);
     if (!sourceRoute) throw new Error("Route not found");
-    if (sourceRoute.date === targetDate) throw new Error("Target date is the same as the current route date");
+    if (sourceRoute.date === targetDate)
+      throw new Error("Target date is the same as the current route date");
 
     const existingTargetRoute = await this.getRouteByDate(companyId, targetDate);
     let targetRouteId: string;
@@ -787,29 +1263,47 @@ export class DatabaseStorage implements IStorage {
     } else {
       // No route exists for targetDate.
       // Check if source route has any non-scheduled visits that would remain after the move.
-      const nonScheduled = await db.select({ id: visits.id }).from(visits)
-        .where(and(
-          eq(visits.routeId, routeId),
-          eq(visits.companyId, companyId),
-          inArray(visits.status, ["in_progress", "completed", "skipped", "cancelled"]),
-        ))
+      const nonScheduled = await db
+        .select({ id: visits.id })
+        .from(visits)
+        .where(
+          and(
+            eq(visits.routeId, routeId),
+            eq(visits.companyId, companyId),
+            inArray(visits.status, ["in_progress", "completed", "skipped", "cancelled"])
+          )
+        )
         .limit(1);
 
       if (nonScheduled.length === 0) {
         // Source route will be empty after the move — reuse it as the target route by updating its date
         const d = new Date(targetDate + "T00:00:00Z");
-        const dayNameMap: Record<number, "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"> = {
-          0: "sunday", 1: "monday", 2: "tuesday", 3: "wednesday",
-          4: "thursday", 5: "friday", 6: "saturday",
+        const dayNameMap: Record<
+          number,
+          "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday"
+        > = {
+          0: "sunday",
+          1: "monday",
+          2: "tuesday",
+          3: "wednesday",
+          4: "thursday",
+          5: "friday",
+          6: "saturday",
         };
         const displayNames: Record<number, string> = {
-          0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday",
-          4: "Thursday", 5: "Friday", 6: "Saturday",
+          0: "Sunday",
+          1: "Monday",
+          2: "Tuesday",
+          3: "Wednesday",
+          4: "Thursday",
+          5: "Friday",
+          6: "Saturday",
         };
         const dayOfWeek = dayNameMap[d.getUTCDay()];
         const formatted = `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
         const name = `${displayNames[d.getUTCDay()]} ${formatted}`;
-        await db.update(routes)
+        await db
+          .update(routes)
           .set({ date: targetDate, dayOfWeek, name, updatedAt: new Date() })
           .where(and(eq(routes.id, routeId), eq(routes.companyId, companyId)));
         targetRouteId = routeId;
@@ -820,13 +1314,16 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const moved = await db.update(visits)
+    const moved = await db
+      .update(visits)
       .set({ routeId: targetRouteId, scheduledDate: targetDate, updatedAt: new Date() })
-      .where(and(
-        eq(visits.routeId, routeId),
-        eq(visits.companyId, companyId),
-        eq(visits.status, "scheduled"),
-      ))
+      .where(
+        and(
+          eq(visits.routeId, routeId),
+          eq(visits.companyId, companyId),
+          eq(visits.status, "scheduled")
+        )
+      )
       .returning({ id: visits.id });
 
     return { movedCount: moved.length, targetRouteId };
@@ -836,15 +1333,18 @@ export class DatabaseStorage implements IStorage {
     const stops = await db
       .select({ id: servicePlans.id })
       .from(servicePlans)
-      .where(and(
-        eq(servicePlans.routeId, routeId),
-        eq(servicePlans.companyId, companyId),
-        eq(servicePlans.isActive, true),
-      ))
+      .where(
+        and(
+          eq(servicePlans.routeId, routeId),
+          eq(servicePlans.companyId, companyId),
+          eq(servicePlans.isActive, true)
+        )
+      )
       .orderBy(asc(servicePlans.stopOrder), asc(servicePlans.id));
 
     for (let i = 0; i < stops.length; i++) {
-      await db.update(servicePlans)
+      await db
+        .update(servicePlans)
         .set({ stopOrder: i + 1, updatedAt: new Date() })
         .where(and(eq(servicePlans.id, stops[i].id), eq(servicePlans.companyId, companyId)));
     }
@@ -865,13 +1365,16 @@ export class DatabaseStorage implements IStorage {
   async reorderRouteStops(routeId: string, companyId: string, orderedIds: string[]): Promise<void> {
     await db.transaction(async (tx) => {
       for (let i = 0; i < orderedIds.length; i++) {
-        await tx.update(servicePlans)
+        await tx
+          .update(servicePlans)
           .set({ stopOrder: i + 1, updatedAt: new Date() })
-          .where(and(
-            eq(servicePlans.id, orderedIds[i]),
-            eq(servicePlans.routeId, routeId),
-            eq(servicePlans.companyId, companyId),
-          ));
+          .where(
+            and(
+              eq(servicePlans.id, orderedIds[i]),
+              eq(servicePlans.routeId, routeId),
+              eq(servicePlans.companyId, companyId)
+            )
+          );
       }
       if (orderedIds.length > 0) {
         await tx.execute(sql`
@@ -889,15 +1392,24 @@ export class DatabaseStorage implements IStorage {
 
   // ================ Agreements ================
   async getAgreement(id: string, companyId: string): Promise<Agreement | undefined> {
-    const [a] = await db.select().from(agreements).where(and(eq(agreements.id, id), eq(agreements.companyId, companyId)));
+    const [a] = await db
+      .select()
+      .from(agreements)
+      .where(and(eq(agreements.id, id), eq(agreements.companyId, companyId)));
     return a;
   }
 
-  async getAgreements(companyId: string, filters?: { contactId?: string; isActive?: boolean }): Promise<Agreement[]> {
+  async getAgreements(
+    companyId: string,
+    filters?: { contactId?: string; isActive?: boolean }
+  ): Promise<Agreement[]> {
     const conditions = [eq(agreements.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(agreements.contactId, filters.contactId));
     if (filters?.isActive !== undefined) conditions.push(eq(agreements.isActive, filters.isActive));
-    return db.select().from(agreements).where(and(...conditions));
+    return db
+      .select()
+      .from(agreements)
+      .where(and(...conditions));
   }
 
   async createAgreement(data: InsertAgreement): Promise<Agreement> {
@@ -905,33 +1417,55 @@ export class DatabaseStorage implements IStorage {
     return a;
   }
 
-  async updateAgreement(id: string, companyId: string, data: Partial<InsertAgreement>): Promise<Agreement> {
-    const [a] = await db.update(agreements).set({ ...data, updatedAt: new Date() }).where(and(eq(agreements.id, id), eq(agreements.companyId, companyId))).returning();
+  async updateAgreement(
+    id: string,
+    companyId: string,
+    data: Partial<InsertAgreement>
+  ): Promise<Agreement> {
+    const [a] = await db
+      .update(agreements)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(agreements.id, id), eq(agreements.companyId, companyId)))
+      .returning();
     return a;
   }
 
   async deleteAgreement(id: string, companyId: string): Promise<void> {
-    await db.delete(agreements).where(and(eq(agreements.id, id), eq(agreements.companyId, companyId)));
+    await db
+      .delete(agreements)
+      .where(and(eq(agreements.id, id), eq(agreements.companyId, companyId)));
   }
 
   async getAgreementByServicePlanId(servicePlanId: string): Promise<Agreement | undefined> {
-    const [a] = await db.select().from(agreements).where(eq(agreements.servicePlanId, servicePlanId));
+    const [a] = await db
+      .select()
+      .from(agreements)
+      .where(eq(agreements.servicePlanId, servicePlanId));
     return a;
   }
 
   // ================ Jobs ================
   async getJob(id: string, companyId: string): Promise<Job | undefined> {
-    const [j] = await db.select().from(jobs).where(and(eq(jobs.id, id), eq(jobs.companyId, companyId)));
+    const [j] = await db
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.id, id), eq(jobs.companyId, companyId)));
     return j;
   }
 
-  async getJobs(companyId: string, filters?: { agreementId?: string; propertyId?: string; routeId?: string; jobStatus?: string }): Promise<Job[]> {
+  async getJobs(
+    companyId: string,
+    filters?: { agreementId?: string; propertyId?: string; routeId?: string; jobStatus?: string }
+  ): Promise<Job[]> {
     const conditions = [eq(jobs.companyId, companyId)];
     if (filters?.agreementId) conditions.push(eq(jobs.agreementId, filters.agreementId));
     if (filters?.propertyId) conditions.push(eq(jobs.propertyId, filters.propertyId));
     if (filters?.routeId) conditions.push(eq(jobs.routeId, filters.routeId));
     if (filters?.jobStatus) conditions.push(sql`${jobs.jobStatus} = ${filters.jobStatus}`);
-    return db.select().from(jobs).where(and(...conditions));
+    return db
+      .select()
+      .from(jobs)
+      .where(and(...conditions));
   }
 
   async createJob(data: InsertJob): Promise<Job> {
@@ -940,7 +1474,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateJob(id: string, companyId: string, data: Partial<InsertJob>): Promise<Job> {
-    const [j] = await db.update(jobs).set({ ...data, updatedAt: new Date() }).where(and(eq(jobs.id, id), eq(jobs.companyId, companyId))).returning();
+    const [j] = await db
+      .update(jobs)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(jobs.id, id), eq(jobs.companyId, companyId)))
+      .returning();
     return j;
   }
 
@@ -953,19 +1491,24 @@ export class DatabaseStorage implements IStorage {
     return j;
   }
 
-  async getJobsWithAgreements(companyId: string, filters?: { isActive?: boolean; routeId?: string; propertyId?: string; contactId?: string }): Promise<JobWithAgreement[]> {
+  async getJobsWithAgreements(
+    companyId: string,
+    filters?: { isActive?: boolean; routeId?: string; propertyId?: string; contactId?: string }
+  ): Promise<JobWithAgreement[]> {
     const conditions = [eq(jobs.companyId, companyId)];
     if (filters?.isActive !== undefined) conditions.push(eq(agreements.isActive, filters.isActive));
     if (filters?.routeId) conditions.push(eq(jobs.routeId, filters.routeId));
     if (filters?.propertyId) conditions.push(eq(jobs.propertyId, filters.propertyId));
     if (filters?.contactId) conditions.push(eq(agreements.contactId, filters.contactId));
-    const rows = await db.select({
-      job: jobs,
-      agreement: agreements,
-    }).from(jobs)
+    const rows = await db
+      .select({
+        job: jobs,
+        agreement: agreements,
+      })
+      .from(jobs)
       .innerJoin(agreements, eq(jobs.agreementId, agreements.id))
       .where(and(...conditions));
-    return rows.map(r => ({
+    return rows.map((r) => ({
       ...r.job,
       contactId: r.agreement.contactId,
       frequency: r.agreement.frequency,
@@ -986,10 +1529,13 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(jobAddOns).where(eq(jobAddOns.jobId, jobId));
   }
 
-  async setJobAddOns(jobId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<JobAddOn[]> {
+  async setJobAddOns(
+    jobId: string,
+    addOns: { servicePricingId: string; name: string; price: string }[]
+  ): Promise<JobAddOn[]> {
     await db.delete(jobAddOns).where(eq(jobAddOns.jobId, jobId));
     if (addOns.length === 0) return [];
-    const rows = addOns.map(a => ({
+    const rows = addOns.map((a) => ({
       jobId,
       servicePricingId: a.servicePricingId,
       name: a.name,
@@ -1000,19 +1546,26 @@ export class DatabaseStorage implements IStorage {
 
   async cancelFutureVisitsForJobs(jobIds: string[], fromDate: string): Promise<number> {
     if (jobIds.length === 0) return 0;
-    const result = await db.update(visits)
+    const result = await db
+      .update(visits)
       .set({ status: "cancelled" })
-      .where(and(
-        sql`${visits.jobId} IN (${sql.join(jobIds.map(id => sql`${id}`), sql`, `)})`,
-        gte(visits.scheduledDate, fromDate),
-        eq(visits.status, "scheduled")
-      ))
+      .where(
+        and(
+          sql`${visits.jobId} IN (${sql.join(
+            jobIds.map((id) => sql`${id}`),
+            sql`, `
+          )})`,
+          gte(visits.scheduledDate, fromDate),
+          eq(visits.status, "scheduled")
+        )
+      )
       .returning();
     return result.length;
   }
 
   async unassignAllJobStops(routeId: string): Promise<number> {
-    const result = await db.update(jobs)
+    const result = await db
+      .update(jobs)
       .set({ routeId: null, stopOrder: 0, updatedAt: new Date() })
       .where(and(eq(jobs.routeId, routeId), eq(jobs.jobStatus, "active")))
       .returning();
@@ -1021,24 +1574,40 @@ export class DatabaseStorage implements IStorage {
 
   async getVacationHoldsForAgreements(agreementIds: string[]): Promise<VacationHold[]> {
     if (agreementIds.length === 0) return [];
-    return db.select().from(vacationHolds).where(
-      sql`${vacationHolds.agreementId} IN (${sql.join(agreementIds.map(id => sql`${id}`), sql`, `)})`
-    );
+    return db
+      .select()
+      .from(vacationHolds)
+      .where(
+        sql`${vacationHolds.agreementId} IN (${sql.join(
+          agreementIds.map((id) => sql`${id}`),
+          sql`, `
+        )})`
+      );
   }
 
   // ================ Service Plans (legacy) ================
   async getServicePlan(id: string, companyId: string): Promise<ServicePlan | undefined> {
-    const [sp] = await db.select().from(servicePlans).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
+    const [sp] = await db
+      .select()
+      .from(servicePlans)
+      .where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
     return sp;
   }
 
-  async getServicePlans(companyId: string, filters?: { contactId?: string; propertyId?: string; isActive?: boolean; routeId?: string }): Promise<ServicePlan[]> {
+  async getServicePlans(
+    companyId: string,
+    filters?: { contactId?: string; propertyId?: string; isActive?: boolean; routeId?: string }
+  ): Promise<ServicePlan[]> {
     const conditions = [eq(servicePlans.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(servicePlans.contactId, filters.contactId));
     if (filters?.propertyId) conditions.push(eq(servicePlans.propertyId, filters.propertyId));
-    if (filters?.isActive !== undefined) conditions.push(eq(servicePlans.isActive, filters.isActive));
+    if (filters?.isActive !== undefined)
+      conditions.push(eq(servicePlans.isActive, filters.isActive));
     if (filters?.routeId) conditions.push(eq(servicePlans.routeId, filters.routeId));
-    return db.select().from(servicePlans).where(and(...conditions));
+    return db
+      .select()
+      .from(servicePlans)
+      .where(and(...conditions));
   }
 
   async createServicePlan(data: InsertServicePlan): Promise<ServicePlan> {
@@ -1046,26 +1615,34 @@ export class DatabaseStorage implements IStorage {
     return sp;
   }
 
-  async updateServicePlan(id: string, companyId: string, data: Partial<InsertServicePlan>): Promise<ServicePlan> {
-    const shouldInvalidate =
-      "routeId" in data ||
-      "dayOfWeek" in data ||
-      (data.isActive === false);
+  async updateServicePlan(
+    id: string,
+    companyId: string,
+    data: Partial<InsertServicePlan>
+  ): Promise<ServicePlan> {
+    const shouldInvalidate = "routeId" in data || "dayOfWeek" in data || data.isActive === false;
 
     let affectedRouteIds: string[] = [];
     if (shouldInvalidate) {
-      const [existing] = await db.select({ routeId: servicePlans.routeId }).from(servicePlans)
+      const [existing] = await db
+        .select({ routeId: servicePlans.routeId })
+        .from(servicePlans)
         .where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
       if (existing?.routeId) affectedRouteIds.push(existing.routeId);
       if (data.routeId && data.routeId !== existing?.routeId) affectedRouteIds.push(data.routeId);
     }
 
-    const [sp] = await db.update(servicePlans).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId))).returning();
+    const [sp] = await db
+      .update(servicePlans)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)))
+      .returning();
 
     if (affectedRouteIds.length > 0) {
       const uniqueIds = affectedRouteIds.filter((id, idx, arr) => arr.indexOf(id) === idx);
       for (const routeId of uniqueIds) {
-        db.update(routes).set({ lastOptimizedAt: null, optimizedStopHash: null, updatedAt: new Date() })
+        db.update(routes)
+          .set({ lastOptimizedAt: null, optimizedStopHash: null, updatedAt: new Date() })
           .where(and(eq(routes.id, routeId), eq(routes.companyId, companyId)))
           .execute()
           .catch(() => {});
@@ -1076,17 +1653,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteServicePlan(id: string, companyId: string): Promise<void> {
-    await db.delete(servicePlans).where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
+    await db
+      .delete(servicePlans)
+      .where(and(eq(servicePlans.id, id), eq(servicePlans.companyId, companyId)));
   }
 
   async getServicePlanAddOns(servicePlanId: string): Promise<ServicePlanAddOn[]> {
-    return db.select().from(servicePlanAddOns).where(eq(servicePlanAddOns.servicePlanId, servicePlanId));
+    return db
+      .select()
+      .from(servicePlanAddOns)
+      .where(eq(servicePlanAddOns.servicePlanId, servicePlanId));
   }
 
-  async getAllServicePlanAddOnsForCompany(planIds: string[]): Promise<Map<string, ServicePlanAddOn[]>> {
+  async getAllServicePlanAddOnsForCompany(
+    planIds: string[]
+  ): Promise<Map<string, ServicePlanAddOn[]>> {
     const result = new Map<string, ServicePlanAddOn[]>();
     if (planIds.length === 0) return result;
-    const allAddOns = await db.select().from(servicePlanAddOns).where(inArray(servicePlanAddOns.servicePlanId, planIds));
+    const allAddOns = await db
+      .select()
+      .from(servicePlanAddOns)
+      .where(inArray(servicePlanAddOns.servicePlanId, planIds));
     for (const addOn of allAddOns) {
       if (!result.has(addOn.servicePlanId)) result.set(addOn.servicePlanId, []);
       result.get(addOn.servicePlanId)!.push(addOn);
@@ -1094,10 +1681,13 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async setServicePlanAddOns(servicePlanId: string, addOns: { servicePricingId: string; name: string; price: string }[]): Promise<ServicePlanAddOn[]> {
+  async setServicePlanAddOns(
+    servicePlanId: string,
+    addOns: { servicePricingId: string; name: string; price: string }[]
+  ): Promise<ServicePlanAddOn[]> {
     await db.delete(servicePlanAddOns).where(eq(servicePlanAddOns.servicePlanId, servicePlanId));
     if (addOns.length === 0) return [];
-    const rows = addOns.map(a => ({
+    const rows = addOns.map((a) => ({
       servicePlanId,
       servicePricingId: a.servicePricingId,
       name: a.name,
@@ -1108,31 +1698,38 @@ export class DatabaseStorage implements IStorage {
 
   async cancelFutureVisitsForPlans(planIds: string[], fromDate: string): Promise<number> {
     if (planIds.length === 0) return 0;
-    const result = await db.update(visits)
+    const result = await db
+      .update(visits)
       .set({ status: "cancelled" })
-      .where(and(
-        inArray(visits.servicePlanId, planIds),
-        gte(visits.scheduledDate, fromDate),
-        eq(visits.status, "scheduled")
-      ))
+      .where(
+        and(
+          inArray(visits.servicePlanId, planIds),
+          gte(visits.scheduledDate, fromDate),
+          eq(visits.status, "scheduled")
+        )
+      )
       .returning();
     return result.length;
   }
 
   async deleteFutureScheduledVisitsForPlans(planIds: string[], afterDate: string): Promise<number> {
     if (planIds.length === 0) return 0;
-    const result = await db.delete(visits)
-      .where(and(
-        inArray(visits.servicePlanId, planIds),
-        sql`${visits.scheduledDate} > ${afterDate}`,
-        eq(visits.status, "scheduled")
-      ))
+    const result = await db
+      .delete(visits)
+      .where(
+        and(
+          inArray(visits.servicePlanId, planIds),
+          sql`${visits.scheduledDate} > ${afterDate}`,
+          eq(visits.status, "scheduled")
+        )
+      )
       .returning();
     return result.length;
   }
 
   async unassignAllStops(routeId: string): Promise<number> {
-    const result = await db.update(servicePlans)
+    const result = await db
+      .update(servicePlans)
       .set({ routeId: null, stopOrder: 0, updatedAt: new Date() })
       .where(and(eq(servicePlans.routeId, routeId), eq(servicePlans.isActive, true)))
       .returning();
@@ -1155,7 +1752,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteVacationHold(id: string, companyId: string): Promise<void> {
-    const [hold] = await db.select({ id: vacationHolds.id })
+    const [hold] = await db
+      .select({ id: vacationHolds.id })
       .from(vacationHolds)
       .innerJoin(servicePlans, eq(vacationHolds.servicePlanId, servicePlans.id))
       .where(and(eq(vacationHolds.id, id), eq(servicePlans.companyId, companyId)));
@@ -1165,85 +1763,125 @@ export class DatabaseStorage implements IStorage {
 
   // ================ Visits ================
   async getVisit(id: string, companyId: string): Promise<Visit | undefined> {
-    const [visit] = await db.select().from(visits).where(and(eq(visits.id, id), eq(visits.companyId, companyId)));
+    const [visit] = await db
+      .select()
+      .from(visits)
+      .where(and(eq(visits.id, id), eq(visits.companyId, companyId)));
     return visit;
   }
 
-  async getVisits(companyId: string, filters?: { date?: string; routeId?: string; status?: string }): Promise<Visit[]> {
+  async getVisits(
+    companyId: string,
+    filters?: { date?: string; routeId?: string; status?: string }
+  ): Promise<Visit[]> {
     const conditions = [eq(visits.companyId, companyId)];
     if (filters?.date) conditions.push(eq(visits.scheduledDate, filters.date));
     if (filters?.routeId) conditions.push(eq(visits.routeId, filters.routeId));
     if (filters?.status) conditions.push(eq(visits.status, filters.status as any));
-    return db.select().from(visits).where(and(...conditions)).orderBy(asc(visits.scheduledDate));
+    return db
+      .select()
+      .from(visits)
+      .where(and(...conditions))
+      .orderBy(asc(visits.scheduledDate));
   }
 
-  async getVisitsForDateRange(companyId: string, startDate: string, endDate: string): Promise<Visit[]> {
-    return db.select().from(visits).where(and(
-      eq(visits.companyId, companyId),
-      gte(visits.scheduledDate, startDate),
-      lte(visits.scheduledDate, endDate),
-    )).orderBy(asc(visits.scheduledDate));
+  async getVisitsForDateRange(
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Visit[]> {
+    return db
+      .select()
+      .from(visits)
+      .where(
+        and(
+          eq(visits.companyId, companyId),
+          gte(visits.scheduledDate, startDate),
+          lte(visits.scheduledDate, endDate)
+        )
+      )
+      .orderBy(asc(visits.scheduledDate));
   }
 
   async getOverdueVisits(companyId: string, beforeDate: string): Promise<Visit[]> {
-    return db.select().from(visits).where(and(
-      eq(visits.companyId, companyId),
-      lt(visits.scheduledDate, beforeDate),
-      inArray(visits.status, ["scheduled", "in_progress"]),
-    )).orderBy(asc(visits.scheduledDate));
+    return db
+      .select()
+      .from(visits)
+      .where(
+        and(
+          eq(visits.companyId, companyId),
+          lt(visits.scheduledDate, beforeDate),
+          inArray(visits.status, ["scheduled", "in_progress"])
+        )
+      )
+      .orderBy(asc(visits.scheduledDate));
   }
 
   async createVisit(data: InsertVisit): Promise<Visit | null> {
-    const [visit] = await db
-      .insert(visits)
-      .values(data)
-      .onConflictDoNothing()
-      .returning();
+    const [visit] = await db.insert(visits).values(data).onConflictDoNothing().returning();
     return visit ?? null;
   }
 
   async updateVisit(id: string, companyId: string, data: Partial<InsertVisit>): Promise<Visit> {
-    const [visit] = await db.update(visits).set({ ...data, updatedAt: new Date() }).where(and(eq(visits.id, id), eq(visits.companyId, companyId))).returning();
+    const [visit] = await db
+      .update(visits)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(visits.id, id), eq(visits.companyId, companyId)))
+      .returning();
     return visit;
   }
 
   async getTodaysVisitsCount(companyId: string, today: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(visits).where(and(eq(visits.companyId, companyId), eq(visits.scheduledDate, today)));
+    const [result] = await db
+      .select({ count: count() })
+      .from(visits)
+      .where(and(eq(visits.companyId, companyId), eq(visits.scheduledDate, today)));
     return result?.count ?? 0;
   }
 
   async getTodaysVisits(companyId: string, today: string): Promise<Visit[]> {
-    return db.select().from(visits).where(and(eq(visits.companyId, companyId), eq(visits.scheduledDate, today)));
+    return db
+      .select()
+      .from(visits)
+      .where(and(eq(visits.companyId, companyId), eq(visits.scheduledDate, today)));
   }
 
   async getOverdueInvoicesCount(companyId: string, today: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(invoices).where(and(
-      eq(invoices.companyId, companyId),
-      inArray(invoices.status, ["pending"]),
-      lt(invoices.dueDate, today)
-    ));
+    const [result] = await db
+      .select({ count: count() })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.companyId, companyId),
+          inArray(invoices.status, ["pending"]),
+          lt(invoices.dueDate, today)
+        )
+      );
     return result?.count ?? 0;
   }
 
   async getActiveContactsCount(companyId: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(contacts).where(and(
-      eq(contacts.companyId, companyId),
-      eq(contacts.status, "active")
-    ));
+    const [result] = await db
+      .select({ count: count() })
+      .from(contacts)
+      .where(and(eq(contacts.companyId, companyId), eq(contacts.status, "active")));
     return result?.count ?? 0;
   }
 
   async getActiveServicePlansCount(companyId: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(servicePlans).where(and(
-      eq(servicePlans.companyId, companyId),
-      eq(servicePlans.isActive, true)
-    ));
+    const [result] = await db
+      .select({ count: count() })
+      .from(servicePlans)
+      .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.isActive, true)));
     return result?.count ?? 0;
   }
 
   // ================ Invoices ================
   async getInvoice(id: string, companyId: string): Promise<Invoice | undefined> {
-    const [invoice] = await db.select().from(invoices).where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
+    const [invoice] = await db
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
     return invoice;
   }
 
@@ -1252,11 +1890,18 @@ export class DatabaseStorage implements IStorage {
     return invoice;
   }
 
-  async getInvoices(companyId: string, filters?: { contactId?: string; status?: string }): Promise<Invoice[]> {
+  async getInvoices(
+    companyId: string,
+    filters?: { contactId?: string; status?: string }
+  ): Promise<Invoice[]> {
     const conditions = [eq(invoices.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(invoices.contactId, filters.contactId));
     if (filters?.status) conditions.push(eq(invoices.status, filters.status as any));
-    return db.select().from(invoices).where(and(...conditions)).orderBy(desc(invoices.createdAt));
+    return db
+      .select()
+      .from(invoices)
+      .where(and(...conditions))
+      .orderBy(desc(invoices.createdAt));
   }
 
   async createInvoice(data: InsertInvoice): Promise<Invoice> {
@@ -1264,37 +1909,59 @@ export class DatabaseStorage implements IStorage {
     return invoice;
   }
 
-  async updateInvoice(id: string, companyId: string, data: Partial<InsertInvoice>): Promise<Invoice> {
-    const [invoice] = await db.update(invoices).set({ ...data, updatedAt: new Date() }).where(and(eq(invoices.id, id), eq(invoices.companyId, companyId))).returning();
+  async updateInvoice(
+    id: string,
+    companyId: string,
+    data: Partial<InsertInvoice>
+  ): Promise<Invoice> {
+    const [invoice] = await db
+      .update(invoices)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)))
+      .returning();
     return invoice;
   }
 
   async getNextInvoiceNumber(companyId: string): Promise<string> {
-    const [result] = await db.select({
-      maxNum: sql<string>`MAX(
+    const [result] = await db
+      .select({
+        maxNum: sql<string>`MAX(
         CASE WHEN ${invoices.invoiceNumber} ~ '^INV-[0-9]+$'
         THEN CAST(SUBSTRING(${invoices.invoiceNumber} FROM 5) AS integer)
         ELSE 0 END
-      )`
-    }).from(invoices).where(eq(invoices.companyId, companyId));
+      )`,
+      })
+      .from(invoices)
+      .where(eq(invoices.companyId, companyId));
     const num = (parseInt(result?.maxNum || "0") || 0) + 1;
     return `INV-${String(num).padStart(5, "0")}`;
   }
 
   async getFailedPaymentsCount(companyId: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(invoices).where(and(eq(invoices.companyId, companyId), eq(invoices.status, "failed")));
+    const [result] = await db
+      .select({ count: count() })
+      .from(invoices)
+      .where(and(eq(invoices.companyId, companyId), eq(invoices.status, "failed")));
     return result?.count ?? 0;
   }
 
-  async getRevenueForPeriod(companyId: string, startDate: string, endDate: string, timezone: string = "UTC"): Promise<number> {
-    const [result] = await db.select({
-      total: sql<string>`COALESCE(SUM(${invoices.total}::numeric), 0)`
-    }).from(invoices).where(
-      sql`${invoices.companyId} = ${companyId}
+  async getRevenueForPeriod(
+    companyId: string,
+    startDate: string,
+    endDate: string,
+    timezone: string = "UTC"
+  ): Promise<number> {
+    const [result] = await db
+      .select({
+        total: sql<string>`COALESCE(SUM(${invoices.total}::numeric), 0)`,
+      })
+      .from(invoices)
+      .where(
+        sql`${invoices.companyId} = ${companyId}
         AND ${invoices.status} IN ('sent', 'pending', 'paid', 'failed')
         AND COALESCE(${invoices.issuedDate}, ((${invoices.createdAt} AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})::date) >= ${startDate}::date
         AND COALESCE(${invoices.issuedDate}, ((${invoices.createdAt} AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})::date) <= ${endDate}::date`
-    );
+      );
     return parseFloat(result?.total ?? "0");
   }
 
@@ -1320,23 +1987,36 @@ export class DatabaseStorage implements IStorage {
   }
 
   async isVisitInvoiced(visitId: string): Promise<boolean> {
-    const [result] = await db.select({ count: count() }).from(invoiceLineItems).where(eq(invoiceLineItems.visitId, visitId));
+    const [result] = await db
+      .select({ count: count() })
+      .from(invoiceLineItems)
+      .where(eq(invoiceLineItems.visitId, visitId));
     return (result?.count ?? 0) > 0;
   }
 
-  async getUninvoicedCompletedVisits(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]> {
-    const allVisits = await db.select().from(visits).where(and(
-      eq(visits.companyId, companyId),
-      eq(visits.status, "completed"),
-      gte(visits.scheduledDate, startDate),
-      lte(visits.scheduledDate, endDate),
-    ));
-    const contactPlans = await db.select().from(servicePlans).where(and(
-      eq(servicePlans.companyId, companyId),
-      eq(servicePlans.contactId, contactId),
-    ));
-    const nonStopOnlyPlanIds = new Set(contactPlans.filter(p => !p.isStopOnly).map(p => p.id));
-    const contactVisits = allVisits.filter(v => nonStopOnlyPlanIds.has(v.servicePlanId));
+  async getUninvoicedCompletedVisits(
+    companyId: string,
+    contactId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Visit[]> {
+    const allVisits = await db
+      .select()
+      .from(visits)
+      .where(
+        and(
+          eq(visits.companyId, companyId),
+          eq(visits.status, "completed"),
+          gte(visits.scheduledDate, startDate),
+          lte(visits.scheduledDate, endDate)
+        )
+      );
+    const contactPlans = await db
+      .select()
+      .from(servicePlans)
+      .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.contactId, contactId)));
+    const nonStopOnlyPlanIds = new Set(contactPlans.filter((p) => !p.isStopOnly).map((p) => p.id));
+    const contactVisits = allVisits.filter((v) => nonStopOnlyPlanIds.has(v.servicePlanId));
     const uninvoiced: Visit[] = [];
     for (const v of contactVisits) {
       const invoiced = await this.isVisitInvoiced(v.id);
@@ -1345,18 +2025,28 @@ export class DatabaseStorage implements IStorage {
     return uninvoiced;
   }
 
-  async getScheduledVisitsForRange(companyId: string, contactId: string, startDate: string, endDate: string): Promise<Visit[]> {
-    const allVisits = await db.select().from(visits).where(and(
-      eq(visits.companyId, companyId),
-      gte(visits.scheduledDate, startDate),
-      lte(visits.scheduledDate, endDate),
-    ));
-    const contactPlans = await db.select().from(servicePlans).where(and(
-      eq(servicePlans.companyId, companyId),
-      eq(servicePlans.contactId, contactId),
-    ));
-    const planIds = new Set(contactPlans.map(p => p.id));
-    const contactVisits = allVisits.filter(v => planIds.has(v.servicePlanId));
+  async getScheduledVisitsForRange(
+    companyId: string,
+    contactId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Visit[]> {
+    const allVisits = await db
+      .select()
+      .from(visits)
+      .where(
+        and(
+          eq(visits.companyId, companyId),
+          gte(visits.scheduledDate, startDate),
+          lte(visits.scheduledDate, endDate)
+        )
+      );
+    const contactPlans = await db
+      .select()
+      .from(servicePlans)
+      .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.contactId, contactId)));
+    const planIds = new Set(contactPlans.map((p) => p.id));
+    const contactVisits = allVisits.filter((v) => planIds.has(v.servicePlanId));
     const uninvoiced: Visit[] = [];
     for (const v of contactVisits) {
       const invoiced = await this.isVisitInvoiced(v.id);
@@ -1365,7 +2055,10 @@ export class DatabaseStorage implements IStorage {
     return uninvoiced;
   }
 
-  async createInvoiceWithLineItems(invoiceData: InsertInvoice, lineItems: Omit<InsertInvoiceLineItem, "invoiceId">[]): Promise<Invoice> {
+  async createInvoiceWithLineItems(
+    invoiceData: InsertInvoice,
+    lineItems: Omit<InsertInvoiceLineItem, "invoiceId">[]
+  ): Promise<Invoice> {
     const [invoice] = await db.insert(invoices).values(invoiceData).returning();
     for (const item of lineItems) {
       await db.insert(invoiceLineItems).values({ ...item, invoiceId: invoice.id });
@@ -1373,31 +2066,45 @@ export class DatabaseStorage implements IStorage {
     return invoice;
   }
 
-  async getUninvoicedSummary(companyId: string): Promise<{ count: number; totalDollars: number; byContact: { contactId: string; contactName: string; count: number; totalDollars: number }[] }> {
-    const completedVisits = await db.select().from(visits).where(and(
-      eq(visits.companyId, companyId),
-      eq(visits.status, "completed"),
-    ));
+  async getUninvoicedSummary(companyId: string): Promise<{
+    count: number;
+    totalDollars: number;
+    byContact: { contactId: string; contactName: string; count: number; totalDollars: number }[];
+  }> {
+    const completedVisits = await db
+      .select()
+      .from(visits)
+      .where(and(eq(visits.companyId, companyId), eq(visits.status, "completed")));
 
-    const allLineItems = await db.select({ visitId: invoiceLineItems.visitId }).from(invoiceLineItems).where(
-      sql`${invoiceLineItems.visitId} IS NOT NULL`
-    );
-    const invoicedVisitIds = new Set(allLineItems.map(li => li.visitId));
-    const uninvoiced = completedVisits.filter(v => !invoicedVisitIds.has(v.id));
+    const allLineItems = await db
+      .select({ visitId: invoiceLineItems.visitId })
+      .from(invoiceLineItems)
+      .where(sql`${invoiceLineItems.visitId} IS NOT NULL`);
+    const invoicedVisitIds = new Set(allLineItems.map((li) => li.visitId));
+    const uninvoiced = completedVisits.filter((v) => !invoicedVisitIds.has(v.id));
 
     if (uninvoiced.length === 0) {
       return { count: 0, totalDollars: 0, byContact: [] };
     }
 
-    const planIds = Array.from(new Set(uninvoiced.map(v => v.servicePlanId)));
-    const plans = planIds.length > 0 ? await db.select().from(servicePlans).where(inArray(servicePlans.id, planIds)) : [];
-    const planMap = new Map(plans.map(p => [p.id, p]));
+    const planIds = Array.from(new Set(uninvoiced.map((v) => v.servicePlanId)));
+    const plans =
+      planIds.length > 0
+        ? await db.select().from(servicePlans).where(inArray(servicePlans.id, planIds))
+        : [];
+    const planMap = new Map(plans.map((p) => [p.id, p]));
 
-    const contactIds = Array.from(new Set(plans.map(p => p.contactId)));
-    const contactsList = contactIds.length > 0 ? await db.select().from(contacts).where(inArray(contacts.id, contactIds)) : [];
-    const contactMap = new Map(contactsList.map(c => [c.id, c]));
+    const contactIds = Array.from(new Set(plans.map((p) => p.contactId)));
+    const contactsList =
+      contactIds.length > 0
+        ? await db.select().from(contacts).where(inArray(contacts.id, contactIds))
+        : [];
+    const contactMap = new Map(contactsList.map((c) => [c.id, c]));
 
-    const byContactMap = new Map<string, { contactId: string; contactName: string; count: number; totalDollars: number }>();
+    const byContactMap = new Map<
+      string,
+      { contactId: string; contactName: string; count: number; totalDollars: number }
+    >();
     let totalDollars = 0;
 
     for (const v of uninvoiced) {
@@ -1412,7 +2119,12 @@ export class DatabaseStorage implements IStorage {
         existing.count++;
         existing.totalDollars += price;
       } else {
-        byContactMap.set(plan.contactId, { contactId: plan.contactId, contactName, count: 1, totalDollars: price });
+        byContactMap.set(plan.contactId, {
+          contactId: plan.contactId,
+          contactName,
+          count: 1,
+          totalDollars: price,
+        });
       }
     }
 
@@ -1424,39 +2136,65 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getVisitsForContact(companyId: string, contactId: string, limit: number, offset: number): Promise<{ visits: { id: string; scheduledDate: string; status: string; servicePlanName: string; propertyAddress: string; completedAt: Date | null; startedAt: Date | null }[]; total: number }> {
-    const contactPlans = await db.select().from(servicePlans).where(and(
-      eq(servicePlans.companyId, companyId),
-      eq(servicePlans.contactId, contactId),
-    ));
+  async getVisitsForContact(
+    companyId: string,
+    contactId: string,
+    limit: number,
+    offset: number
+  ): Promise<{
+    visits: {
+      id: string;
+      scheduledDate: string;
+      status: string;
+      servicePlanName: string;
+      propertyAddress: string;
+      completedAt: Date | null;
+      startedAt: Date | null;
+    }[];
+    total: number;
+  }> {
+    const contactPlans = await db
+      .select()
+      .from(servicePlans)
+      .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.contactId, contactId)));
     if (contactPlans.length === 0) return { visits: [], total: 0 };
 
-    const planIds = contactPlans.map(p => p.id);
-    const [countResult] = await db.select({ count: count() }).from(visits).where(and(
-      eq(visits.companyId, companyId),
-      inArray(visits.servicePlanId, planIds),
-    ));
+    const planIds = contactPlans.map((p) => p.id);
+    const [countResult] = await db
+      .select({ count: count() })
+      .from(visits)
+      .where(and(eq(visits.companyId, companyId), inArray(visits.servicePlanId, planIds)));
     const total = countResult?.count ?? 0;
 
-    const allVisits = await db.select().from(visits).where(and(
-      eq(visits.companyId, companyId),
-      inArray(visits.servicePlanId, planIds),
-    )).orderBy(desc(visits.scheduledDate)).limit(limit).offset(offset);
+    const allVisits = await db
+      .select()
+      .from(visits)
+      .where(and(eq(visits.companyId, companyId), inArray(visits.servicePlanId, planIds)))
+      .orderBy(desc(visits.scheduledDate))
+      .limit(limit)
+      .offset(offset);
 
-    const planMap = new Map(contactPlans.map(p => [p.id, p]));
-    const propertyIds = Array.from(new Set(contactPlans.map(p => p.propertyId)));
-    const propsList = propertyIds.length > 0 ? await db.select().from(properties).where(inArray(properties.id, propertyIds)) : [];
-    const propMap = new Map(propsList.map(p => [p.id, p]));
+    const planMap = new Map(contactPlans.map((p) => [p.id, p]));
+    const propertyIds = Array.from(new Set(contactPlans.map((p) => p.propertyId)));
+    const propsList =
+      propertyIds.length > 0
+        ? await db.select().from(properties).where(inArray(properties.id, propertyIds))
+        : [];
+    const propMap = new Map(propsList.map((p) => [p.id, p]));
 
-    const enriched = allVisits.map(v => {
+    const enriched = allVisits.map((v) => {
       const plan = planMap.get(v.servicePlanId);
       const prop = plan ? propMap.get(plan.propertyId) : undefined;
       return {
         id: v.id,
         scheduledDate: v.scheduledDate,
         status: v.status,
-        servicePlanName: plan?.frequency ? `${plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1)} Service` : "Service",
-        propertyAddress: prop ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}` : "Unknown",
+        servicePlanName: plan?.frequency
+          ? `${plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1)} Service`
+          : "Service",
+        propertyAddress: prop
+          ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}`
+          : "Unknown",
         completedAt: v.completedAt,
         startedAt: v.startedAt,
       };
@@ -1465,50 +2203,76 @@ export class DatabaseStorage implements IStorage {
     return { visits: enriched, total };
   }
 
-  async getUninvoicedVisitsForContact(companyId: string, contactId: string): Promise<{ visits: (Visit & { servicePlanName: string; pricePerVisit: string; propertyAddress: string })[]; totalDollars: number }> {
-    const contactPlans = await db.select().from(servicePlans).where(and(
-      eq(servicePlans.companyId, companyId),
-      eq(servicePlans.contactId, contactId),
-    ));
+  async getUninvoicedVisitsForContact(
+    companyId: string,
+    contactId: string
+  ): Promise<{
+    visits: (Visit & { servicePlanName: string; pricePerVisit: string; propertyAddress: string })[];
+    totalDollars: number;
+  }> {
+    const contactPlans = await db
+      .select()
+      .from(servicePlans)
+      .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.contactId, contactId)));
     if (contactPlans.length === 0) return { visits: [], totalDollars: 0 };
 
-    const planIds = contactPlans.map(p => p.id);
-    const completedVisits = await db.select().from(visits).where(and(
-      eq(visits.companyId, companyId),
-      eq(visits.status, "completed"),
-      inArray(visits.servicePlanId, planIds),
-    ));
+    const planIds = contactPlans.map((p) => p.id);
+    const completedVisits = await db
+      .select()
+      .from(visits)
+      .where(
+        and(
+          eq(visits.companyId, companyId),
+          eq(visits.status, "completed"),
+          inArray(visits.servicePlanId, planIds)
+        )
+      );
 
     if (completedVisits.length === 0) return { visits: [], totalDollars: 0 };
 
-    const allLineItems = await db.select({ visitId: invoiceLineItems.visitId }).from(invoiceLineItems).where(
-      inArray(invoiceLineItems.visitId!, completedVisits.map(v => v.id))
-    );
-    const invoicedVisitIds = new Set(allLineItems.map(li => li.visitId));
-    const uninvoiced = completedVisits.filter(v => !invoicedVisitIds.has(v.id));
+    const allLineItems = await db
+      .select({ visitId: invoiceLineItems.visitId })
+      .from(invoiceLineItems)
+      .where(
+        inArray(
+          invoiceLineItems.visitId!,
+          completedVisits.map((v) => v.id)
+        )
+      );
+    const invoicedVisitIds = new Set(allLineItems.map((li) => li.visitId));
+    const uninvoiced = completedVisits.filter((v) => !invoicedVisitIds.has(v.id));
 
-    const planMap = new Map(contactPlans.map(p => [p.id, p]));
-    const stopOnlyPlanIds = new Set(contactPlans.filter(p => p.isStopOnly).map(p => p.id));
+    const planMap = new Map(contactPlans.map((p) => [p.id, p]));
+    const stopOnlyPlanIds = new Set(contactPlans.filter((p) => p.isStopOnly).map((p) => p.id));
 
-    const propertyIds = Array.from(new Set(contactPlans.map(p => p.propertyId)));
-    const propsList = propertyIds.length > 0 ? await db.select().from(properties).where(inArray(properties.id, propertyIds)) : [];
-    const propMap = new Map(propsList.map(p => [p.id, p]));
+    const propertyIds = Array.from(new Set(contactPlans.map((p) => p.propertyId)));
+    const propsList =
+      propertyIds.length > 0
+        ? await db.select().from(properties).where(inArray(properties.id, propertyIds))
+        : [];
+    const propMap = new Map(propsList.map((p) => [p.id, p]));
 
-    const filteredUninvoiced = uninvoiced.filter(v => !stopOnlyPlanIds.has(v.servicePlanId));
+    const filteredUninvoiced = uninvoiced.filter((v) => !stopOnlyPlanIds.has(v.servicePlanId));
 
     let totalDollars = 0;
-    const enriched = filteredUninvoiced.map(v => {
-      const plan = planMap.get(v.servicePlanId);
-      const prop = plan ? propMap.get(plan.propertyId) : undefined;
-      const price = parseFloat(plan?.pricePerVisit || "0");
-      totalDollars += price;
-      return {
-        ...v,
-        servicePlanName: plan?.frequency ? `${plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1)} Service` : "Service",
-        pricePerVisit: plan?.pricePerVisit || "0",
-        propertyAddress: prop ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}` : "Unknown",
-      };
-    }).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+    const enriched = filteredUninvoiced
+      .map((v) => {
+        const plan = planMap.get(v.servicePlanId);
+        const prop = plan ? propMap.get(plan.propertyId) : undefined;
+        const price = parseFloat(plan?.pricePerVisit || "0");
+        totalDollars += price;
+        return {
+          ...v,
+          servicePlanName: plan?.frequency
+            ? `${plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1)} Service`
+            : "Service",
+          pricePerVisit: plan?.pricePerVisit || "0",
+          propertyAddress: prop
+            ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}`
+            : "Unknown",
+        };
+      })
+      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
 
     return { visits: enriched, totalDollars: Math.round(totalDollars * 100) / 100 };
   }
@@ -1523,26 +2287,47 @@ export class DatabaseStorage implements IStorage {
     return rule;
   }
 
-  async updateAutomationRule(id: string, companyId: string, data: Partial<InsertAutomationRule>): Promise<AutomationRule> {
-    const [rule] = await db.update(automationRules).set({ ...data, updatedAt: new Date() }).where(and(eq(automationRules.id, id), eq(automationRules.companyId, companyId))).returning();
+  async updateAutomationRule(
+    id: string,
+    companyId: string,
+    data: Partial<InsertAutomationRule>
+  ): Promise<AutomationRule> {
+    const [rule] = await db
+      .update(automationRules)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(automationRules.id, id), eq(automationRules.companyId, companyId)))
+      .returning();
     return rule;
   }
 
   async deleteAutomationRule(id: string, companyId?: string): Promise<void> {
     await db.delete(automationEventLogs).where(eq(automationEventLogs.ruleId, id));
-    const conditions = companyId ? and(eq(automationRules.id, id), eq(automationRules.companyId, companyId)) : eq(automationRules.id, id);
+    const conditions = companyId
+      ? and(eq(automationRules.id, id), eq(automationRules.companyId, companyId))
+      : eq(automationRules.id, id);
     await db.delete(automationRules).where(conditions);
   }
 
   async getRulesForTrigger(companyId: string, trigger: string): Promise<AutomationRule[]> {
-    return db.select().from(automationRules).where(and(
-      eq(automationRules.companyId, companyId),
-      eq(automationRules.trigger, trigger as any),
-      eq(automationRules.isActive, true),
-    ));
+    return db
+      .select()
+      .from(automationRules)
+      .where(
+        and(
+          eq(automationRules.companyId, companyId),
+          eq(automationRules.trigger, trigger as any),
+          eq(automationRules.isActive, true)
+        )
+      );
   }
 
-  async createAutomationEventLog(data: { companyId: string; ruleId?: string; trigger: string; payload?: any; result?: any }): Promise<void> {
+  async createAutomationEventLog(data: {
+    companyId: string;
+    ruleId?: string;
+    trigger: string;
+    payload?: any;
+    result?: any;
+  }): Promise<void> {
     await db.insert(automationEventLogs).values(data);
   }
 
@@ -1566,7 +2351,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteApiKey(id: string, companyId?: string): Promise<void> {
-    const conditions = companyId ? and(eq(apiKeys.id, id), eq(apiKeys.companyId, companyId)) : eq(apiKeys.id, id);
+    const conditions = companyId
+      ? and(eq(apiKeys.id, id), eq(apiKeys.companyId, companyId))
+      : eq(apiKeys.id, id);
     await db.delete(apiKeys).where(conditions);
   }
 
@@ -1580,19 +2367,32 @@ export class DatabaseStorage implements IStorage {
     return wh;
   }
 
-  async updateWebhook(id: string, companyId: string, data: Partial<InsertWebhook>): Promise<Webhook> {
-    const [wh] = await db.update(webhooks).set({ ...data, updatedAt: new Date() }).where(and(eq(webhooks.id, id), eq(webhooks.companyId, companyId))).returning();
+  async updateWebhook(
+    id: string,
+    companyId: string,
+    data: Partial<InsertWebhook>
+  ): Promise<Webhook> {
+    const [wh] = await db
+      .update(webhooks)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(webhooks.id, id), eq(webhooks.companyId, companyId)))
+      .returning();
     return wh;
   }
 
   async deleteWebhook(id: string, companyId?: string): Promise<void> {
-    const conditions = companyId ? and(eq(webhooks.id, id), eq(webhooks.companyId, companyId)) : eq(webhooks.id, id);
+    const conditions = companyId
+      ? and(eq(webhooks.id, id), eq(webhooks.companyId, companyId))
+      : eq(webhooks.id, id);
     await db.delete(webhooks).where(conditions);
   }
 
   async getWebhooksForEvent(companyId: string, event: string): Promise<Webhook[]> {
-    const allWebhooks = await db.select().from(webhooks).where(and(eq(webhooks.companyId, companyId), eq(webhooks.isActive, true)));
-    return allWebhooks.filter(wh => (wh.events as string[]).includes(event));
+    const allWebhooks = await db
+      .select()
+      .from(webhooks)
+      .where(and(eq(webhooks.companyId, companyId), eq(webhooks.isActive, true)));
+    return allWebhooks.filter((wh) => (wh.events as string[]).includes(event));
   }
 
   // ================ Attachments ================
@@ -1601,12 +2401,19 @@ export class DatabaseStorage implements IStorage {
     return attachment;
   }
 
-  async getAttachments(companyId: string, filters?: { contactId?: string; propertyId?: string; visitId?: string }): Promise<Attachment[]> {
+  async getAttachments(
+    companyId: string,
+    filters?: { contactId?: string; propertyId?: string; visitId?: string }
+  ): Promise<Attachment[]> {
     const conditions = [eq(attachments.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(attachments.contactId, filters.contactId));
     if (filters?.propertyId) conditions.push(eq(attachments.propertyId, filters.propertyId));
     if (filters?.visitId) conditions.push(eq(attachments.visitId, filters.visitId));
-    return db.select().from(attachments).where(and(...conditions)).orderBy(desc(attachments.createdAt));
+    return db
+      .select()
+      .from(attachments)
+      .where(and(...conditions))
+      .orderBy(desc(attachments.createdAt));
   }
 
   async createDocument(data: InsertAttachment): Promise<Attachment> {
@@ -1615,13 +2422,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDocumentImports(companyId: string): Promise<Attachment[]> {
-    return db.select().from(attachments)
-      .where(and(
-        eq(attachments.companyId, companyId),
-        isNull(attachments.visitId),
-        isNull(attachments.propertyId),
-        isNotNull(attachments.documentCategory),
-      ))
+    return db
+      .select()
+      .from(attachments)
+      .where(
+        and(
+          eq(attachments.companyId, companyId),
+          isNull(attachments.visitId),
+          isNull(attachments.propertyId),
+          isNotNull(attachments.documentCategory)
+        )
+      )
       .orderBy(desc(attachments.createdAt));
   }
 
@@ -1629,7 +2440,11 @@ export class DatabaseStorage implements IStorage {
   async getServicePricing(companyId: string, category?: string): Promise<ServicePricingItem[]> {
     const conditions = [eq(servicePricing.companyId, companyId)];
     if (category) conditions.push(eq(servicePricing.category, category as any));
-    return db.select().from(servicePricing).where(and(...conditions)).orderBy(asc(servicePricing.sortOrder), asc(servicePricing.name));
+    return db
+      .select()
+      .from(servicePricing)
+      .where(and(...conditions))
+      .orderBy(asc(servicePricing.sortOrder), asc(servicePricing.name));
   }
 
   async createServicePricingItem(data: InsertServicePricing): Promise<ServicePricingItem> {
@@ -1637,22 +2452,40 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  async updateServicePricingItem(id: string, companyId: string, data: Partial<InsertServicePricing>): Promise<ServicePricingItem> {
-    const [item] = await db.update(servicePricing).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePricing.id, id), eq(servicePricing.companyId, companyId))).returning();
+  async updateServicePricingItem(
+    id: string,
+    companyId: string,
+    data: Partial<InsertServicePricing>
+  ): Promise<ServicePricingItem> {
+    const [item] = await db
+      .update(servicePricing)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(servicePricing.id, id), eq(servicePricing.companyId, companyId)))
+      .returning();
     return item;
   }
 
   async deleteServicePricingItem(id: string, companyId: string): Promise<void> {
-    await db.delete(servicePricing).where(and(eq(servicePricing.id, id), eq(servicePricing.companyId, companyId)));
+    await db
+      .delete(servicePricing)
+      .where(and(eq(servicePricing.id, id), eq(servicePricing.companyId, companyId)));
   }
 
   // ================ Service Billing Rules ================
   async getServiceBillingRules(companyId: string): Promise<ServiceBillingRule[]> {
-    return db.select().from(serviceBillingRules).where(eq(serviceBillingRules.companyId, companyId));
+    return db
+      .select()
+      .from(serviceBillingRules)
+      .where(eq(serviceBillingRules.companyId, companyId));
   }
 
-  async upsertServiceBillingRule(companyId: string, servicePricingId: string, data: Partial<InsertServiceBillingRule>): Promise<ServiceBillingRule> {
-    const [rule] = await db.insert(serviceBillingRules)
+  async upsertServiceBillingRule(
+    companyId: string,
+    servicePricingId: string,
+    data: Partial<InsertServiceBillingRule>
+  ): Promise<ServiceBillingRule> {
+    const [rule] = await db
+      .insert(serviceBillingRules)
       .values({ companyId, servicePricingId, ...data })
       .onConflictDoUpdate({
         target: [serviceBillingRules.companyId, serviceBillingRules.servicePricingId],
@@ -1663,14 +2496,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteServiceBillingRule(companyId: string, servicePricingId: string): Promise<void> {
-    await db.delete(serviceBillingRules).where(
-      and(eq(serviceBillingRules.companyId, companyId), eq(serviceBillingRules.servicePricingId, servicePricingId))
-    );
+    await db
+      .delete(serviceBillingRules)
+      .where(
+        and(
+          eq(serviceBillingRules.companyId, companyId),
+          eq(serviceBillingRules.servicePricingId, servicePricingId)
+        )
+      );
   }
 
   // ================ Service Packages ================
   async getServicePackages(companyId: string): Promise<ServicePackage[]> {
-    return db.select().from(servicePackages).where(eq(servicePackages.companyId, companyId)).orderBy(asc(servicePackages.sortOrder), asc(servicePackages.name));
+    return db
+      .select()
+      .from(servicePackages)
+      .where(eq(servicePackages.companyId, companyId))
+      .orderBy(asc(servicePackages.sortOrder), asc(servicePackages.name));
   }
 
   async createServicePackage(data: InsertServicePackage): Promise<ServicePackage> {
@@ -1678,13 +2520,23 @@ export class DatabaseStorage implements IStorage {
     return pkg;
   }
 
-  async updateServicePackage(id: string, companyId: string, data: Partial<InsertServicePackage>): Promise<ServicePackage> {
-    const [pkg] = await db.update(servicePackages).set({ ...data, updatedAt: new Date() }).where(and(eq(servicePackages.id, id), eq(servicePackages.companyId, companyId))).returning();
+  async updateServicePackage(
+    id: string,
+    companyId: string,
+    data: Partial<InsertServicePackage>
+  ): Promise<ServicePackage> {
+    const [pkg] = await db
+      .update(servicePackages)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(servicePackages.id, id), eq(servicePackages.companyId, companyId)))
+      .returning();
     return pkg;
   }
 
   async deleteServicePackage(id: string, companyId: string): Promise<void> {
-    await db.delete(servicePackages).where(and(eq(servicePackages.id, id), eq(servicePackages.companyId, companyId)));
+    await db
+      .delete(servicePackages)
+      .where(and(eq(servicePackages.id, id), eq(servicePackages.companyId, companyId)));
   }
 
   // ================ Seed Default Pricing ================
@@ -1697,9 +2549,24 @@ export class DatabaseStorage implements IStorage {
       const inc = rules.perDogRule.incrementDogs;
 
       const frequencies = [
-        { label: "Weekly Scooping", base: rules.basePrices.weekly, unit: "per_week", descPrefix: "Once per week yard cleanup" },
-        { label: "Twice Weekly Scooping", base: rules.basePrices.twiceWeekly, unit: "per_visit", descPrefix: "Two visits per week" },
-        { label: "Bi-Weekly Scooping", base: rules.basePrices.biWeekly, unit: "per_visit", descPrefix: "Every other week yard cleanup" },
+        {
+          label: "Weekly Scooping",
+          base: rules.basePrices.weekly,
+          unit: "per_week",
+          descPrefix: "Once per week yard cleanup",
+        },
+        {
+          label: "Twice Weekly Scooping",
+          base: rules.basePrices.twiceWeekly,
+          unit: "per_visit",
+          descPrefix: "Two visits per week",
+        },
+        {
+          label: "Bi-Weekly Scooping",
+          base: rules.basePrices.biWeekly,
+          unit: "per_visit",
+          descPrefix: "Every other week yard cleanup",
+        },
       ];
 
       let sortOrder = 1;
@@ -1731,12 +2598,54 @@ export class DatabaseStorage implements IStorage {
       }
 
       const defaultNonRecurring: Omit<InsertServicePricing, "companyId">[] = [
-        { category: "one_time_service", name: "One-Time Cleaning (First 5-Gal Bucket)", description: "Initial one-time cleanup, first 5-gallon bucket", basePrice: "49.99", unit: "flat_rate", sortOrder: 1 },
-        { category: "one_time_service", name: "One-Time Cleaning (Additional 5-Gal Bucket)", description: "Additional 5-gallon bucket for one-time cleanup", basePrice: "24.99", unit: "flat_rate", sortOrder: 2 },
-        { category: "add_on", name: "Front/Side Yard", description: "Additional service for front or side yard areas", basePrice: "7.99", unit: "per_visit", sortOrder: 1 },
-        { category: "add_on", name: "Deck", description: "Deck cleaning and waste removal", basePrice: "5.99", unit: "per_visit", sortOrder: 2 },
-        { category: "add_on", name: "Deodorizing (with Scoop)", description: "Deodorizing treatment included with scooping service", basePrice: "9.99", unit: "per_visit", sortOrder: 3 },
-        { category: "add_on", name: "Waste Take-Away", description: "Removal of collected waste from property", basePrice: "5.99", unit: "per_visit", sortOrder: 4 },
+        {
+          category: "one_time_service",
+          name: "One-Time Cleaning (First 5-Gal Bucket)",
+          description: "Initial one-time cleanup, first 5-gallon bucket",
+          basePrice: "49.99",
+          unit: "flat_rate",
+          sortOrder: 1,
+        },
+        {
+          category: "one_time_service",
+          name: "One-Time Cleaning (Additional 5-Gal Bucket)",
+          description: "Additional 5-gallon bucket for one-time cleanup",
+          basePrice: "24.99",
+          unit: "flat_rate",
+          sortOrder: 2,
+        },
+        {
+          category: "add_on",
+          name: "Front/Side Yard",
+          description: "Additional service for front or side yard areas",
+          basePrice: "7.99",
+          unit: "per_visit",
+          sortOrder: 1,
+        },
+        {
+          category: "add_on",
+          name: "Deck",
+          description: "Deck cleaning and waste removal",
+          basePrice: "5.99",
+          unit: "per_visit",
+          sortOrder: 2,
+        },
+        {
+          category: "add_on",
+          name: "Deodorizing (with Scoop)",
+          description: "Deodorizing treatment included with scooping service",
+          basePrice: "9.99",
+          unit: "per_visit",
+          sortOrder: 3,
+        },
+        {
+          category: "add_on",
+          name: "Waste Take-Away",
+          description: "Removal of collected waste from property",
+          basePrice: "5.99",
+          unit: "per_visit",
+          sortOrder: 4,
+        },
       ];
 
       for (const item of defaultNonRecurring) {
@@ -1749,9 +2658,10 @@ export class DatabaseStorage implements IStorage {
           companyId,
           category: "add_on",
           name: `Lot Size up to ${tier.upToAcres} Acre`,
-          description: tier.surcharge === 0
-            ? `No additional charge for lots up to ${tier.upToAcres} acre`
-            : `Additional charge for lots up to ${tier.upToAcres} acre`,
+          description:
+            tier.surcharge === 0
+              ? `No additional charge for lots up to ${tier.upToAcres} acre`
+              : `Additional charge for lots up to ${tier.upToAcres} acre`,
           basePrice: tier.surcharge.toFixed(2),
           unit: "per_visit",
           sortOrder: yardSort++,
@@ -1790,7 +2700,11 @@ export class DatabaseStorage implements IStorage {
         description: "Twice weekly scooping for 2 dogs with deodorizing",
         frequency: "weekly",
         basePrice: "55.97",
-        includedItems: ["Twice Weekly Scooping 2 Dog", "Deodorizing (with Scoop)", "Waste Take-Away"],
+        includedItems: [
+          "Twice Weekly Scooping 2 Dog",
+          "Deodorizing (with Scoop)",
+          "Waste Take-Away",
+        ],
         sortOrder: 3,
       },
       {
@@ -1811,7 +2725,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ================ Messages ================
-  async getMessages(companyId: string, filters?: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string; emailThreadId?: string; retentionDays?: number }): Promise<Message[]> {
+  async getMessages(
+    companyId: string,
+    filters?: {
+      contactId?: string;
+      channel?: string;
+      direction?: string;
+      isRead?: boolean;
+      phone?: string;
+      emailThreadId?: string;
+      retentionDays?: number;
+    }
+  ): Promise<Message[]> {
     const conditions = [eq(messages.companyId, companyId)];
     if (filters?.retentionDays && filters.retentionDays > 0) {
       const cutoff = new Date();
@@ -1835,59 +2760,79 @@ export class DatabaseStorage implements IStorage {
         )!
       );
     }
-    return db.select().from(messages).where(and(...conditions)).orderBy(desc(messages.createdAt));
+    return db
+      .select()
+      .from(messages)
+      .where(and(...conditions))
+      .orderBy(desc(messages.createdAt));
   }
 
   async markMessageRead(id: string, companyId: string): Promise<Message> {
-    const [msg] = await db.update(messages).set({ isRead: true }).where(and(eq(messages.id, id), eq(messages.companyId, companyId))).returning();
+    const [msg] = await db
+      .update(messages)
+      .set({ isRead: true })
+      .where(and(eq(messages.id, id), eq(messages.companyId, companyId)))
+      .returning();
     return msg;
   }
 
   async markMessagesReadByContact(contactId: string, companyId: string): Promise<void> {
-    await db.update(messages).set({ isRead: true }).where(
-      and(
-        eq(messages.companyId, companyId),
-        eq(messages.contactId, contactId),
-        eq(messages.channel, "sms"),
-        eq(messages.direction, "inbound"),
-        eq(messages.isRead, false),
-      )
-    );
+    await db
+      .update(messages)
+      .set({ isRead: true })
+      .where(
+        and(
+          eq(messages.companyId, companyId),
+          eq(messages.contactId, contactId),
+          eq(messages.channel, "sms"),
+          eq(messages.direction, "inbound"),
+          eq(messages.isRead, false)
+        )
+      );
   }
 
   async markMessagesReadByPhone(phone: string, companyId: string): Promise<void> {
-    await db.update(messages).set({ isRead: true }).where(
-      and(
-        eq(messages.companyId, companyId),
-        eq(messages.fromAddress, phone),
-        eq(messages.channel, "sms"),
-        eq(messages.direction, "inbound"),
-        eq(messages.isRead, false),
-      )
-    );
+    await db
+      .update(messages)
+      .set({ isRead: true })
+      .where(
+        and(
+          eq(messages.companyId, companyId),
+          eq(messages.fromAddress, phone),
+          eq(messages.channel, "sms"),
+          eq(messages.direction, "inbound"),
+          eq(messages.isRead, false)
+        )
+      );
   }
 
   async getUnreadSmsCount(companyId: string): Promise<number> {
-    const result = await db.select({ count: sql<number>`count(*)::int` }).from(messages).where(
-      and(
-        eq(messages.companyId, companyId),
-        eq(messages.channel, "sms"),
-        eq(messages.direction, "inbound"),
-        eq(messages.isRead, false),
-      )
-    );
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.companyId, companyId),
+          eq(messages.channel, "sms"),
+          eq(messages.direction, "inbound"),
+          eq(messages.isRead, false)
+        )
+      );
     return result[0]?.count ?? 0;
   }
 
   async getUnreadEmailCount(companyId: string): Promise<number> {
-    const result = await db.select({ count: sql<number>`count(*)::int` }).from(messages).where(
-      and(
-        eq(messages.companyId, companyId),
-        eq(messages.channel, "email"),
-        eq(messages.direction, "inbound"),
-        eq(messages.isRead, false),
-      )
-    );
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.companyId, companyId),
+          eq(messages.channel, "email"),
+          eq(messages.direction, "inbound"),
+          eq(messages.isRead, false)
+        )
+      );
     return result[0]?.count ?? 0;
   }
 
@@ -1896,21 +2841,26 @@ export class DatabaseStorage implements IStorage {
     if (companyId) {
       conditions.push(eq(messages.companyId, companyId));
     }
-    return db.select().from(messages)
+    return db
+      .select()
+      .from(messages)
       .where(and(...conditions))
       .orderBy(messages.createdAt);
   }
 
   async markMessagesReadByEmail(emailThreadId: string, companyId: string): Promise<void> {
-    await db.update(messages).set({ isRead: true }).where(
-      and(
-        eq(messages.companyId, companyId),
-        eq(messages.emailThreadId, emailThreadId),
-        eq(messages.channel, "email"),
-        eq(messages.direction, "inbound"),
-        eq(messages.isRead, false),
-      )
-    );
+    await db
+      .update(messages)
+      .set({ isRead: true })
+      .where(
+        and(
+          eq(messages.companyId, companyId),
+          eq(messages.emailThreadId, emailThreadId),
+          eq(messages.channel, "email"),
+          eq(messages.direction, "inbound"),
+          eq(messages.isRead, false)
+        )
+      );
   }
 
   async createMessage(data: InsertMessage): Promise<Message> {
@@ -1932,8 +2882,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPortalSessionByToken(tokenHash: string): Promise<PortalSession | undefined> {
-    const [session] = await db.select().from(portalSessions)
-      .where(and(eq(portalSessions.tokenHash, tokenHash), gte(portalSessions.expiresAt, new Date())));
+    const [session] = await db
+      .select()
+      .from(portalSessions)
+      .where(
+        and(eq(portalSessions.tokenHash, tokenHash), gte(portalSessions.expiresAt, new Date()))
+      );
     return session;
   }
 
@@ -1952,25 +2906,45 @@ export class DatabaseStorage implements IStorage {
 
   // ================ Admin (Platform-level) ================
   async getAllCompanies(): Promise<Company[]> {
-    return db.select().from(companies).where(isNull(companies.deletedAt)).orderBy(desc(companies.createdAt));
+    return db
+      .select()
+      .from(companies)
+      .where(isNull(companies.deletedAt))
+      .orderBy(desc(companies.createdAt));
   }
 
   async getPendingDeletionCompanies(): Promise<Company[]> {
-    return db.select().from(companies).where(isNotNull(companies.deletedAt)).orderBy(desc(companies.deletedAt));
+    return db
+      .select()
+      .from(companies)
+      .where(isNotNull(companies.deletedAt))
+      .orderBy(desc(companies.deletedAt));
   }
 
   async softDeleteCompany(id: string): Promise<Company> {
-    const [company] = await db.update(companies).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(companies.id, id)).returning();
+    const [company] = await db
+      .update(companies)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(companies.id, id))
+      .returning();
     return company;
   }
 
   async restoreCompany(id: string): Promise<Company> {
-    const [company] = await db.update(companies).set({ deletedAt: null, updatedAt: new Date() }).where(eq(companies.id, id)).returning();
+    const [company] = await db
+      .update(companies)
+      .set({ deletedAt: null, updatedAt: new Date() })
+      .where(eq(companies.id, id))
+      .returning();
     return company;
   }
 
   async getAdminNotes(companyId: string): Promise<AdminNote[]> {
-    return db.select().from(adminNotes).where(eq(adminNotes.companyId, companyId)).orderBy(desc(adminNotes.createdAt));
+    return db
+      .select()
+      .from(adminNotes)
+      .where(eq(adminNotes.companyId, companyId))
+      .orderBy(desc(adminNotes.createdAt));
   }
 
   async createAdminNote(data: InsertAdminNote): Promise<AdminNote> {
@@ -1982,21 +2956,41 @@ export class DatabaseStorage implements IStorage {
     await db.delete(adminNotes).where(eq(adminNotes.id, id));
   }
 
-  async updateCompanySubscription(companyId: string, tier: string, opts?: { subscriptionStatus?: string; trialEndsAt?: Date | null; customMaxUsers?: number | null }): Promise<Company> {
+  async updateCompanySubscription(
+    companyId: string,
+    tier: string,
+    opts?: {
+      subscriptionStatus?: string;
+      trialEndsAt?: Date | null;
+      customMaxUsers?: number | null;
+    }
+  ): Promise<Company> {
     const setData: Record<string, any> = { subscriptionTier: tier as any };
-    if (opts?.subscriptionStatus !== undefined) setData.subscriptionStatus = opts.subscriptionStatus as any;
+    if (opts?.subscriptionStatus !== undefined)
+      setData.subscriptionStatus = opts.subscriptionStatus as any;
     if (opts?.trialEndsAt !== undefined) setData.trialEndsAt = opts.trialEndsAt;
     if (opts?.customMaxUsers !== undefined) setData.customMaxUsers = opts.customMaxUsers;
-    const [updated] = await db.update(companies)
+    const [updated] = await db
+      .update(companies)
       .set(setData)
       .where(eq(companies.id, companyId))
       .returning();
     return updated;
   }
 
-  async getPlatformStats(): Promise<{ totalCompanies: number; totalUsers: number; totalContacts: number; totalVisits: number; mrr: number }> {
+  async getPlatformStats(): Promise<{
+    totalCompanies: number;
+    totalUsers: number;
+    totalContacts: number;
+    totalVisits: number;
+    mrr: number;
+  }> {
     const tierPricing: Record<string, number> = {
-      tier_1: 29, tier_1_3: 49, tier_3_5: 99, tier_6_10: 149, tier_10_plus: 599,
+      tier_1: 29,
+      tier_1_3: 49,
+      tier_3_5: 99,
+      tier_6_10: 149,
+      tier_10_plus: 599,
     };
     const allCompanies = await db.select().from(companies).where(isNull(companies.deletedAt));
     const [usersCount] = await db.select({ count: count() }).from(companyUsers);
@@ -2018,19 +3012,36 @@ export class DatabaseStorage implements IStorage {
     return msg;
   }
 
-  async getSmsMessages(companyId: string, startDate?: string, endDate?: string): Promise<SmsMessage[]> {
+  async getSmsMessages(
+    companyId: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<SmsMessage[]> {
     const conditions = [eq(smsMessages.companyId, companyId)];
     if (startDate) conditions.push(gte(smsMessages.createdAt, new Date(startDate)));
     if (endDate) conditions.push(lte(smsMessages.createdAt, new Date(endDate)));
-    return db.select().from(smsMessages).where(and(...conditions)).orderBy(desc(smsMessages.createdAt));
+    return db
+      .select()
+      .from(smsMessages)
+      .where(and(...conditions))
+      .orderBy(desc(smsMessages.createdAt));
   }
 
-  async getSmsCountForPeriod(companyId: string, startDate: string, endDate: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(smsMessages).where(and(
-      eq(smsMessages.companyId, companyId),
-      gte(smsMessages.createdAt, new Date(startDate)),
-      lte(smsMessages.createdAt, new Date(endDate + "T23:59:59.999Z")),
-    ));
+  async getSmsCountForPeriod(
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(smsMessages)
+      .where(
+        and(
+          eq(smsMessages.companyId, companyId),
+          gte(smsMessages.createdAt, new Date(startDate)),
+          lte(smsMessages.createdAt, new Date(endDate + "T23:59:59.999Z"))
+        )
+      );
     return result?.count ?? 0;
   }
 
@@ -2040,25 +3051,44 @@ export class DatabaseStorage implements IStorage {
     return log;
   }
 
-  async getEmailLogs(companyId: string, startDate?: string, endDate?: string): Promise<EmailSent[]> {
+  async getEmailLogs(
+    companyId: string,
+    startDate?: string,
+    endDate?: string
+  ): Promise<EmailSent[]> {
     const conditions = [eq(emailsSent.companyId, companyId)];
     if (startDate) conditions.push(gte(emailsSent.createdAt, new Date(startDate)));
     if (endDate) conditions.push(lte(emailsSent.createdAt, new Date(endDate)));
-    return db.select().from(emailsSent).where(and(...conditions)).orderBy(desc(emailsSent.createdAt));
+    return db
+      .select()
+      .from(emailsSent)
+      .where(and(...conditions))
+      .orderBy(desc(emailsSent.createdAt));
   }
 
-  async getEmailCountForPeriod(companyId: string, startDate: string, endDate: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(emailsSent).where(and(
-      eq(emailsSent.companyId, companyId),
-      gte(emailsSent.createdAt, new Date(startDate)),
-      lte(emailsSent.createdAt, new Date(endDate + "T23:59:59.999Z")),
-    ));
+  async getEmailCountForPeriod(
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(emailsSent)
+      .where(
+        and(
+          eq(emailsSent.companyId, companyId),
+          gte(emailsSent.createdAt, new Date(startDate)),
+          lte(emailsSent.createdAt, new Date(endDate + "T23:59:59.999Z"))
+        )
+      );
     return result?.count ?? 0;
   }
 
   // ================ Account Daily Metrics ================
   async upsertDailyMetrics(data: InsertAccountDailyMetric): Promise<AccountDailyMetric> {
-    const [metric] = await db.insert(accountDailyMetrics).values(data)
+    const [metric] = await db
+      .insert(accountDailyMetrics)
+      .values(data)
       .onConflictDoUpdate({
         target: [accountDailyMetrics.companyId, accountDailyMetrics.date],
         set: {
@@ -2081,29 +3111,45 @@ export class DatabaseStorage implements IStorage {
     return metric;
   }
 
-  async getDailyMetrics(companyId: string, startDate: string, endDate: string): Promise<AccountDailyMetric[]> {
-    return db.select().from(accountDailyMetrics).where(and(
-      eq(accountDailyMetrics.companyId, companyId),
-      gte(accountDailyMetrics.date, startDate),
-      lte(accountDailyMetrics.date, endDate),
-    )).orderBy(desc(accountDailyMetrics.date));
+  async getDailyMetrics(
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<AccountDailyMetric[]> {
+    return db
+      .select()
+      .from(accountDailyMetrics)
+      .where(
+        and(
+          eq(accountDailyMetrics.companyId, companyId),
+          gte(accountDailyMetrics.date, startDate),
+          lte(accountDailyMetrics.date, endDate)
+        )
+      )
+      .orderBy(desc(accountDailyMetrics.date));
   }
 
   async getAllDailyMetrics(startDate: string, endDate: string): Promise<AccountDailyMetric[]> {
-    return db.select().from(accountDailyMetrics).where(and(
-      gte(accountDailyMetrics.date, startDate),
-      lte(accountDailyMetrics.date, endDate),
-    )).orderBy(desc(accountDailyMetrics.date));
+    return db
+      .select()
+      .from(accountDailyMetrics)
+      .where(and(gte(accountDailyMetrics.date, startDate), lte(accountDailyMetrics.date, endDate)))
+      .orderBy(desc(accountDailyMetrics.date));
   }
 
   // ================ SaaS Costs ================
   async getSaasCosts(month: string): Promise<SaasCostMonthly | undefined> {
-    const [cost] = await db.select().from(saasCostsMonthly).where(eq(saasCostsMonthly.month, month));
+    const [cost] = await db
+      .select()
+      .from(saasCostsMonthly)
+      .where(eq(saasCostsMonthly.month, month));
     return cost;
   }
 
   async upsertSaasCosts(data: InsertSaasCostMonthly): Promise<SaasCostMonthly> {
-    const [cost] = await db.insert(saasCostsMonthly).values(data)
+    const [cost] = await db
+      .insert(saasCostsMonthly)
+      .values(data)
       .onConflictDoUpdate({
         target: [saasCostsMonthly.month],
         set: {
@@ -2129,8 +3175,15 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(costConfig);
   }
 
-  async upsertCostConfig(key: string, valueCents: number, valuePct?: string, description?: string): Promise<CostConfigItem> {
-    const [item] = await db.insert(costConfig).values({ key, valueCents, valuePct, description })
+  async upsertCostConfig(
+    key: string,
+    valueCents: number,
+    valuePct?: string,
+    description?: string
+  ): Promise<CostConfigItem> {
+    const [item] = await db
+      .insert(costConfig)
+      .values({ key, valueCents, valuePct, description })
       .onConflictDoUpdate({
         target: [costConfig.key],
         set: { valueCents, valuePct, description, updatedAt: new Date() },
@@ -2141,14 +3194,18 @@ export class DatabaseStorage implements IStorage {
 
   // ================ Notifications ================
   async getNotifications(companyId: string, limit = 50): Promise<Notification[]> {
-    return db.select().from(notifications)
+    return db
+      .select()
+      .from(notifications)
       .where(eq(notifications.companyId, companyId))
       .orderBy(desc(notifications.createdAt))
       .limit(limit);
   }
 
   async getUnreadNotificationCount(companyId: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(notifications)
+    const [result] = await db
+      .select({ count: count() })
+      .from(notifications)
       .where(and(eq(notifications.companyId, companyId), eq(notifications.isRead, false)));
     return result?.count ?? 0;
   }
@@ -2159,7 +3216,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async markNotificationRead(id: string, companyId: string): Promise<Notification> {
-    const [notif] = await db.update(notifications)
+    const [notif] = await db
+      .update(notifications)
       .set({ isRead: true })
       .where(and(eq(notifications.id, id), eq(notifications.companyId, companyId)))
       .returning();
@@ -2167,7 +3225,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async markAllNotificationsRead(companyId: string): Promise<void> {
-    await db.update(notifications)
+    await db
+      .update(notifications)
       .set({ isRead: true })
       .where(and(eq(notifications.companyId, companyId), eq(notifications.isRead, false)));
   }
@@ -2178,23 +3237,42 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
-  async updateTimeEntry(id: string, companyId: string, data: Partial<InsertTimeEntry>): Promise<TimeEntry> {
-    const [entry] = await db.update(timeEntries).set(data).where(and(eq(timeEntries.id, id), eq(timeEntries.companyId, companyId))).returning();
+  async updateTimeEntry(
+    id: string,
+    companyId: string,
+    data: Partial<InsertTimeEntry>
+  ): Promise<TimeEntry> {
+    const [entry] = await db
+      .update(timeEntries)
+      .set(data)
+      .where(and(eq(timeEntries.id, id), eq(timeEntries.companyId, companyId)))
+      .returning();
     return entry;
   }
 
-  async getTimeEntries(companyId: string, filters?: { userId?: string; startDate?: string; endDate?: string }): Promise<TimeEntry[]> {
+  async getTimeEntries(
+    companyId: string,
+    filters?: { userId?: string; startDate?: string; endDate?: string }
+  ): Promise<TimeEntry[]> {
     const conditions = [eq(timeEntries.companyId, companyId)];
     if (filters?.userId) conditions.push(eq(timeEntries.userId, filters.userId));
     if (filters?.startDate) conditions.push(gte(timeEntries.clockIn, new Date(filters.startDate)));
-    if (filters?.endDate) conditions.push(lte(timeEntries.clockIn, new Date(filters.endDate + "T23:59:59")));
-    return db.select().from(timeEntries).where(and(...conditions)).orderBy(desc(timeEntries.clockIn));
+    if (filters?.endDate)
+      conditions.push(lte(timeEntries.clockIn, new Date(filters.endDate + "T23:59:59")));
+    return db
+      .select()
+      .from(timeEntries)
+      .where(and(...conditions))
+      .orderBy(desc(timeEntries.clockIn));
   }
 
   async getActiveTimeEntry(userId: string): Promise<TimeEntry | undefined> {
-    const [entry] = await db.select().from(timeEntries)
+    const [entry] = await db
+      .select()
+      .from(timeEntries)
       .where(and(eq(timeEntries.userId, userId), sql`${timeEntries.clockOut} IS NULL`))
-      .orderBy(desc(timeEntries.clockIn)).limit(1);
+      .orderBy(desc(timeEntries.clockIn))
+      .limit(1);
     return entry;
   }
 
@@ -2204,11 +3282,19 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
-  async getActivityLogs(companyId: string, contactId: string, limit = 50, offset = 0): Promise<ActivityLog[]> {
-    return db.select().from(activityLog)
+  async getActivityLogs(
+    companyId: string,
+    contactId: string,
+    limit = 50,
+    offset = 0
+  ): Promise<ActivityLog[]> {
+    return db
+      .select()
+      .from(activityLog)
       .where(and(eq(activityLog.companyId, companyId), eq(activityLog.contactId, contactId)))
       .orderBy(desc(activityLog.createdAt))
-      .limit(limit).offset(offset);
+      .limit(limit)
+      .offset(offset);
   }
 
   // ================ Webhook Deliveries ================
@@ -2217,36 +3303,54 @@ export class DatabaseStorage implements IStorage {
     return delivery;
   }
 
-  async updateWebhookDelivery(id: string, data: Partial<InsertWebhookDelivery>): Promise<WebhookDelivery> {
-    const [delivery] = await db.update(webhookDeliveries).set(data).where(eq(webhookDeliveries.id, id)).returning();
+  async updateWebhookDelivery(
+    id: string,
+    data: Partial<InsertWebhookDelivery>
+  ): Promise<WebhookDelivery> {
+    const [delivery] = await db
+      .update(webhookDeliveries)
+      .set(data)
+      .where(eq(webhookDeliveries.id, id))
+      .returning();
     return delivery;
   }
 
   async getPendingWebhookDeliveries(): Promise<WebhookDelivery[]> {
-    return db.select().from(webhookDeliveries)
-      .where(and(
-        eq(webhookDeliveries.status, "pending"),
-        or(
-          sql`${webhookDeliveries.nextRetry} IS NULL`,
-          lte(webhookDeliveries.nextRetry, new Date())
+    return db
+      .select()
+      .from(webhookDeliveries)
+      .where(
+        and(
+          eq(webhookDeliveries.status, "pending"),
+          or(
+            sql`${webhookDeliveries.nextRetry} IS NULL`,
+            lte(webhookDeliveries.nextRetry, new Date())
+          )
         )
-      ))
+      )
       .orderBy(asc(webhookDeliveries.createdAt))
       .limit(100);
   }
 
   async getWebhookDeliveries(webhookId: string, limit = 50): Promise<WebhookDelivery[]> {
-    return db.select().from(webhookDeliveries)
+    return db
+      .select()
+      .from(webhookDeliveries)
       .where(eq(webhookDeliveries.webhookId, webhookId))
       .orderBy(desc(webhookDeliveries.createdAt))
       .limit(limit);
   }
 
   async getWebhookDeliveriesForCompany(companyId: string, limit = 100): Promise<WebhookDelivery[]> {
-    const companyWebhooks = await db.select({ id: webhooks.id }).from(webhooks).where(eq(webhooks.companyId, companyId));
+    const companyWebhooks = await db
+      .select({ id: webhooks.id })
+      .from(webhooks)
+      .where(eq(webhooks.companyId, companyId));
     if (companyWebhooks.length === 0) return [];
-    const webhookIds = companyWebhooks.map(w => w.id);
-    return db.select().from(webhookDeliveries)
+    const webhookIds = companyWebhooks.map((w) => w.id);
+    return db
+      .select()
+      .from(webhookDeliveries)
       .where(inArray(webhookDeliveries.webhookId, webhookIds))
       .orderBy(desc(webhookDeliveries.createdAt))
       .limit(limit);
@@ -2258,66 +3362,115 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
-  async getAuditTrail(companyId: string, filters?: { entityType?: string; startDate?: string; endDate?: string }, limit = 100, offset = 0): Promise<AuditTrail[]> {
+  async getAuditTrail(
+    companyId: string,
+    filters?: { entityType?: string; startDate?: string; endDate?: string },
+    limit = 100,
+    offset = 0
+  ): Promise<AuditTrail[]> {
     const conditions = [eq(auditTrail.companyId, companyId)];
     if (filters?.entityType) conditions.push(eq(auditTrail.entityType, filters.entityType));
     if (filters?.startDate) conditions.push(gte(auditTrail.createdAt, new Date(filters.startDate)));
-    if (filters?.endDate) conditions.push(lte(auditTrail.createdAt, new Date(filters.endDate + "T23:59:59")));
-    return db.select().from(auditTrail).where(and(...conditions)).orderBy(desc(auditTrail.createdAt)).limit(limit).offset(offset);
+    if (filters?.endDate)
+      conditions.push(lte(auditTrail.createdAt, new Date(filters.endDate + "T23:59:59")));
+    return db
+      .select()
+      .from(auditTrail)
+      .where(and(...conditions))
+      .orderBy(desc(auditTrail.createdAt))
+      .limit(limit)
+      .offset(offset);
   }
 
   // ================ Bulk Operations ================
   async bulkUpdateContacts(ids: string[], companyId: string, data: Partial<any>): Promise<number> {
-    await db.update(contacts)
+    await db
+      .update(contacts)
       .set({ ...data, updatedAt: new Date() })
       .where(and(inArray(contacts.id, ids), eq(contacts.companyId, companyId)));
     return ids.length;
   }
 
   async bulkDeleteContacts(ids: string[], companyId: string): Promise<number> {
-    await db.delete(contacts)
+    await db
+      .delete(contacts)
       .where(and(inArray(contacts.id, ids), eq(contacts.companyId, companyId)));
     return ids.length;
   }
 
   async searchContacts(companyId: string, term: string): Promise<any[]> {
-    return db.select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email, phone: contacts.phone, status: contacts.status })
+    return db
+      .select({
+        id: contacts.id,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        email: contacts.email,
+        phone: contacts.phone,
+        status: contacts.status,
+      })
       .from(contacts)
-      .where(and(eq(contacts.companyId, companyId), or(
-        sql`lower(${contacts.firstName}) like ${term}`,
-        sql`lower(${contacts.lastName}) like ${term}`,
-        sql`lower(${contacts.email}) like ${term}`,
-        sql`${contacts.phone} like ${term}`
-      )))
+      .where(
+        and(
+          eq(contacts.companyId, companyId),
+          or(
+            sql`lower(${contacts.firstName}) like ${term}`,
+            sql`lower(${contacts.lastName}) like ${term}`,
+            sql`lower(${contacts.email}) like ${term}`,
+            sql`${contacts.phone} like ${term}`
+          )
+        )
+      )
       .limit(10);
   }
 
   async searchProperties(companyId: string, term: string): Promise<any[]> {
-    return db.select({ id: properties.id, streetAddress: properties.streetAddress, city: properties.city, contactId: properties.contactId })
+    return db
+      .select({
+        id: properties.id,
+        streetAddress: properties.streetAddress,
+        city: properties.city,
+        contactId: properties.contactId,
+      })
       .from(properties)
-      .where(and(eq(properties.companyId, companyId), or(
-        sql`lower(${properties.streetAddress}) like ${term}`,
-        sql`lower(${properties.city}) like ${term}`
-      )))
+      .where(
+        and(
+          eq(properties.companyId, companyId),
+          or(
+            sql`lower(${properties.streetAddress}) like ${term}`,
+            sql`lower(${properties.city}) like ${term}`
+          )
+        )
+      )
       .limit(10);
   }
 
   async searchInvoices(companyId: string, term: string): Promise<any[]> {
-    return db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, status: invoices.status, total: invoices.total, contactId: invoices.contactId })
+    return db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        status: invoices.status,
+        total: invoices.total,
+        contactId: invoices.contactId,
+      })
       .from(invoices)
-      .where(and(eq(invoices.companyId, companyId), or(
-        sql`lower(${invoices.invoiceNumber}) like ${term}`,
-        sql`cast(${invoices.total} as text) like ${term}`
-      )))
+      .where(
+        and(
+          eq(invoices.companyId, companyId),
+          or(
+            sql`lower(${invoices.invoiceNumber}) like ${term}`,
+            sql`cast(${invoices.total} as text) like ${term}`
+          )
+        )
+      )
       .limit(10);
   }
 
   async searchRoutes(companyId: string, term: string): Promise<any[]> {
-    return db.select({ id: routes.id, name: routes.name, dayOfWeek: routes.dayOfWeek })
+    return db
+      .select({ id: routes.id, name: routes.name, dayOfWeek: routes.dayOfWeek })
       .from(routes)
-      .where(and(eq(routes.companyId, companyId),
-        sql`lower(${routes.name}) like ${term}`
-      ))
+      .where(and(eq(routes.companyId, companyId), sql`lower(${routes.name}) like ${term}`))
       .limit(10);
   }
 
@@ -2328,21 +3481,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getImportRun(id: string, companyId: string): Promise<ImportRun | undefined> {
-    const [run] = await db.select().from(importRuns).where(and(eq(importRuns.id, id), eq(importRuns.companyId, companyId)));
+    const [run] = await db
+      .select()
+      .from(importRuns)
+      .where(and(eq(importRuns.id, id), eq(importRuns.companyId, companyId)));
     return run;
   }
 
-  async updateImportRun(id: string, data: Partial<InsertImportRun> & { completedAt?: Date }): Promise<ImportRun> {
+  async updateImportRun(
+    id: string,
+    data: Partial<InsertImportRun> & { completedAt?: Date }
+  ): Promise<ImportRun> {
     const [run] = await db.update(importRuns).set(data).where(eq(importRuns.id, id)).returning();
     return run;
   }
 
   async getImportRuns(companyId: string): Promise<ImportRun[]> {
-    return db.select().from(importRuns).where(eq(importRuns.companyId, companyId)).orderBy(desc(importRuns.createdAt));
+    return db
+      .select()
+      .from(importRuns)
+      .where(eq(importRuns.companyId, companyId))
+      .orderBy(desc(importRuns.createdAt));
   }
 
   async getImportRunByHash(companyId: string, fileHash: string): Promise<ImportRun | undefined> {
-    const [run] = await db.select().from(importRuns).where(and(eq(importRuns.companyId, companyId), eq(importRuns.fileHash, fileHash)));
+    const [run] = await db
+      .select()
+      .from(importRuns)
+      .where(and(eq(importRuns.companyId, companyId), eq(importRuns.fileHash, fileHash)));
     return run;
   }
 
@@ -2353,31 +3519,56 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getInvoicePayments(invoiceId: string): Promise<InvoicePayment[]> {
-    return db.select().from(invoicePayments).where(eq(invoicePayments.invoiceId, invoiceId)).orderBy(desc(invoicePayments.paidAt));
+    return db
+      .select()
+      .from(invoicePayments)
+      .where(eq(invoicePayments.invoiceId, invoiceId))
+      .orderBy(desc(invoicePayments.paidAt));
   }
 
-  async getInvoicePaymentsByCompany(companyId: string, filters?: { source?: string }): Promise<InvoicePayment[]> {
+  async getInvoicePaymentsByCompany(
+    companyId: string,
+    filters?: { source?: string }
+  ): Promise<InvoicePayment[]> {
     const conditions = [eq(invoicePayments.companyId, companyId)];
     if (filters?.source) {
       conditions.push(eq(invoicePayments.source, filters.source as any));
     }
-    return db.select().from(invoicePayments).where(and(...conditions)).orderBy(desc(invoicePayments.paidAt));
+    return db
+      .select()
+      .from(invoicePayments)
+      .where(and(...conditions))
+      .orderBy(desc(invoicePayments.paidAt));
   }
 
-  async getInvoicePaymentByExternalId(companyId: string, externalId: string): Promise<InvoicePayment | undefined> {
-    const [payment] = await db.select().from(invoicePayments).where(and(
-      eq(invoicePayments.companyId, companyId),
-      eq(invoicePayments.externalId, externalId)
-    ));
+  async getInvoicePaymentByExternalId(
+    companyId: string,
+    externalId: string
+  ): Promise<InvoicePayment | undefined> {
+    const [payment] = await db
+      .select()
+      .from(invoicePayments)
+      .where(
+        and(eq(invoicePayments.companyId, companyId), eq(invoicePayments.externalId, externalId))
+      );
     return payment;
   }
 
-  async getInvoiceByExternalId(companyId: string, externalSource: string, externalId: string): Promise<Invoice | undefined> {
-    const [inv] = await db.select().from(invoices).where(and(
-      eq(invoices.companyId, companyId),
-      eq(invoices.externalSource, externalSource),
-      eq(invoices.externalId, externalId)
-    ));
+  async getInvoiceByExternalId(
+    companyId: string,
+    externalSource: string,
+    externalId: string
+  ): Promise<Invoice | undefined> {
+    const [inv] = await db
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.companyId, companyId),
+          eq(invoices.externalSource, externalSource),
+          eq(invoices.externalId, externalId)
+        )
+      );
     return inv;
   }
 
@@ -2387,40 +3578,74 @@ export class DatabaseStorage implements IStorage {
     return rec;
   }
 
-  async getPriceRecommendations(companyId: string, propertyId?: string): Promise<PriceRecommendation[]> {
+  async getPriceRecommendations(
+    companyId: string,
+    propertyId?: string
+  ): Promise<PriceRecommendation[]> {
     const conditions = [eq(priceRecommendations.companyId, companyId)];
     if (propertyId) {
       conditions.push(eq(priceRecommendations.propertyId, propertyId));
     }
-    return db.select().from(priceRecommendations).where(and(...conditions)).orderBy(desc(priceRecommendations.calculatedAt));
+    return db
+      .select()
+      .from(priceRecommendations)
+      .where(and(...conditions))
+      .orderBy(desc(priceRecommendations.calculatedAt));
   }
 
-  async getLatestPriceRecommendation(companyId: string, propertyId: string): Promise<PriceRecommendation | undefined> {
-    const [rec] = await db.select().from(priceRecommendations)
-      .where(and(
-        eq(priceRecommendations.companyId, companyId),
-        eq(priceRecommendations.propertyId, propertyId)
-      ))
+  async getLatestPriceRecommendation(
+    companyId: string,
+    propertyId: string
+  ): Promise<PriceRecommendation | undefined> {
+    const [rec] = await db
+      .select()
+      .from(priceRecommendations)
+      .where(
+        and(
+          eq(priceRecommendations.companyId, companyId),
+          eq(priceRecommendations.propertyId, propertyId)
+        )
+      )
       .orderBy(desc(priceRecommendations.calculatedAt))
       .limit(1);
     return rec;
   }
 
   // ================ Profitability Snapshots ================
-  async getProfitabilitySnapshots(companyId: string, filters?: { startDate?: string; endDate?: string; contactId?: string }): Promise<ProfitabilitySnapshot[]> {
+  async getProfitabilitySnapshots(
+    companyId: string,
+    filters?: { startDate?: string; endDate?: string; contactId?: string }
+  ): Promise<ProfitabilitySnapshot[]> {
     const conditions = [eq(profitabilitySnapshots.companyId, companyId)];
-    if (filters?.contactId) conditions.push(eq(profitabilitySnapshots.contactId, filters.contactId));
-    if (filters?.startDate) conditions.push(gte(profitabilitySnapshots.snapshotDate, filters.startDate));
-    if (filters?.endDate) conditions.push(lte(profitabilitySnapshots.snapshotDate, filters.endDate));
-    return db.select().from(profitabilitySnapshots).where(and(...conditions)).orderBy(desc(profitabilitySnapshots.snapshotDate));
+    if (filters?.contactId)
+      conditions.push(eq(profitabilitySnapshots.contactId, filters.contactId));
+    if (filters?.startDate)
+      conditions.push(gte(profitabilitySnapshots.snapshotDate, filters.startDate));
+    if (filters?.endDate)
+      conditions.push(lte(profitabilitySnapshots.snapshotDate, filters.endDate));
+    return db
+      .select()
+      .from(profitabilitySnapshots)
+      .where(and(...conditions))
+      .orderBy(desc(profitabilitySnapshots.snapshotDate));
   }
 
-  async getProfitabilitySnapshot(id: string, companyId: string): Promise<ProfitabilitySnapshot | undefined> {
-    const [snap] = await db.select().from(profitabilitySnapshots).where(and(eq(profitabilitySnapshots.id, id), eq(profitabilitySnapshots.companyId, companyId)));
+  async getProfitabilitySnapshot(
+    id: string,
+    companyId: string
+  ): Promise<ProfitabilitySnapshot | undefined> {
+    const [snap] = await db
+      .select()
+      .from(profitabilitySnapshots)
+      .where(
+        and(eq(profitabilitySnapshots.id, id), eq(profitabilitySnapshots.companyId, companyId))
+      );
     return snap;
   }
 
-  async createProfitabilitySnapshot(data: InsertProfitabilitySnapshot): Promise<ProfitabilitySnapshot> {
+  async createProfitabilitySnapshot(
+    data: InsertProfitabilitySnapshot
+  ): Promise<ProfitabilitySnapshot> {
     const [snap] = await db.insert(profitabilitySnapshots).values(data).returning();
     return snap;
   }
@@ -2432,25 +3657,34 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomerProfitabilitySummary(companyId: string): Promise<any[]> {
-    const activeContacts = await db.select({
-      id: contacts.id,
-      firstName: contacts.firstName,
-      lastName: contacts.lastName,
-      email: contacts.email,
-      phone: contacts.phone,
-      status: contacts.status,
-    }).from(contacts).where(and(eq(contacts.companyId, companyId), eq(contacts.status, "active")));
+    const activeContacts = await db
+      .select({
+        id: contacts.id,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        email: contacts.email,
+        phone: contacts.phone,
+        status: contacts.status,
+      })
+      .from(contacts)
+      .where(and(eq(contacts.companyId, companyId), eq(contacts.status, "active")));
 
-    const activePlans = await db.select().from(servicePlans).where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.isActive, true)));
+    const activePlans = await db
+      .select()
+      .from(servicePlans)
+      .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.isActive, true)));
 
-    const allProperties = await db.select().from(properties).where(eq(properties.companyId, companyId));
+    const allProperties = await db
+      .select()
+      .from(properties)
+      .where(eq(properties.companyId, companyId));
 
-    const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+    const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
     const result: any[] = [];
 
     for (const contact of activeContacts) {
-      const contactPlans = activePlans.filter(p => p.contactId === contact.id);
+      const contactPlans = activePlans.filter((p) => p.contactId === contact.id);
       if (contactPlans.length === 0) continue;
 
       let totalRevenueCentsPerMonth = 0;
@@ -2466,17 +3700,26 @@ export class DatabaseStorage implements IStorage {
 
         let visitsPerMonth = 4;
         switch (plan.frequency) {
-          case "weekly": visitsPerMonth = 4.33; break;
-          case "biweekly": visitsPerMonth = 2.17; break;
-          case "monthly": visitsPerMonth = 1; break;
-          case "onetime": visitsPerMonth = 0.25; break;
+          case "weekly":
+            visitsPerMonth = 4.33;
+            break;
+          case "biweekly":
+            visitsPerMonth = 2.17;
+            break;
+          case "monthly":
+            visitsPerMonth = 1;
+            break;
+          case "onetime":
+            visitsPerMonth = 0.25;
+            break;
         }
 
         totalRevenueCentsPerMonth += pricePerVisitCents * visitsPerMonth;
       }
 
       const profitCents = totalRevenueCentsPerMonth - totalCostCentsPerMonth;
-      const marginPct = totalRevenueCentsPerMonth > 0 ? (profitCents / totalRevenueCentsPerMonth) * 100 : 0;
+      const marginPct =
+        totalRevenueCentsPerMonth > 0 ? (profitCents / totalRevenueCentsPerMonth) * 100 : 0;
 
       let profitabilityStatus: "profitable" | "marginal" | "unprofitable" = "profitable";
       if (profitCents < 0) profitabilityStatus = "unprofitable";
@@ -2503,19 +3746,25 @@ export class DatabaseStorage implements IStorage {
 
   async getRouteProfitabilitySummary(companyId: string): Promise<any[]> {
     const companyRoutes = await db.select().from(routes).where(eq(routes.companyId, companyId));
-    const activePlans = await db.select().from(servicePlans).where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.isActive, true)));
-    const allContacts = await db.select({
-      id: contacts.id,
-      firstName: contacts.firstName,
-      lastName: contacts.lastName,
-    }).from(contacts).where(eq(contacts.companyId, companyId));
+    const activePlans = await db
+      .select()
+      .from(servicePlans)
+      .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.isActive, true)));
+    const allContacts = await db
+      .select({
+        id: contacts.id,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+      })
+      .from(contacts)
+      .where(eq(contacts.companyId, companyId));
 
-    const contactMap = new Map(allContacts.map(c => [c.id, c]));
+    const contactMap = new Map(allContacts.map((c) => [c.id, c]));
 
     const result: any[] = [];
 
     for (const route of companyRoutes) {
-      const routePlans = activePlans.filter(p => p.routeId === route.id);
+      const routePlans = activePlans.filter((p) => p.routeId === route.id);
       if (routePlans.length === 0) {
         result.push({
           routeId: route.id,
@@ -2534,7 +3783,16 @@ export class DatabaseStorage implements IStorage {
 
       let totalRevenueCents = 0;
       let totalCostCents = 0;
-      const customerMap = new Map<string, { contactId: string; firstName: string; lastName: string; revenueCents: number; costCents: number }>();
+      const customerMap = new Map<
+        string,
+        {
+          contactId: string;
+          firstName: string;
+          lastName: string;
+          revenueCents: number;
+          costCents: number;
+        }
+      >();
 
       for (const plan of routePlans) {
         const pricePerVisitCents = Math.round(parseFloat(plan.pricePerVisit) * 100);
@@ -2579,7 +3837,9 @@ export class DatabaseStorage implements IStorage {
 
   // ================ Overhead Costs ================
   async getOverheadCosts(companyId: string): Promise<OverheadCost[]> {
-    return db.select().from(overheadCosts)
+    return db
+      .select()
+      .from(overheadCosts)
       .where(eq(overheadCosts.companyId, companyId))
       .orderBy(asc(overheadCosts.category), asc(overheadCosts.sortOrder));
   }
@@ -2589,8 +3849,13 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  async updateOverheadCost(id: string, companyId: string, data: Partial<InsertOverheadCost>): Promise<OverheadCost> {
-    const [item] = await db.update(overheadCosts)
+  async updateOverheadCost(
+    id: string,
+    companyId: string,
+    data: Partial<InsertOverheadCost>
+  ): Promise<OverheadCost> {
+    const [item] = await db
+      .update(overheadCosts)
       .set(data)
       .where(and(eq(overheadCosts.id, id), eq(overheadCosts.companyId, companyId)))
       .returning();
@@ -2598,12 +3863,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOverheadCost(id: string, companyId: string): Promise<void> {
-    await db.delete(overheadCosts)
+    await db
+      .delete(overheadCosts)
       .where(and(eq(overheadCosts.id, id), eq(overheadCosts.companyId, companyId)));
   }
 
   async getTotalMonthlyOverheadCents(companyId: string): Promise<number> {
-    const result = await db.select({ total: sql<number>`COALESCE(SUM(${overheadCosts.monthlyCostCents}), 0)` })
+    const result = await db
+      .select({ total: sql<number>`COALESCE(SUM(${overheadCosts.monthlyCostCents}), 0)` })
       .from(overheadCosts)
       .where(eq(overheadCosts.companyId, companyId));
     return Number(result[0]?.total ?? 0);
@@ -2613,7 +3880,9 @@ export class DatabaseStorage implements IStorage {
   async getCompetitorPricing(companyId: string, zipCode?: string): Promise<CompetitorPricing[]> {
     const conditions = [eq(competitorPricing.companyId, companyId)];
     if (zipCode) conditions.push(eq(competitorPricing.zipCode, zipCode));
-    return db.select().from(competitorPricing)
+    return db
+      .select()
+      .from(competitorPricing)
       .where(and(...conditions))
       .orderBy(asc(competitorPricing.zipCode), asc(competitorPricing.competitorName));
   }
@@ -2623,8 +3892,13 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  async updateCompetitorPricing(id: string, companyId: string, data: Partial<InsertCompetitorPricing>): Promise<CompetitorPricing> {
-    const [item] = await db.update(competitorPricing)
+  async updateCompetitorPricing(
+    id: string,
+    companyId: string,
+    data: Partial<InsertCompetitorPricing>
+  ): Promise<CompetitorPricing> {
+    const [item] = await db
+      .update(competitorPricing)
       .set(data)
       .where(and(eq(competitorPricing.id, id), eq(competitorPricing.companyId, companyId)))
       .returning();
@@ -2632,22 +3906,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCompetitorPricing(id: string, companyId: string): Promise<void> {
-    await db.delete(competitorPricing)
+    await db
+      .delete(competitorPricing)
       .where(and(eq(competitorPricing.id, id), eq(competitorPricing.companyId, companyId)));
   }
 
   // ================ Estimates ================
   async getEstimate(id: string, companyId: string): Promise<Estimate | undefined> {
-    const [item] = await db.select().from(estimates)
+    const [item] = await db
+      .select()
+      .from(estimates)
       .where(and(eq(estimates.id, id), eq(estimates.companyId, companyId)));
     return item;
   }
 
-  async getEstimates(companyId: string, filters?: { contactId?: string; status?: string }): Promise<Estimate[]> {
+  async getEstimates(
+    companyId: string,
+    filters?: { contactId?: string; status?: string }
+  ): Promise<Estimate[]> {
     const conditions = [eq(estimates.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(estimates.contactId, filters.contactId));
     if (filters?.status) conditions.push(eq(estimates.status, filters.status as any));
-    return db.select().from(estimates).where(and(...conditions)).orderBy(desc(estimates.createdAt));
+    return db
+      .select()
+      .from(estimates)
+      .where(and(...conditions))
+      .orderBy(desc(estimates.createdAt));
   }
 
   async createEstimate(data: InsertEstimate): Promise<Estimate> {
@@ -2655,32 +3939,62 @@ export class DatabaseStorage implements IStorage {
     return item;
   }
 
-  async updateEstimate(id: string, companyId: string, data: Partial<InsertEstimate>): Promise<Estimate> {
-    const [item] = await db.update(estimates).set(data).where(and(eq(estimates.id, id), eq(estimates.companyId, companyId))).returning();
+  async updateEstimate(
+    id: string,
+    companyId: string,
+    data: Partial<InsertEstimate>
+  ): Promise<Estimate> {
+    const [item] = await db
+      .update(estimates)
+      .set(data)
+      .where(and(eq(estimates.id, id), eq(estimates.companyId, companyId)))
+      .returning();
     return item;
   }
 
   // ================ Service Change Requests ================
-  async getServiceChangeRequest(id: string, companyId: string): Promise<ServiceChangeRequest | undefined> {
-    const [item] = await db.select().from(serviceChangeRequests)
+  async getServiceChangeRequest(
+    id: string,
+    companyId: string
+  ): Promise<ServiceChangeRequest | undefined> {
+    const [item] = await db
+      .select()
+      .from(serviceChangeRequests)
       .where(and(eq(serviceChangeRequests.id, id), eq(serviceChangeRequests.companyId, companyId)));
     return item;
   }
 
-  async getServiceChangeRequests(companyId: string, filters?: { contactId?: string; status?: string }): Promise<ServiceChangeRequest[]> {
+  async getServiceChangeRequests(
+    companyId: string,
+    filters?: { contactId?: string; status?: string }
+  ): Promise<ServiceChangeRequest[]> {
     const conditions = [eq(serviceChangeRequests.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(serviceChangeRequests.contactId, filters.contactId));
     if (filters?.status) conditions.push(eq(serviceChangeRequests.status, filters.status as any));
-    return db.select().from(serviceChangeRequests).where(and(...conditions)).orderBy(desc(serviceChangeRequests.createdAt));
+    return db
+      .select()
+      .from(serviceChangeRequests)
+      .where(and(...conditions))
+      .orderBy(desc(serviceChangeRequests.createdAt));
   }
 
-  async createServiceChangeRequest(data: InsertServiceChangeRequest): Promise<ServiceChangeRequest> {
+  async createServiceChangeRequest(
+    data: InsertServiceChangeRequest
+  ): Promise<ServiceChangeRequest> {
     const [item] = await db.insert(serviceChangeRequests).values(data).returning();
     return item;
   }
 
-  async updateServiceChangeRequest(id: string, companyId: string, data: Partial<InsertServiceChangeRequest>): Promise<ServiceChangeRequest> {
-    const [item] = await db.update(serviceChangeRequests).set(data).where(and(eq(serviceChangeRequests.id, id), eq(serviceChangeRequests.companyId, companyId))).returning();
+  async updateServiceChangeRequest(
+    id: string,
+    companyId: string,
+    data: Partial<InsertServiceChangeRequest>
+  ): Promise<ServiceChangeRequest> {
+    const [item] = await db
+      .update(serviceChangeRequests)
+      .set(data)
+      .where(and(eq(serviceChangeRequests.id, id), eq(serviceChangeRequests.companyId, companyId)))
+      .returning();
     return item;
   }
 
@@ -2693,13 +4007,19 @@ export class DatabaseStorage implements IStorage {
   async getReferralCount(contactId: string): Promise<number> {
     const contact = await this.getContactById(contactId);
     if (!contact?.referralCode) return 0;
-    const result = await db.select({ count: count() }).from(contacts)
+    const result = await db
+      .select({ count: count() })
+      .from(contacts)
       .where(eq(contacts.referralSource, contact.referralCode));
     return Number(result[0]?.count ?? 0);
   }
 
   async getServiceZones(companyId: string): Promise<ServiceZone[]> {
-    return db.select().from(serviceZones).where(eq(serviceZones.companyId, companyId)).orderBy(serviceZones.zipCode);
+    return db
+      .select()
+      .from(serviceZones)
+      .where(eq(serviceZones.companyId, companyId))
+      .orderBy(serviceZones.zipCode);
   }
 
   async createServiceZone(data: InsertServiceZone): Promise<ServiceZone> {
@@ -2707,13 +4027,23 @@ export class DatabaseStorage implements IStorage {
     return zone;
   }
 
-  async updateServiceZone(id: string, companyId: string, data: Partial<InsertServiceZone>): Promise<ServiceZone> {
-    const [zone] = await db.update(serviceZones).set(data).where(and(eq(serviceZones.id, id), eq(serviceZones.companyId, companyId))).returning();
+  async updateServiceZone(
+    id: string,
+    companyId: string,
+    data: Partial<InsertServiceZone>
+  ): Promise<ServiceZone> {
+    const [zone] = await db
+      .update(serviceZones)
+      .set(data)
+      .where(and(eq(serviceZones.id, id), eq(serviceZones.companyId, companyId)))
+      .returning();
     return zone;
   }
 
   async deleteServiceZone(id: string, companyId: string): Promise<void> {
-    await db.delete(serviceZones).where(and(eq(serviceZones.id, id), eq(serviceZones.companyId, companyId)));
+    await db
+      .delete(serviceZones)
+      .where(and(eq(serviceZones.id, id), eq(serviceZones.companyId, companyId)));
   }
 
   // ================ Usage Events ================
@@ -2722,26 +4052,42 @@ export class DatabaseStorage implements IStorage {
     return event;
   }
 
-  async getUsageEvents(companyId: string, startDate: string, endDate: string): Promise<UsageEvent[]> {
-    return db.select().from(usageEvents)
-      .where(and(
-        eq(usageEvents.companyId, companyId),
-        gte(usageEvents.recordedAt, new Date(startDate)),
-        lte(usageEvents.recordedAt, new Date(endDate)),
-      ))
+  async getUsageEvents(
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<UsageEvent[]> {
+    return db
+      .select()
+      .from(usageEvents)
+      .where(
+        and(
+          eq(usageEvents.companyId, companyId),
+          gte(usageEvents.recordedAt, new Date(startDate)),
+          lte(usageEvents.recordedAt, new Date(endDate))
+        )
+      )
       .orderBy(desc(usageEvents.recordedAt));
   }
 
-  async getUsageSummary(companyId: string, startDate: string, endDate: string): Promise<{ smsSegments: number; voiceMinutes: number; userSeats: number }> {
-    const rows = await db.select({
-      eventType: usageEvents.eventType,
-      total: sql<number>`coalesce(sum(${usageEvents.quantity}), 0)`,
-    }).from(usageEvents)
-      .where(and(
-        eq(usageEvents.companyId, companyId),
-        gte(usageEvents.recordedAt, new Date(startDate)),
-        lte(usageEvents.recordedAt, new Date(endDate)),
-      ))
+  async getUsageSummary(
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<{ smsSegments: number; voiceMinutes: number; userSeats: number }> {
+    const rows = await db
+      .select({
+        eventType: usageEvents.eventType,
+        total: sql<number>`coalesce(sum(${usageEvents.quantity}), 0)`,
+      })
+      .from(usageEvents)
+      .where(
+        and(
+          eq(usageEvents.companyId, companyId),
+          gte(usageEvents.recordedAt, new Date(startDate)),
+          lte(usageEvents.recordedAt, new Date(endDate))
+        )
+      )
       .groupBy(usageEvents.eventType);
     const map: Record<string, number> = {};
     for (const r of rows) map[r.eventType] = Number(r.total);
@@ -2757,35 +4103,53 @@ export class DatabaseStorage implements IStorage {
     return call;
   }
 
-  async updateVoiceCall(id: string, data: Partial<Pick<InsertVoiceCall, "outcome" | "summary" | "metadata">>): Promise<VoiceCall> {
+  async updateVoiceCall(
+    id: string,
+    data: Partial<Pick<InsertVoiceCall, "outcome" | "summary" | "metadata">>
+  ): Promise<VoiceCall> {
     const [call] = await db.update(voiceCalls).set(data).where(eq(voiceCalls.id, id)).returning();
     return call;
   }
 
   async getVoiceCalls(companyId: string, limit = 50): Promise<VoiceCall[]> {
-    return db.select().from(voiceCalls)
+    return db
+      .select()
+      .from(voiceCalls)
       .where(eq(voiceCalls.companyId, companyId))
       .orderBy(desc(voiceCalls.createdAt))
       .limit(limit);
   }
 
   async getVoiceCallByRetellId(retellCallId: string): Promise<VoiceCall | undefined> {
-    const [call] = await db.select().from(voiceCalls)
+    const [call] = await db
+      .select()
+      .from(voiceCalls)
       .where(eq(voiceCalls.retellCallId, retellCallId));
     return call;
   }
 
-  async getVoiceCallSummary(companyId: string, startDate: string, endDate: string): Promise<{ totalCalls: number; totalMinutes: number }> {
-    const [result] = await db.select({
-      totalCalls: sql<number>`count(*)`,
-      totalMinutes: sql<number>`coalesce(sum(${voiceCalls.durationMinutes}), 0)`,
-    }).from(voiceCalls)
-      .where(and(
-        eq(voiceCalls.companyId, companyId),
-        gte(voiceCalls.createdAt, new Date(startDate)),
-        lte(voiceCalls.createdAt, new Date(endDate)),
-      ));
-    return { totalCalls: Number(result?.totalCalls || 0), totalMinutes: Number(result?.totalMinutes || 0) };
+  async getVoiceCallSummary(
+    companyId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<{ totalCalls: number; totalMinutes: number }> {
+    const [result] = await db
+      .select({
+        totalCalls: sql<number>`count(*)`,
+        totalMinutes: sql<number>`coalesce(sum(${voiceCalls.durationMinutes}), 0)`,
+      })
+      .from(voiceCalls)
+      .where(
+        and(
+          eq(voiceCalls.companyId, companyId),
+          gte(voiceCalls.createdAt, new Date(startDate)),
+          lte(voiceCalls.createdAt, new Date(endDate))
+        )
+      );
+    return {
+      totalCalls: Number(result?.totalCalls || 0),
+      totalMinutes: Number(result?.totalMinutes || 0),
+    };
   }
 
   async createJobFromEstimate(estimate: Estimate, contactId: string): Promise<ServicePlan> {
@@ -2794,32 +4158,38 @@ export class DatabaseStorage implements IStorage {
     const svcName = estimate.description || "Job from estimate";
 
     return db.transaction(async (tx) => {
-      const [sp] = await tx.insert(servicePlans).values({
-        companyId: estimate.companyId,
-        contactId,
-        propertyId: estimate.propertyId!,
-        frequency: "onetime",
-        pricePerVisit: totalDollars,
-        startDate: today,
-        isActive: false,
-        serviceName: svcName,
-        jobType: "one_off",
-        jobStatus: "draft",
-        anytime: true,
-        estimateId: estimate.id,
-        stopOrder: 0,
-      }).returning();
+      const [sp] = await tx
+        .insert(servicePlans)
+        .values({
+          companyId: estimate.companyId,
+          contactId,
+          propertyId: estimate.propertyId!,
+          frequency: "onetime",
+          pricePerVisit: totalDollars,
+          startDate: today,
+          isActive: false,
+          serviceName: svcName,
+          jobType: "one_off",
+          jobStatus: "draft",
+          anytime: true,
+          estimateId: estimate.id,
+          stopOrder: 0,
+        })
+        .returning();
 
-      const [agreement] = await tx.insert(agreements).values({
-        companyId: estimate.companyId,
-        contactId,
-        frequency: "onetime",
-        pricePerVisit: totalDollars,
-        isActive: false,
-        startDate: today,
-        estimateId: estimate.id,
-        servicePlanId: sp.id,
-      }).returning();
+      const [agreement] = await tx
+        .insert(agreements)
+        .values({
+          companyId: estimate.companyId,
+          contactId,
+          frequency: "onetime",
+          pricePerVisit: totalDollars,
+          isActive: false,
+          startDate: today,
+          estimateId: estimate.id,
+          servicePlanId: sp.id,
+        })
+        .returning();
 
       await tx.insert(jobs).values({
         companyId: estimate.companyId,
@@ -2838,17 +4208,26 @@ export class DatabaseStorage implements IStorage {
   }
   // ================ Quotes ================
   async getQuote(id: string, companyId: string): Promise<Quote | undefined> {
-    const [quote] = await db.select().from(quotes)
+    const [quote] = await db
+      .select()
+      .from(quotes)
       .where(and(eq(quotes.id, id), eq(quotes.companyId, companyId)));
     return quote;
   }
 
-  async getQuotes(companyId: string, filters?: { status?: string; type?: string; contactId?: string }): Promise<Quote[]> {
+  async getQuotes(
+    companyId: string,
+    filters?: { status?: string; type?: string; contactId?: string }
+  ): Promise<Quote[]> {
     const conditions = [eq(quotes.companyId, companyId)];
     if (filters?.status) conditions.push(eq(quotes.status, filters.status as any));
     if (filters?.type) conditions.push(eq(quotes.type, filters.type as any));
     if (filters?.contactId) conditions.push(eq(quotes.contactId, filters.contactId));
-    return db.select().from(quotes).where(and(...conditions)).orderBy(desc(quotes.createdAt));
+    return db
+      .select()
+      .from(quotes)
+      .where(and(...conditions))
+      .orderBy(desc(quotes.createdAt));
   }
 
   async createQuote(data: InsertQuote): Promise<Quote> {
@@ -2857,7 +4236,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateQuote(id: string, companyId: string, data: Partial<InsertQuote>): Promise<Quote> {
-    const [quote] = await db.update(quotes)
+    const [quote] = await db
+      .update(quotes)
       .set({ ...data, updatedAt: new Date() })
       .where(and(eq(quotes.id, id), eq(quotes.companyId, companyId)))
       .returning();
@@ -2869,9 +4249,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNextQuoteNumber(companyId: string): Promise<string> {
-    const [result] = await db.select({
-      maxNum: sql<string>`max(quote_number)`,
-    }).from(quotes).where(eq(quotes.companyId, companyId));
+    const [result] = await db
+      .select({
+        maxNum: sql<string>`max(quote_number)`,
+      })
+      .from(quotes)
+      .where(eq(quotes.companyId, companyId));
     const current = result?.maxNum;
     if (!current) return "Q-0001";
     const match = current.match(/Q-(\d+)/);
@@ -2886,7 +4269,9 @@ export class DatabaseStorage implements IStorage {
     const canonicalShared = this.canonicalizePhone(sharedNumber);
     const canonicalCustomer = this.canonicalizePhone(customerPhone);
     if (!canonicalShared || !canonicalCustomer) return [];
-    const rows = await db.select().from(messageRouting)
+    const rows = await db
+      .select()
+      .from(messageRouting)
       .where(
         and(
           eq(messageRouting.sharedNumber, canonicalShared),
@@ -2910,10 +4295,15 @@ export class DatabaseStorage implements IStorage {
       sharedNumber: this.canonicalizePhone(data.sharedNumber),
       customerPhone: this.canonicalizePhone(data.customerPhone),
     };
-    const [row] = await db.insert(messageRouting)
+    const [row] = await db
+      .insert(messageRouting)
       .values(canonicalData)
       .onConflictDoUpdate({
-        target: [messageRouting.sharedNumber, messageRouting.customerPhone, messageRouting.companyId],
+        target: [
+          messageRouting.sharedNumber,
+          messageRouting.customerPhone,
+          messageRouting.companyId,
+        ],
         set: {
           contactId: canonicalData.contactId,
           lastUsedAt: new Date(),
@@ -2931,14 +4321,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMessageAttachments(messageId: string): Promise<MessageAttachment[]> {
-    return await db.select().from(messageAttachments)
+    return await db
+      .select()
+      .from(messageAttachments)
       .where(eq(messageAttachments.messageId, messageId))
       .orderBy(asc(messageAttachments.createdAt));
   }
 
   // ================ Message Exceptions ================
 
-  async getMessageExceptions(filters?: { resolved?: boolean; companyId?: string }): Promise<MessageException[]> {
+  async getMessageExceptions(filters?: {
+    resolved?: boolean;
+    companyId?: string;
+  }): Promise<MessageException[]> {
     const conditions = [];
     if (filters?.resolved === false) {
       conditions.push(sql`${messageExceptions.resolvedAt} IS NULL`);
@@ -2950,9 +4345,14 @@ export class DatabaseStorage implements IStorage {
         sql`(${messageExceptions.candidateCompanyIds} @> ARRAY[${filters.companyId}]::text[] OR ${messageExceptions.resolvedCompanyId} = ${filters.companyId})`
       );
     }
-    const query = conditions.length > 0
-      ? db.select().from(messageExceptions).where(and(...conditions)).orderBy(desc(messageExceptions.createdAt))
-      : db.select().from(messageExceptions).orderBy(desc(messageExceptions.createdAt));
+    const query =
+      conditions.length > 0
+        ? db
+            .select()
+            .from(messageExceptions)
+            .where(and(...conditions))
+            .orderBy(desc(messageExceptions.createdAt))
+        : db.select().from(messageExceptions).orderBy(desc(messageExceptions.createdAt));
     return await query;
   }
 
@@ -2961,30 +4361,35 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async resolveMessageException(id: string, resolvedBy: string, companyId: string, skipCandidateCheck?: boolean): Promise<MessageException | undefined> {
-    const conditions = [
-      eq(messageExceptions.id, id),
-      sql`${messageExceptions.resolvedAt} IS NULL`,
-    ];
+  async resolveMessageException(
+    id: string,
+    resolvedBy: string,
+    companyId: string,
+    skipCandidateCheck?: boolean
+  ): Promise<MessageException | undefined> {
+    const conditions = [eq(messageExceptions.id, id), sql`${messageExceptions.resolvedAt} IS NULL`];
     if (!skipCandidateCheck) {
       conditions.push(sql`${messageExceptions.candidateCompanyIds} @> ARRAY[${companyId}]::text[]`);
     }
-    const [row] = await db.update(messageExceptions)
+    const [row] = await db
+      .update(messageExceptions)
       .set({ resolvedAt: new Date(), resolvedBy, resolvedCompanyId: companyId })
       .where(and(...conditions))
       .returning();
     return row;
   }
 
-  async dismissMessageException(id: string, resolvedBy: string, companyId?: string): Promise<MessageException | undefined> {
-    const conditions = [
-      eq(messageExceptions.id, id),
-      sql`${messageExceptions.resolvedAt} IS NULL`,
-    ];
+  async dismissMessageException(
+    id: string,
+    resolvedBy: string,
+    companyId?: string
+  ): Promise<MessageException | undefined> {
+    const conditions = [eq(messageExceptions.id, id), sql`${messageExceptions.resolvedAt} IS NULL`];
     if (companyId) {
       conditions.push(sql`${messageExceptions.candidateCompanyIds} @> ARRAY[${companyId}]::text[]`);
     }
-    const [row] = await db.update(messageExceptions)
+    const [row] = await db
+      .update(messageExceptions)
       .set({ resolvedAt: new Date(), resolvedBy, reason: "dismissed" })
       .where(and(...conditions))
       .returning();
@@ -2996,22 +4401,39 @@ export class DatabaseStorage implements IStorage {
     return msg;
   }
 
-  async getSystemMessages(companyId: string, filters?: { includeDismissed?: boolean }): Promise<SystemMessage[]> {
+  async getSystemMessages(
+    companyId: string,
+    filters?: { includeDismissed?: boolean }
+  ): Promise<SystemMessage[]> {
     const conditions = [eq(systemMessages.companyId, companyId)];
     if (!filters?.includeDismissed) {
       conditions.push(isNull(systemMessages.dismissedAt));
     }
-    return db.select().from(systemMessages).where(and(...conditions)).orderBy(desc(systemMessages.createdAt)).limit(50);
+    return db
+      .select()
+      .from(systemMessages)
+      .where(and(...conditions))
+      .orderBy(desc(systemMessages.createdAt))
+      .limit(50);
   }
 
   async getUnreadSystemMessageCount(companyId: string): Promise<number> {
-    const [result] = await db.select({ count: count() }).from(systemMessages)
-      .where(and(eq(systemMessages.companyId, companyId), isNull(systemMessages.dismissedAt), isNull(systemMessages.readAt)));
+    const [result] = await db
+      .select({ count: count() })
+      .from(systemMessages)
+      .where(
+        and(
+          eq(systemMessages.companyId, companyId),
+          isNull(systemMessages.dismissedAt),
+          isNull(systemMessages.readAt)
+        )
+      );
     return result?.count ?? 0;
   }
 
   async markSystemMessageRead(id: string, companyId: string): Promise<SystemMessage | undefined> {
-    const [row] = await db.update(systemMessages)
+    const [row] = await db
+      .update(systemMessages)
       .set({ readAt: new Date() })
       .where(and(eq(systemMessages.id, id), eq(systemMessages.companyId, companyId)))
       .returning();
@@ -3019,7 +4441,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async dismissSystemMessage(id: string, companyId: string): Promise<SystemMessage | undefined> {
-    const [row] = await db.update(systemMessages)
+    const [row] = await db
+      .update(systemMessages)
       .set({ dismissedAt: new Date() })
       .where(and(eq(systemMessages.id, id), eq(systemMessages.companyId, companyId)))
       .returning();
@@ -3027,7 +4450,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async dismissAllSystemMessages(companyId: string): Promise<void> {
-    await db.update(systemMessages)
+    await db
+      .update(systemMessages)
       .set({ dismissedAt: new Date() })
       .where(and(eq(systemMessages.companyId, companyId), isNull(systemMessages.dismissedAt)));
   }
@@ -3039,7 +4463,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBusinessAssessments(companyId: string, limit = 13): Promise<BusinessAssessment[]> {
-    return db.select()
+    return db
+      .select()
       .from(businessAssessments)
       .where(eq(businessAssessments.companyId, companyId))
       .orderBy(desc(businessAssessments.createdAt))
@@ -3052,31 +4477,47 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async listErrorReports(filters?: { status?: string; message?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<ErrorReport[]> {
+  async listErrorReports(filters?: {
+    status?: string;
+    message?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<ErrorReport[]> {
     const status = filters?.status as "open" | "acknowledged" | "resolved" | undefined;
-    return db.select()
+    return db
+      .select()
       .from(errorReports)
-      .where(and(
-        status ? eq(errorReports.status, status) : undefined,
-        filters?.message ? eq(errorReports.message, filters.message) : undefined,
-        filters?.fromDate ? gte(errorReports.createdAt, filters.fromDate) : undefined,
-        filters?.toDate ? lte(errorReports.createdAt, filters.toDate) : undefined,
-      ))
+      .where(
+        and(
+          status ? eq(errorReports.status, status) : undefined,
+          filters?.message ? eq(errorReports.message, filters.message) : undefined,
+          filters?.fromDate ? gte(errorReports.createdAt, filters.fromDate) : undefined,
+          filters?.toDate ? lte(errorReports.createdAt, filters.toDate) : undefined
+        )
+      )
       .orderBy(desc(errorReports.createdAt))
       .limit(filters?.limit ?? 50)
       .offset(filters?.offset ?? 0);
   }
 
-  async listGroupedErrorReports(filters?: { status?: string; severity?: string; fromDate?: Date; toDate?: Date; limit?: number; offset?: number }): Promise<GroupedErrorReport[]> {
+  async listGroupedErrorReports(filters?: {
+    status?: string;
+    severity?: string;
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<GroupedErrorReport[]> {
     const { status, severity, fromDate, toDate, limit = 50, offset = 0 } = filters ?? {};
     const whereParts: ReturnType<typeof sql>[] = [];
     if (status) whereParts.push(sql`status = ${status}`);
     if (severity) whereParts.push(sql`severity = ${severity}`);
     if (fromDate) whereParts.push(sql`created_at >= ${fromDate}`);
     if (toDate) whereParts.push(sql`created_at <= ${toDate}`);
-    const whereClause = whereParts.length > 0
-      ? sql`WHERE ${sql.join(whereParts, sql` AND `)}`
-      : sql``;
+    const whereClause =
+      whereParts.length > 0 ? sql`WHERE ${sql.join(whereParts, sql` AND `)}` : sql``;
     const result = await db.execute(sql`
       WITH grouped AS (
         SELECT
@@ -3120,13 +4561,27 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateErrorReport(id: string, data: Partial<Pick<InsertErrorReport, "status" | "severity">>): Promise<ErrorReport> {
-    const [row] = await db.update(errorReports).set(data).where(eq(errorReports.id, id)).returning();
+  async updateErrorReport(
+    id: string,
+    data: Partial<Pick<InsertErrorReport, "status" | "severity">>
+  ): Promise<ErrorReport> {
+    const [row] = await db
+      .update(errorReports)
+      .set(data)
+      .where(eq(errorReports.id, id))
+      .returning();
     return row;
   }
 
-  async bulkUpdateErrorReportStatus(message: string, status: "open" | "acknowledged" | "resolved"): Promise<number> {
-    const result = await db.update(errorReports).set({ status }).where(eq(errorReports.message, message)).returning({ id: errorReports.id });
+  async bulkUpdateErrorReportStatus(
+    message: string,
+    status: "open" | "acknowledged" | "resolved"
+  ): Promise<number> {
+    const result = await db
+      .update(errorReports)
+      .set({ status })
+      .where(eq(errorReports.message, message))
+      .returning({ id: errorReports.id });
     return result.length;
   }
 
@@ -3136,31 +4591,53 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getErrorFixTask(errorReportId: string): Promise<ErrorFixTask | undefined> {
-    const [row] = await db.select().from(errorFixTasks).where(eq(errorFixTasks.errorReportId, errorReportId));
+    const [row] = await db
+      .select()
+      .from(errorFixTasks)
+      .where(eq(errorFixTasks.errorReportId, errorReportId));
     return row;
   }
 
-  async updateErrorFixTask(id: string, data: Partial<Pick<ErrorFixTask, "status">>): Promise<ErrorFixTask> {
-    const [row] = await db.update(errorFixTasks).set(data).where(eq(errorFixTasks.id, id)).returning();
+  async updateErrorFixTask(
+    id: string,
+    data: Partial<Pick<ErrorFixTask, "status">>
+  ): Promise<ErrorFixTask> {
+    const [row] = await db
+      .update(errorFixTasks)
+      .set(data)
+      .where(eq(errorFixTasks.id, id))
+      .returning();
     return row;
   }
 
   async getOpenErrorCount(): Promise<number> {
-    const [result] = await db.select({ cnt: count() }).from(errorReports).where(eq(errorReports.status, "open"));
+    const [result] = await db
+      .select({ cnt: count() })
+      .from(errorReports)
+      .where(eq(errorReports.status, "open"));
     return result?.cnt ?? 0;
   }
 
   async getLatestErrorTimestamp(): Promise<Date | null> {
-    const [result] = await db.select({ ts: sql<Date>`max(${errorReports.createdAt})` }).from(errorReports);
+    const [result] = await db
+      .select({ ts: sql<Date>`max(${errorReports.createdAt})` })
+      .from(errorReports);
     return result?.ts ?? null;
   }
 
   async getGeocodeCache(addressKey: string): Promise<GeocodeCache | undefined> {
-    const [row] = await db.select().from(geocodeCacheTable).where(eq(geocodeCacheTable.addressKey, addressKey));
+    const [row] = await db
+      .select()
+      .from(geocodeCacheTable)
+      .where(eq(geocodeCacheTable.addressKey, addressKey));
     return row;
   }
 
-  async setGeocodeCache(addressKey: string, latitude: string | null, longitude: string | null): Promise<void> {
+  async setGeocodeCache(
+    addressKey: string,
+    latitude: string | null,
+    longitude: string | null
+  ): Promise<void> {
     await db
       .insert(geocodeCacheTable)
       .values({ addressKey, latitude, longitude, cachedAt: new Date() })
@@ -3176,7 +4653,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAutocompleteCache(queryKey: string): Promise<AutocompleteCache | undefined> {
-    const [row] = await db.select().from(autocompleteCacheTable).where(eq(autocompleteCacheTable.queryKey, queryKey));
+    const [row] = await db
+      .select()
+      .from(autocompleteCacheTable)
+      .where(eq(autocompleteCacheTable.queryKey, queryKey));
     return row;
   }
 

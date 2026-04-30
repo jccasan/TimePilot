@@ -2,14 +2,28 @@ import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, and } from "drizzle-orm";
-import { companies, contacts, properties, qboSyncLogs, servicePlans as servicePlansTable, agreements as agreementsTable, jobs as jobsTable } from "@shared/schema";
 import {
-  reportMeteredUsageSet,
-} from "../services/stripe";
+  companies,
+  contacts,
+  properties,
+  qboSyncLogs,
+  servicePlans as servicePlansTable,
+  agreements as agreementsTable,
+  jobs as jobsTable,
+} from "@shared/schema";
+import { reportMeteredUsageSet } from "../services/stripe";
 import { checkRetellWebhookSync } from "../services/retell";
 
-import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, auditLog, p } from "./shared";
-
+import {
+  isAuthenticated,
+  isAdmin,
+  getCompanyContext,
+  requireRole,
+  getBaseUrl,
+  handleError,
+  auditLog,
+  p,
+} from "./shared";
 
 export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   // ================ QuickBooks Online Integration ================
@@ -19,36 +33,58 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const { isQboConfigured, getQboSyncStatus } = await import("../services/quickbooks");
       if (!isQboConfigured()) {
-        return res.json({ configured: false, connected: false, realmId: null, connectedAt: null, lastSync: null, totalSynced: 0, totalErrors: 0, recentLogs: [] });
+        return res.json({
+          configured: false,
+          connected: false,
+          realmId: null,
+          connectedAt: null,
+          lastSync: null,
+          totalSynced: 0,
+          totalErrors: 0,
+          recentLogs: [],
+        });
       }
       const status = await getQboSyncStatus(companyId);
       return res.json({ configured: true, ...status });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/qbo/connect", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
-      const { isQboConfigured, getQboAuthUrl, createOAuthState } = await import("../services/quickbooks");
+      const { isQboConfigured, getQboAuthUrl, createOAuthState } =
+        await import("../services/quickbooks");
       if (!isQboConfigured()) {
-        return res.status(503).json({ error: "QuickBooks integration is not configured. Please add QBO_CLIENT_ID and QBO_CLIENT_SECRET." });
+        return res.status(503).json({
+          error:
+            "QuickBooks integration is not configured. Please add QBO_CLIENT_ID and QBO_CLIENT_SECRET.",
+        });
       }
       const baseUrl = getBaseUrl(req);
       const redirectUri = process.env.QBO_REDIRECT_URI || `${baseUrl}/api/qbo/callback`;
       const state = createOAuthState(companyId);
       const authUrl = getQboAuthUrl(redirectUri, state);
       return res.json({ url: authUrl });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/qbo/callback", async (req: Request, res: Response) => {
     try {
-      const { code, state, realmId } = req.query as { code: string; state: string; realmId: string };
+      const { code, state, realmId } = req.query as {
+        code: string;
+        state: string;
+        realmId: string;
+      };
       if (!code || !state || !realmId) {
         return res.redirect("/settings?qbo=error&msg=missing_params");
       }
-      const { exchangeQboCode, validateOAuthState, encryptToken } = await import("../services/quickbooks");
+      const { exchangeQboCode, validateOAuthState, encryptToken } =
+        await import("../services/quickbooks");
       const companyId = validateOAuthState(state);
       if (!companyId) {
         return res.redirect("/settings?qbo=error&msg=invalid_or_expired_state");
@@ -57,18 +93,23 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       const redirectUri = process.env.QBO_REDIRECT_URI || `${baseUrl}/api/qbo/callback`;
       const tokens = await exchangeQboCode(code, redirectUri);
 
-      await db.update(companies).set({
-        qboRealmId: realmId,
-        qboAccessToken: encryptToken(tokens.access_token),
-        qboRefreshToken: encryptToken(tokens.refresh_token),
-        qboTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
-        qboConnectedAt: new Date(),
-      }).where(eq(companies.id, companyId));
+      await db
+        .update(companies)
+        .set({
+          qboRealmId: realmId,
+          qboAccessToken: encryptToken(tokens.access_token),
+          qboRefreshToken: encryptToken(tokens.refresh_token),
+          qboTokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+          qboConnectedAt: new Date(),
+        })
+        .where(eq(companies.id, companyId));
 
       return res.redirect("/settings?qbo=connected");
     } catch (err: any) {
       console.error("QBO callback error:", err);
-      return res.redirect(`/settings?qbo=error&msg=${encodeURIComponent(err.message || "auth_failed")}`);
+      return res.redirect(
+        `/settings?qbo=error&msg=${encodeURIComponent(err.message || "auth_failed")}`
+      );
     }
   });
 
@@ -78,9 +119,13 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       requireRole(role);
       const { disconnectQbo } = await import("../services/quickbooks");
       await disconnectQbo(companyId);
-      auditLog(companyId, (await getCompanyContext(req)).userId, "company", companyId, "update", { action: "qbo_disconnect" });
+      auditLog(companyId, (await getCompanyContext(req)).userId, "company", companyId, "update", {
+        action: "qbo_disconnect",
+      });
       return res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/qbo/sync", isAuthenticated, async (req: Request, res: Response) => {
@@ -89,39 +134,60 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       requireRole(role);
       const { runFullSync } = await import("../services/quickbooks");
       const result = await runFullSync(companyId);
-      auditLog(companyId, (await getCompanyContext(req)).userId, "company", companyId, "update", { action: "qbo_full_sync", result });
+      auditLog(companyId, (await getCompanyContext(req)).userId, "company", companyId, "update", {
+        action: "qbo_full_sync",
+        result,
+      });
       return res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/qbo/sync/contact/:contactId", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const { syncContactToQbo } = await import("../services/quickbooks");
-      const result = await syncContactToQbo(companyId, p(req.params.contactId));
-      return res.json(result);
-    } catch (err) { handleError(res, err); }
-  });
+  app.post(
+    "/api/qbo/sync/contact/:contactId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const { syncContactToQbo } = await import("../services/quickbooks");
+        const result = await syncContactToQbo(companyId, p(req.params.contactId));
+        return res.json(result);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
-  app.post("/api/qbo/sync/invoice/:invoiceId", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const { syncInvoiceToQbo } = await import("../services/quickbooks");
-      const result = await syncInvoiceToQbo(companyId, p(req.params.invoiceId));
-      return res.json(result);
-    } catch (err) { handleError(res, err); }
-  });
+  app.post(
+    "/api/qbo/sync/invoice/:invoiceId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const { syncInvoiceToQbo } = await import("../services/quickbooks");
+        const result = await syncInvoiceToQbo(companyId, p(req.params.invoiceId));
+        return res.json(result);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.post("/api/qbo/retry/:logId", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const logId = p(req.params.logId);
-      const [logEntry] = await db.select().from(qboSyncLogs).where(and(eq(qboSyncLogs.id, logId), eq(qboSyncLogs.companyId, companyId)));
+      const [logEntry] = await db
+        .select()
+        .from(qboSyncLogs)
+        .where(and(eq(qboSyncLogs.id, logId), eq(qboSyncLogs.companyId, companyId)));
       if (!logEntry) return res.status(404).json({ error: "Sync log not found" });
-      const { syncContactToQbo, syncInvoiceToQbo, syncPaymentToQbo } = await import("../services/quickbooks");
+      const { syncContactToQbo, syncInvoiceToQbo, syncPaymentToQbo } =
+        await import("../services/quickbooks");
       try {
         if (logEntry.entityType === "contact") {
           await syncContactToQbo(companyId, logEntry.entityId);
@@ -134,7 +200,9 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       } catch (retryErr: any) {
         return res.status(422).json({ error: retryErr.message });
       }
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/qbo/expense-accounts", isAuthenticated, async (req: Request, res: Response) => {
@@ -144,7 +212,9 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       const { listQboExpenseAccounts } = await import("../services/quickbooks");
       const accounts = await listQboExpenseAccounts(companyId);
       res.json(accounts);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/qbo/fee-account", isAuthenticated, async (req: Request, res: Response) => {
@@ -161,9 +231,14 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       if (!valid) {
         return res.status(400).json({ error: "Invalid expense account ID" });
       }
-      await db.update(companies).set({ qboFeeAccountRef: accountId }).where(eq(companies.id, companyId));
+      await db
+        .update(companies)
+        .set({ qboFeeAccountRef: accountId })
+        .where(eq(companies.id, companyId));
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Voice Agent Scheduling API ================
@@ -172,34 +247,48 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
     try {
       const { companyId, role } = await getCompanyContext(req);
       if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
-      const phone = (req.query.phone as string || "").replace(/[^\d+]/g, "");
+      const phone = ((req.query.phone as string) || "").replace(/[^\d+]/g, "");
       if (!phone || phone.length < 7) {
         return res.json({ found: false, message: "No matching customer found" });
       }
       const allContacts = await storage.getContacts(companyId, { search: phone });
-      const matched = allContacts.find(c => c.phone && c.phone.replace(/[^\d+]/g, "").includes(phone));
+      const matched = allContacts.find(
+        (c) => c.phone && c.phone.replace(/[^\d+]/g, "").includes(phone)
+      );
       if (!matched) {
         return res.json({ found: false, message: "No matching customer found" });
       }
       const plans = await storage.getServicePlans(companyId, { contactId: matched.id });
-      const activePlans = plans.filter(p => p.isActive);
+      const activePlans = plans.filter((p) => p.isActive);
       const props = await storage.getProperties(companyId, matched.id);
       const today = new Date().toISOString().split("T")[0];
-      let upcomingVisits: { scheduledDate: string; status: string; servicePlanName: string; propertyAddress: string }[] = [];
+      let upcomingVisits: {
+        scheduledDate: string;
+        status: string;
+        servicePlanName: string;
+        propertyAddress: string;
+      }[] = [];
       if (activePlans.length > 0) {
         const visitsResult = await storage.getVisitsForContact(companyId, matched.id, 50, 0);
         upcomingVisits = visitsResult.visits
-          .filter(v => v.scheduledDate >= today && v.status === "scheduled")
+          .filter((v) => v.scheduledDate >= today && v.status === "scheduled")
           .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))
           .slice(0, 3)
-          .map(v => ({ scheduledDate: v.scheduledDate, status: v.status, servicePlanName: v.servicePlanName, propertyAddress: v.propertyAddress }));
+          .map((v) => ({
+            scheduledDate: v.scheduledDate,
+            status: v.status,
+            servicePlanName: v.servicePlanName,
+            propertyAddress: v.propertyAddress,
+          }));
       }
-      let activeHolds: { id: string; startDate: string; endDate: string; reason: string | null }[] = [];
+      let activeHolds: { id: string; startDate: string; endDate: string; reason: string | null }[] =
+        [];
       if (activePlans.length > 0) {
-        const allHolds = await Promise.all(activePlans.map(p => storage.getVacationHolds(p.id)));
-        activeHolds = allHolds.flat()
-          .filter(h => h.endDate >= today)
-          .map(h => ({ id: h.id, startDate: h.startDate, endDate: h.endDate, reason: h.reason }));
+        const allHolds = await Promise.all(activePlans.map((p) => storage.getVacationHolds(p.id)));
+        activeHolds = allHolds
+          .flat()
+          .filter((h) => h.endDate >= today)
+          .map((h) => ({ id: h.id, startDate: h.startDate, endDate: h.endDate, reason: h.reason }));
       }
       res.json({
         found: true,
@@ -211,7 +300,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
           email: matched.email,
           status: matched.status,
         },
-        properties: props.map(p => ({
+        properties: props.map((p) => ({
           id: p.id,
           streetAddress: p.streetAddress,
           city: p.city,
@@ -219,7 +308,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
           zipCode: p.zipCode,
           numberOfDogs: p.numberOfDogs,
         })),
-        servicePlans: activePlans.map(sp => ({
+        servicePlans: activePlans.map((sp) => ({
           id: sp.id,
           frequency: sp.frequency,
           dayOfWeek: sp.dayOfWeek,
@@ -230,7 +319,9 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
         upcomingVisits,
         activeHolds,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/voice/calls", isAuthenticated, async (req: Request, res: Response) => {
@@ -240,7 +331,9 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
       const calls = await storage.getVoiceCalls(companyId, limit);
       res.json(calls);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/voice/availability", isAuthenticated, async (req: Request, res: Response) => {
@@ -255,22 +348,26 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       let servedDays: Set<string> | null = null;
       if (zipCode) {
         const zones = await storage.getServiceZones(companyId);
-        const matchingZones = zones.filter(z => z.isActive && z.zipCode === zipCode);
+        const matchingZones = zones.filter((z) => z.isActive && z.zipCode === zipCode);
         if (matchingZones.length === 0) {
-          return res.json({ availability: [], available_days: [], message: `No service zones found for zip code ${zipCode}` });
+          return res.json({
+            availability: [],
+            available_days: [],
+            message: `No service zones found for zip code ${zipCode}`,
+          });
         }
-        servedDays = new Set(matchingZones.map(z => z.dayOfWeek).filter(d => d !== "tbd"));
+        servedDays = new Set(matchingZones.map((z) => z.dayOfWeek).filter((d) => d !== "tbd"));
         if (servedDays.size === 0) servedDays = null;
       }
 
       const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
       const availability = days
-        .filter(d => !dayFilter || d === dayFilter)
-        .filter(d => !servedDays || servedDays.has(d))
-        .map(day => {
-          const dayRoutes = allRoutes.filter(r => r.dayOfWeek === day);
+        .filter((d) => !dayFilter || d === dayFilter)
+        .filter((d) => !servedDays || servedDays.has(d))
+        .map((day) => {
+          const dayRoutes = allRoutes.filter((r) => r.dayOfWeek === day);
           const totalStops = dayRoutes.reduce((sum, r) => {
-            return sum + activePlans.filter(sp => sp.routeId === r.id).length;
+            return sum + activePlans.filter((sp) => sp.routeId === r.id).length;
           }, 0);
           const totalCapacity = dayRoutes.length * 30;
           const openSlots = Math.max(0, totalCapacity - totalStops);
@@ -282,35 +379,84 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
             available: openSlots > 0,
           };
         });
-      const available_days = availability.filter(d => d.available).map(d => d.dayOfWeek);
+      const available_days = availability.filter((d) => d.available).map((d) => d.dayOfWeek);
       res.json({ availability, available_days });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/voice/book", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
       if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
-      const { firstName, lastName, phone, email, streetAddress, city, state, zipCode, numberOfDogs, frequency, dayOfWeek, notes } = req.body;
-      if (!firstName || typeof firstName !== "string" || !lastName || typeof lastName !== "string" || !phone || typeof phone !== "string") {
-        return res.status(400).json({ error: "firstName, lastName, and phone are required (strings)" });
+      const {
+        firstName,
+        lastName,
+        phone,
+        email,
+        streetAddress,
+        city,
+        state,
+        zipCode,
+        numberOfDogs,
+        frequency,
+        dayOfWeek,
+        notes,
+      } = req.body;
+      if (
+        !firstName ||
+        typeof firstName !== "string" ||
+        !lastName ||
+        typeof lastName !== "string" ||
+        !phone ||
+        typeof phone !== "string"
+      ) {
+        return res
+          .status(400)
+          .json({ error: "firstName, lastName, and phone are required (strings)" });
       }
       if (!streetAddress || !city || !state || !zipCode) {
-        return res.status(400).json({ error: "streetAddress, city, state, and zipCode are required" });
+        return res
+          .status(400)
+          .json({ error: "streetAddress, city, state, and zipCode are required" });
       }
       type Frequency = "weekly" | "biweekly" | "monthly" | "onetime";
       const validFrequencies: Frequency[] = ["weekly", "biweekly", "monthly", "onetime"];
       const freq: Frequency = (frequency || "weekly") as Frequency;
       if (!validFrequencies.includes(freq)) {
-        return res.status(400).json({ error: `frequency must be one of: ${validFrequencies.join(", ")}` });
+        return res
+          .status(400)
+          .json({ error: `frequency must be one of: ${validFrequencies.join(", ")}` });
       }
-      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
-      type DayOfWeek = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | "tbd";
+      const validDays = [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+      ] as const;
+      type DayOfWeek =
+        | "monday"
+        | "tuesday"
+        | "wednesday"
+        | "thursday"
+        | "friday"
+        | "saturday"
+        | "sunday"
+        | "tbd";
       const day: DayOfWeek = (dayOfWeek || "tbd") as DayOfWeek;
       if (day !== "tbd" && !validDays.includes(day)) {
-        return res.status(400).json({ error: `dayOfWeek must be one of: ${validDays.join(", ")}, or omit for auto-assignment` });
+        return res.status(400).json({
+          error: `dayOfWeek must be one of: ${validDays.join(", ")}, or omit for auto-assignment`,
+        });
       }
-      const dogCount = numberOfDogs && Number.isInteger(Number(numberOfDogs)) && Number(numberOfDogs) > 0 ? Number(numberOfDogs) : 1;
+      const dogCount =
+        numberOfDogs && Number.isInteger(Number(numberOfDogs)) && Number(numberOfDogs) > 0
+          ? Number(numberOfDogs)
+          : 1;
 
       let routeId: string | null = null;
       if (day !== "tbd") {
@@ -320,7 +466,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
           let bestRoute = dayRoutes[0];
           let bestCount = Infinity;
           for (const route of dayRoutes) {
-            const stopCount = allPlans.filter(sp => sp.routeId === route.id).length;
+            const stopCount = allPlans.filter((sp) => sp.routeId === route.id).length;
             if (stopCount < bestCount) {
               bestCount = stopCount;
               bestRoute = route;
@@ -331,48 +477,60 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       }
 
       const result = await db.transaction(async (tx) => {
-        const [contact] = await tx.insert(contacts).values({
-          companyId,
-          firstName,
-          lastName,
-          phone,
-          email: email || null,
-          status: "active",
-          notes: notes || null,
-        }).returning();
+        const [contact] = await tx
+          .insert(contacts)
+          .values({
+            companyId,
+            firstName,
+            lastName,
+            phone,
+            email: email || null,
+            status: "active",
+            notes: notes || null,
+          })
+          .returning();
 
-        const [property] = await tx.insert(properties).values({
-          companyId,
-          contactId: contact.id,
-          streetAddress,
-          city,
-          state,
-          zipCode,
-          numberOfDogs: dogCount,
-        }).returning();
+        const [property] = await tx
+          .insert(properties)
+          .values({
+            companyId,
+            contactId: contact.id,
+            streetAddress,
+            city,
+            state,
+            zipCode,
+            numberOfDogs: dogCount,
+          })
+          .returning();
 
-        const [servicePlan] = await tx.insert(servicePlansTable).values({
-          companyId,
-          contactId: contact.id,
-          propertyId: property.id,
-          frequency: freq,
-          dayOfWeek: day,
-          pricePerVisit: "0",
-          isActive: true,
-          startDate: new Date().toISOString().split("T")[0],
-          routeId,
-          stopOrder: 0,
-        }).returning();
+        const [servicePlan] = await tx
+          .insert(servicePlansTable)
+          .values({
+            companyId,
+            contactId: contact.id,
+            propertyId: property.id,
+            frequency: freq,
+            dayOfWeek: day,
+            pricePerVisit: "0",
+            isActive: true,
+            startDate: new Date().toISOString().split("T")[0],
+            routeId,
+            stopOrder: 0,
+          })
+          .returning();
 
-        const [agreement] = await tx.insert(agreementsTable).values({
-          companyId,
-          contactId: contact.id,
-          frequency: freq,
-          pricePerVisit: "0",
-          isActive: true,
-          startDate: new Date().toISOString().split("T")[0],
-          servicePlanId: servicePlan.id,
-        }).returning();
+        const [agreement] = await tx
+          .insert(agreementsTable)
+          .values({
+            companyId,
+            contactId: contact.id,
+            frequency: freq,
+            pricePerVisit: "0",
+            isActive: true,
+            startDate: new Date().toISOString().split("T")[0],
+            servicePlanId: servicePlan.id,
+          })
+          .returning();
 
         await tx.insert(jobsTable).values({
           companyId,
@@ -398,7 +556,9 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
         routeAssigned: !!routeId,
         summary: `Booked ${freq} service for ${firstName} ${lastName} at ${streetAddress}, ${city}${day !== "tbd" ? ` on ${day}s` : ""}`,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/voice/pause", isAuthenticated, async (req: Request, res: Response) => {
@@ -423,16 +583,23 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
         planIds = [servicePlanId];
       } else if (contactId) {
         const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
-        planIds = plans.map(p => p.id);
+        planIds = plans.map((p) => p.id);
       } else {
         return res.status(400).json({ error: "Provide contactId or servicePlanId" });
       }
       if (planIds.length === 0) {
         return res.status(404).json({ error: "No active service plans found" });
       }
-      const holds = await Promise.all(planIds.map(pid =>
-        storage.createVacationHold({ servicePlanId: pid, startDate, endDate, reason: reason || null })
-      ));
+      const holds = await Promise.all(
+        planIds.map((pid) =>
+          storage.createVacationHold({
+            servicePlanId: pid,
+            startDate,
+            endDate,
+            reason: reason || null,
+          })
+        )
+      );
       res.status(201).json({
         success: true,
         holdsCreated: holds.length,
@@ -440,7 +607,9 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
         endDate,
         summary: `Service paused from ${startDate} to ${endDate}`,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/voice/resume", isAuthenticated, async (req: Request, res: Response) => {
@@ -455,7 +624,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
         planIds = [servicePlanId];
       } else if (contactId) {
         const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
-        planIds = plans.map(p => p.id);
+        planIds = plans.map((p) => p.id);
       } else {
         return res.status(400).json({ error: "Provide contactId or servicePlanId" });
       }
@@ -463,7 +632,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       let removedCount = 0;
       for (const pid of planIds) {
         const holds = await storage.getVacationHolds(pid);
-        const activeHolds = holds.filter(h => h.endDate >= today);
+        const activeHolds = holds.filter((h) => h.endDate >= today);
         for (const hold of activeHolds) {
           await storage.deleteVacationHold(hold.id, companyId);
           removedCount++;
@@ -472,9 +641,14 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       res.json({
         success: true,
         holdsRemoved: removedCount,
-        summary: removedCount > 0 ? `Removed ${removedCount} vacation hold(s). Service resumed.` : "No active holds found to remove.",
+        summary:
+          removedCount > 0
+            ? `Removed ${removedCount} vacation hold(s). Service resumed.`
+            : "No active holds found to remove.",
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/voice/reschedule", isAuthenticated, async (req: Request, res: Response) => {
@@ -482,9 +656,19 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       const { companyId, role } = await getCompanyContext(req);
       if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
       const { servicePlanId, contactId, newDayOfWeek } = req.body;
-      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+      const validDays = [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+      ];
       if (!newDayOfWeek || !validDays.includes(newDayOfWeek)) {
-        return res.status(400).json({ error: `newDayOfWeek is required and must be one of: ${validDays.join(", ")}` });
+        return res
+          .status(400)
+          .json({ error: `newDayOfWeek is required and must be one of: ${validDays.join(", ")}` });
       }
       let plans: { id: string; dayOfWeek: string | null }[] = [];
       if (servicePlanId) {
@@ -507,7 +691,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
         let bestRoute = dayRoutes[0];
         let bestCount = Infinity;
         for (const route of dayRoutes) {
-          const stopCount = allPlans.filter(sp => sp.routeId === route.id).length;
+          const stopCount = allPlans.filter((sp) => sp.routeId === route.id).length;
           if (stopCount < bestCount) {
             bestCount = stopCount;
             bestRoute = route;
@@ -516,7 +700,10 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
         newRouteId = bestRoute.id;
       }
       for (const plan of plans) {
-        await storage.updateServicePlan(plan.id, companyId, { dayOfWeek: newDayOfWeek as any, routeId: newRouteId });
+        await storage.updateServicePlan(plan.id, companyId, {
+          dayOfWeek: newDayOfWeek as any,
+          routeId: newRouteId,
+        });
       }
       res.json({
         success: true,
@@ -525,7 +712,9 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
         routeAssigned: !!newRouteId,
         summary: `Rescheduled ${plans.length} plan(s) to ${newDayOfWeek}s`,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/voice/cancel", isAuthenticated, async (req: Request, res: Response) => {
@@ -540,7 +729,10 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
       for (const plan of plans) {
-        await storage.updateServicePlan(plan.id, companyId, { isActive: false, jobStatus: "cancelled" as any });
+        await storage.updateServicePlan(plan.id, companyId, {
+          isActive: false,
+          jobStatus: "cancelled" as any,
+        });
       }
       await storage.updateContact(contactId, companyId, {
         status: "cancelled" as any,
@@ -553,7 +745,9 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
         plansDeactivated: plans.length,
         summary: `Service cancelled for ${contact.firstName} ${contact.lastName}. ${plans.length} plan(s) deactivated.`,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   const { registerAdminAnalyticsRoutes } = await import("../admin-analytics");
@@ -639,10 +833,14 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       for (const company of allCompanies) {
         if (!company.stripeSubscriptionId || company.subscriptionStatus === "cancelled") continue;
         const members = await storage.getCompanyUsers(company.id);
-        const activeCount = members.filter(m => m.isActive !== false).length;
-        await reportMeteredUsageSet(company.stripeSubscriptionId, "user_seat", activeCount).catch(() => {});
+        const activeCount = members.filter((m) => m.isActive !== false).length;
+        await reportMeteredUsageSet(company.stripeSubscriptionId, "user_seat", activeCount).catch(
+          () => {}
+        );
       }
-      console.log(`[Seat Sync] Reported seat counts for ${allCompanies.filter(c => c.stripeSubscriptionId).length} companies`);
+      console.log(
+        `[Seat Sync] Reported seat counts for ${allCompanies.filter((c) => c.stripeSubscriptionId).length} companies`
+      );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[Seat Sync] Error:", message);
@@ -650,5 +848,4 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   }
   setTimeout(() => syncSeatUsageToStripe().catch(console.error), 120000);
   setInterval(() => syncSeatUsageToStripe().catch(console.error), 24 * 60 * 60 * 1000);
-
 }

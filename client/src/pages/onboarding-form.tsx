@@ -63,20 +63,17 @@ type FormState = {
 
 const TOTAL_STEPS = 3;
 
-function StepIndicator({
-  currentStep,
-  accentColor,
-}: {
-  currentStep: number;
-  accentColor: string;
-}) {
+function StepIndicator({ currentStep, accentColor }: { currentStep: number; accentColor: string }) {
   const steps = [
     { label: "Dog Details", icon: Dog },
     { label: "Property Access", icon: Home },
     { label: "Contact Preferences", icon: Phone },
   ];
   return (
-    <div className="flex items-center justify-center gap-1 py-4 px-2" data-testid="onboarding-step-indicator">
+    <div
+      className="flex items-center justify-center gap-1 py-4 px-2"
+      data-testid="onboarding-step-indicator"
+    >
       {steps.map((step, i) => {
         const stepNum = i + 1;
         const isActive = stepNum === currentStep;
@@ -128,7 +125,8 @@ function DogDetailsStep({
     <div className="space-y-4">
       <div>
         <p className="text-sm text-muted-foreground mb-4">
-          Tell us about your {numberOfDogs > 1 ? "dogs" : "dog"} so our technicians know what to expect on every visit.
+          Tell us about your {numberOfDogs > 1 ? "dogs" : "dog"} so our technicians know what to
+          expect on every visit.
         </p>
       </div>
       <div className="space-y-1.5">
@@ -148,7 +146,9 @@ function DogDetailsStep({
         <Label htmlFor="dog-breeds">Breed{numberOfDogs > 1 ? "s" : ""}</Label>
         <Input
           id="dog-breeds"
-          placeholder={numberOfDogs > 1 ? "e.g. Labrador, German Shepherd, Poodle" : "e.g. Labrador"}
+          placeholder={
+            numberOfDogs > 1 ? "e.g. Labrador, German Shepherd, Poodle" : "e.g. Labrador"
+          }
           value={form.dogBreeds}
           onChange={(e) => setForm({ ...form, dogBreeds: e.target.value })}
           data-testid="input-dog-breeds"
@@ -201,9 +201,7 @@ function PropertyAccessStep({
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-sm font-medium text-muted-foreground">
-          Service Address
-        </p>
+        <p className="text-sm font-medium text-muted-foreground">Service Address</p>
         <p className="text-sm">
           {property.streetAddress}, {property.city}, {property.state} {property.zipCode}
         </p>
@@ -284,7 +282,12 @@ function ContactPreferencesStep({
                   isSelected ? "border-2 bg-white shadow-sm" : "border-gray-200 hover:bg-gray-50"
                 }`}
                 style={isSelected ? { borderColor: accentColor } : {}}
-                onClick={() => setForm({ ...form, preferredContactMethod: m.value as FormState["preferredContactMethod"] })}
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    preferredContactMethod: m.value as FormState["preferredContactMethod"],
+                  })
+                }
                 data-testid={`option-contact-method-${m.value}`}
               >
                 <div
@@ -428,7 +431,8 @@ export default function OnboardingForm() {
             <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
             <h2 className="text-lg font-semibold">Link Not Found</h2>
             <p className="text-sm text-muted-foreground">
-              This onboarding link is invalid or has already been used. Please contact your service provider for a new link.
+              This onboarding link is invalid or has already been used. Please contact your service
+              provider for a new link.
             </p>
           </CardContent>
         </Card>
@@ -455,9 +459,7 @@ export default function OnboardingForm() {
                 ? `We've saved your information for ${data.contact.firstName}. Our technicians will have everything they need before your first visit.`
                 : `Your onboarding information has already been submitted. Contact ${data.company.name} if you need to make changes.`}
             </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Powered by {data.company.name}
-            </p>
+            <p className="text-xs text-muted-foreground mt-2">Powered by {data.company.name}</p>
           </CardContent>
         </Card>
       </div>
@@ -468,13 +470,14 @@ export default function OnboardingForm() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <div
-        className="py-4 px-6 text-white"
-        style={{ backgroundColor: accentColor }}
-      >
+      <div className="py-4 px-6 text-white" style={{ backgroundColor: accentColor }}>
         <div className="max-w-lg mx-auto flex items-center gap-3">
           {data.company.logoUrl ? (
-            <img src={data.company.logoUrl} alt={data.company.name} className="h-8 w-8 rounded object-cover" />
+            <img
+              src={data.company.logoUrl}
+              alt={data.company.name}
+              className="h-8 w-8 rounded object-cover"
+            />
           ) : (
             <ClipboardList className="h-6 w-6" />
           )}
@@ -490,13 +493,16 @@ export default function OnboardingForm() {
           <CardHeader className="pb-2">
             <div className="text-center">
               <p className="text-sm text-muted-foreground">
-                Welcome, <span className="font-medium text-foreground">{data.contact.firstName}</span>!
-                Just a few questions to help our technicians serve you better.
+                Welcome,{" "}
+                <span className="font-medium text-foreground">{data.contact.firstName}</span>! Just
+                a few questions to help our technicians serve you better.
               </p>
             </div>
             <StepIndicator currentStep={currentStep} accentColor={accentColor} />
             <div className="text-center">
-              <p className="text-xs text-muted-foreground">Step {currentStep} of {TOTAL_STEPS}</p>
+              <p className="text-xs text-muted-foreground">
+                Step {currentStep} of {TOTAL_STEPS}
+              </p>
             </div>
           </CardHeader>
           <CardContent className="pt-2">
@@ -514,7 +520,7 @@ export default function OnboardingForm() {
               {currentStep > 1 ? (
                 <Button
                   variant="outline"
-                  onClick={() => setCurrentStep(s => s - 1)}
+                  onClick={() => setCurrentStep((s) => s - 1)}
                   data-testid="button-onboarding-back"
                 >
                   <ChevronLeft className="mr-1 h-4 w-4" /> Back
@@ -524,7 +530,7 @@ export default function OnboardingForm() {
               )}
               {currentStep < TOTAL_STEPS ? (
                 <Button
-                  onClick={() => setCurrentStep(s => s + 1)}
+                  onClick={() => setCurrentStep((s) => s + 1)}
                   style={{ backgroundColor: accentColor, borderColor: accentColor }}
                   data-testid="button-onboarding-next"
                 >
@@ -538,15 +544,22 @@ export default function OnboardingForm() {
                   data-testid="button-onboarding-submit"
                 >
                   {submitMutation.isPending ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                    </>
                   ) : (
-                    <><CheckCircle2 className="mr-2 h-4 w-4" /> Submit</>
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" /> Submit
+                    </>
                   )}
                 </Button>
               )}
             </div>
             {submitMutation.isError && (
-              <p className="text-sm text-destructive mt-2 text-center" data-testid="text-onboarding-error">
+              <p
+                className="text-sm text-destructive mt-2 text-center"
+                data-testid="text-onboarding-error"
+              >
                 {submitMutation.error?.message || "Something went wrong. Please try again."}
               </p>
             )}

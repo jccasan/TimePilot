@@ -17,7 +17,9 @@ export async function runStripeEventCleanup() {
     await db.delete(stripeEvents).where(lt(stripeEvents.processedAt, cutoff));
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[StripeEventCleanup] Completed in ${elapsed}s — deleted ${total} events older than 30 days`);
+    console.log(
+      `[StripeEventCleanup] Completed in ${elapsed}s — deleted ${total} events older than 30 days`
+    );
     return { deleted: total, elapsed };
   } catch (err) {
     console.error("[StripeEventCleanup] Error:", err);

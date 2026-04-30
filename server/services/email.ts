@@ -46,16 +46,22 @@ export function buildWelcomeEmailContent(opts: {
   const { firstName, companyName, appUrl, email, tempPassword } = opts;
   const subject = `Welcome to ScooPilot, ${companyName}!`;
 
-  const credentialsSection = (email && tempPassword) ? `\n\nYour login credentials:\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.` : "";
+  const credentialsSection =
+    email && tempPassword
+      ? `\n\nYour login credentials:\nEmail: ${email}\nTemporary Password: ${tempPassword}\n\nYou'll be asked to set a new password on your first login.`
+      : "";
   const text = `Hi ${firstName},\n\nWelcome to ScooPilot — we're really glad to have you on board!\n\nYour account is all set up and ready to go. To get started, just head to the app and log in. The setup wizard will walk you through everything — it only takes a few minutes.${credentialsSection}\n\nLog in at: ${appUrl}\n\nIf you run into anything or have questions, we're here to help:\n• Instagram or Facebook: Shoot us a DM — we're responsive there\n• Email: jeremy@scoopilot.com\n\nLooking forward to helping you grow your business.\n\n— The ScooPilot Team`;
 
-  const credentialsHtml = (email && tempPassword) ? `
+  const credentialsHtml =
+    email && tempPassword
+      ? `
               <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2d8a5e;">
                 <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.5px;">Your Login Credentials</p>
                 <p style="margin: 4px 0; font-size: 14px;"><strong>Email:</strong> ${email}</p>
                 <p style="margin: 4px 0; font-size: 14px;"><strong>Temporary Password:</strong> ${tempPassword}</p>
                 <p style="margin: 8px 0 0; font-size: 12px; color: #6b7280;">You'll be asked to set a new password when you first log in.</p>
-              </div>` : "";
+              </div>`
+      : "";
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9fafb;">
@@ -104,17 +110,22 @@ export function extractThreadIdFromAddress(address: string): string | null {
 
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
   if (process.env.DISABLE_EMAIL_SENDING === "true") {
-    console.log(`Email suppressed (DISABLE_EMAIL_SENDING=true): to=${options.to} subject="${options.subject}"`);
+    console.log(
+      `Email suppressed (DISABLE_EMAIL_SENDING=true): to=${options.to} subject="${options.subject}"`
+    );
     return { success: true, messageId: "suppressed" };
   }
 
   if (options.contactId && options.companyId && !options.bypassClientSuppression) {
-    const [co] = await db.select({ clientNotificationsSuppressed: companies.clientNotificationsSuppressed })
+    const [co] = await db
+      .select({ clientNotificationsSuppressed: companies.clientNotificationsSuppressed })
       .from(companies)
       .where(eq(companies.id, options.companyId))
       .limit(1);
     if (co?.clientNotificationsSuppressed) {
-      console.log(`[sendEmail] Client notifications suppressed for company ${options.companyId} — skipping email to contact`);
+      console.log(
+        `[sendEmail] Client notifications suppressed for company ${options.companyId} — skipping email to contact`
+      );
       return { success: true, suppressed: true };
     }
   }
@@ -131,8 +142,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
       const displayName = options.senderName || options.from || undefined;
       replyTo = displayName ? { email: threadReplyTo, name: displayName } : threadReplyTo;
     } else {
-      replyTo = options.replyTo
-        || (options.from && options.from !== VERIFIED_SENDER ? options.from : undefined);
+      replyTo =
+        options.replyTo ||
+        (options.from && options.from !== VERIFIED_SENDER ? options.from : undefined);
     }
 
     const senderEmail = options.companyId
@@ -201,7 +213,11 @@ export async function sendAdminSignupNotification(details: {
   tier: string;
   source: string;
 }): Promise<void> {
-  const timestamp = new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" });
+  const timestamp = new Date().toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
   const tierLabel = TIER_LABELS[details.tier] || details.tier;
   const subject = `New ScooPilot Signup: ${details.companyName}`;
   const text = `New signup!\n\nCompany: ${details.companyName}\nOwner: ${details.ownerName}\nEmail: ${details.ownerEmail}\nPlan: ${tierLabel}\nSource: ${details.source}\nTime: ${timestamp}`;
@@ -226,7 +242,9 @@ export async function sendAdminSignupNotification(details: {
   try {
     const result = await sendEmail({ to: ADMIN_NOTIFICATION_EMAIL, subject, text, html });
     if (result.success) {
-      console.log(`[Signup Notification] Admin notified of new signup: ${details.companyName} (${details.ownerEmail})`);
+      console.log(
+        `[Signup Notification] Admin notified of new signup: ${details.companyName} (${details.ownerEmail})`
+      );
     } else {
       console.error(`[Signup Notification] Failed to send admin notification: ${result.error}`);
     }
@@ -249,25 +267,31 @@ export function generateInvoiceEmailHtml(data: {
 
   const paymentLine = data.paymentUrl ? `\nPay online: ${data.paymentUrl}\n` : "";
   const venmoLine = data.venmoHandle ? `\nOr pay via Venmo: @${data.venmoHandle}\n` : "";
-  const text = `Hi ${data.contactName},\n\nYou have a new invoice from ${data.companyName}.\n\nInvoice #: ${data.invoiceNumber}\nDue Date: ${data.dueDate}\nTotal: $${data.total}\n\nItems:\n${data.lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentLine}${venmoLine}\nThank you for your business!`;
+  const text = `Hi ${data.contactName},\n\nYou have a new invoice from ${data.companyName}.\n\nInvoice #: ${data.invoiceNumber}\nDue Date: ${data.dueDate}\nTotal: $${data.total}\n\nItems:\n${data.lineItems.map((li) => `  - ${li.description}: $${li.total}`).join("\n")}${paymentLine}${venmoLine}\nThank you for your business!`;
 
-  const venmoSection = data.venmoHandle ? `
+  const venmoSection = data.venmoHandle
+    ? `
           <p style="margin-top: 12px; font-size: 14px; color: #374151;">Or pay via Venmo: <span style="display: inline-block; background-color: #3D95CE; color: #ffffff; border-radius: 4px; padding: 2px 10px; font-weight: 700; font-size: 14px;">@${data.venmoHandle}</span></p>
-  ` : "";
+  `
+    : "";
 
-  const payNowButton = data.paymentUrl ? `
+  const payNowButton = data.paymentUrl
+    ? `
         <div style="text-align: center; margin: 28px 0 20px; background-color: #f0fdf4; border: 2px solid #22c55e; border-radius: 10px; padding: 28px 24px;">
           <p style="margin: 0 0 14px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #16a34a;">Payment Due</p>
           <a href="${data.paymentUrl}" style="display: inline-block; background-color: #16a34a; color: #ffffff; text-decoration: none; padding: 18px 60px; border-radius: 8px; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 4px 14px rgba(22,163,74,0.35);">Pay Now — $${data.total}</a>
           <p style="margin-top: 14px; font-size: 13px; color: #4b5563;">Pay securely online with credit card or bank transfer</p>
           ${venmoSection}
         </div>
-  ` : (data.venmoHandle ? `
+  `
+    : data.venmoHandle
+      ? `
         <div style="text-align: center; margin: 28px 0 20px; background-color: #f0fdf4; border: 2px solid #22c55e; border-radius: 10px; padding: 28px 24px;">
           <p style="margin: 0 0 14px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #16a34a;">How to Pay</p>
           ${venmoSection}
         </div>
-  ` : "");
+  `
+      : "";
 
   const html = `
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f8fafc;">
@@ -299,14 +323,18 @@ export function generateInvoiceEmailHtml(data: {
             </tr>
           </thead>
           <tbody>
-            ${data.lineItems.map((li, i) => `
+            ${data.lineItems
+              .map(
+                (li, i) => `
               <tr style="background-color: ${i % 2 === 0 ? "#f8fafc" : "#ffffff"};">
                 <td style="padding: 10px 12px; border-bottom: 1px solid #e2e8f0;">${li.description}</td>
                 <td style="padding: 10px 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">${li.quantity}</td>
                 <td style="padding: 10px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">$${li.unitPrice}</td>
                 <td style="padding: 10px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">$${li.total}</td>
               </tr>
-            `).join("")}
+            `
+              )
+              .join("")}
           </tbody>
         </table>
 
@@ -328,7 +356,14 @@ export function generateInvoiceEmailHtml(data: {
   return { subject, text, html };
 }
 
-export async function logEmailSent(companyId: string, toAddress: string, subject: string, category: string, sendgridMessageId?: string, contactId?: string): Promise<void> {
+export async function logEmailSent(
+  companyId: string,
+  toAddress: string,
+  subject: string,
+  category: string,
+  sendgridMessageId?: string,
+  contactId?: string
+): Promise<void> {
   await db.insert(emailsSent).values({
     companyId,
     contactId: contactId || null,

@@ -30,10 +30,25 @@ function calculatePolygonArea(coords: number[][]): number {
 }
 
 function getYardCategory(sqft: number): { label: string; color: string } {
-  if (sqft < 6500) return { label: "Small", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" };
-  if (sqft <= 10890) return { label: "Standard", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" };
-  if (sqft <= 21780) return { label: "Large", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" };
-  return { label: "Extra Large", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" };
+  if (sqft < 6500)
+    return {
+      label: "Small",
+      color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+    };
+  if (sqft <= 10890)
+    return {
+      label: "Standard",
+      color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    };
+  if (sqft <= 21780)
+    return {
+      label: "Large",
+      color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+    };
+  return {
+    label: "Extra Large",
+    color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  };
 }
 
 function formatArea(sqft: number): string {
@@ -49,7 +64,14 @@ export { getYardCategory, formatArea };
 const IMG_W = 640;
 const IMG_H = 400;
 
-function lngLatToPixel(lngLat: number[], centerLng: number, centerLat: number, zoom: number, imgW: number, imgH: number): { x: number; y: number } {
+function lngLatToPixel(
+  lngLat: number[],
+  centerLng: number,
+  centerLat: number,
+  zoom: number,
+  imgW: number,
+  imgH: number
+): { x: number; y: number } {
   const scale = Math.pow(2, zoom) * 256;
   const toMerc = (lng: number, lat: number) => {
     const x = ((lng + 180) / 360) * scale;
@@ -65,7 +87,15 @@ function lngLatToPixel(lngLat: number[], centerLng: number, centerLat: number, z
   };
 }
 
-function pixelToLngLat(px: number, py: number, centerLng: number, centerLat: number, zoom: number, imgW: number, imgH: number): number[] {
+function pixelToLngLat(
+  px: number,
+  py: number,
+  centerLng: number,
+  centerLat: number,
+  zoom: number,
+  imgW: number,
+  imgH: number
+): number[] {
   const scale = Math.pow(2, zoom) * 256;
   const toMerc = (lng: number, lat: number) => {
     const x = ((lng + 180) / 360) * scale;
@@ -82,7 +112,13 @@ function pixelToLngLat(px: number, py: number, centerLng: number, centerLat: num
   return [lng, lat];
 }
 
-function StaticMapMeasure({ lat, lng, existingPolygon, onSave, onCancel }: {
+function StaticMapMeasure({
+  lat,
+  lng,
+  existingPolygon,
+  onSave,
+  onCancel,
+}: {
   lat: number;
   lng: number;
   existingPolygon?: number[][] | null;
@@ -134,14 +170,22 @@ function StaticMapMeasure({ lat, lng, existingPolygon, onSave, onCancel }: {
       .then((blob) => {
         if (cancelled) return;
         const url = URL.createObjectURL(blob);
-        setImgBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
+        setImgBlobUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
         setImgLoading(false);
       })
       .catch(() => {
-        if (!cancelled) { setImgLoading(false); setImgError(true); }
+        if (!cancelled) {
+          setImgLoading(false);
+          setImgError(true);
+        }
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [lat, lng, zoom, imgW, imgH]);
 
   const areaSqft = points.length >= 3 ? calculatePolygonArea(points) : 0;
@@ -230,15 +274,7 @@ function StaticMapMeasure({ lat, lng, existingPolygon, onSave, onCancel }: {
             />
           )}
           {pixelPoints.map((p, i) => (
-            <circle
-              key={i}
-              cx={p.x}
-              cy={p.y}
-              r={5}
-              fill="white"
-              stroke="#22c55e"
-              strokeWidth="2"
-            />
+            <circle key={i} cx={p.x} cy={p.y} r={5} fill="white" stroke="#22c55e" strokeWidth="2" />
           ))}
         </svg>
         <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
@@ -246,7 +282,10 @@ function StaticMapMeasure({ lat, lng, existingPolygon, onSave, onCancel }: {
             size="icon"
             variant="secondary"
             className="h-7 w-7"
-            onClick={(e) => { e.stopPropagation(); setZoom((z) => Math.min(z + 1, 22)); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoom((z) => Math.min(z + 1, 22));
+            }}
             data-testid="button-zoom-in"
           >
             <ZoomIn className="h-4 w-4" />
@@ -255,7 +294,10 @@ function StaticMapMeasure({ lat, lng, existingPolygon, onSave, onCancel }: {
             size="icon"
             variant="secondary"
             className="h-7 w-7"
-            onClick={(e) => { e.stopPropagation(); setZoom((z) => Math.max(z - 1, 15)); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoom((z) => Math.max(z - 1, 15));
+            }}
             data-testid="button-zoom-out"
           >
             <ZoomOut className="h-4 w-4" />
@@ -267,7 +309,9 @@ function StaticMapMeasure({ lat, lng, existingPolygon, onSave, onCancel }: {
         <div className="flex items-center gap-2">
           {areaSqft > 0 ? (
             <>
-              <span className="text-sm font-medium" data-testid="text-yard-area">{formatArea(areaSqft)}</span>
+              <span className="text-sm font-medium" data-testid="text-yard-area">
+                {formatArea(areaSqft)}
+              </span>
               {category && (
                 <Badge className={`text-xs ${category.color}`} data-testid="badge-yard-category">
                   {category.label}
@@ -292,11 +336,23 @@ function StaticMapMeasure({ lat, lng, existingPolygon, onSave, onCancel }: {
             Close Shape
           </Button>
         )}
-        <Button size="sm" variant="outline" onClick={handleUndo} disabled={points.length === 0} data-testid="button-undo-point">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleUndo}
+          disabled={points.length === 0}
+          data-testid="button-undo-point"
+        >
           <Undo2 className="h-3.5 w-3.5 mr-1" />
           Undo
         </Button>
-        <Button size="sm" variant="outline" onClick={handleClear} disabled={points.length === 0} data-testid="button-clear-points">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleClear}
+          disabled={points.length === 0}
+          data-testid="button-clear-points"
+        >
           <Trash2 className="h-3.5 w-3.5 mr-1" />
           Clear
         </Button>
@@ -316,7 +372,15 @@ function StaticMapMeasure({ lat, lng, existingPolygon, onSave, onCancel }: {
   );
 }
 
-export function YardMeasureTool({ lat, lng, propertyId: _propertyId, existingPolygon, existingArea: _existingArea, onSave, onCancel }: YardMeasureToolProps) {
+export function YardMeasureTool({
+  lat,
+  lng,
+  propertyId: _propertyId,
+  existingPolygon,
+  existingArea: _existingArea,
+  onSave,
+  onCancel,
+}: YardMeasureToolProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -359,7 +423,16 @@ export function YardMeasureTool({ lat, lng, propertyId: _propertyId, existingPol
     if (map.getSource("measure-line")) {
       map.getSource("measure-line").setData({
         type: "Feature",
-        geometry: { type: "LineString", coordinates: lineCoords.length >= 2 ? lineCoords : [[0, 0], [0, 0]] },
+        geometry: {
+          type: "LineString",
+          coordinates:
+            lineCoords.length >= 2
+              ? lineCoords
+              : [
+                  [0, 0],
+                  [0, 0],
+                ],
+        },
         properties: {},
       });
     }
@@ -367,7 +440,20 @@ export function YardMeasureTool({ lat, lng, propertyId: _propertyId, existingPol
     if (map.getSource("measure-polygon")) {
       map.getSource("measure-polygon").setData({
         type: "Feature",
-        geometry: { type: "Polygon", coordinates: polyCoords.length > 0 ? polyCoords : [[[0, 0], [0, 0], [0, 0], [0, 0]]] },
+        geometry: {
+          type: "Polygon",
+          coordinates:
+            polyCoords.length > 0
+              ? polyCoords
+              : [
+                  [
+                    [0, 0],
+                    [0, 0],
+                    [0, 0],
+                    [0, 0],
+                  ],
+                ],
+        },
         properties: {},
       });
     }
@@ -378,73 +464,99 @@ export function YardMeasureTool({ lat, lng, propertyId: _propertyId, existingPol
 
     const initMap = async () => {
       try {
-      const mapboxgl = (await import("mapbox-gl")).default;
-      await import("mapbox-gl/dist/mapbox-gl.css");
-      (mapboxgl as any).accessToken = mapboxToken;
+        const mapboxgl = (await import("mapbox-gl")).default;
+        await import("mapbox-gl/dist/mapbox-gl.css");
+        (mapboxgl as any).accessToken = mapboxToken;
 
-      if (!mapboxgl.supported()) {
-        setMapError(true);
-        return;
-      }
-
-      const map = new mapboxgl.Map({
-        container: mapContainerRef.current!,
-        style: "mapbox://styles/mapbox/satellite-streets-v12",
-        center: [lng, lat],
-        zoom: 19,
-        attributionControl: false,
-      });
-
-      map.on("error", (e: any) => {
-        console.warn("Mapbox error:", e);
-      });
-
-      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
-      mapRef.current = map;
-
-      map.on("load", () => {
-        map.addSource("measure-polygon", {
-          type: "geojson",
-          data: { type: "Feature", geometry: { type: "Polygon", coordinates: [[[0, 0], [0, 0], [0, 0], [0, 0]]] }, properties: {} },
-        });
-        map.addLayer({
-          id: "measure-polygon-fill",
-          type: "fill",
-          source: "measure-polygon",
-          paint: { "fill-color": "#22c55e", "fill-opacity": 0.25 },
-        });
-        map.addLayer({
-          id: "measure-polygon-outline",
-          type: "line",
-          source: "measure-polygon",
-          paint: { "line-color": "#22c55e", "line-width": 2 },
-        });
-
-        map.addSource("measure-line", {
-          type: "geojson",
-          data: { type: "Feature", geometry: { type: "LineString", coordinates: [[0, 0], [0, 0]] }, properties: {} },
-        });
-        map.addLayer({
-          id: "measure-line-layer",
-          type: "line",
-          source: "measure-line",
-          paint: { "line-color": "#ffffff", "line-width": 2, "line-dasharray": [2, 2] },
-        });
-
-        polygonLayerAdded.current = true;
-        setMapLoaded(true);
-
-        if (existingPolygon && existingPolygon.length >= 3) {
-          const mapboxgl2 = mapboxgl;
-          existingPolygon.forEach((coord) => {
-            const el = document.createElement("div");
-            el.className = "w-3 h-3 bg-white border-2 border-green-500 rounded-full shadow-md";
-            const marker = new mapboxgl2.Marker({ element: el }).setLngLat(coord as [number, number]).addTo(map);
-            markersRef.current.push(marker);
-          });
-          updateMapLayers(map, existingPolygon, true);
+        if (!mapboxgl.supported()) {
+          setMapError(true);
+          return;
         }
-      });
+
+        const map = new mapboxgl.Map({
+          container: mapContainerRef.current!,
+          style: "mapbox://styles/mapbox/satellite-streets-v12",
+          center: [lng, lat],
+          zoom: 19,
+          attributionControl: false,
+        });
+
+        map.on("error", (e: any) => {
+          console.warn("Mapbox error:", e);
+        });
+
+        map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+        mapRef.current = map;
+
+        map.on("load", () => {
+          map.addSource("measure-polygon", {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              geometry: {
+                type: "Polygon",
+                coordinates: [
+                  [
+                    [0, 0],
+                    [0, 0],
+                    [0, 0],
+                    [0, 0],
+                  ],
+                ],
+              },
+              properties: {},
+            },
+          });
+          map.addLayer({
+            id: "measure-polygon-fill",
+            type: "fill",
+            source: "measure-polygon",
+            paint: { "fill-color": "#22c55e", "fill-opacity": 0.25 },
+          });
+          map.addLayer({
+            id: "measure-polygon-outline",
+            type: "line",
+            source: "measure-polygon",
+            paint: { "line-color": "#22c55e", "line-width": 2 },
+          });
+
+          map.addSource("measure-line", {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: [
+                  [0, 0],
+                  [0, 0],
+                ],
+              },
+              properties: {},
+            },
+          });
+          map.addLayer({
+            id: "measure-line-layer",
+            type: "line",
+            source: "measure-line",
+            paint: { "line-color": "#ffffff", "line-width": 2, "line-dasharray": [2, 2] },
+          });
+
+          polygonLayerAdded.current = true;
+          setMapLoaded(true);
+
+          if (existingPolygon && existingPolygon.length >= 3) {
+            const mapboxgl2 = mapboxgl;
+            existingPolygon.forEach((coord) => {
+              const el = document.createElement("div");
+              el.className = "w-3 h-3 bg-white border-2 border-green-500 rounded-full shadow-md";
+              const marker = new mapboxgl2.Marker({ element: el })
+                .setLngLat(coord as [number, number])
+                .addTo(map);
+              markersRef.current.push(marker);
+            });
+            updateMapLayers(map, existingPolygon, true);
+          }
+        });
       } catch (err) {
         console.warn("Failed to initialize map:", err);
         setMapError(true);
@@ -476,14 +588,20 @@ export function YardMeasureTool({ lat, lng, propertyId: _propertyId, existingPol
         const mapboxgl = (window as any).mapboxgl || null;
         if (mapboxgl) {
           const el = document.createElement("div");
-          el.className = "w-3 h-3 bg-white border-2 border-green-500 rounded-full shadow-md cursor-pointer";
-          const marker = new mapboxgl.Marker({ element: el }).setLngLat(coord as [number, number]).addTo(map);
+          el.className =
+            "w-3 h-3 bg-white border-2 border-green-500 rounded-full shadow-md cursor-pointer";
+          const marker = new mapboxgl.Marker({ element: el })
+            .setLngLat(coord as [number, number])
+            .addTo(map);
           markersRef.current.push(marker);
         } else {
           import("mapbox-gl").then((mod) => {
             const el = document.createElement("div");
-            el.className = "w-3 h-3 bg-white border-2 border-green-500 rounded-full shadow-md cursor-pointer";
-            const marker = new mod.default.Marker({ element: el }).setLngLat(coord as [number, number]).addTo(map);
+            el.className =
+              "w-3 h-3 bg-white border-2 border-green-500 rounded-full shadow-md cursor-pointer";
+            const marker = new mod.default.Marker({ element: el })
+              .setLngLat(coord as [number, number])
+              .addTo(map);
             markersRef.current.push(marker);
           });
         }
@@ -548,7 +666,10 @@ export function YardMeasureTool({ lat, lng, propertyId: _propertyId, existingPol
   if (!tokenLoaded) {
     return (
       <div className="space-y-3" data-testid="yard-measure-tool">
-        <div className="w-full h-[350px] rounded-md border flex items-center justify-center bg-muted" data-testid="yard-measure-map">
+        <div
+          className="w-full h-[350px] rounded-md border flex items-center justify-center bg-muted"
+          data-testid="yard-measure-map"
+        >
           <div className="text-center text-muted-foreground">
             <p className="text-sm">Loading map...</p>
           </div>
@@ -569,7 +690,9 @@ export function YardMeasureTool({ lat, lng, propertyId: _propertyId, existingPol
         <div className="flex items-center gap-2">
           {areaSqft > 0 ? (
             <>
-              <span className="text-sm font-medium" data-testid="text-yard-area">{formatArea(areaSqft)}</span>
+              <span className="text-sm font-medium" data-testid="text-yard-area">
+                {formatArea(areaSqft)}
+              </span>
               {category && (
                 <Badge className={`text-xs ${category.color}`} data-testid="badge-yard-category">
                   {category.label}
@@ -594,11 +717,23 @@ export function YardMeasureTool({ lat, lng, propertyId: _propertyId, existingPol
             Close Shape
           </Button>
         )}
-        <Button size="sm" variant="outline" onClick={handleUndo} disabled={points.length === 0} data-testid="button-undo-point">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleUndo}
+          disabled={points.length === 0}
+          data-testid="button-undo-point"
+        >
           <Undo2 className="h-3.5 w-3.5 mr-1" />
           Undo
         </Button>
-        <Button size="sm" variant="outline" onClick={handleClear} disabled={points.length === 0} data-testid="button-clear-points">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleClear}
+          disabled={points.length === 0}
+          data-testid="button-clear-points"
+        >
           <Trash2 className="h-3.5 w-3.5 mr-1" />
           Clear
         </Button>

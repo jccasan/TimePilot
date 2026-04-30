@@ -142,12 +142,20 @@ function formatDollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-
 function statusBadge(status: "profitable" | "marginal" | "unprofitable") {
   const variants: Record<string, { label: string; className: string }> = {
-    profitable: { label: "Profitable", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
-    marginal: { label: "Marginal", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
-    unprofitable: { label: "Unprofitable", className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" },
+    profitable: {
+      label: "Profitable",
+      className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+    },
+    marginal: {
+      label: "Marginal",
+      className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+    },
+    unprofitable: {
+      label: "Unprofitable",
+      className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+    },
   };
   const v = variants[status];
   return (
@@ -157,7 +165,12 @@ function statusBadge(status: "profitable" | "marginal" | "unprofitable") {
   );
 }
 
-function SortButton({ field, currentField, currentDir, onSort }: {
+function SortButton({
+  field,
+  currentField,
+  currentDir,
+  onSort,
+}: {
   field: SortField;
   currentField: SortField;
   currentDir: SortDir;
@@ -173,7 +186,11 @@ function SortButton({ field, currentField, currentDir, onSort }: {
       data-testid={`button-sort-${field}`}
     >
       {isActive ? (
-        currentDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+        currentDir === "asc" ? (
+          <ArrowUp className="h-3 w-3" />
+        ) : (
+          <ArrowDown className="h-3 w-3" />
+        )
       ) : (
         <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
       )}
@@ -186,21 +203,28 @@ export default function Profitability() {
   const [, navigate] = useLocation();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem("scoopilot_profit_view_mode");
-    return (saved === "customers" || saved === "routes") ? saved : "customers";
+    return saved === "customers" || saved === "routes" ? saved : "customers";
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortField, setSortField] = useState<SortField>("profit");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
-  const [aiSuggestionsMap, setAiSuggestionsMap] = useState<Map<string, ProfitabilitySuggestion[] | "error">>(new Map());
+  const [aiSuggestionsMap, setAiSuggestionsMap] = useState<
+    Map<string, ProfitabilitySuggestion[] | "error">
+  >(new Map());
   const [isAnalysisRunning, setIsAnalysisRunning] = useState(false);
-  const [analysisProgress, setAnalysisProgress] = useState<{ current: number; total: number } | null>(null);
+  const [analysisProgress, setAnalysisProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [currentlyAnalyzingId, setCurrentlyAnalyzingId] = useState<string | null>(null);
   const abortRef = useRef(false);
 
   useEffect(() => {
-    try { localStorage.setItem("scoopilot_profit_view_mode", viewMode); } catch {}
+    try {
+      localStorage.setItem("scoopilot_profit_view_mode", viewMode);
+    } catch {}
   }, [viewMode]);
 
   const { data: customers, isLoading } = useQuery<CustomerProfitability[]>({
@@ -218,7 +242,10 @@ export default function Profitability() {
   });
 
   const routeOptStateMap = new Map<string, boolean>(
-    (routeRecords ?? []).map(r => [r.id, r.isOptimizedCurrent ?? !!(r.lastOptimizedAt && r.optimizedStopHash)])
+    (routeRecords ?? []).map((r) => [
+      r.id,
+      r.isOptimizedCurrent ?? !!(r.lastOptimizedAt && r.optimizedStopHash),
+    ])
   );
 
   const recalculateMutation = useMutation({
@@ -228,7 +255,10 @@ export default function Profitability() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/summary"] });
-      toast({ title: "Recalculation complete", description: `${data.snapshotsCreated} snapshots created.` });
+      toast({
+        title: "Recalculation complete",
+        description: `${data.snapshotsCreated} snapshots created.`,
+      });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -255,9 +285,14 @@ export default function Profitability() {
   };
 
   const runBulkAiAnalysis = async () => {
-    const struggling = (customers ?? []).filter(c => c.status === "marginal" || c.status === "unprofitable");
+    const struggling = (customers ?? []).filter(
+      (c) => c.status === "marginal" || c.status === "unprofitable"
+    );
     if (struggling.length === 0) {
-      toast({ title: "No struggling customers", description: "All customers are profitable — nothing to analyze." });
+      toast({
+        title: "No struggling customers",
+        description: "All customers are profitable — nothing to analyze.",
+      });
       return;
     }
     abortRef.current = false;
@@ -276,13 +311,13 @@ export default function Profitability() {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setAiSuggestionsMap(prev => {
+        setAiSuggestionsMap((prev) => {
           const next = new Map(prev);
           next.set(customer.contactId, (data.suggestions ?? []) as ProfitabilitySuggestion[]);
           return next;
         });
       } catch {
-        setAiSuggestionsMap(prev => {
+        setAiSuggestionsMap((prev) => {
           const next = new Map(prev);
           next.set(customer.contactId, "error");
           return next;
@@ -301,21 +336,31 @@ export default function Profitability() {
     setAnalysisProgress(null);
   };
 
-
   const filtered = (customers ?? [])
-    .filter(c => {
+    .filter((c) => {
       if (statusFilter !== "all" && c.status !== statusFilter) return false;
-      if (searchTerm && !c.contactName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      if (searchTerm && !c.contactName.toLowerCase().includes(searchTerm.toLowerCase()))
+        return false;
       return true;
     })
     .sort((a, b) => {
       let cmp = 0;
       switch (sortField) {
-        case "name": cmp = a.contactName.localeCompare(b.contactName); break;
-        case "revenue": cmp = a.monthlyRevenueCents - b.monthlyRevenueCents; break;
-        case "cost": cmp = a.monthlyCostCents - b.monthlyCostCents; break;
-        case "profit": cmp = a.monthlyProfitCents - b.monthlyProfitCents; break;
-        case "margin": cmp = a.profitMarginPct - b.profitMarginPct; break;
+        case "name":
+          cmp = a.contactName.localeCompare(b.contactName);
+          break;
+        case "revenue":
+          cmp = a.monthlyRevenueCents - b.monthlyRevenueCents;
+          break;
+        case "cost":
+          cmp = a.monthlyCostCents - b.monthlyCostCents;
+          break;
+        case "profit":
+          cmp = a.monthlyProfitCents - b.monthlyProfitCents;
+          break;
+        case "margin":
+          cmp = a.profitMarginPct - b.profitMarginPct;
+          break;
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -324,12 +369,13 @@ export default function Profitability() {
   const totalCost = (customers ?? []).reduce((s, c) => s + c.monthlyCostCents, 0);
   const totalProfit = totalRevenue - totalCost;
   const avgMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-  const unprofitableCount = (customers ?? []).filter(c => c.status === "unprofitable").length;
+  const unprofitableCount = (customers ?? []).filter((c) => c.status === "unprofitable").length;
 
   const toggleRouteExpand = (routeId: string) => {
-    setExpandedRoutes(prev => {
+    setExpandedRoutes((prev) => {
       const next = new Set(prev);
-      if (next.has(routeId)) next.delete(routeId); else next.add(routeId);
+      if (next.has(routeId)) next.delete(routeId);
+      else next.add(routeId);
       return next;
     });
   };
@@ -337,11 +383,21 @@ export default function Profitability() {
   const sortedRoutes = (routeData ?? []).slice().sort((a, b) => {
     let cmp = 0;
     switch (sortField) {
-      case "name": cmp = a.routeName.localeCompare(b.routeName); break;
-      case "revenue": cmp = a.totalRevenueCents - b.totalRevenueCents; break;
-      case "cost": cmp = a.totalCostCents - b.totalCostCents; break;
-      case "profit": cmp = a.totalProfitCents - b.totalProfitCents; break;
-      case "margin": cmp = a.avgMarginPct - b.avgMarginPct; break;
+      case "name":
+        cmp = a.routeName.localeCompare(b.routeName);
+        break;
+      case "revenue":
+        cmp = a.totalRevenueCents - b.totalRevenueCents;
+        break;
+      case "cost":
+        cmp = a.totalCostCents - b.totalCostCents;
+        break;
+      case "profit":
+        cmp = a.totalProfitCents - b.totalProfitCents;
+        break;
+      case "margin":
+        cmp = a.avgMarginPct - b.avgMarginPct;
+        break;
     }
     return sortDir === "asc" ? cmp : -cmp;
   });
@@ -356,7 +412,9 @@ export default function Profitability() {
           <p className="text-muted-foreground">Loading profitability data...</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-28" />)}
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
         </div>
         <Skeleton className="h-96" />
       </div>
@@ -370,7 +428,10 @@ export default function Profitability() {
           <h1 className="text-2xl font-bold" data-testid="text-profitability-heading">
             {viewMode === "customers" ? "Customer Profitability" : "Route Profitability"}
           </h1>
-          <p className="text-muted-foreground">Analyze profit and loss across your {viewMode === "customers" ? "customer base" : "routes"}</p>
+          <p className="text-muted-foreground">
+            Analyze profit and loss across your{" "}
+            {viewMode === "customers" ? "customer base" : "routes"}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
@@ -391,7 +452,9 @@ export default function Profitability() {
             disabled={recalculateMutation.isPending}
             data-testid="button-recalculate"
           >
-            <RefreshCw className={`mr-1 h-4 w-4 ${recalculateMutation.isPending ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`mr-1 h-4 w-4 ${recalculateMutation.isPending ? "animate-spin" : ""}`}
+            />
             {recalculateMutation.isPending ? "Recalculating..." : "Recalculate"}
           </Button>
           {viewMode === "customers" && (
@@ -405,8 +468,8 @@ export default function Profitability() {
               {bulkRecommendationsMutation.isPending ? "Generating..." : "Price Recommendations"}
             </Button>
           )}
-          {viewMode === "customers" && (
-            isAnalysisRunning ? (
+          {viewMode === "customers" &&
+            (isAnalysisRunning ? (
               <Button
                 variant="outline"
                 onClick={stopBulkAiAnalysis}
@@ -427,8 +490,7 @@ export default function Profitability() {
                 <Brain className="mr-1 h-4 w-4" />
                 Run AI Analysis
               </Button>
-            )
-          )}
+            ))}
         </div>
       </div>
 
@@ -438,7 +500,9 @@ export default function Profitability() {
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Total Revenue/mo</p>
-                <p className="text-2xl font-bold" data-testid="text-kpi-total-revenue">{formatDollars(totalRevenue)}</p>
+                <p className="text-2xl font-bold" data-testid="text-kpi-total-revenue">
+                  {formatDollars(totalRevenue)}
+                </p>
               </div>
               <div className="p-2 rounded-md bg-primary/10">
                 <DollarSign className="h-4 w-4 text-primary" />
@@ -451,7 +515,9 @@ export default function Profitability() {
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Total Costs/mo</p>
-                <p className="text-2xl font-bold" data-testid="text-kpi-total-costs">{formatDollars(totalCost)}</p>
+                <p className="text-2xl font-bold" data-testid="text-kpi-total-costs">
+                  {formatDollars(totalCost)}
+                </p>
               </div>
               <div className="p-2 rounded-md bg-primary/10">
                 <TrendingDown className="h-4 w-4 text-primary" />
@@ -464,12 +530,19 @@ export default function Profitability() {
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Total Profit/mo</p>
-                <p className={`text-2xl font-bold ${totalProfit >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-kpi-total-profit">
+                <p
+                  className={`text-2xl font-bold ${totalProfit >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+                  data-testid="text-kpi-total-profit"
+                >
                   {formatDollars(totalProfit)}
                 </p>
               </div>
               <div className="p-2 rounded-md bg-primary/10">
-                {totalProfit >= 0 ? <TrendingUp className="h-4 w-4 text-primary" /> : <TrendingDown className="h-4 w-4 text-primary" />}
+                {totalProfit >= 0 ? (
+                  <TrendingUp className="h-4 w-4 text-primary" />
+                ) : (
+                  <TrendingDown className="h-4 w-4 text-primary" />
+                )}
               </div>
             </div>
           </CardContent>
@@ -479,7 +552,10 @@ export default function Profitability() {
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Average Margin</p>
-                <p className={`text-2xl font-bold ${avgMargin >= 15 ? "text-green-600 dark:text-green-400" : avgMargin >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-kpi-avg-margin">
+                <p
+                  className={`text-2xl font-bold ${avgMargin >= 15 ? "text-green-600 dark:text-green-400" : avgMargin >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}`}
+                  data-testid="text-kpi-avg-margin"
+                >
                   {avgMargin.toFixed(1)}%
                 </p>
               </div>
@@ -494,10 +570,15 @@ export default function Profitability() {
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Unprofitable</p>
-                <p className={`text-2xl font-bold ${unprofitableCount > 0 ? "text-red-600 dark:text-red-400" : ""}`} data-testid="text-kpi-unprofitable">
+                <p
+                  className={`text-2xl font-bold ${unprofitableCount > 0 ? "text-red-600 dark:text-red-400" : ""}`}
+                  data-testid="text-kpi-unprofitable"
+                >
                   {unprofitableCount}
                 </p>
-                <p className="text-xs text-muted-foreground">{(customers ?? []).length} total customers</p>
+                <p className="text-xs text-muted-foreground">
+                  {(customers ?? []).length} total customers
+                </p>
               </div>
               <div className="p-2 rounded-md bg-primary/10">
                 <AlertTriangle className="h-4 w-4 text-primary" />
@@ -526,7 +607,12 @@ export default function Profitability() {
                       <TableHead>
                         <div className="flex items-center gap-1">
                           Route
-                          <SortButton field="name" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
+                          <SortButton
+                            field="name"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
                         </div>
                       </TableHead>
                       <TableHead>Day</TableHead>
@@ -534,25 +620,45 @@ export default function Profitability() {
                       <TableHead>
                         <div className="flex items-center gap-1">
                           Revenue
-                          <SortButton field="revenue" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
+                          <SortButton
+                            field="revenue"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
                         </div>
                       </TableHead>
                       <TableHead>
                         <div className="flex items-center gap-1">
                           Cost
-                          <SortButton field="cost" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
+                          <SortButton
+                            field="cost"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
                         </div>
                       </TableHead>
                       <TableHead>
                         <div className="flex items-center gap-1">
                           Profit
-                          <SortButton field="profit" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
+                          <SortButton
+                            field="profit"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
                         </div>
                       </TableHead>
                       <TableHead>
                         <div className="flex items-center gap-1">
                           Avg Margin
-                          <SortButton field="margin" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
+                          <SortButton
+                            field="margin"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
                         </div>
                       </TableHead>
                     </TableRow>
@@ -567,19 +673,22 @@ export default function Profitability() {
                     ) : (
                       sortedRoutes.flatMap((route) => {
                         const isExpanded = expandedRoutes.has(route.routeId);
-                        const marginColor = route.avgMarginPct >= 15
-                          ? "text-green-600 dark:text-green-400"
-                          : route.avgMarginPct >= 0
-                            ? "text-yellow-600 dark:text-yellow-400"
+                        const marginColor =
+                          route.avgMarginPct >= 15
+                            ? "text-green-600 dark:text-green-400"
+                            : route.avgMarginPct >= 0
+                              ? "text-yellow-600 dark:text-yellow-400"
+                              : "text-red-600 dark:text-red-400";
+                        const profitColor =
+                          route.totalProfitCents >= 0
+                            ? "text-green-600 dark:text-green-400"
                             : "text-red-600 dark:text-red-400";
-                        const profitColor = route.totalProfitCents >= 0
-                          ? "text-green-600 dark:text-green-400"
-                          : "text-red-600 dark:text-red-400";
-                        const rowBg = route.avgMarginPct < 0
-                          ? "bg-red-50/50 dark:bg-red-950/20"
-                          : route.avgMarginPct <= 15
-                            ? "bg-yellow-50/50 dark:bg-yellow-950/20"
-                            : "";
+                        const rowBg =
+                          route.avgMarginPct < 0
+                            ? "bg-red-50/50 dark:bg-red-950/20"
+                            : route.avgMarginPct <= 15
+                              ? "bg-yellow-50/50 dark:bg-yellow-950/20"
+                              : "";
 
                         const rows = [
                           <TableRow
@@ -589,26 +698,39 @@ export default function Profitability() {
                             data-testid={`row-route-${route.routeId}`}
                           >
                             <TableCell className="w-8 pr-0">
-                              {route.customers.length > 0 && (
-                                isExpanded
-                                  ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                  : <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                              )}
+                              {route.customers.length > 0 &&
+                                (isExpanded ? (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                ))}
                             </TableCell>
-                            <TableCell className="font-medium" data-testid={`text-route-name-${route.routeId}`}>
+                            <TableCell
+                              className="font-medium"
+                              data-testid={`text-route-name-${route.routeId}`}
+                            >
                               <div className="flex items-center gap-1.5">
                                 {route.routeName}
                                 {routeOptStateMap.get(route.routeId) && (
-                                  <span title="Route is optimized" data-testid={`badge-profit-optimized-${route.routeId}`}>
+                                  <span
+                                    title="Route is optimized"
+                                    data-testid={`badge-profit-optimized-${route.routeId}`}
+                                  >
                                     <CheckCircle className="h-3.5 w-3.5 text-green-600 dark:text-green-400 shrink-0" />
                                   </span>
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="capitalize text-muted-foreground" data-testid={`text-route-day-${route.routeId}`}>
+                            <TableCell
+                              className="capitalize text-muted-foreground"
+                              data-testid={`text-route-day-${route.routeId}`}
+                            >
                               {route.dayOfWeek}
                             </TableCell>
-                            <TableCell className="text-center" data-testid={`text-route-stops-${route.routeId}`}>
+                            <TableCell
+                              className="text-center"
+                              data-testid={`text-route-stops-${route.routeId}`}
+                            >
                               {route.totalStops}
                             </TableCell>
                             <TableCell data-testid={`text-route-revenue-${route.routeId}`}>
@@ -618,7 +740,9 @@ export default function Profitability() {
                               {formatDollars(route.totalCostCents)}
                             </TableCell>
                             <TableCell data-testid={`text-route-profit-${route.routeId}`}>
-                              <span className={profitColor}>{formatDollars(route.totalProfitCents)}</span>
+                              <span className={profitColor}>
+                                {formatDollars(route.totalProfitCents)}
+                              </span>
                             </TableCell>
                             <TableCell data-testid={`text-route-margin-${route.routeId}`}>
                               <span className={marginColor}>{route.avgMarginPct.toFixed(1)}%</span>
@@ -634,17 +758,20 @@ export default function Profitability() {
                           });
                           for (const customer of sortedCustomers) {
                             const custProfit = customer.revenueCents - customer.costCents;
-                            const custMargin = customer.revenueCents > 0
-                              ? (custProfit / customer.revenueCents) * 100
-                              : 0;
-                            const custProfitColor = custProfit >= 0
-                              ? "text-green-600 dark:text-green-400"
-                              : "text-red-600 dark:text-red-400";
-                            const custMarginColor = custMargin >= 15
-                              ? "text-green-600 dark:text-green-400"
-                              : custMargin >= 0
-                                ? "text-yellow-600 dark:text-yellow-400"
+                            const custMargin =
+                              customer.revenueCents > 0
+                                ? (custProfit / customer.revenueCents) * 100
+                                : 0;
+                            const custProfitColor =
+                              custProfit >= 0
+                                ? "text-green-600 dark:text-green-400"
                                 : "text-red-600 dark:text-red-400";
+                            const custMarginColor =
+                              custMargin >= 15
+                                ? "text-green-600 dark:text-green-400"
+                                : custMargin >= 0
+                                  ? "text-yellow-600 dark:text-yellow-400"
+                                  : "text-red-600 dark:text-red-400";
 
                             rows.push(
                               <TableRow
@@ -657,23 +784,42 @@ export default function Profitability() {
                                 data-testid={`row-route-customer-${route.routeId}-${customer.contactId}`}
                               >
                                 <TableCell></TableCell>
-                                <TableCell className="pl-8 text-sm" data-testid={`text-route-customer-name-${customer.contactId}`}>
+                                <TableCell
+                                  className="pl-8 text-sm"
+                                  data-testid={`text-route-customer-name-${customer.contactId}`}
+                                >
                                   <ClientInfoPopover contactId={customer.contactId}>
-                                    <span>{customer.firstName} {customer.lastName}</span>
+                                    <span>
+                                      {customer.firstName} {customer.lastName}
+                                    </span>
                                   </ClientInfoPopover>
                                 </TableCell>
                                 <TableCell></TableCell>
                                 <TableCell></TableCell>
-                                <TableCell className="text-sm" data-testid={`text-route-customer-revenue-${customer.contactId}`}>
+                                <TableCell
+                                  className="text-sm"
+                                  data-testid={`text-route-customer-revenue-${customer.contactId}`}
+                                >
                                   {formatDollars(customer.revenueCents)}
                                 </TableCell>
-                                <TableCell className="text-sm" data-testid={`text-route-customer-cost-${customer.contactId}`}>
+                                <TableCell
+                                  className="text-sm"
+                                  data-testid={`text-route-customer-cost-${customer.contactId}`}
+                                >
                                   {formatDollars(customer.costCents)}
                                 </TableCell>
-                                <TableCell className="text-sm" data-testid={`text-route-customer-profit-${customer.contactId}`}>
-                                  <span className={custProfitColor}>{formatDollars(custProfit)}</span>
+                                <TableCell
+                                  className="text-sm"
+                                  data-testid={`text-route-customer-profit-${customer.contactId}`}
+                                >
+                                  <span className={custProfitColor}>
+                                    {formatDollars(custProfit)}
+                                  </span>
                                 </TableCell>
-                                <TableCell className="text-sm" data-testid={`text-route-customer-margin-${customer.contactId}`}>
+                                <TableCell
+                                  className="text-sm"
+                                  data-testid={`text-route-customer-margin-${customer.contactId}`}
+                                >
                                   <span className={custMarginColor}>{custMargin.toFixed(1)}%</span>
                                 </TableCell>
                               </TableRow>
@@ -693,200 +839,282 @@ export default function Profitability() {
       )}
 
       {viewMode === "customers" && (
-      <Card data-testid="card-profitability-table">
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-4">
-          <CardTitle className="text-base">Customer Profitability</CardTitle>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search customers..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 w-48"
-                data-testid="input-search-customers"
-              />
+        <Card data-testid="card-profitability-table">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-4">
+            <CardTitle className="text-base">Customer Profitability</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search customers..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 w-48"
+                  data-testid="input-search-customers"
+                />
+              </div>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+              >
+                <SelectTrigger className="w-40" data-testid="select-status-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="profitable">Profitable</SelectItem>
+                  <SelectItem value="marginal">Marginal</SelectItem>
+                  <SelectItem value="unprofitable">Unprofitable</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-              <SelectTrigger className="w-40" data-testid="select-status-filter">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="profitable">Profitable</SelectItem>
-                <SelectItem value="marginal">Marginal</SelectItem>
-                <SelectItem value="unprofitable">Unprofitable</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      Customer
-                      <SortButton field="name" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-center">Properties</TableHead>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      Revenue/mo
-                      <SortButton field="revenue" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
-                    </div>
-                  </TableHead>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      Cost/mo
-                      <SortButton field="cost" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
-                    </div>
-                  </TableHead>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      Profit/mo
-                      <SortButton field="profit" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
-                    </div>
-                  </TableHead>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      Margin
-                      <SortButton field="margin" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
-                    </div>
-                  </TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.length === 0 ? (
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                      {(customers ?? []).length === 0 ? "No active customers with jobs found." : "No customers match your filters."}
-                    </TableCell>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        Customer
+                        <SortButton
+                          field="name"
+                          currentField={sortField}
+                          currentDir={sortDir}
+                          onSort={handleSort}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-center">Properties</TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        Revenue/mo
+                        <SortButton
+                          field="revenue"
+                          currentField={sortField}
+                          currentDir={sortDir}
+                          onSort={handleSort}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        Cost/mo
+                        <SortButton
+                          field="cost"
+                          currentField={sortField}
+                          currentDir={sortDir}
+                          onSort={handleSort}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        Profit/mo
+                        <SortButton
+                          field="profit"
+                          currentField={sortField}
+                          currentDir={sortDir}
+                          onSort={handleSort}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        Margin
+                        <SortButton
+                          field="margin"
+                          currentField={sortField}
+                          currentDir={sortDir}
+                          onSort={handleSort}
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ) : (
-                  filtered.flatMap((customer) => {
-                    const rowBg = customer.status === "unprofitable"
-                      ? "bg-red-50/50 dark:bg-red-950/20"
-                      : customer.status === "marginal"
-                        ? "bg-yellow-50/50 dark:bg-yellow-950/20"
-                        : "";
-                    const aiResult = aiSuggestionsMap.get(customer.contactId);
-                    const isAnalyzingThis = currentlyAnalyzingId === customer.contactId;
-                    const rows = [
-                      <TableRow
-                        key={customer.contactId}
-                        className={`cursor-pointer hover-elevate ${rowBg}`}
-                        onClick={() => navigate(`/profitability/${customer.contactId}`)}
-                        data-testid={`row-customer-${customer.contactId}`}
-                      >
-                        <TableCell className="font-medium" data-testid={`text-customer-name-${customer.contactId}`}>
-                          <ClientInfoPopover contactId={customer.contactId}>
-                            <span>{customer.contactName}</span>
-                          </ClientInfoPopover>
-                        </TableCell>
-                        <TableCell className="text-center" data-testid={`text-property-count-${customer.contactId}`}>
-                          {customer.propertyCount}
-                        </TableCell>
-                        <TableCell data-testid={`text-revenue-${customer.contactId}`}>
-                          {formatDollars(customer.monthlyRevenueCents)}
-                        </TableCell>
-                        <TableCell data-testid={`text-cost-${customer.contactId}`}>
-                          {formatDollars(customer.monthlyCostCents)}
-                        </TableCell>
-                        <TableCell data-testid={`text-profit-${customer.contactId}`}>
-                          <span className={customer.monthlyProfitCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
-                            {formatDollars(customer.monthlyProfitCents)}
-                          </span>
-                        </TableCell>
-                        <TableCell data-testid={`text-margin-${customer.contactId}`}>
-                          <span className={customer.profitMarginPct >= 15 ? "text-green-600 dark:text-green-400" : customer.profitMarginPct >= 0 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}>
-                            {customer.profitMarginPct.toFixed(1)}%
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {statusBadge(customer.status)}
-                        </TableCell>
-                      </TableRow>,
-                    ];
-                    if (isAnalyzingThis) {
-                      rows.push(
-                        <TableRow key={`${customer.contactId}-ai-loading`} className={rowBg} data-testid={`row-ai-loading-${customer.contactId}`}>
-                          <TableCell colSpan={7} className="py-2 pl-8">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              Analyzing with AI...
-                            </div>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        {(customers ?? []).length === 0
+                          ? "No active customers with jobs found."
+                          : "No customers match your filters."}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filtered.flatMap((customer) => {
+                      const rowBg =
+                        customer.status === "unprofitable"
+                          ? "bg-red-50/50 dark:bg-red-950/20"
+                          : customer.status === "marginal"
+                            ? "bg-yellow-50/50 dark:bg-yellow-950/20"
+                            : "";
+                      const aiResult = aiSuggestionsMap.get(customer.contactId);
+                      const isAnalyzingThis = currentlyAnalyzingId === customer.contactId;
+                      const rows = [
+                        <TableRow
+                          key={customer.contactId}
+                          className={`cursor-pointer hover-elevate ${rowBg}`}
+                          onClick={() => navigate(`/profitability/${customer.contactId}`)}
+                          data-testid={`row-customer-${customer.contactId}`}
+                        >
+                          <TableCell
+                            className="font-medium"
+                            data-testid={`text-customer-name-${customer.contactId}`}
+                          >
+                            <ClientInfoPopover contactId={customer.contactId}>
+                              <span>{customer.contactName}</span>
+                            </ClientInfoPopover>
                           </TableCell>
-                        </TableRow>
-                      );
-                    } else if (aiResult === "error") {
-                      rows.push(
-                        <TableRow key={`${customer.contactId}-ai-error`} className={rowBg} data-testid={`row-ai-error-${customer.contactId}`}>
-                          <TableCell colSpan={7} className="py-2 pl-8">
-                            <p className="text-xs text-muted-foreground italic">AI analysis unavailable for this customer.</p>
+                          <TableCell
+                            className="text-center"
+                            data-testid={`text-property-count-${customer.contactId}`}
+                          >
+                            {customer.propertyCount}
                           </TableCell>
-                        </TableRow>
-                      );
-                    } else if (Array.isArray(aiResult)) {
-                      const topSuggestions = aiResult.slice(0, 2);
-                      if (topSuggestions.length === 0) {
+                          <TableCell data-testid={`text-revenue-${customer.contactId}`}>
+                            {formatDollars(customer.monthlyRevenueCents)}
+                          </TableCell>
+                          <TableCell data-testid={`text-cost-${customer.contactId}`}>
+                            {formatDollars(customer.monthlyCostCents)}
+                          </TableCell>
+                          <TableCell data-testid={`text-profit-${customer.contactId}`}>
+                            <span
+                              className={
+                                customer.monthlyProfitCents >= 0
+                                  ? "text-green-600 dark:text-green-400"
+                                  : "text-red-600 dark:text-red-400"
+                              }
+                            >
+                              {formatDollars(customer.monthlyProfitCents)}
+                            </span>
+                          </TableCell>
+                          <TableCell data-testid={`text-margin-${customer.contactId}`}>
+                            <span
+                              className={
+                                customer.profitMarginPct >= 15
+                                  ? "text-green-600 dark:text-green-400"
+                                  : customer.profitMarginPct >= 0
+                                    ? "text-yellow-600 dark:text-yellow-400"
+                                    : "text-red-600 dark:text-red-400"
+                              }
+                            >
+                              {customer.profitMarginPct.toFixed(1)}%
+                            </span>
+                          </TableCell>
+                          <TableCell>{statusBadge(customer.status)}</TableCell>
+                        </TableRow>,
+                      ];
+                      if (isAnalyzingThis) {
                         rows.push(
-                          <TableRow key={`${customer.contactId}-ai-none`} className={rowBg} data-testid={`row-ai-none-${customer.contactId}`}>
+                          <TableRow
+                            key={`${customer.contactId}-ai-loading`}
+                            className={rowBg}
+                            data-testid={`row-ai-loading-${customer.contactId}`}
+                          >
                             <TableCell colSpan={7} className="py-2 pl-8">
-                              <p className="text-xs text-muted-foreground italic">No specific suggestions found for this customer.</p>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      } else {
-                        rows.push(
-                          <TableRow key={`${customer.contactId}-ai-suggestions`} className={rowBg} data-testid={`row-ai-suggestions-${customer.contactId}`}>
-                            <TableCell colSpan={7} className="py-2 pl-8 pr-4">
-                              <div className="flex flex-wrap gap-3">
-                                {topSuggestions.map((s, idx) => (
-                                  <Link
-                                    key={idx}
-                                    href={`/contacts/${customer.contactId}`}
-                                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                                    data-testid={`link-ai-detail-${customer.contactId}-${idx}`}
-                                  >
-                                    <div
-                                      className="flex items-start gap-2 rounded-md border border-border bg-background/60 hover:bg-muted/60 transition-colors px-3 py-2 max-w-sm cursor-pointer"
-                                      data-testid={`card-ai-suggestion-${customer.contactId}-${idx}`}
-                                    >
-                                      <Zap className="h-3.5 w-3.5 mt-0.5 shrink-0 text-yellow-500" />
-                                      <div className="space-y-0.5">
-                                        <p className="text-xs font-semibold leading-tight" data-testid={`text-ai-suggestion-title-${customer.contactId}-${idx}`}>{s.title}</p>
-                                        <p className="text-xs text-muted-foreground leading-snug" data-testid={`text-ai-suggestion-explanation-${customer.contactId}-${idx}`}>{s.explanation}</p>
-                                        {s.impactCents > 0 && (
-                                          <p className="text-xs text-green-600 dark:text-green-400 font-medium" data-testid={`text-ai-suggestion-impact-${customer.contactId}-${idx}`}>
-                                            +{formatDollars(s.impactCents)}/mo potential
-                                          </p>
-                                        )}
-                                        <div className="flex items-center gap-1 pt-0.5 text-xs text-muted-foreground">
-                                          <ExternalLink className="h-2.5 w-2.5" />
-                                          View contact
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </Link>
-                                ))}
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Analyzing with AI...
                               </div>
                             </TableCell>
                           </TableRow>
                         );
+                      } else if (aiResult === "error") {
+                        rows.push(
+                          <TableRow
+                            key={`${customer.contactId}-ai-error`}
+                            className={rowBg}
+                            data-testid={`row-ai-error-${customer.contactId}`}
+                          >
+                            <TableCell colSpan={7} className="py-2 pl-8">
+                              <p className="text-xs text-muted-foreground italic">
+                                AI analysis unavailable for this customer.
+                              </p>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      } else if (Array.isArray(aiResult)) {
+                        const topSuggestions = aiResult.slice(0, 2);
+                        if (topSuggestions.length === 0) {
+                          rows.push(
+                            <TableRow
+                              key={`${customer.contactId}-ai-none`}
+                              className={rowBg}
+                              data-testid={`row-ai-none-${customer.contactId}`}
+                            >
+                              <TableCell colSpan={7} className="py-2 pl-8">
+                                <p className="text-xs text-muted-foreground italic">
+                                  No specific suggestions found for this customer.
+                                </p>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        } else {
+                          rows.push(
+                            <TableRow
+                              key={`${customer.contactId}-ai-suggestions`}
+                              className={rowBg}
+                              data-testid={`row-ai-suggestions-${customer.contactId}`}
+                            >
+                              <TableCell colSpan={7} className="py-2 pl-8 pr-4">
+                                <div className="flex flex-wrap gap-3">
+                                  {topSuggestions.map((s, idx) => (
+                                    <Link
+                                      key={idx}
+                                      href={`/contacts/${customer.contactId}`}
+                                      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                      data-testid={`link-ai-detail-${customer.contactId}-${idx}`}
+                                    >
+                                      <div
+                                        className="flex items-start gap-2 rounded-md border border-border bg-background/60 hover:bg-muted/60 transition-colors px-3 py-2 max-w-sm cursor-pointer"
+                                        data-testid={`card-ai-suggestion-${customer.contactId}-${idx}`}
+                                      >
+                                        <Zap className="h-3.5 w-3.5 mt-0.5 shrink-0 text-yellow-500" />
+                                        <div className="space-y-0.5">
+                                          <p
+                                            className="text-xs font-semibold leading-tight"
+                                            data-testid={`text-ai-suggestion-title-${customer.contactId}-${idx}`}
+                                          >
+                                            {s.title}
+                                          </p>
+                                          <p
+                                            className="text-xs text-muted-foreground leading-snug"
+                                            data-testid={`text-ai-suggestion-explanation-${customer.contactId}-${idx}`}
+                                          >
+                                            {s.explanation}
+                                          </p>
+                                          {s.impactCents > 0 && (
+                                            <p
+                                              className="text-xs text-green-600 dark:text-green-400 font-medium"
+                                              data-testid={`text-ai-suggestion-impact-${customer.contactId}-${idx}`}
+                                            >
+                                              +{formatDollars(s.impactCents)}/mo potential
+                                            </p>
+                                          )}
+                                          <div className="flex items-center gap-1 pt-0.5 text-xs text-muted-foreground">
+                                            <ExternalLink className="h-2.5 w-2.5" />
+                                            View contact
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </Link>
+                                  ))}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        }
                       }
-                    }
-                    return rows;
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                      return rows;
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {viewMode === "customers" && recommendations && recommendations.length > 0 && (
@@ -912,24 +1140,44 @@ export default function Profitability() {
                 </TableHeader>
                 <TableBody>
                   {recommendations.map((rec, idx) => (
-                    <TableRow key={`${rec.contactId}-${rec.propertyId}-${idx}`} data-testid={`row-recommendation-${idx}`}>
+                    <TableRow
+                      key={`${rec.contactId}-${rec.propertyId}-${idx}`}
+                      data-testid={`row-recommendation-${idx}`}
+                    >
                       <TableCell className="font-medium" data-testid={`text-rec-customer-${idx}`}>
                         <ClientInfoPopover contactId={rec.contactId}>
                           <span>{rec.contactName}</span>
                         </ClientInfoPopover>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-48 truncate" data-testid={`text-rec-address-${idx}`}>{rec.propertyAddress}</TableCell>
-                      <TableCell data-testid={`text-rec-current-${idx}`}>{formatDollars(rec.currentPriceCents)}</TableCell>
+                      <TableCell
+                        className="text-sm text-muted-foreground max-w-48 truncate"
+                        data-testid={`text-rec-address-${idx}`}
+                      >
+                        {rec.propertyAddress}
+                      </TableCell>
+                      <TableCell data-testid={`text-rec-current-${idx}`}>
+                        {formatDollars(rec.currentPriceCents)}
+                      </TableCell>
                       <TableCell data-testid={`text-rec-recommended-${idx}`}>
-                        <span className="font-medium text-green-600 dark:text-green-400">{formatDollars(rec.recommendedPriceCents)}</span>
+                        <span className="font-medium text-green-600 dark:text-green-400">
+                          {formatDollars(rec.recommendedPriceCents)}
+                        </span>
                       </TableCell>
                       <TableCell data-testid={`text-rec-current-margin-${idx}`}>
-                        <span className={rec.currentMarginPct < 0 ? "text-red-600 dark:text-red-400" : "text-yellow-600 dark:text-yellow-400"}>
+                        <span
+                          className={
+                            rec.currentMarginPct < 0
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-yellow-600 dark:text-yellow-400"
+                          }
+                        >
                           {rec.currentMarginPct.toFixed(1)}%
                         </span>
                       </TableCell>
                       <TableCell data-testid={`text-rec-projected-margin-${idx}`}>
-                        <span className="text-green-600 dark:text-green-400">{rec.projectedMarginPct.toFixed(1)}%</span>
+                        <span className="text-green-600 dark:text-green-400">
+                          {rec.projectedMarginPct.toFixed(1)}%
+                        </span>
                       </TableCell>
                     </TableRow>
                   ))}

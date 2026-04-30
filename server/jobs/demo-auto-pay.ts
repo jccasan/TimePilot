@@ -15,7 +15,7 @@ export async function runDemoAutoPay() {
     if (!demoRow.rows || demoRow.rows.length === 0) return;
 
     const companyId = demoRow.rows[0].company_id as string;
-    const autoPayEnabled = !!(demoRow.rows[0].demo_auto_pay_invoices);
+    const autoPayEnabled = !!demoRow.rows[0].demo_auto_pay_invoices;
     if (!autoPayEnabled) return;
 
     // Fetch all outstanding invoices (sent or pending, not yet paid)

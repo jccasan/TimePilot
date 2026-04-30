@@ -51,7 +51,7 @@ export default function InvoicePayPage() {
   }, [id]);
 
   const invoiceTotal = invoice ? parseFloat(invoice.total) : 0;
-  const tipValue = customTip ? parseFloat(customTip) || 0 : selectedTip ?? 0;
+  const tipValue = customTip ? parseFloat(customTip) || 0 : (selectedTip ?? 0);
   const chargeTotal = invoiceTotal + tipValue;
   const canPay = invoice?.stripeEnabled && chargeTotal >= 0.5;
 
@@ -97,17 +97,24 @@ export default function InvoicePayPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="bg-white rounded-2xl shadow-md p-8 max-w-sm w-full text-center space-y-4">
           {invoice.logoUrl && (
-            <img src={invoice.logoUrl} alt={invoice.companyName} className="h-16 mx-auto object-contain" />
+            <img
+              src={invoice.logoUrl}
+              alt={invoice.companyName}
+              className="h-16 mx-auto object-contain"
+            />
           )}
           <div className="flex justify-center">
             <CheckCircle2 className="h-16 w-16 text-green-500" />
           </div>
           <h1 className="text-xl font-bold text-green-700">Payment Received!</h1>
           <p className="text-muted-foreground text-sm">
-            Thank you{invoice.contactName ? `, ${invoice.contactName.split(" ")[0]}` : ""}! Your payment for invoice{" "}
-            <span className="font-medium">{invoice.invoiceNumber}</span> has been received.
+            Thank you{invoice.contactName ? `, ${invoice.contactName.split(" ")[0]}` : ""}! Your
+            payment for invoice <span className="font-medium">{invoice.invoiceNumber}</span> has
+            been received.
           </p>
-          <p className="text-xs text-muted-foreground">{invoice.companyName} appreciates your business.</p>
+          <p className="text-xs text-muted-foreground">
+            {invoice.companyName} appreciates your business.
+          </p>
         </div>
       </div>
     );
@@ -118,7 +125,11 @@ export default function InvoicePayPage() {
       <div className="bg-white rounded-2xl shadow-md p-6 max-w-sm w-full space-y-5">
         {invoice.logoUrl && (
           <div className="text-center">
-            <img src={invoice.logoUrl} alt={invoice.companyName} className="h-14 mx-auto object-contain" />
+            <img
+              src={invoice.logoUrl}
+              alt={invoice.companyName}
+              className="h-14 mx-auto object-contain"
+            />
           </div>
         )}
         <div className="text-center">
@@ -151,7 +162,9 @@ export default function InvoicePayPage() {
               <Label className="text-sm font-medium">
                 {invoiceTotal === 0 ? "Leave a Tip" : "Add a Tip (optional)"}
               </Label>
-              <p className="text-xs text-muted-foreground">Tips are appreciated but never expected.</p>
+              <p className="text-xs text-muted-foreground">
+                Tips are appreciated but never expected.
+              </p>
               <div className="grid grid-cols-4 gap-2">
                 {TIP_OPTIONS.map((amt) => (
                   <Button
@@ -160,7 +173,10 @@ export default function InvoicePayPage() {
                     variant={selectedTip === amt && !customTip ? "default" : "outline"}
                     size="sm"
                     className="w-full"
-                    onClick={() => { setSelectedTip(amt); setCustomTip(""); }}
+                    onClick={() => {
+                      setSelectedTip(amt);
+                      setCustomTip("");
+                    }}
                     data-testid={`button-tip-${amt}`}
                   >
                     ${amt}
@@ -168,7 +184,12 @@ export default function InvoicePayPage() {
                 ))}
               </div>
               <div className="flex items-center gap-2 mt-1">
-                <Label htmlFor="custom-tip" className="text-xs text-muted-foreground whitespace-nowrap">Custom:</Label>
+                <Label
+                  htmlFor="custom-tip"
+                  className="text-xs text-muted-foreground whitespace-nowrap"
+                >
+                  Custom:
+                </Label>
                 <div className="relative flex-1">
                   <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input
@@ -179,7 +200,10 @@ export default function InvoicePayPage() {
                     placeholder="0.00"
                     className="pl-7"
                     value={customTip}
-                    onChange={(e) => { setCustomTip(e.target.value); setSelectedTip(null); }}
+                    onChange={(e) => {
+                      setCustomTip(e.target.value);
+                      setSelectedTip(null);
+                    }}
                     data-testid="input-custom-tip"
                   />
                 </div>
@@ -208,7 +232,10 @@ export default function InvoicePayPage() {
               data-testid="button-pay"
             >
               {paying ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processing...</>
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processing...
+                </>
               ) : (
                 `Pay $${chargeTotal.toFixed(2)}`
               )}

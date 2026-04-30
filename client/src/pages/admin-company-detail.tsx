@@ -6,9 +6,49 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X, MessageSquare, Phone, Activity, Download, Clock, Filter, Database, FlaskConical, XCircle, CreditCard } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  ArrowLeft,
+  Building2,
+  Users,
+  Contact2,
+  FileText,
+  StickyNote,
+  Trash2,
+  KeyRound,
+  Copy,
+  Eye,
+  EyeOff,
+  Mail,
+  Send,
+  Pencil,
+  Check,
+  X,
+  MessageSquare,
+  Phone,
+  Activity,
+  Download,
+  Clock,
+  Filter,
+  Database,
+  FlaskConical,
+  XCircle,
+  CreditCard,
+} from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
@@ -68,17 +108,33 @@ export default function AdminCompanyDetail() {
   const { toast } = useToast();
   const [noteText, setNoteText] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
-  const [resetTarget, setResetTarget] = useState<{ userId: string; email: string; name: string } | null>(null);
+  const [resetTarget, setResetTarget] = useState<{
+    userId: string;
+    email: string;
+    name: string;
+  } | null>(null);
   const [customPassword, setCustomPassword] = useState("");
   const [useCustomPassword, setUseCustomPassword] = useState(false);
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
   const [editingCompany, setEditingCompany] = useState(false);
-  const [companyForm, setCompanyForm] = useState({ name: "", email: "", phone: "", address: "", routeCredits: "0" });
+  const [companyForm, setCompanyForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    routeCredits: "0",
+  });
 
   const [editUserOpen, setEditUserOpen] = useState(false);
-  const [editUserTarget, setEditUserTarget] = useState<{ userId: string; firstName: string; lastName: string; email: string; role: string } | null>(null);
+  const [editUserTarget, setEditUserTarget] = useState<{
+    userId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: string;
+  } | null>(null);
 
   const [auditPage, setAuditPage] = useState(0);
   const [auditFilter, setAuditFilter] = useState<string>("");
@@ -120,9 +176,14 @@ export default function AdminCompanyDetail() {
     enabled: !!id,
   });
 
-  const { data: auditData, isLoading: auditLoading } = useQuery<{ logs: AuditLogEntry[]; total: number }>({
+  const { data: auditData, isLoading: auditLoading } = useQuery<{
+    logs: AuditLogEntry[];
+    total: number;
+  }>({
     queryKey: ["/api/admin/companies", id, "audit-logs", auditPage, auditFilter],
-    queryFn: adminFetchFn(`/api/admin/companies/${id}/audit-logs?limit=${auditPageSize}&offset=${auditPage * auditPageSize}${auditFilter ? `&entityType=${auditFilter}` : ""}`),
+    queryFn: adminFetchFn(
+      `/api/admin/companies/${id}/audit-logs?limit=${auditPageSize}&offset=${auditPage * auditPageSize}${auditFilter ? `&entityType=${auditFilter}` : ""}`
+    ),
     enabled: activeTab === "audit",
   });
 
@@ -168,9 +229,13 @@ export default function AdminCompanyDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       setCancelOpen(false);
       setCancelReason("");
-      toast({ title: "Account cancelled", description: "Subscription has been cancelled and Stripe notified." });
+      toast({
+        title: "Account cancelled",
+        description: "Subscription has been cancelled and Stripe notified.",
+      });
     },
-    onError: (err: any) => toast({ title: "Cancel failed", description: err.message, variant: "destructive" }),
+    onError: (err: any) =>
+      toast({ title: "Cancel failed", description: err.message, variant: "destructive" }),
   });
 
   const reactivateMutation = useMutation({
@@ -187,9 +252,13 @@ export default function AdminCompanyDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       setReactivateOpen(false);
-      toast({ title: "Account reactivated", description: "The scheduled cancellation has been reversed." });
+      toast({
+        title: "Account reactivated",
+        description: "The scheduled cancellation has been reversed.",
+      });
     },
-    onError: (err: any) => toast({ title: "Reactivation failed", description: err.message, variant: "destructive" }),
+    onError: (err: any) =>
+      toast({ title: "Reactivation failed", description: err.message, variant: "destructive" }),
   });
 
   const addNoteMutation = useMutation({
@@ -214,9 +283,13 @@ export default function AdminCompanyDetail() {
 
   const resetPasswordMutation = useMutation({
     mutationFn: async ({ userId, newPassword }: { userId: string; newPassword?: string }) => {
-      const res = await adminRequest("POST", `/api/admin/companies/${id}/users/${userId}/reset-password`, {
-        newPassword: newPassword || undefined,
-      });
+      const res = await adminRequest(
+        "POST",
+        `/api/admin/companies/${id}/users/${userId}/reset-password`,
+        {
+          newPassword: newPassword || undefined,
+        }
+      );
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to reset password");
@@ -225,16 +298,26 @@ export default function AdminCompanyDetail() {
     },
     onSuccess: (data) => {
       setGeneratedPassword(data.tempPassword);
-      toast({ title: "Password updated", description: `New password set for ${data.email}. They will be prompted to change it on next login.` });
+      toast({
+        title: "Password updated",
+        description: `New password set for ${data.email}. They will be prompted to change it on next login.`,
+      });
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to reset password", description: error.message, variant: "destructive" });
+      toast({
+        title: "Failed to reset password",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
   const sendResetEmailMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const res = await adminRequest("POST", `/api/admin/companies/${id}/users/${userId}/send-reset-email`);
+      const res = await adminRequest(
+        "POST",
+        `/api/admin/companies/${id}/users/${userId}/send-reset-email`
+      );
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to send reset email");
@@ -242,7 +325,10 @@ export default function AdminCompanyDetail() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ title: "Password reset email sent", description: `Reset link sent to ${data.email}` });
+      toast({
+        title: "Password reset email sent",
+        description: `Reset link sent to ${data.email}`,
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Failed to send email", description: error.message, variant: "destructive" });
@@ -251,7 +337,10 @@ export default function AdminCompanyDetail() {
 
   const sendCredentialsMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const res = await adminRequest("POST", `/api/admin/companies/${id}/users/${userId}/send-credentials`);
+      const res = await adminRequest(
+        "POST",
+        `/api/admin/companies/${id}/users/${userId}/send-credentials`
+      );
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to send credentials");
@@ -259,10 +348,17 @@ export default function AdminCompanyDetail() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ title: "Credentials sent", description: `Login credentials emailed to ${data.email}` });
+      toast({
+        title: "Credentials sent",
+        description: `Login credentials emailed to ${data.email}`,
+      });
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to send credentials", description: error.message, variant: "destructive" });
+      toast({
+        title: "Failed to send credentials",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -282,13 +378,27 @@ export default function AdminCompanyDetail() {
       toast({ title: "Company updated" });
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to update company", description: error.message, variant: "destructive" });
+      toast({
+        title: "Failed to update company",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ userId, updates }: { userId: string; updates: Record<string, string> }) => {
-      const res = await adminRequest("PATCH", `/api/admin/companies/${id}/users/${userId}`, updates);
+    mutationFn: async ({
+      userId,
+      updates,
+    }: {
+      userId: string;
+      updates: Record<string, string>;
+    }) => {
+      const res = await adminRequest(
+        "PATCH",
+        `/api/admin/companies/${id}/users/${userId}`,
+        updates
+      );
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to update user");
@@ -371,8 +481,10 @@ export default function AdminCompanyDetail() {
     if (!editUserTarget) return;
     const original = company?.users?.find((u: any) => u.userId === editUserTarget.userId);
     const updates: Record<string, string> = {};
-    if (editUserTarget.firstName !== (original?.firstName || "")) updates.firstName = editUserTarget.firstName;
-    if (editUserTarget.lastName !== (original?.lastName || "")) updates.lastName = editUserTarget.lastName;
+    if (editUserTarget.firstName !== (original?.firstName || ""))
+      updates.firstName = editUserTarget.firstName;
+    if (editUserTarget.lastName !== (original?.lastName || ""))
+      updates.lastName = editUserTarget.lastName;
     if (editUserTarget.email !== (original?.email || "")) updates.email = editUserTarget.email;
     if (editUserTarget.role !== (original?.role || "")) updates.role = editUserTarget.role;
     if (Object.keys(updates).length === 0) {
@@ -423,7 +535,9 @@ export default function AdminCompanyDetail() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold" data-testid="text-company-name">{company.name}</h1>
+            <h1 className="text-2xl font-bold" data-testid="text-company-name">
+              {company.name}
+            </h1>
             <p className="text-sm text-muted-foreground">{company.id}</p>
           </div>
         </div>
@@ -443,7 +557,10 @@ export default function AdminCompanyDetail() {
         </button>
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "audit" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          onClick={() => { setActiveTab("audit"); setAuditPage(0); }}
+          onClick={() => {
+            setActiveTab("audit");
+            setAuditPage(0);
+          }}
           data-testid="tab-audit"
         >
           Audit Log
@@ -460,7 +577,9 @@ export default function AdminCompanyDetail() {
                     <MessageSquare className="h-3.5 w-3.5" />
                     <span className="text-xs font-medium">SMS Segments</span>
                   </div>
-                  <p className="text-2xl font-bold" data-testid="text-usage-sms">{usage.smsSegments}</p>
+                  <p className="text-2xl font-bold" data-testid="text-usage-sms">
+                    {usage.smsSegments}
+                  </p>
                   <p className="text-xs text-muted-foreground">This month</p>
                 </CardContent>
               </Card>
@@ -470,7 +589,9 @@ export default function AdminCompanyDetail() {
                     <Phone className="h-3.5 w-3.5" />
                     <span className="text-xs font-medium">Voice Minutes</span>
                   </div>
-                  <p className="text-2xl font-bold" data-testid="text-usage-voice">{usage.voiceMinutes}</p>
+                  <p className="text-2xl font-bold" data-testid="text-usage-voice">
+                    {usage.voiceMinutes}
+                  </p>
                   <p className="text-xs text-muted-foreground">This month</p>
                 </CardContent>
               </Card>
@@ -482,10 +603,19 @@ export default function AdminCompanyDetail() {
                   </div>
                   <p className="text-2xl font-bold" data-testid="text-usage-users">
                     {usage.activeUsers}
-                    <span className="text-sm font-normal text-muted-foreground"> / {usage.maxUsers}</span>
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {" "}
+                      / {usage.maxUsers}
+                    </span>
                   </p>
                   {usage.activeUsers >= Math.ceil(usage.maxUsers * 0.8) && (
-                    <Badge variant="destructive" className="text-xs mt-1" data-testid="badge-user-limit-warning">Near limit</Badge>
+                    <Badge
+                      variant="destructive"
+                      className="text-xs mt-1"
+                      data-testid="badge-user-limit-warning"
+                    >
+                      Near limit
+                    </Badge>
                   )}
                 </CardContent>
               </Card>
@@ -495,7 +625,9 @@ export default function AdminCompanyDetail() {
                     <Activity className="h-3.5 w-3.5" />
                     <span className="text-xs font-medium">API Calls</span>
                   </div>
-                  <p className="text-2xl font-bold" data-testid="text-usage-api-calls">{usage.apiCalls}</p>
+                  <p className="text-2xl font-bold" data-testid="text-usage-api-calls">
+                    {usage.apiCalls}
+                  </p>
                   <p className="text-xs text-muted-foreground">This month</p>
                 </CardContent>
               </Card>
@@ -508,7 +640,9 @@ export default function AdminCompanyDetail() {
                   <p className="text-lg font-bold" data-testid="text-usage-storage">
                     {usage.totalContacts} contacts / {usage.totalVisits} visits
                   </p>
-                  <p className="text-xs text-muted-foreground">{usage.messagesSent} messages this month</p>
+                  <p className="text-xs text-muted-foreground">
+                    {usage.messagesSent} messages this month
+                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -521,8 +655,13 @@ export default function AdminCompanyDetail() {
                   <span className="flex items-center gap-2">
                     <Phone className="h-4 w-4" /> Voice Call Log
                   </span>
-                  <span className="text-xs font-normal text-muted-foreground" data-testid="text-voice-summary">
-                    {voiceCalls.length} call{voiceCalls.length !== 1 ? "s" : ""} / {voiceCalls.reduce((sum: number, c: any) => sum + (c.durationMinutes || 0), 0)} min total
+                  <span
+                    className="text-xs font-normal text-muted-foreground"
+                    data-testid="text-voice-summary"
+                  >
+                    {voiceCalls.length} call{voiceCalls.length !== 1 ? "s" : ""} /{" "}
+                    {voiceCalls.reduce((sum: number, c: any) => sum + (c.durationMinutes || 0), 0)}{" "}
+                    min total
                   </span>
                 </CardTitle>
               </CardHeader>
@@ -540,18 +679,32 @@ export default function AdminCompanyDetail() {
                     </thead>
                     <tbody>
                       {voiceCalls.map((call: any) => (
-                        <tr key={call.id} className="border-b last:border-0" data-testid={`row-voice-call-${call.id}`}>
-                          <td className="py-2 pr-3 whitespace-nowrap">{new Date(call.createdAt).toLocaleDateString()}</td>
-                          <td className="py-2 pr-3 whitespace-nowrap">{call.callerPhone || "Unknown"}</td>
+                        <tr
+                          key={call.id}
+                          className="border-b last:border-0"
+                          data-testid={`row-voice-call-${call.id}`}
+                        >
+                          <td className="py-2 pr-3 whitespace-nowrap">
+                            {new Date(call.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="py-2 pr-3 whitespace-nowrap">
+                            {call.callerPhone || "Unknown"}
+                          </td>
                           <td className="py-2 pr-3 whitespace-nowrap">
                             {call.durationMinutes} min ({call.durationSeconds}s)
                           </td>
                           <td className="py-2 pr-3">
-                            <Badge variant={call.outcome === "successful" ? "default" : "secondary"} data-testid={`badge-outcome-${call.id}`}>
+                            <Badge
+                              variant={call.outcome === "successful" ? "default" : "secondary"}
+                              data-testid={`badge-outcome-${call.id}`}
+                            >
                               {call.outcome || "unknown"}
                             </Badge>
                           </td>
-                          <td className="py-2 text-xs text-muted-foreground max-w-[200px] truncate" title={call.summary || ""}>
+                          <td
+                            className="py-2 text-xs text-muted-foreground max-w-[200px] truncate"
+                            title={call.summary || ""}
+                          >
                             {call.summary || "--"}
                           </td>
                         </tr>
@@ -571,15 +724,34 @@ export default function AdminCompanyDetail() {
                     <Building2 className="h-4 w-4" /> Account Info
                   </span>
                   {!editingCompany ? (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={startEditingCompany} data-testid="button-edit-company">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={startEditingCompany}
+                      data-testid="button-edit-company"
+                    >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                   ) : (
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSaveCompany} disabled={updateCompanyMutation.isPending} data-testid="button-save-company">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={handleSaveCompany}
+                        disabled={updateCompanyMutation.isPending}
+                        data-testid="button-save-company"
+                      >
                         <Check className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingCompany(false)} data-testid="button-cancel-edit-company">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setEditingCompany(false)}
+                        data-testid="button-cancel-edit-company"
+                      >
                         <X className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -591,19 +763,37 @@ export default function AdminCompanyDetail() {
                   <>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Company Name</Label>
-                      <Input value={companyForm.name} onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })} data-testid="input-company-name" />
+                      <Input
+                        value={companyForm.name}
+                        onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
+                        data-testid="input-company-name"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Email</Label>
-                      <Input value={companyForm.email} onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })} data-testid="input-company-email" />
+                      <Input
+                        value={companyForm.email}
+                        onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })}
+                        data-testid="input-company-email"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Phone</Label>
-                      <Input value={companyForm.phone} onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })} data-testid="input-company-phone" />
+                      <Input
+                        value={companyForm.phone}
+                        onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })}
+                        data-testid="input-company-phone"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Address</Label>
-                      <Input value={companyForm.address} onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })} data-testid="input-company-address" />
+                      <Input
+                        value={companyForm.address}
+                        onChange={(e) =>
+                          setCompanyForm({ ...companyForm, address: e.target.value })
+                        }
+                        data-testid="input-company-address"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Route Credits</Label>
@@ -611,7 +801,9 @@ export default function AdminCompanyDetail() {
                         type="number"
                         min="0"
                         value={companyForm.routeCredits}
-                        onChange={(e) => setCompanyForm({ ...companyForm, routeCredits: e.target.value })}
+                        onChange={(e) =>
+                          setCompanyForm({ ...companyForm, routeCredits: e.target.value })
+                        }
                         data-testid="input-route-credits"
                       />
                     </div>
@@ -632,7 +824,8 @@ export default function AdminCompanyDetail() {
                           <SelectContent>
                             {Object.entries(TIER_CONFIG).map(([key, config]) => (
                               <SelectItem key={key} value={key}>
-                                {config.name} {config.price > 0 ? `($${config.price}/mo)` : "(Free)"}
+                                {config.name}{" "}
+                                {config.price > 0 ? `($${config.price}/mo)` : "(Free)"}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -641,12 +834,17 @@ export default function AdminCompanyDetail() {
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm text-muted-foreground">Status</span>
-                      <Badge variant="outline" data-testid="badge-subscription-status">{company.subscriptionStatus}</Badge>
+                      <Badge variant="outline" data-testid="badge-subscription-status">
+                        {company.subscriptionStatus}
+                      </Badge>
                     </div>
                     {(company as any).cancelAtPeriodEnd && (company as any).cancelAt && (
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-muted-foreground">Cancels On</span>
-                        <Badge className="bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700" data-testid="badge-cancel-at-period-end">
+                        <Badge
+                          className="bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700"
+                          data-testid="badge-cancel-at-period-end"
+                        >
                           {new Date((company as any).cancelAt).toLocaleDateString()}
                         </Badge>
                       </div>
@@ -662,7 +860,9 @@ export default function AdminCompanyDetail() {
                     {company.customMaxUsers != null && (
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-muted-foreground">Seat Limit</span>
-                        <Badge variant="secondary" data-testid="badge-custom-max-users">Custom: {company.customMaxUsers} users</Badge>
+                        <Badge variant="secondary" data-testid="badge-custom-max-users">
+                          Custom: {company.customMaxUsers} users
+                        </Badge>
                       </div>
                     )}
                     <div className="pt-1 space-y-1.5">
@@ -674,11 +874,13 @@ export default function AdminCompanyDetail() {
                         onClick={() => {
                           setTrialForm({
                             tier: company.subscriptionTier || "tier_10_plus",
-                            subscriptionStatus: company.subscriptionStatus === "trialing" ? "trialing" : "trialing",
+                            subscriptionStatus:
+                              company.subscriptionStatus === "trialing" ? "trialing" : "trialing",
                             trialEndsAt: company.trialEndsAt
                               ? new Date(company.trialEndsAt).toISOString().split("T")[0]
                               : defaultTrialDate(),
-                            customMaxUsers: company.customMaxUsers != null ? String(company.customMaxUsers) : "3",
+                            customMaxUsers:
+                              company.customMaxUsers != null ? String(company.customMaxUsers) : "3",
                           });
                           setCustomTrialOpen(true);
                         }}
@@ -686,8 +888,8 @@ export default function AdminCompanyDetail() {
                         <FlaskConical className="h-3.5 w-3.5" />
                         Custom Trial Plan
                       </Button>
-                      {company.subscriptionStatus !== "cancelled" && (
-                        (company as any).cancelAtPeriodEnd ? (
+                      {company.subscriptionStatus !== "cancelled" &&
+                        ((company as any).cancelAtPeriodEnd ? (
                           <div className="space-y-1.5">
                             <Button
                               variant="outline"
@@ -715,17 +917,21 @@ export default function AdminCompanyDetail() {
                             size="sm"
                             className="w-full gap-1.5 text-xs text-destructive hover:text-destructive border-destructive/30 hover:border-destructive/60"
                             data-testid="button-cancel-account"
-                            onClick={() => { setCancelReason(""); setCancelOpen(true); }}
+                            onClick={() => {
+                              setCancelReason("");
+                              setCancelOpen(true);
+                            }}
                           >
                             <XCircle className="h-3.5 w-3.5" />
                             Cancel Account
                           </Button>
-                        )
-                      )}
+                        ))}
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm text-muted-foreground">Created</span>
-                      <span className="text-sm">{new Date(company.createdAt).toLocaleDateString()}</span>
+                      <span className="text-sm">
+                        {new Date(company.createdAt).toLocaleDateString()}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm text-muted-foreground">Phone</span>
@@ -745,7 +951,9 @@ export default function AdminCompanyDetail() {
                       <span className="text-sm text-muted-foreground flex items-center gap-1">
                         <CreditCard className="h-3.5 w-3.5" /> Route Credits
                       </span>
-                      <Badge variant="secondary" data-testid="badge-route-credits">{company.routeCredits ?? 0}</Badge>
+                      <Badge variant="secondary" data-testid="badge-route-credits">
+                        {company.routeCredits ?? 0}
+                      </Badge>
                     </div>
                   </>
                 )}
@@ -762,13 +970,30 @@ export default function AdminCompanyDetail() {
                 {company.users?.length > 0 ? (
                   <div className="space-y-2">
                     {company.users.map((u: any) => (
-                      <div key={u.id} className="flex items-center justify-between gap-2 py-1.5 border-b last:border-b-0" data-testid={`row-user-${u.userId}`}>
+                      <div
+                        key={u.id}
+                        className="flex items-center justify-between gap-2 py-1.5 border-b last:border-b-0"
+                        data-testid={`row-user-${u.userId}`}
+                      >
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium truncate" data-testid={`text-user-name-${u.userId}`}>
-                            {u.firstName || u.lastName ? `${u.firstName} ${u.lastName}`.trim() : "Unnamed"}
+                          <p
+                            className="text-sm font-medium truncate"
+                            data-testid={`text-user-name-${u.userId}`}
+                          >
+                            {u.firstName || u.lastName
+                              ? `${u.firstName} ${u.lastName}`.trim()
+                              : "Unnamed"}
                           </p>
-                          <p className="text-xs text-muted-foreground truncate" data-testid={`text-user-email-${u.userId}`}>{u.email}</p>
-                          <p className="text-xs text-muted-foreground" data-testid={`text-user-last-login-${u.userId}`}>
+                          <p
+                            className="text-xs text-muted-foreground truncate"
+                            data-testid={`text-user-email-${u.userId}`}
+                          >
+                            {u.email}
+                          </p>
+                          <p
+                            className="text-xs text-muted-foreground"
+                            data-testid={`text-user-last-login-${u.userId}`}
+                          >
                             {u.lastLoginAt
                               ? `Last login: ${new Date(u.lastLoginAt).toLocaleDateString()} ${new Date(u.lastLoginAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                               : "Never logged in"}
@@ -792,7 +1017,11 @@ export default function AdminCompanyDetail() {
                             className="h-7 w-7"
                             title="Set/Reset Password"
                             onClick={() => {
-                              setResetTarget({ userId: u.userId, email: u.email, name: `${u.firstName} ${u.lastName}`.trim() || u.email });
+                              setResetTarget({
+                                userId: u.userId,
+                                email: u.email,
+                                name: `${u.firstName} ${u.lastName}`.trim() || u.email,
+                              });
                               setResetOpen(true);
                             }}
                             data-testid={`button-reset-password-${u.userId}`}
@@ -844,12 +1073,16 @@ export default function AdminCompanyDetail() {
                   <div className="space-y-1 max-h-48 overflow-y-auto">
                     {company.contacts.slice(0, 20).map((c: any) => (
                       <div key={c.id} className="flex items-center justify-between gap-2 py-1">
-                        <span className="text-sm truncate">{c.firstName} {c.lastName}</span>
+                        <span className="text-sm truncate">
+                          {c.firstName} {c.lastName}
+                        </span>
                         <Badge variant="outline">{c.status}</Badge>
                       </div>
                     ))}
                     {company.contacts.length > 20 && (
-                      <p className="text-xs text-muted-foreground">... and {company.contacts.length - 20} more</p>
+                      <p className="text-xs text-muted-foreground">
+                        ... and {company.contacts.length - 20} more
+                      </p>
                     )}
                   </div>
                 ) : (
@@ -877,7 +1110,9 @@ export default function AdminCompanyDetail() {
                       </div>
                     ))}
                     {company.invoices.length > 15 && (
-                      <p className="text-xs text-muted-foreground">... and {company.invoices.length - 15} more</p>
+                      <p className="text-xs text-muted-foreground">
+                        ... and {company.invoices.length - 15} more
+                      </p>
                     )}
                   </div>
                 ) : (
@@ -913,9 +1148,17 @@ export default function AdminCompanyDetail() {
               {company.notes?.length > 0 ? (
                 <div className="space-y-2">
                   {company.notes.map((n: any) => (
-                    <div key={n.id} className="flex items-start justify-between gap-2 p-2 rounded border">
+                    <div
+                      key={n.id}
+                      className="flex items-start justify-between gap-2 p-2 rounded border"
+                    >
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm whitespace-pre-wrap" data-testid={`text-note-${n.id}`}>{n.content}</p>
+                        <p
+                          className="text-sm whitespace-pre-wrap"
+                          data-testid={`text-note-${n.id}`}
+                        >
+                          {n.content}
+                        </p>
                         <p className="text-xs text-muted-foreground mt-1">
                           {new Date(n.createdAt).toLocaleString()} by {n.createdBy}
                         </p>
@@ -946,11 +1189,21 @@ export default function AdminCompanyDetail() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <CardTitle className="text-base flex items-center gap-2">
                 <Clock className="h-4 w-4" /> Tenant Audit Log
-                {auditData && <span className="text-sm font-normal text-muted-foreground">({auditData.total} events)</span>}
+                {auditData && (
+                  <span className="text-sm font-normal text-muted-foreground">
+                    ({auditData.total} events)
+                  </span>
+                )}
               </CardTitle>
               <div className="flex items-center gap-2">
                 <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-                <Select value={auditFilter} onValueChange={(v) => { setAuditFilter(v === "all" ? "" : v); setAuditPage(0); }}>
+                <Select
+                  value={auditFilter}
+                  onValueChange={(v) => {
+                    setAuditFilter(v === "all" ? "" : v);
+                    setAuditPage(0);
+                  }}
+                >
                   <SelectTrigger className="w-36 h-8 text-xs" data-testid="select-audit-filter">
                     <SelectValue placeholder="All types" />
                   </SelectTrigger>
@@ -977,10 +1230,17 @@ export default function AdminCompanyDetail() {
               <>
                 <div className="space-y-2">
                   {auditData.logs.map((log) => (
-                    <div key={log.id} className="flex items-start justify-between border rounded-lg px-3 py-2.5" data-testid={`audit-entry-${log.id}`}>
+                    <div
+                      key={log.id}
+                      className="flex items-start justify-between border rounded-lg px-3 py-2.5"
+                      data-testid={`audit-entry-${log.id}`}
+                    >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Badge className={actionColors[log.action] || "bg-gray-100 text-gray-800"} variant="secondary">
+                          <Badge
+                            className={actionColors[log.action] || "bg-gray-100 text-gray-800"}
+                            variant="secondary"
+                          >
                             {actionLabels[log.action] || log.action}
                           </Badge>
                           <Badge variant="outline" className="text-xs">
@@ -1010,7 +1270,7 @@ export default function AdminCompanyDetail() {
                       variant="outline"
                       size="sm"
                       disabled={auditPage === 0}
-                      onClick={() => setAuditPage(p => p - 1)}
+                      onClick={() => setAuditPage((p) => p - 1)}
                       data-testid="button-audit-prev"
                     >
                       Previous
@@ -1022,7 +1282,7 @@ export default function AdminCompanyDetail() {
                       variant="outline"
                       size="sm"
                       disabled={auditPage >= totalAuditPages - 1}
-                      onClick={() => setAuditPage(p => p + 1)}
+                      onClick={() => setAuditPage((p) => p + 1)}
                       data-testid="button-audit-next"
                     >
                       Next
@@ -1046,7 +1306,10 @@ export default function AdminCompanyDetail() {
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label className="text-sm">Plan Tier</Label>
-              <Select value={trialForm.tier} onValueChange={(v) => setTrialForm({ ...trialForm, tier: v })}>
+              <Select
+                value={trialForm.tier}
+                onValueChange={(v) => setTrialForm({ ...trialForm, tier: v })}
+              >
                 <SelectTrigger data-testid="select-trial-tier">
                   <SelectValue />
                 </SelectTrigger>
@@ -1061,7 +1324,10 @@ export default function AdminCompanyDetail() {
             </div>
             <div className="space-y-1.5">
               <Label className="text-sm">Status</Label>
-              <Select value={trialForm.subscriptionStatus} onValueChange={(v) => setTrialForm({ ...trialForm, subscriptionStatus: v })}>
+              <Select
+                value={trialForm.subscriptionStatus}
+                onValueChange={(v) => setTrialForm({ ...trialForm, subscriptionStatus: v })}
+              >
                 <SelectTrigger data-testid="select-trial-status">
                   <SelectValue />
                 </SelectTrigger>
@@ -1082,7 +1348,10 @@ export default function AdminCompanyDetail() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm">User Seat Limit <span className="text-muted-foreground">(overrides tier default)</span></Label>
+              <Label className="text-sm">
+                User Seat Limit{" "}
+                <span className="text-muted-foreground">(overrides tier default)</span>
+              </Label>
               <Input
                 type="number"
                 min="1"
@@ -1093,13 +1362,19 @@ export default function AdminCompanyDetail() {
                 data-testid="input-custom-max-users"
               />
               <p className="text-xs text-muted-foreground">
-                {TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG]?.name ?? trialForm.tier} default: {TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG]?.maxUsers ?? "—"} users
-                {(TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG] as any)?.maxContacts != null && ` · ${(TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG] as any).maxContacts} customers max`}
+                {TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG]?.name ?? trialForm.tier}{" "}
+                default: {TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG]?.maxUsers ?? "—"}{" "}
+                users
+                {(TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG] as any)?.maxContacts !=
+                  null &&
+                  ` · ${(TIER_CONFIG[trialForm.tier as keyof typeof TIER_CONFIG] as any).maxContacts} customers max`}
               </p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCustomTrialOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setCustomTrialOpen(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={() => customTrialMutation.mutate(trialForm)}
               disabled={customTrialMutation.isPending}
@@ -1119,7 +1394,9 @@ export default function AdminCompanyDetail() {
               Cancel Account
             </DialogTitle>
             <DialogDescription>
-              This will immediately cancel <strong>{company?.name}</strong>'s subscription. Their Stripe subscription will be terminated and their account status set to cancelled. This cannot be undone without manually reactivating.
+              This will immediately cancel <strong>{company?.name}</strong>'s subscription. Their
+              Stripe subscription will be terminated and their account status set to cancelled. This
+              cannot be undone without manually reactivating.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-1">
@@ -1133,7 +1410,11 @@ export default function AdminCompanyDetail() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelOpen(false)} data-testid="button-cancel-dialog-close">
+            <Button
+              variant="outline"
+              onClick={() => setCancelOpen(false)}
+              data-testid="button-cancel-dialog-close"
+            >
               Keep Account
             </Button>
             <Button
@@ -1153,11 +1434,16 @@ export default function AdminCompanyDetail() {
           <DialogHeader>
             <DialogTitle>Reactivate Account</DialogTitle>
             <DialogDescription>
-              This will reverse the scheduled cancellation for <strong>{company?.name}</strong>. Their subscription will continue as normal and the cancellation date will be removed.
+              This will reverse the scheduled cancellation for <strong>{company?.name}</strong>.
+              Their subscription will continue as normal and the cancellation date will be removed.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReactivateOpen(false)} data-testid="button-reactivate-dialog-close">
+            <Button
+              variant="outline"
+              onClick={() => setReactivateOpen(false)}
+              data-testid="button-reactivate-dialog-close"
+            >
               Keep Scheduled
             </Button>
             <Button
@@ -1171,12 +1457,19 @@ export default function AdminCompanyDetail() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={resetOpen} onOpenChange={(open) => { if (!open) handleCloseResetDialog(); else setResetOpen(open); }}>
+      <Dialog
+        open={resetOpen}
+        onOpenChange={(open) => {
+          if (!open) handleCloseResetDialog();
+          else setResetOpen(open);
+        }}
+      >
         <DialogContent data-testid="dialog-reset-password">
           <DialogHeader>
             <DialogTitle>Set Password</DialogTitle>
             <DialogDescription>
-              Set a new password for <strong>{resetTarget?.name}</strong> ({resetTarget?.email}). They will be required to change it on their next login.
+              Set a new password for <strong>{resetTarget?.name}</strong> ({resetTarget?.email}).
+              They will be required to change it on their next login.
             </DialogDescription>
           </DialogHeader>
 
@@ -1187,16 +1480,37 @@ export default function AdminCompanyDetail() {
                 <code className="flex-1 text-sm font-mono" data-testid="text-generated-password">
                   {showPassword ? generatedPassword : "••••••••••"}
                 </code>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowPassword(!showPassword)} data-testid="button-toggle-password-visibility">
-                  {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setShowPassword(!showPassword)}
+                  data-testid="button-toggle-password-visibility"
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5" />
+                  )}
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyToClipboard(generatedPassword)} data-testid="button-copy-password">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => copyToClipboard(generatedPassword)}
+                  data-testid="button-copy-password"
+                >
                   <Copy className="h-3.5 w-3.5" />
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">Share this password with the user. They will be asked to create a new one when they log in.</p>
+              <p className="text-xs text-muted-foreground">
+                Share this password with the user. They will be asked to create a new one when they
+                log in.
+              </p>
               <DialogFooter>
-                <Button onClick={handleCloseResetDialog} data-testid="button-close-reset-dialog">Done</Button>
+                <Button onClick={handleCloseResetDialog} data-testid="button-close-reset-dialog">
+                  Done
+                </Button>
               </DialogFooter>
             </div>
           ) : (
@@ -1210,7 +1524,9 @@ export default function AdminCompanyDetail() {
                   className="rounded"
                   data-testid="checkbox-custom-password"
                 />
-                <Label htmlFor="useCustomPassword" className="text-sm cursor-pointer">Set a specific password</Label>
+                <Label htmlFor="useCustomPassword" className="text-sm cursor-pointer">
+                  Set a specific password
+                </Label>
               </div>
               {useCustomPassword && (
                 <div className="space-y-1.5">
@@ -1227,13 +1543,24 @@ export default function AdminCompanyDetail() {
                 </div>
               )}
               {!useCustomPassword && (
-                <p className="text-sm text-muted-foreground">A secure random password will be generated automatically.</p>
+                <p className="text-sm text-muted-foreground">
+                  A secure random password will be generated automatically.
+                </p>
               )}
               <DialogFooter>
-                <Button variant="outline" onClick={handleCloseResetDialog} data-testid="button-cancel-reset">Cancel</Button>
+                <Button
+                  variant="outline"
+                  onClick={handleCloseResetDialog}
+                  data-testid="button-cancel-reset"
+                >
+                  Cancel
+                </Button>
                 <Button
                   onClick={handleResetPassword}
-                  disabled={resetPasswordMutation.isPending || (useCustomPassword && customPassword.length < 8)}
+                  disabled={
+                    resetPasswordMutation.isPending ||
+                    (useCustomPassword && customPassword.length < 8)
+                  }
                   data-testid="button-confirm-reset-password"
                 >
                   {resetPasswordMutation.isPending ? "Setting..." : "Set Password"}
@@ -1244,13 +1571,19 @@ export default function AdminCompanyDetail() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editUserOpen} onOpenChange={(open) => { if (!open) { setEditUserOpen(false); setEditUserTarget(null); } else setEditUserOpen(open); }}>
+      <Dialog
+        open={editUserOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditUserOpen(false);
+            setEditUserTarget(null);
+          } else setEditUserOpen(open);
+        }}
+      >
         <DialogContent data-testid="dialog-edit-user">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>
-              Update details for this user.
-            </DialogDescription>
+            <DialogDescription>Update details for this user.</DialogDescription>
           </DialogHeader>
           {editUserTarget && (
             <div className="space-y-4 py-2">
@@ -1258,7 +1591,9 @@ export default function AdminCompanyDetail() {
                 <Label>First Name</Label>
                 <Input
                   value={editUserTarget.firstName}
-                  onChange={(e) => setEditUserTarget({ ...editUserTarget, firstName: e.target.value })}
+                  onChange={(e) =>
+                    setEditUserTarget({ ...editUserTarget, firstName: e.target.value })
+                  }
                   data-testid="input-edit-user-firstname"
                 />
               </div>
@@ -1266,7 +1601,9 @@ export default function AdminCompanyDetail() {
                 <Label>Last Name</Label>
                 <Input
                   value={editUserTarget.lastName}
-                  onChange={(e) => setEditUserTarget({ ...editUserTarget, lastName: e.target.value })}
+                  onChange={(e) =>
+                    setEditUserTarget({ ...editUserTarget, lastName: e.target.value })
+                  }
                   data-testid="input-edit-user-lastname"
                 />
               </div>
@@ -1281,7 +1618,10 @@ export default function AdminCompanyDetail() {
               </div>
               <div className="space-y-1.5">
                 <Label>Role</Label>
-                <Select value={editUserTarget.role} onValueChange={(v) => setEditUserTarget({ ...editUserTarget, role: v })}>
+                <Select
+                  value={editUserTarget.role}
+                  onValueChange={(v) => setEditUserTarget({ ...editUserTarget, role: v })}
+                >
                   <SelectTrigger data-testid="select-edit-user-role">
                     <SelectValue />
                   </SelectTrigger>
@@ -1293,8 +1633,21 @@ export default function AdminCompanyDetail() {
                 </Select>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => { setEditUserOpen(false); setEditUserTarget(null); }} data-testid="button-cancel-edit-user">Cancel</Button>
-                <Button onClick={handleSaveUser} disabled={updateUserMutation.isPending} data-testid="button-save-user">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditUserOpen(false);
+                    setEditUserTarget(null);
+                  }}
+                  data-testid="button-cancel-edit-user"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveUser}
+                  disabled={updateUserMutation.isPending}
+                  data-testid="button-save-user"
+                >
                   {updateUserMutation.isPending ? "Saving..." : "Save"}
                 </Button>
               </DialogFooter>

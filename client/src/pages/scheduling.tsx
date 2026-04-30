@@ -5,7 +5,14 @@ import { toLocalDateString } from "@/lib/utils";
 import { compressImage } from "@/lib/compress-image";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
-import type { Visit, Contact, Property, Route, ServicePricingItem, ServicePlan } from "@shared/schema";
+import type {
+  Visit,
+  Contact,
+  Property,
+  Route,
+  ServicePricingItem,
+  ServicePlan,
+} from "@shared/schema";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,12 +29,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Command,
   CommandEmpty,
@@ -45,17 +47,49 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
-  ChevronLeft, ChevronRight, Plus, Calendar, CalendarDays, CalendarRange,
-  CheckCircle, XCircle, Ban, Clock, MapPin, DollarSign, User, CalendarCheck, Loader2, GripVertical,
-  Trash2, Search, Eye, EyeOff, Pencil, ChevronsUpDown, Play, Camera, X, Navigation,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Calendar,
+  CalendarDays,
+  CalendarRange,
+  CheckCircle,
+  XCircle,
+  Ban,
+  Clock,
+  MapPin,
+  DollarSign,
+  User,
+  CalendarCheck,
+  Loader2,
+  GripVertical,
+  Trash2,
+  Search,
+  Eye,
+  EyeOff,
+  Pencil,
+  ChevronsUpDown,
+  Play,
+  Camera,
+  X,
+  Navigation,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 import {
-  DndContext, DragOverlay, closestCenter, PointerSensor, TouchSensor,
-  useSensor, useSensors, useDroppable, useDraggable,
-  type DragStartEvent, type DragEndEvent, type DragOverEvent,
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  useDraggable,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core";
 
 const visitStatusColors: Record<string, string> = {
@@ -152,10 +186,18 @@ const dayOfWeekLabels: Record<string, string> = {
 
 function getServiceCategory(name: string): string {
   const lower = name.toLowerCase();
-  if (lower.includes("biweekly") || lower.includes("bi-weekly") || lower.includes("every 2") || lower.includes("every two")) return "Biweekly Services";
+  if (
+    lower.includes("biweekly") ||
+    lower.includes("bi-weekly") ||
+    lower.includes("every 2") ||
+    lower.includes("every two")
+  )
+    return "Biweekly Services";
   if (lower.includes("weekly")) return "Weekly Services";
-  if (lower.includes("one-time") || lower.includes("onetime") || lower.includes("one time")) return "One-Time";
-  if (lower.includes("add-on") || lower.includes("addon") || lower.includes("add on")) return "Add-ons";
+  if (lower.includes("one-time") || lower.includes("onetime") || lower.includes("one time"))
+    return "One-Time";
+  if (lower.includes("add-on") || lower.includes("addon") || lower.includes("add on"))
+    return "Add-ons";
   if (lower.includes("monthly")) return "Monthly Services";
   return "Other Services";
 }
@@ -191,10 +233,14 @@ function ScheduleJobForm({
   const [jobType, setJobType] = useState<string>("recurring");
   const [contactId, setContactId] = useState(initialContactId || "");
   const [propertyId, setPropertyId] = useState("");
-  const [selectedServices, setSelectedServices] = useState<Array<{ id: string; name: string; price: string }>>([]);
+  const [selectedServices, setSelectedServices] = useState<
+    Array<{ id: string; name: string; price: string }>
+  >([]);
   const [serviceComboOpen, setServiceComboOpen] = useState(false);
   const [frequency, setFrequency] = useState(initialFrequency || "weekly");
-  const [dayOfWeek, setDayOfWeek] = useState(() => initialDayOfWeek || getDayOfWeekFromDate(toLocalDateString(new Date(), tz)));
+  const [dayOfWeek, setDayOfWeek] = useState(
+    () => initialDayOfWeek || getDayOfWeekFromDate(toLocalDateString(new Date(), tz))
+  );
   const [pricePerVisit, setPricePerVisit] = useState("");
   const [manualServiceName, setManualServiceName] = useState("");
   const [startDate, setStartDate] = useState(toLocalDateString(new Date(), tz));
@@ -210,27 +256,37 @@ function ScheduleJobForm({
   const [assignedUserId, setAssignedUserId] = useState("none");
   const [suppressNotifications, setSuppressNotifications] = useState(false);
 
-  const activeServices = useMemo(() => services.filter(s => s.isActive), [services]);
+  const activeServices = useMemo(() => services.filter((s) => s.isActive), [services]);
 
   const groupedServices = useMemo(() => {
     const groups: Record<string, ServicePricingItem[]> = {};
-    activeServices.forEach(s => {
+    activeServices.forEach((s) => {
       const cat = getServiceCategory(s.name);
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(s);
     });
-    const order = ["Weekly Services", "Biweekly Services", "Monthly Services", "One-Time", "Add-ons", "Other Services"];
-    return order.filter(cat => groups[cat]).map(cat => ({ category: cat, items: groups[cat] }));
+    const order = [
+      "Weekly Services",
+      "Biweekly Services",
+      "Monthly Services",
+      "One-Time",
+      "Add-ons",
+      "Other Services",
+    ];
+    return order.filter((cat) => groups[cat]).map((cat) => ({ category: cat, items: groups[cat] }));
   }, [activeServices]);
 
   const filteredProperties = useMemo(() => {
     if (!contactId) return [];
-    return properties.filter(p => p.contactId === contactId);
+    return properties.filter((p) => p.contactId === contactId);
   }, [contactId, properties]);
 
   useEffect(() => {
-    if (!contactId) { setPropertyId(""); return; }
-    const props = properties.filter(p => p.contactId === contactId);
+    if (!contactId) {
+      setPropertyId("");
+      return;
+    }
+    const props = properties.filter((p) => p.contactId === contactId);
     if (props.length === 1) setPropertyId(props[0].id);
     else setPropertyId("");
   }, [contactId, properties]);
@@ -248,11 +304,11 @@ function ScheduleJobForm({
 
   const combinedServiceName = useMemo(() => {
     if (selectedServices.length === 0) return manualServiceName || null;
-    return selectedServices.map(s => s.name).join(" + ");
+    return selectedServices.map((s) => s.name).join(" + ");
   }, [selectedServices, manualServiceName]);
 
   const handleAddService = (svc: ServicePricingItem) => {
-    setSelectedServices(prev => [...prev, { id: svc.id, name: svc.name, price: svc.basePrice }]);
+    setSelectedServices((prev) => [...prev, { id: svc.id, name: svc.name, price: svc.basePrice }]);
     setServiceComboOpen(false);
   };
 
@@ -267,11 +323,11 @@ function ScheduleJobForm({
       dayOfWeek: dayOfWeek || null,
       pricePerVisit: totalPrice || "0",
       startDate,
-      startTime: anytime ? null : (startTime || null),
-      endTime: anytime ? null : (endTime || null),
+      startTime: anytime ? null : startTime || null,
+      endTime: anytime ? null : endTime || null,
       anytime,
       visitInstructions: visitInstructions || null,
-      assignedUserId: (assignedUserId && assignedUserId !== "none") ? assignedUserId : null,
+      assignedUserId: assignedUserId && assignedUserId !== "none" ? assignedUserId : null,
     };
     if (jobType === "recurring") {
       if (endsAfterMode === "count" && endsAfterCount) {
@@ -301,28 +357,55 @@ function ScheduleJobForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-
         {/* Section: Customer */}
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Customer
+          </h3>
           <div className="space-y-1.5">
             <Label>Customer</Label>
-            <Select value={contactId} onValueChange={(v) => { setContactId(v); }}>
-              <SelectTrigger data-testid="select-job-contact"><SelectValue placeholder="Select customer" /></SelectTrigger>
-              <SelectContent>{contacts.map(c => (<SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>))}</SelectContent>
+            <Select
+              value={contactId}
+              onValueChange={(v) => {
+                setContactId(v);
+              }}
+            >
+              <SelectTrigger data-testid="select-job-contact">
+                <SelectValue placeholder="Select customer" />
+              </SelectTrigger>
+              <SelectContent>
+                {contacts.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.firstName} {c.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Property</Label>
             {singleProperty ? (
-              <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-md border text-sm" data-testid="text-auto-property">
+              <div
+                className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-md border text-sm"
+                data-testid="text-auto-property"
+              >
                 <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <span>{singleProperty.streetAddress}</span>
               </div>
             ) : (
               <Select value={propertyId} onValueChange={setPropertyId} disabled={!contactId}>
-                <SelectTrigger data-testid="select-job-property"><SelectValue placeholder={contactId ? "Select property" : "Select customer first"} /></SelectTrigger>
-                <SelectContent>{filteredProperties.map(p => (<SelectItem key={p.id} value={p.id}>{p.streetAddress}</SelectItem>))}</SelectContent>
+                <SelectTrigger data-testid="select-job-property">
+                  <SelectValue
+                    placeholder={contactId ? "Select property" : "Select customer first"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredProperties.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.streetAddress}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             )}
           </div>
@@ -332,16 +415,31 @@ function ScheduleJobForm({
 
         {/* Section: Service */}
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Service</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Service
+          </h3>
 
           {selectedServices.length > 0 && (
             <div className="space-y-2">
               {selectedServices.map((svc, idx) => (
-                <div key={svc.id + idx} className="flex items-center justify-between bg-muted/50 border rounded-md px-3 py-2.5" data-testid={`service-row-${idx}`}>
+                <div
+                  key={svc.id + idx}
+                  className="flex items-center justify-between bg-muted/50 border rounded-md px-3 py-2.5"
+                  data-testid={`service-row-${idx}`}
+                >
                   <span className="text-sm font-medium">{svc.name}</span>
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold tabular-nums">${parseFloat(svc.price || "0").toFixed(2)}</span>
-                    <button type="button" className="text-muted-foreground hover:text-destructive transition-colors" onClick={() => setSelectedServices(prev => prev.filter((_, i) => i !== idx))} data-testid={`button-remove-service-${idx}`}>
+                    <span className="text-sm font-semibold tabular-nums">
+                      ${parseFloat(svc.price || "0").toFixed(2)}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                      onClick={() =>
+                        setSelectedServices((prev) => prev.filter((_, i) => i !== idx))
+                      }
+                      data-testid={`button-remove-service-${idx}`}
+                    >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -353,33 +451,58 @@ function ScheduleJobForm({
           {activeServices.length > 0 ? (
             <div>
               {selectedServices.length === 0 ? (
-                <Button type="button" variant="outline" className="w-full justify-between" onClick={() => setServiceComboOpen(true)} data-testid="button-open-service-picker">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between"
+                  onClick={() => setServiceComboOpen(true)}
+                  data-testid="button-open-service-picker"
+                >
                   <span className="text-muted-foreground">Select a service...</span>
                   <ChevronsUpDown className="h-4 w-4 opacity-50" />
                 </Button>
               ) : (
-                <button type="button" className="text-sm text-primary hover:underline font-medium" onClick={() => setServiceComboOpen(true)} data-testid="button-add-another-service">
+                <button
+                  type="button"
+                  className="text-sm text-primary hover:underline font-medium"
+                  onClick={() => setServiceComboOpen(true)}
+                  data-testid="button-add-another-service"
+                >
                   + Add another service
                 </button>
               )}
 
               <Dialog open={serviceComboOpen} onOpenChange={setServiceComboOpen}>
-                <DialogContent className="sm:max-w-md p-0 gap-0" data-testid="dialog-service-picker">
+                <DialogContent
+                  className="sm:max-w-md p-0 gap-0"
+                  data-testid="dialog-service-picker"
+                >
                   <DialogHeader className="px-4 pt-4 pb-2">
                     <DialogTitle>Select a service</DialogTitle>
                   </DialogHeader>
                   <Command>
                     <div className="px-2 pb-2">
-                      <CommandInput placeholder="Search services..." autoFocus data-testid="input-service-search" />
+                      <CommandInput
+                        placeholder="Search services..."
+                        autoFocus
+                        data-testid="input-service-search"
+                      />
                     </div>
                     <CommandList className="max-h-72 overflow-y-auto px-2 pb-2">
                       <CommandEmpty>No services found.</CommandEmpty>
-                      {groupedServices.map(group => (
+                      {groupedServices.map((group) => (
                         <CommandGroup key={group.category} heading={group.category}>
-                          {group.items.map(svc => (
-                            <CommandItem key={svc.id} value={svc.name} onSelect={() => handleAddService(svc)} data-testid={`service-option-${svc.id}`}>
+                          {group.items.map((svc) => (
+                            <CommandItem
+                              key={svc.id}
+                              value={svc.name}
+                              onSelect={() => handleAddService(svc)}
+                              data-testid={`service-option-${svc.id}`}
+                            >
                               <span className="flex-1">{svc.name}</span>
-                              <span className="text-muted-foreground text-sm tabular-nums">${parseFloat(svc.basePrice).toFixed(2)}</span>
+                              <span className="text-muted-foreground text-sm tabular-nums">
+                                ${parseFloat(svc.basePrice).toFixed(2)}
+                              </span>
                             </CommandItem>
                           ))}
                         </CommandGroup>
@@ -391,8 +514,21 @@ function ScheduleJobForm({
             </div>
           ) : (
             <div className="space-y-2">
-              <Input value={manualServiceName} onChange={e => setManualServiceName(e.target.value)} placeholder="Service name (e.g. Waste Removal)" data-testid="input-job-service-name" />
-              <Input type="number" min="0" step="0.01" value={pricePerVisit} onChange={e => setPricePerVisit(e.target.value)} placeholder="Price per visit (e.g. 35.00)" data-testid="input-job-price-manual" />
+              <Input
+                value={manualServiceName}
+                onChange={(e) => setManualServiceName(e.target.value)}
+                placeholder="Service name (e.g. Waste Removal)"
+                data-testid="input-job-service-name"
+              />
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={pricePerVisit}
+                onChange={(e) => setPricePerVisit(e.target.value)}
+                placeholder="Price per visit (e.g. 35.00)"
+                data-testid="input-job-price-manual"
+              />
             </div>
           )}
 
@@ -408,34 +544,80 @@ function ScheduleJobForm({
 
         {/* Section: Schedule */}
         <div className="space-y-4">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Schedule</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Schedule
+          </h3>
 
           <div className="flex gap-2">
-            <Button type="button" variant={jobType === "recurring" ? "default" : "outline"} size="sm" onClick={() => { setJobType("recurring"); setFrequency("weekly"); }} data-testid="button-job-type-recurring">Recurring</Button>
-            <Button type="button" variant={jobType === "one_off" ? "default" : "outline"} size="sm" onClick={() => { setJobType("one_off"); setFrequency("onetime"); }} data-testid="button-job-type-one-off">One-off</Button>
+            <Button
+              type="button"
+              variant={jobType === "recurring" ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setJobType("recurring");
+                setFrequency("weekly");
+              }}
+              data-testid="button-job-type-recurring"
+            >
+              Recurring
+            </Button>
+            <Button
+              type="button"
+              variant={jobType === "one_off" ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setJobType("one_off");
+                setFrequency("onetime");
+              }}
+              data-testid="button-job-type-one-off"
+            >
+              One-off
+            </Button>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Start Date</Label>
-              <Input type="date" value={startDate} onChange={e => handleStartDateChange(e.target.value)} data-testid="input-job-start-date" />
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                data-testid="input-job-start-date"
+              />
             </div>
             {!anytime && (
               <>
                 <div className="space-y-1.5">
                   <Label>Start Time</Label>
-                  <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} data-testid="input-job-start-time" />
+                  <Input
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    data-testid="input-job-start-time"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>End Time</Label>
-                  <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} data-testid="input-job-end-time" />
+                  <Input
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    data-testid="input-job-end-time"
+                  />
                 </div>
               </>
             )}
             <div className="flex items-end pb-0.5">
               <div className="flex items-center gap-2">
-                <Checkbox id="anytime" checked={anytime} onCheckedChange={(checked) => setAnytime(!!checked)} data-testid="checkbox-job-anytime" />
-                <Label htmlFor="anytime" className="text-sm cursor-pointer">Anytime</Label>
+                <Checkbox
+                  id="anytime"
+                  checked={anytime}
+                  onCheckedChange={(checked) => setAnytime(!!checked)}
+                  data-testid="checkbox-job-anytime"
+                />
+                <Label htmlFor="anytime" className="text-sm cursor-pointer">
+                  Anytime
+                </Label>
               </div>
             </div>
           </div>
@@ -446,7 +628,9 @@ function ScheduleJobForm({
                 <div className="space-y-1.5">
                   <Label>Repeats</Label>
                   <Select value={frequency} onValueChange={setFrequency}>
-                    <SelectTrigger data-testid="select-job-frequency"><SelectValue /></SelectTrigger>
+                    <SelectTrigger data-testid="select-job-frequency">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="weekly">Weekly</SelectItem>
                       <SelectItem value="biweekly">Every 2 Weeks</SelectItem>
@@ -458,8 +642,16 @@ function ScheduleJobForm({
                   <div className="space-y-1.5">
                     <Label>Day of Week</Label>
                     <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-                      <SelectTrigger data-testid="select-job-day"><SelectValue placeholder="Select day" /></SelectTrigger>
-                      <SelectContent>{Object.entries(dayOfWeekLabels).map(([val, label]) => (<SelectItem key={val} value={val}>{label}</SelectItem>))}</SelectContent>
+                      <SelectTrigger data-testid="select-job-day">
+                        <SelectValue placeholder="Select day" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(dayOfWeekLabels).map(([val, label]) => (
+                          <SelectItem key={val} value={val}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
                   </div>
                 )}
@@ -482,7 +674,10 @@ function ScheduleJobForm({
                       <button
                         type="button"
                         className="text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => { setShowEndCondition(false); setEndsAfterMode("none"); }}
+                        onClick={() => {
+                          setShowEndCondition(false);
+                          setEndsAfterMode("none");
+                        }}
                         data-testid="button-hide-end-condition"
                       >
                         Remove
@@ -490,18 +685,41 @@ function ScheduleJobForm({
                     </div>
                     <div className="space-y-2">
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="endsAfterMode" checked={endsAfterMode === "none"} onChange={() => setEndsAfterMode("none")} className="accent-primary" data-testid="radio-ends-never" />
+                        <input
+                          type="radio"
+                          name="endsAfterMode"
+                          checked={endsAfterMode === "none"}
+                          onChange={() => setEndsAfterMode("none")}
+                          className="accent-primary"
+                          data-testid="radio-ends-never"
+                        />
                         <span className="text-sm">No end date</span>
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="endsAfterMode" checked={endsAfterMode === "count"} onChange={() => setEndsAfterMode("count")} className="accent-primary" data-testid="radio-ends-after" />
+                        <input
+                          type="radio"
+                          name="endsAfterMode"
+                          checked={endsAfterMode === "count"}
+                          onChange={() => setEndsAfterMode("count")}
+                          className="accent-primary"
+                          data-testid="radio-ends-after"
+                        />
                         <span className="text-sm">Ends after</span>
                       </label>
                       {endsAfterMode === "count" && (
                         <div className="flex gap-2 ml-6">
-                          <Input type="number" min="1" value={endsAfterCount} onChange={e => setEndsAfterCount(e.target.value)} className="w-20" data-testid="input-ends-after-count" />
+                          <Input
+                            type="number"
+                            min="1"
+                            value={endsAfterCount}
+                            onChange={(e) => setEndsAfterCount(e.target.value)}
+                            className="w-20"
+                            data-testid="input-ends-after-count"
+                          />
                           <Select value={endsAfterUnit} onValueChange={setEndsAfterUnit}>
-                            <SelectTrigger className="w-32" data-testid="select-ends-after-unit"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-32" data-testid="select-ends-after-unit">
+                              <SelectValue />
+                            </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="days">Days</SelectItem>
                               <SelectItem value="weeks">Weeks</SelectItem>
@@ -512,12 +730,24 @@ function ScheduleJobForm({
                         </div>
                       )}
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="endsAfterMode" checked={endsAfterMode === "date"} onChange={() => setEndsAfterMode("date")} className="accent-primary" data-testid="radio-ends-on" />
+                        <input
+                          type="radio"
+                          name="endsAfterMode"
+                          checked={endsAfterMode === "date"}
+                          onChange={() => setEndsAfterMode("date")}
+                          className="accent-primary"
+                          data-testid="radio-ends-on"
+                        />
                         <span className="text-sm">Ends on</span>
                       </label>
                       {endsAfterMode === "date" && (
                         <div className="ml-6">
-                          <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} data-testid="input-ends-on-date" />
+                          <Input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            data-testid="input-ends-on-date"
+                          />
                         </div>
                       )}
                     </div>
@@ -532,14 +762,22 @@ function ScheduleJobForm({
 
         {/* Section: Assignment */}
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Assignment</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Assignment
+          </h3>
           <div className="space-y-1.5">
             <Label>Assigned Team Member</Label>
             <Select value={assignedUserId} onValueChange={setAssignedUserId}>
-              <SelectTrigger data-testid="select-job-assigned"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+              <SelectTrigger data-testid="select-job-assigned">
+                <SelectValue placeholder="Unassigned" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Unassigned</SelectItem>
-                {team.map(t => (<SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>))}
+                {team.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.firstName} {t.lastName}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -549,13 +787,20 @@ function ScheduleJobForm({
 
         {/* Section: Notes */}
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Notes
+          </h3>
           <div className="space-y-1.5">
             <Label>Visit Instructions</Label>
-            <Textarea value={visitInstructions} onChange={e => setVisitInstructions(e.target.value)} placeholder="Instructions for technician..." rows={3} data-testid="input-job-instructions" />
+            <Textarea
+              value={visitInstructions}
+              onChange={(e) => setVisitInstructions(e.target.value)}
+              placeholder="Instructions for technician..."
+              rows={3}
+              data-testid="input-job-instructions"
+            />
           </div>
         </div>
-
       </div>
 
       {/* Sticky footer */}
@@ -567,12 +812,27 @@ function ScheduleJobForm({
             onCheckedChange={setSuppressNotifications}
             data-testid="switch-suppress-notifications"
           />
-          <Label htmlFor="sched-suppress-notifications" className="text-sm text-muted-foreground cursor-pointer">
+          <Label
+            htmlFor="sched-suppress-notifications"
+            className="text-sm text-muted-foreground cursor-pointer"
+          >
             Suppress notifications
           </Label>
         </div>
-        <Button type="submit" className="w-full" size="lg" disabled={isPending || !contactId || !propertyId} data-testid="button-submit-job">
-          {isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating Job...</> : "Create Job"}
+        <Button
+          type="submit"
+          className="w-full"
+          size="lg"
+          disabled={isPending || !contactId || !propertyId}
+          data-testid="button-submit-job"
+        >
+          {isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating Job...
+            </>
+          ) : (
+            "Create Job"
+          )}
         </Button>
       </div>
     </form>
@@ -585,7 +845,7 @@ export default function Scheduling() {
   const { user: authUser } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = localStorage.getItem("scoopilot_sched_view_mode");
-    return (saved === "week" || saved === "day" || saved === "month") ? saved : "week";
+    return saved === "week" || saved === "day" || saved === "month" ? saved : "week";
   });
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -593,8 +853,8 @@ export default function Scheduling() {
   const [prefilledFrequency, setPrefilledFrequency] = useState<string | null>(null);
   const [prefilledDayOfWeek, setPrefilledDayOfWeek] = useState<string | null>(null);
   const [clientFilter, setClientFilter] = useState("");
-  const [showHiddenStatuses, setShowHiddenStatuses] = useState(() =>
-    localStorage.getItem("scoopilot_sched_show_hidden") === "true"
+  const [showHiddenStatuses, setShowHiddenStatuses] = useState(
+    () => localStorage.getItem("scoopilot_sched_show_hidden") === "true"
   );
   const [pendingVisitId, setPendingVisitId] = useState<string | null>(null);
   const isAdminOrOwner = authUser?.role === "owner" || authUser?.role === "admin";
@@ -602,8 +862,8 @@ export default function Scheduling() {
   const frequencyFromContactDialog: Record<string, string | null> = {
     "1_per_week": "weekly",
     "2_per_week": "weekly",
-    "biweekly": "biweekly",
-    "as_needed": null,
+    biweekly: "biweekly",
+    as_needed: null,
   };
 
   useEffect(() => {
@@ -635,11 +895,15 @@ export default function Scheduling() {
   }, []);
 
   useEffect(() => {
-    try { localStorage.setItem("scoopilot_sched_view_mode", viewMode); } catch {}
+    try {
+      localStorage.setItem("scoopilot_sched_view_mode", viewMode);
+    } catch {}
   }, [viewMode]);
 
   useEffect(() => {
-    try { localStorage.setItem("scoopilot_sched_show_hidden", String(showHiddenStatuses)); } catch {}
+    try {
+      localStorage.setItem("scoopilot_sched_show_hidden", String(showHiddenStatuses));
+    } catch {}
   }, [showHiddenStatuses]);
 
   const dateRange = useMemo(() => {
@@ -674,7 +938,9 @@ export default function Scheduling() {
 
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
-  const [invoiceDialogContactId, setInvoiceDialogContactId] = useState<string | undefined>(undefined);
+  const [invoiceDialogContactId, setInvoiceDialogContactId] = useState<string | undefined>(
+    undefined
+  );
   const handleShowInvoiceDialog = useCallback((contactId?: string) => {
     setInvoiceDialogContactId(contactId);
     setShowInvoiceDialog(true);
@@ -682,7 +948,7 @@ export default function Scheduling() {
 
   useEffect(() => {
     if (pendingVisitId && visits) {
-      const found = visits.find(v => v.id === pendingVisitId);
+      const found = visits.find((v) => v.id === pendingVisitId);
       if (found) {
         setSelectedVisit(found);
         setPendingVisitId(null);
@@ -695,30 +961,56 @@ export default function Scheduling() {
   const [quickAddRouteId, setQuickAddRouteId] = useState("");
 
   const createMutation = useMutation({
-    mutationFn: async (data: JobFormPayload) => { await apiRequest("POST", "/api/jobs", data); },
+    mutationFn: async (data: JobFormPayload) => {
+      await apiRequest("POST", "/api/jobs", data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId="),
+      });
       toast({ title: "Job created", description: "Visits have been auto-generated." });
       setDialogOpen(false);
     },
-    onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const quickAddMutation = useMutation({
-    mutationFn: async ({ servicePlanId, scheduledDate, routeId }: { servicePlanId: string; scheduledDate: string; routeId?: string }) => {
+    mutationFn: async ({
+      servicePlanId,
+      scheduledDate,
+      routeId,
+    }: {
+      servicePlanId: string;
+      scheduledDate: string;
+      routeId?: string;
+    }) => {
       const plan = servicePlans?.find((sp) => sp.id === servicePlanId);
       if (!plan) throw new Error("Job not found");
-      const body: any = { servicePlanId, propertyId: plan.propertyId, scheduledDate, status: "scheduled" };
+      const body: any = {
+        servicePlanId,
+        propertyId: plan.propertyId,
+        scheduledDate,
+        status: "scheduled",
+      };
       if (routeId) body.routeId = routeId;
       await apiRequest("POST", "/api/visits", body);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
@@ -727,7 +1019,9 @@ export default function Scheduling() {
       setQuickAddPlanId("");
       setQuickAddRouteId("");
     },
-    onError: (error: Error) => { toast({ title: "Error", description: error.message, variant: "destructive" }); },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
   const activeServicePlans = useMemo(() => {
@@ -739,7 +1033,9 @@ export default function Scheduling() {
   const [overDateKey, setOverDateKey] = useState<string | null>(null);
 
   const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 5 } });
-  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 500, tolerance: 8 } });
+  const touchSensor = useSensor(TouchSensor, {
+    activationConstraint: { delay: 500, tolerance: 8 },
+  });
   const sensors = useSensors(pointerSensor, touchSensor);
 
   const rescheduleMutation = useMutation({
@@ -747,11 +1043,15 @@ export default function Scheduling() {
       await apiRequest("PATCH", `/api/visits/${visitId}`, { scheduledDate, routeId: null });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`],
+      });
       toast({ title: "Visit rescheduled" });
     },
     onError: (err: Error) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`],
+      });
       toast({ title: "Error rescheduling", description: err.message, variant: "destructive" });
     },
   });
@@ -763,23 +1063,29 @@ export default function Scheduling() {
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const overId = event.over?.id as string | undefined;
-    setOverDateKey(overId && overId.startsWith("drop-day-") ? overId.replace("drop-day-", "") : null);
+    setOverDateKey(
+      overId && overId.startsWith("drop-day-") ? overId.replace("drop-day-", "") : null
+    );
   }, []);
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
-    setActiveVisit(null);
-    setOverDateKey(null);
-    const visit = event.active.data.current?.visit as Visit | undefined;
-    const overId = event.over?.id as string | undefined;
-    if (!visit || !overId || !overId.startsWith("drop-day-")) return;
-    const newDate = overId.replace("drop-day-", "");
-    if (newDate === visit.scheduledDate) return;
-    queryClient.setQueryData<Visit[]>(
-      [`/api/visits/range?start=${startStr}&end=${endStr}`],
-      (old) => old?.map((v) => v.id === visit.id ? { ...v, scheduledDate: newDate, routeId: null } : v)
-    );
-    rescheduleMutation.mutate({ visitId: visit.id, scheduledDate: newDate });
-  }, [startStr, endStr, rescheduleMutation]);
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveVisit(null);
+      setOverDateKey(null);
+      const visit = event.active.data.current?.visit as Visit | undefined;
+      const overId = event.over?.id as string | undefined;
+      if (!visit || !overId || !overId.startsWith("drop-day-")) return;
+      const newDate = overId.replace("drop-day-", "");
+      if (newDate === visit.scheduledDate) return;
+      queryClient.setQueryData<Visit[]>(
+        [`/api/visits/range?start=${startStr}&end=${endStr}`],
+        (old) =>
+          old?.map((v) => (v.id === visit.id ? { ...v, scheduledDate: newDate, routeId: null } : v))
+      );
+      rescheduleMutation.mutate({ visitId: visit.id, scheduledDate: newDate });
+    },
+    [startStr, endStr, rescheduleMutation]
+  );
 
   const handleDragCancel = useCallback(() => {
     setActiveVisit(null);
@@ -801,9 +1107,7 @@ export default function Scheduling() {
           .map((c) => c.id)
       );
       const matchingPlanIds = new Set(
-        (servicePlans || [])
-          .filter((sp) => matchingContactIds.has(sp.contactId))
-          .map((sp) => sp.id)
+        (servicePlans || []).filter((sp) => matchingContactIds.has(sp.contactId)).map((sp) => sp.id)
       );
       filtered = filtered.filter((v) => matchingPlanIds.has(v.servicePlanId));
     }
@@ -822,9 +1126,12 @@ export default function Scheduling() {
       map[v.scheduledDate].push(v);
     });
     if (servicePlans) {
-      const planOrderMap = new Map(servicePlans.map(sp => [sp.id, sp.stopOrder ?? 0]));
+      const planOrderMap = new Map(servicePlans.map((sp) => [sp.id, sp.stopOrder ?? 0]));
       for (const dateKey of Object.keys(map)) {
-        map[dateKey].sort((a, b) => (planOrderMap.get(a.servicePlanId) ?? 0) - (planOrderMap.get(b.servicePlanId) ?? 0));
+        map[dateKey].sort(
+          (a, b) =>
+            (planOrderMap.get(a.servicePlanId) ?? 0) - (planOrderMap.get(b.servicePlanId) ?? 0)
+        );
       }
     }
     return map;
@@ -844,7 +1151,12 @@ export default function Scheduling() {
 
   const headerLabel = useMemo(() => {
     if (viewMode === "day") {
-      return currentDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+      return currentDate.toLocaleDateString(undefined, {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
     } else if (viewMode === "week") {
       return `${dateRange.start.toLocaleDateString()} - ${dateRange.end.toLocaleDateString()}`;
     } else {
@@ -872,13 +1184,33 @@ export default function Scheduling() {
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold" data-testid="text-scheduling-heading">Scheduling</h1>
-        <Button onClick={() => setDialogOpen(true)} data-testid="button-create-service-plan"><Plus className="mr-1 h-4 w-4" /> Add Job</Button>
-        <Sheet open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setPrefilledContactId(null); setPrefilledFrequency(null); setPrefilledDayOfWeek(null); } }}>
-          <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col" data-testid="sheet-new-job">
+        <h1 className="text-2xl font-bold" data-testid="text-scheduling-heading">
+          Scheduling
+        </h1>
+        <Button onClick={() => setDialogOpen(true)} data-testid="button-create-service-plan">
+          <Plus className="mr-1 h-4 w-4" /> Add Job
+        </Button>
+        <Sheet
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open);
+            if (!open) {
+              setPrefilledContactId(null);
+              setPrefilledFrequency(null);
+              setPrefilledDayOfWeek(null);
+            }
+          }}
+        >
+          <SheetContent
+            side="right"
+            className="w-full sm:max-w-md p-0 flex flex-col"
+            data-testid="sheet-new-job"
+          >
             <SheetHeader className="px-6 py-4 border-b shrink-0">
               <SheetTitle>New Job</SheetTitle>
-              <SheetDescription>Fill in the details below to create a new job and generate visits.</SheetDescription>
+              <SheetDescription>
+                Fill in the details below to create a new job and generate visits.
+              </SheetDescription>
             </SheetHeader>
             <div className="flex-1 overflow-hidden flex flex-col">
               <ScheduleJobForm
@@ -899,12 +1231,15 @@ export default function Scheduling() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center border rounded-lg overflow-hidden" data-testid="view-mode-switcher">
-          {([
+        <div
+          className="flex items-center border rounded-lg overflow-hidden"
+          data-testid="view-mode-switcher"
+        >
+          {[
             { mode: "day" as ViewMode, icon: Calendar, label: "Day" },
             { mode: "week" as ViewMode, icon: CalendarDays, label: "Week" },
             { mode: "month" as ViewMode, icon: CalendarRange, label: "Month" },
-          ]).map(({ mode, icon: Icon, label }) => (
+          ].map(({ mode, icon: Icon, label }) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
@@ -935,23 +1270,46 @@ export default function Scheduling() {
             onCheckedChange={setShowHiddenStatuses}
             data-testid="switch-show-hidden"
           />
-          <Label htmlFor="show-hidden" className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap" data-testid="label-show-hidden">
-            {showHiddenStatuses ? <Eye className="h-3.5 w-3.5 inline mr-1" /> : <EyeOff className="h-3.5 w-3.5 inline mr-1" />}
+          <Label
+            htmlFor="show-hidden"
+            className="text-xs text-muted-foreground cursor-pointer whitespace-nowrap"
+            data-testid="label-show-hidden"
+          >
+            {showHiddenStatuses ? (
+              <Eye className="h-3.5 w-3.5 inline mr-1" />
+            ) : (
+              <EyeOff className="h-3.5 w-3.5 inline mr-1" />
+            )}
             {hiddenCount > 0 ? `${hiddenCount} hidden` : "Hidden"}
           </Label>
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
-          <Button variant="outline" size="icon" onClick={() => navigate(-1)} data-testid="button-prev">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => navigate(-1)}
+            data-testid="button-prev"
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="text-sm font-medium min-w-[140px] text-center" data-testid="text-date-range">
+          <span
+            className="text-sm font-medium min-w-[140px] text-center"
+            data-testid="text-date-range"
+          >
             {headerLabel}
           </span>
-          <Button variant="outline" size="icon" onClick={() => navigate(1)} data-testid="button-next">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => navigate(1)}
+            data-testid="button-next"
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={goToday} data-testid="button-today">Today</Button>
+          <Button variant="ghost" size="sm" onClick={goToday} data-testid="button-today">
+            Today
+          </Button>
         </div>
       </div>
 
@@ -972,7 +1330,11 @@ export default function Scheduling() {
               routes={routes}
               servicePlans={servicePlans}
               onVisitClick={setSelectedVisit}
-              onAddVisit={(dateKey) => { setQuickAddDate(dateKey); setQuickAddPlanId(""); setQuickAddRouteId(""); }}
+              onAddVisit={(dateKey) => {
+                setQuickAddDate(dateKey);
+                setQuickAddPlanId("");
+                setQuickAddRouteId("");
+              }}
             />
           )}
 
@@ -991,15 +1353,26 @@ export default function Scheduling() {
                   const dayVisits = visitsByDate[dateKey] || [];
                   const isToday = dateKey === todayStr;
                   return (
-                    <DroppableDayCell key={dateKey} dateKey={dateKey} isOver={overDateKey === dateKey}>
-                      <Card className={`h-full ${isToday ? "ring-2 ring-primary" : ""}`} data-testid={`card-day-${dayLabels[i]}`}>
+                    <DroppableDayCell
+                      key={dateKey}
+                      dateKey={dateKey}
+                      isOver={overDateKey === dateKey}
+                    >
+                      <Card
+                        className={`h-full ${isToday ? "ring-2 ring-primary" : ""}`}
+                        data-testid={`card-day-${dayLabels[i]}`}
+                      >
                         <CardHeader className="p-3 pb-1">
                           <div className="flex items-center justify-between">
                             <CardTitle className={`text-sm ${isToday ? "text-primary" : ""}`}>
                               {dayLabels[i]} {day.getDate()}
                             </CardTitle>
                             <button
-                              onClick={() => { setQuickAddDate(dateKey); setQuickAddPlanId(""); setQuickAddRouteId(""); }}
+                              onClick={() => {
+                                setQuickAddDate(dateKey);
+                                setQuickAddPlanId("");
+                                setQuickAddRouteId("");
+                              }}
                               className="h-5 w-5 rounded-full flex items-center justify-center text-muted-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
                               data-testid={`button-quick-add-${dateKey}`}
                               title="Add visit"
@@ -1012,14 +1385,27 @@ export default function Scheduling() {
                           {dayVisits.length === 0 ? (
                             <p
                               className="text-xs text-muted-foreground cursor-pointer hover:text-primary transition-colors"
-                              onClick={() => { setQuickAddDate(dateKey); setQuickAddPlanId(""); setQuickAddRouteId(""); }}
+                              onClick={() => {
+                                setQuickAddDate(dateKey);
+                                setQuickAddPlanId("");
+                                setQuickAddRouteId("");
+                              }}
                               data-testid={`text-no-visits-${dateKey}`}
                             >
                               No visits — click to add
                             </p>
                           ) : (
                             dayVisits.map((v) => (
-                              <DraggableVisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={setSelectedVisit} />
+                              <DraggableVisitChip
+                                key={v.id}
+                                visit={v}
+                                contacts={contacts}
+                                properties={properties}
+                                routes={routes}
+                                servicePlans={servicePlans}
+                                compact
+                                onVisitClick={setSelectedVisit}
+                              />
                             ))
                           )}
                         </CardContent>
@@ -1030,7 +1416,12 @@ export default function Scheduling() {
               </div>
               <DragOverlay>
                 {activeVisit && (
-                  <VisitDragOverlay visit={activeVisit} contacts={contacts} properties={properties} servicePlans={servicePlans} />
+                  <VisitDragOverlay
+                    visit={activeVisit}
+                    contacts={contacts}
+                    properties={properties}
+                    servicePlans={servicePlans}
+                  />
                 )}
               </DragOverlay>
             </DndContext>
@@ -1048,7 +1439,10 @@ export default function Scheduling() {
               <div className="border rounded-lg overflow-hidden" data-testid="calendar-month">
                 <div className="grid grid-cols-7 bg-muted/50">
                   {dayLabels.map((d) => (
-                    <div key={d} className="px-2 py-2 text-xs font-medium text-muted-foreground text-center border-b">
+                    <div
+                      key={d}
+                      className="px-2 py-2 text-xs font-medium text-muted-foreground text-center border-b"
+                    >
                       {d}
                     </div>
                   ))}
@@ -1060,17 +1454,25 @@ export default function Scheduling() {
                     const isToday = dateKey === todayStr;
                     const isCurrentMonth = day.getMonth() === currentMonth;
                     return (
-                      <DroppableDayCell key={dateKey} dateKey={dateKey} isOver={overDateKey === dateKey}>
+                      <DroppableDayCell
+                        key={dateKey}
+                        dateKey={dateKey}
+                        isOver={overDateKey === dateKey}
+                      >
                         <div
                           className={`min-h-[100px] border-b border-r p-1.5 h-full group/cell cursor-pointer ${!isCurrentMonth ? "bg-muted/30" : ""} ${isToday ? "bg-primary/5" : ""}`}
                           data-testid={`cell-month-${dateKey}`}
                           onClick={(e) => {
-                            if ((e.target as HTMLElement).closest('[data-visit-chip]')) return;
-                            setQuickAddDate(dateKey); setQuickAddPlanId(""); setQuickAddRouteId("");
+                            if ((e.target as HTMLElement).closest("[data-visit-chip]")) return;
+                            setQuickAddDate(dateKey);
+                            setQuickAddPlanId("");
+                            setQuickAddRouteId("");
                           }}
                         >
                           <div className="flex items-center justify-between mb-1">
-                            <div className={`text-xs font-medium ${isToday ? "bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center" : isCurrentMonth ? "text-foreground" : "text-muted-foreground"}`}>
+                            <div
+                              className={`text-xs font-medium ${isToday ? "bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center" : isCurrentMonth ? "text-foreground" : "text-muted-foreground"}`}
+                            >
                               {day.getDate()}
                             </div>
                             <div className="h-4 w-4 rounded-full flex items-center justify-center text-muted-foreground opacity-0 group-hover/cell:opacity-100 hover:bg-primary hover:text-primary-foreground transition-all">
@@ -1079,7 +1481,16 @@ export default function Scheduling() {
                           </div>
                           <div className="space-y-0.5">
                             {dayVisits.slice(0, 3).map((v) => (
-                              <DraggableVisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={setSelectedVisit} />
+                              <DraggableVisitChip
+                                key={v.id}
+                                visit={v}
+                                contacts={contacts}
+                                properties={properties}
+                                routes={routes}
+                                servicePlans={servicePlans}
+                                compact
+                                onVisitClick={setSelectedVisit}
+                              />
                             ))}
                             {dayVisits.length > 3 && (
                               <OverflowVisitsPopover
@@ -1101,7 +1512,12 @@ export default function Scheduling() {
               </div>
               <DragOverlay>
                 {activeVisit && (
-                  <VisitDragOverlay visit={activeVisit} contacts={contacts} properties={properties} servicePlans={servicePlans} />
+                  <VisitDragOverlay
+                    visit={activeVisit}
+                    contacts={contacts}
+                    properties={properties}
+                    servicePlans={servicePlans}
+                  />
                 )}
               </DragOverlay>
             </DndContext>
@@ -1112,7 +1528,9 @@ export default function Scheduling() {
       <VisitDetailSheet
         visit={selectedVisit}
         open={!!selectedVisit}
-        onOpenChange={(open) => { if (!open) setSelectedVisit(null); }}
+        onOpenChange={(open) => {
+          if (!open) setSelectedVisit(null);
+        }}
         contacts={contacts}
         properties={properties}
         routes={routes}
@@ -1129,17 +1547,39 @@ export default function Scheduling() {
         contactId={invoiceDialogContactId}
       />
 
-      <Dialog open={!!quickAddDate} onOpenChange={(open) => { if (!open) { setQuickAddDate(null); setQuickAddPlanId(""); setQuickAddRouteId(""); } }}>
+      <Dialog
+        open={!!quickAddDate}
+        onOpenChange={(open) => {
+          if (!open) {
+            setQuickAddDate(null);
+            setQuickAddPlanId("");
+            setQuickAddRouteId("");
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Visit — {quickAddDate ? new Date(quickAddDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }) : ""}</DialogTitle>
+            <DialogTitle>
+              Add Visit —{" "}
+              {quickAddDate
+                ? new Date(quickAddDate + "T12:00:00").toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "short",
+                    day: "numeric",
+                  })
+                : ""}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label className="text-sm font-medium">Job</Label>
               <Select value={quickAddPlanId} onValueChange={setQuickAddPlanId}>
                 <SelectTrigger data-testid="select-quick-add-plan">
-                  <SelectValue placeholder={activeServicePlans.length === 0 ? "No active jobs" : "Select a job"} />
+                  <SelectValue
+                    placeholder={
+                      activeServicePlans.length === 0 ? "No active jobs" : "Select a job"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {activeServicePlans.map((sp) => {
@@ -1147,7 +1587,8 @@ export default function Scheduling() {
                     const p = properties?.find((pr) => pr.id === sp.propertyId);
                     return (
                       <SelectItem key={sp.id} value={sp.id} data-testid={`option-plan-${sp.id}`}>
-                        {c ? `${c.firstName} ${c.lastName}` : "Unknown"} — {p?.streetAddress || "No address"} ({sp.frequency})
+                        {c ? `${c.firstName} ${c.lastName}` : "Unknown"} —{" "}
+                        {p?.streetAddress || "No address"} ({sp.frequency})
                       </SelectItem>
                     );
                   })}
@@ -1163,7 +1604,9 @@ export default function Scheduling() {
                 <SelectContent>
                   <SelectItem value="none">No route</SelectItem>
                   {routes?.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1176,12 +1619,21 @@ export default function Scheduling() {
                 quickAddMutation.mutate({
                   servicePlanId: quickAddPlanId,
                   scheduledDate: quickAddDate,
-                  routeId: quickAddRouteId && quickAddRouteId !== "none" ? quickAddRouteId : undefined,
+                  routeId:
+                    quickAddRouteId && quickAddRouteId !== "none" ? quickAddRouteId : undefined,
                 });
               }}
               data-testid="button-quick-add-submit"
             >
-              {quickAddMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding...</> : <><Plus className="mr-2 h-4 w-4" /> Add Visit</>}
+              {quickAddMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding...
+                </>
+              ) : (
+                <>
+                  <Plus className="mr-2 h-4 w-4" /> Add Visit
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
@@ -1272,15 +1724,23 @@ function VisitDetailSheet({
       await apiRequest("PATCH", `/api/visits/${visitId}`, body);
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits"),
+      });
       if (variables.status === "completed" && !visit?.invoiceId && onShowInvoiceDialog) {
-        const completedPlan = servicePlans?.find(sp => sp.id === visit?.servicePlanId);
+        const completedPlan = servicePlans?.find((sp) => sp.id === visit?.servicePlanId);
         const completedContactId = completedPlan?.contactId;
-        toast({ title: "Visit marked complete", description: "Open the invoice dialog to bill for this visit." });
+        toast({
+          title: "Visit marked complete",
+          description: "Open the invoice dialog to bill for this visit.",
+        });
         onOpenChange(false);
         onShowInvoiceDialog(completedContactId);
       } else {
@@ -1299,7 +1759,9 @@ function VisitDetailSheet({
       await apiRequest("PATCH", `/api/visits/${visitId}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       toast({ title: "Visit updated" });
       setEditing(false);
@@ -1316,7 +1778,9 @@ function VisitDetailSheet({
   const contact = plan ? contacts?.find((c) => c.id === plan.contactId) : undefined;
   const property = properties?.find((p) => p.id === visit.propertyId);
   const route = routes?.find((r) => r.id === visit.routeId);
-  const frequencyLabel = plan ? plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1) : "";
+  const frequencyLabel = plan
+    ? plan.frequency.charAt(0).toUpperCase() + plan.frequency.slice(1)
+    : "";
   const pricePerVisit = plan ? parseFloat(plan.pricePerVisit) || 0 : 0;
   const handleSendEnRoute = () => {
     if (!visit) return;
@@ -1331,7 +1795,10 @@ function VisitDetailSheet({
           const data = await res.json();
           queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
           queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
-          toast({ title: "En-route SMS sent", description: `${data.contactName} notified — ETA ~${data.etaMinutes} min` });
+          toast({
+            title: "En-route SMS sent",
+            description: `${data.contactName} notified — ETA ~${data.etaMinutes} min`,
+          });
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : "Failed to send SMS";
           toast({ title: "Failed to send SMS", description: msg, variant: "destructive" });
@@ -1341,7 +1808,11 @@ function VisitDetailSheet({
       },
       (err) => {
         setEnRouteSending(false);
-        toast({ title: "Location unavailable", description: err.message || "Could not get your current location", variant: "destructive" });
+        toast({
+          title: "Location unavailable",
+          description: err.message || "Could not get your current location",
+          variant: "destructive",
+        });
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -1390,13 +1861,21 @@ function VisitDetailSheet({
           completedAt: new Date().toISOString(),
         });
       }
-      queryClient.invalidateQueries({ queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
-      const completedPlan = servicePlans?.find(sp => sp.id === visit.servicePlanId);
-      toast({ title: "Visit marked complete", description: "Open the invoice dialog to bill for this visit." });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits"),
+      });
+      const completedPlan = servicePlans?.find((sp) => sp.id === visit.servicePlanId);
+      toast({
+        title: "Visit marked complete",
+        description: "Open the invoice dialog to bill for this visit.",
+      });
       onOpenChange(false);
       if (onShowInvoiceDialog && !visit.invoiceId) {
         onShowInvoiceDialog(completedPlan?.contactId);
@@ -1412,422 +1891,549 @@ function VisitDetailSheet({
     }
   };
 
-  const statusActions: { status: string; label: string; icon: typeof CheckCircle; color: string; show: boolean }[] = [
+  const statusActions: {
+    status: string;
+    label: string;
+    icon: typeof CheckCircle;
+    color: string;
+    show: boolean;
+  }[] = [
     {
       status: "skipped",
       label: "Skip Visit",
       icon: XCircle,
-      color: "text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-amber-200 dark:border-amber-800",
+      color:
+        "text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-amber-200 dark:border-amber-800",
       show: visit.status !== "skipped" && visit.status !== "completed",
     },
     {
       status: "cancelled",
       label: "Cancel Visit",
       icon: Ban,
-      color: "text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-800",
+      color:
+        "text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-red-200 dark:border-red-800",
       show: visit.status !== "cancelled" && visit.status !== "completed",
     },
     {
       status: "scheduled",
       label: "Revert to Scheduled",
       icon: Clock,
-      color: "text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 border-blue-200 dark:border-blue-800",
+      color:
+        "text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 border-blue-200 dark:border-blue-800",
       show: visit.status !== "scheduled",
     },
   ];
 
   return (
     <>
-    <Sheet open={open} onOpenChange={(o) => { if (!o) { setEditing(false); setShowCompletePanel(false); setGatePhotoFile(null); setGatePhotoPreview(null); setEnlargedPhoto(null); } onOpenChange(o); }}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto" data-testid="sheet-visit-detail">
-        <SheetHeader className="pb-4">
-          <SheetTitle className="text-lg" data-testid="text-sheet-title">Visit Details</SheetTitle>
-          <SheetDescription>
-            {visit.scheduledDate ? new Date(visit.scheduledDate + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : ""}
-          </SheetDescription>
-        </SheetHeader>
+      <Sheet
+        open={open}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditing(false);
+            setShowCompletePanel(false);
+            setGatePhotoFile(null);
+            setGatePhotoPreview(null);
+            setEnlargedPhoto(null);
+          }
+          onOpenChange(o);
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-md overflow-y-auto"
+          data-testid="sheet-visit-detail"
+        >
+          <SheetHeader className="pb-4">
+            <SheetTitle className="text-lg" data-testid="text-sheet-title">
+              Visit Details
+            </SheetTitle>
+            <SheetDescription>
+              {visit.scheduledDate
+                ? new Date(visit.scheduledDate + "T12:00:00").toLocaleDateString(undefined, {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })
+                : ""}
+            </SheetDescription>
+          </SheetHeader>
 
-        <div className="space-y-5">
-          <div className="flex items-center gap-2">
-            <Badge className={`${visitStatusColors[visit.status] || ""}`} data-testid="badge-visit-status">
-              {visitStatusLabels[visit.status] || visit.status}
-            </Badge>
-            {isEditable && !editing && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-auto"
-                onClick={() => setEditing(true)}
-                data-testid="button-edit-visit"
+          <div className="space-y-5">
+            <div className="flex items-center gap-2">
+              <Badge
+                className={`${visitStatusColors[visit.status] || ""}`}
+                data-testid="badge-visit-status"
               >
-                <Pencil className="h-4 w-4 mr-1" />
-                Edit
-              </Button>
-            )}
-            {visit.status === "completed" && !visit.invoiceId && (
-              <Badge variant="outline" className="text-orange-600 border-orange-300 dark:border-orange-700" data-testid="badge-needs-invoice">
-                <DollarSign className="h-3 w-3 mr-0.5" />Needs Invoice
+                {visitStatusLabels[visit.status] || visit.status}
               </Badge>
-            )}
-          </div>
-
-          {visit.status === "completed" && !visit.invoiceId && (
-            <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg p-3 space-y-2" data-testid="section-needs-invoice">
-              <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
-                <DollarSign className="h-4 w-4 shrink-0" />
-                <span className="text-sm font-medium">This visit hasn't been invoiced yet</span>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {onShowInvoiceDialog && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      onOpenChange(false);
-                      const planForBanner = servicePlans?.find(sp => sp.id === visit.servicePlanId);
-                      onShowInvoiceDialog(planForBanner?.contactId);
-                    }}
-                    data-testid="button-generate-invoice-from-visit"
-                  >
-                    <DollarSign className="h-3.5 w-3.5 mr-1" />
-                    Generate Invoice
-                  </Button>
-                )}
-                {contact && (
-                  <Link href={`/contacts/${contact.id}`}>
-                    <Button size="sm" variant="outline" onClick={() => onOpenChange(false)} data-testid="button-view-contact-billing">
-                      View Contact →
-                    </Button>
-                  </Link>
-                )}
-              </div>
-            </div>
-          )}
-
-          <Separator />
-
-          {editing ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Scheduled Date</Label>
-                <Input
-                  type="date"
-                  value={editDate}
-                  onChange={(e) => setEditDate(e.target.value)}
-                  data-testid="input-edit-date"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Route</Label>
-                <Select value={editRouteId || "none"} onValueChange={(v) => setEditRouteId(v === "none" ? "" : v)}>
-                  <SelectTrigger data-testid="select-edit-route">
-                    <SelectValue placeholder="No route" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No route</SelectItem>
-                    {routes?.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Technician Notes</Label>
-                <Textarea
-                  value={editNotes}
-                  onChange={(e) => setEditNotes(e.target.value)}
-                  placeholder="Add notes..."
-                  rows={3}
-                  data-testid="textarea-edit-notes"
-                />
-              </div>
-
-              <div className="flex gap-2">
+              {isEditable && !editing && (
                 <Button
-                  className="flex-1"
-                  onClick={handleSaveEdit}
-                  disabled={editMutation.isPending}
-                  data-testid="button-save-edit"
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={() => setEditing(true)}
+                  data-testid="button-edit-visit"
                 >
-                  {editMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Save Changes
+                  <Pencil className="h-4 w-4 mr-1" />
+                  Edit
                 </Button>
-                <Button
+              )}
+              {visit.status === "completed" && !visit.invoiceId && (
+                <Badge
                   variant="outline"
-                  onClick={() => setEditing(false)}
-                  disabled={editMutation.isPending}
-                  data-testid="button-cancel-edit"
+                  className="text-orange-600 border-orange-300 dark:border-orange-700"
+                  data-testid="badge-needs-invoice"
                 >
-                  Cancel
-                </Button>
-              </div>
+                  <DollarSign className="h-3 w-3 mr-0.5" />
+                  Needs Invoice
+                </Badge>
+              )}
             </div>
-          ) : (
-            <>
-              <div className="space-y-3">
-                {contact && (
-                  <div className="flex items-start gap-3">
-                    <User className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Client</p>
-                      <Link href={`/contacts/${contact.id}`}>
-                        <span className="text-sm font-medium hover:underline cursor-pointer" data-testid="link-visit-contact">
-                          {contact.firstName} {contact.lastName}
-                        </span>
-                      </Link>
-                    </div>
-                  </div>
-                )}
 
-                {property && (
+            {visit.status === "completed" && !visit.invoiceId && (
+              <div
+                className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg p-3 space-y-2"
+                data-testid="section-needs-invoice"
+              >
+                <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                  <DollarSign className="h-4 w-4 shrink-0" />
+                  <span className="text-sm font-medium">This visit hasn't been invoiced yet</span>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {onShowInvoiceDialog && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        onOpenChange(false);
+                        const planForBanner = servicePlans?.find(
+                          (sp) => sp.id === visit.servicePlanId
+                        );
+                        onShowInvoiceDialog(planForBanner?.contactId);
+                      }}
+                      data-testid="button-generate-invoice-from-visit"
+                    >
+                      <DollarSign className="h-3.5 w-3.5 mr-1" />
+                      Generate Invoice
+                    </Button>
+                  )}
+                  {contact && (
+                    <Link href={`/contacts/${contact.id}`}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                        data-testid="button-view-contact-billing"
+                      >
+                        View Contact →
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <Separator />
+
+            {editing ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Scheduled Date</Label>
+                  <Input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    data-testid="input-edit-date"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Route</Label>
+                  <Select
+                    value={editRouteId || "none"}
+                    onValueChange={(v) => setEditRouteId(v === "none" ? "" : v)}
+                  >
+                    <SelectTrigger data-testid="select-edit-route">
+                      <SelectValue placeholder="No route" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No route</SelectItem>
+                      {routes?.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Technician Notes</Label>
+                  <Textarea
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    placeholder="Add notes..."
+                    rows={3}
+                    data-testid="textarea-edit-notes"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    onClick={handleSaveEdit}
+                    disabled={editMutation.isPending}
+                    data-testid="button-save-edit"
+                  >
+                    {editMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : null}
+                    Save Changes
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditing(false)}
+                    disabled={editMutation.isPending}
+                    data-testid="button-cancel-edit"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {contact && (
+                    <div className="flex items-start gap-3">
+                      <User className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Client</p>
+                        <Link href={`/contacts/${contact.id}`}>
+                          <span
+                            className="text-sm font-medium hover:underline cursor-pointer"
+                            data-testid="link-visit-contact"
+                          >
+                            {contact.firstName} {contact.lastName}
+                          </span>
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+
+                  {property && (
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Property</p>
+                        <p className="text-sm" data-testid="text-visit-address">
+                          {property.streetAddress}
+                          {property.city ? `, ${property.city}` : ""}
+                          {property.state ? ` ${property.state}` : ""}
+                          {property.zipCode ? ` ${property.zipCode}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {plan && (
+                    <div className="flex items-start gap-3">
+                      <CalendarCheck className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Job</p>
+                        <p className="text-sm" data-testid="text-visit-service">
+                          {frequencyLabel} Cleanup
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {route && (
+                    <div className="flex items-start gap-3">
+                      <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Route</p>
+                        <p className="text-sm" data-testid="text-visit-route">
+                          {route.name}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex items-start gap-3">
-                    <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                    <DollarSign className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                     <div>
-                      <p className="text-xs text-muted-foreground">Property</p>
-                      <p className="text-sm" data-testid="text-visit-address">
-                        {property.streetAddress}
-                        {property.city ? `, ${property.city}` : ""}
-                        {property.state ? ` ${property.state}` : ""}
-                        {property.zipCode ? ` ${property.zipCode}` : ""}
+                      <p className="text-xs text-muted-foreground">Amount</p>
+                      <p className="text-sm font-medium" data-testid="text-visit-amount">
+                        ${pricePerVisit.toFixed(2)}
                       </p>
                     </div>
                   </div>
-                )}
 
-                {plan && (
-                  <div className="flex items-start gap-3">
-                    <CalendarCheck className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Job</p>
-                      <p className="text-sm" data-testid="text-visit-service">{frequencyLabel} Cleanup</p>
+                  {visit.startedAt && (
+                    <div className="flex items-start gap-3">
+                      <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Started</p>
+                        <p className="text-sm">{new Date(visit.startedAt).toLocaleString()}</p>
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {route && (
-                  <div className="flex items-start gap-3">
-                    <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Route</p>
-                      <p className="text-sm" data-testid="text-visit-route">{route.name}</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-start gap-3">
-                  <DollarSign className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Amount</p>
-                    <p className="text-sm font-medium" data-testid="text-visit-amount">${pricePerVisit.toFixed(2)}</p>
-                  </div>
-                </div>
-
-                {visit.startedAt && (
-                  <div className="flex items-start gap-3">
-                    <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Started</p>
-                      <p className="text-sm">{new Date(visit.startedAt).toLocaleString()}</p>
-                    </div>
-                  </div>
-                )}
-
-                {visit.completedAt && (
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="h-4 w-4 mt-0.5 text-green-600 shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Completed</p>
-                      <p className="text-sm">{new Date(visit.completedAt).toLocaleString()}</p>
-                    </div>
-                  </div>
-                )}
-
-                {visit.technicianNotes && (
-                  <div className="flex items-start gap-3">
-                    <CalendarDays className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Technician Notes</p>
-                      <p className="text-sm italic" data-testid="text-visit-notes">{visit.technicianNotes}</p>
-                    </div>
-                  </div>
-                )}
-
-                {visit.gateClosedPhoto && (
-                  <div className="flex items-start gap-3">
-                    <Camera className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">Gate closed photo</p>
-                      <button
-                        type="button"
-                        className="mt-1 block rounded-md overflow-hidden border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={() => setEnlargedPhoto(visit.gateClosedPhoto!)}
-                        data-testid="button-gate-closed-photo"
-                        aria-label="View gate closed photo full size"
-                      >
-                        <img
-                          src={visit.gateClosedPhoto}
-                          alt="Gate closed photo"
-                          className="h-28 w-auto object-cover hover:opacity-90 transition-opacity"
-                          data-testid="img-gate-closed-photo"
-                        />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <Dialog open={!!enlargedPhoto} onOpenChange={(open) => { if (!open) setEnlargedPhoto(null); }}>
-                <DialogContent className="max-w-2xl p-2">
-                  <DialogHeader className="px-2 pt-2 pb-0">
-                    <DialogTitle className="text-sm font-medium">Gate closed photo</DialogTitle>
-                  </DialogHeader>
-                  {enlargedPhoto && (
-                    <img
-                      src={enlargedPhoto}
-                      alt="Gate closed photo enlarged"
-                      className="w-full h-auto rounded-md"
-                      data-testid="img-gate-closed-photo-enlarged"
-                    />
-                  )}
-                </DialogContent>
-              </Dialog>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</p>
-                <div className="grid grid-cols-1 gap-2">
-                  {(visit.status === "scheduled" || visit.status === "in_progress") && (
-                    <Button
-                      variant="outline"
-                      className="justify-start gap-2 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 border-teal-200 dark:border-teal-800"
-                      onClick={handleSendEnRoute}
-                      disabled={enRouteSending}
-                      data-testid="button-action-en_route"
-                    >
-                      {enRouteSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
-                      Send En-Route
-                    </Button>
                   )}
 
-                  {visit.status === "scheduled" && (
-                    <Button
-                      variant="outline"
-                      className="w-full justify-center sm:justify-start gap-2 h-11 sm:h-9 text-base sm:text-sm font-semibold sm:font-normal text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30 border-orange-200 dark:border-orange-800"
-                      onClick={() => statusMutation.mutate({ visitId: visit.id, status: "in_progress" })}
-                      disabled={statusMutation.isPending}
-                      data-testid="button-action-start"
-                    >
-                      {updatingStatus === "in_progress" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                      Start Job
-                    </Button>
+                  {visit.completedAt && (
+                    <div className="flex items-start gap-3">
+                      <CheckCircle className="h-4 w-4 mt-0.5 text-green-600 shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Completed</p>
+                        <p className="text-sm">{new Date(visit.completedAt).toLocaleString()}</p>
+                      </div>
+                    </div>
                   )}
 
-                  {(visit.status === "scheduled" || visit.status === "in_progress") && (
-                    <>
-                      {!showCompletePanel ? (
-                        <Button
-                          variant="outline"
-                          className="w-full justify-center sm:justify-start gap-2 h-11 sm:h-9 text-base sm:text-sm font-semibold sm:font-normal text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 border-green-200 dark:border-green-800"
-                          onClick={() => setShowCompletePanel(true)}
-                          disabled={statusMutation.isPending || isCompletingWithPhoto}
-                          data-testid="button-action-completed"
+                  {visit.technicianNotes && (
+                    <div className="flex items-start gap-3">
+                      <CalendarDays className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Technician Notes</p>
+                        <p className="text-sm italic" data-testid="text-visit-notes">
+                          {visit.technicianNotes}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {visit.gateClosedPhoto && (
+                    <div className="flex items-start gap-3">
+                      <Camera className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Gate closed photo</p>
+                        <button
+                          type="button"
+                          className="mt-1 block rounded-md overflow-hidden border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={() => setEnlargedPhoto(visit.gateClosedPhoto!)}
+                          data-testid="button-gate-closed-photo"
+                          aria-label="View gate closed photo full size"
                         >
-                          <CheckCircle className="h-4 w-4" />
-                          Mark Complete
-                        </Button>
-                      ) : (
-                        <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20 p-3 space-y-3" data-testid="panel-complete-visit">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-green-700 dark:text-green-400">Complete this visit</p>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 w-6 p-0"
-                              onClick={() => { setShowCompletePanel(false); setGatePhotoFile(null); setGatePhotoPreview(null); }}
-                              data-testid="button-cancel-complete-panel"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-
-                          <div className="space-y-2">
-                            <p className="text-xs text-muted-foreground">Gate closed photo (optional)</p>
-                            {gatePhotoPreview ? (
-                              <div className="relative">
-                                <img src={gatePhotoPreview} alt="Gate closed preview" className="w-full rounded-md max-h-32 object-cover" data-testid="img-gate-preview" />
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="absolute top-1 right-1 h-6 w-6 p-0 bg-black/40 hover:bg-black/60 text-white rounded-full"
-                                  onClick={() => { setGatePhotoFile(null); setGatePhotoPreview(null); }}
-                                  data-testid="button-remove-gate-photo"
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <label className="flex items-center gap-2 cursor-pointer rounded-md border border-dashed border-green-300 dark:border-green-700 p-2 hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors" data-testid="label-gate-photo-upload">
-                                <Camera className="h-4 w-4 text-green-600 shrink-0" />
-                                <span className="text-xs text-muted-foreground">Tap to add gate photo</span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  capture="environment"
-                                  className="hidden"
-                                  onChange={handleGatePhotoChange}
-                                  data-testid="input-gate-photo"
-                                />
-                              </label>
-                            )}
-                          </div>
-
-                          <div className="flex gap-2">
-                            <Button
-                              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                              onClick={handleCompleteConfirm}
-                              disabled={isCompletingWithPhoto}
-                              data-testid="button-confirm-complete"
-                            >
-                              {isCompletingWithPhoto ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                              {gatePhotoFile ? "Complete & Save Photo" : "Complete Visit"}
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </>
+                          <img
+                            src={visit.gateClosedPhoto}
+                            alt="Gate closed photo"
+                            className="h-28 w-auto object-cover hover:opacity-90 transition-opacity"
+                            data-testid="img-gate-closed-photo"
+                          />
+                        </button>
+                      </div>
+                    </div>
                   )}
-
-                  {statusActions.filter(a => a.show).map((action) => {
-                    const Icon = action.icon;
-                    const isUpdating = updatingStatus === action.status;
-                    return (
-                      <Button
-                        key={action.status}
-                        variant="outline"
-                        className={`justify-start gap-2 ${action.color}`}
-                        onClick={() => statusMutation.mutate({ visitId: visit.id, status: action.status })}
-                        disabled={statusMutation.isPending}
-                        data-testid={`button-action-${action.status}`}
-                      >
-                        {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
-                        {action.label}
-                      </Button>
-                    );
-                  })}
                 </div>
-              </div>
-            </>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
+
+                <Dialog
+                  open={!!enlargedPhoto}
+                  onOpenChange={(open) => {
+                    if (!open) setEnlargedPhoto(null);
+                  }}
+                >
+                  <DialogContent className="max-w-2xl p-2">
+                    <DialogHeader className="px-2 pt-2 pb-0">
+                      <DialogTitle className="text-sm font-medium">Gate closed photo</DialogTitle>
+                    </DialogHeader>
+                    {enlargedPhoto && (
+                      <img
+                        src={enlargedPhoto}
+                        alt="Gate closed photo enlarged"
+                        className="w-full h-auto rounded-md"
+                        data-testid="img-gate-closed-photo-enlarged"
+                      />
+                    )}
+                  </DialogContent>
+                </Dialog>
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Actions
+                  </p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {(visit.status === "scheduled" || visit.status === "in_progress") && (
+                      <Button
+                        variant="outline"
+                        className="justify-start gap-2 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 border-teal-200 dark:border-teal-800"
+                        onClick={handleSendEnRoute}
+                        disabled={enRouteSending}
+                        data-testid="button-action-en_route"
+                      >
+                        {enRouteSending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Navigation className="h-4 w-4" />
+                        )}
+                        Send En-Route
+                      </Button>
+                    )}
+
+                    {visit.status === "scheduled" && (
+                      <Button
+                        variant="outline"
+                        className="w-full justify-center sm:justify-start gap-2 h-11 sm:h-9 text-base sm:text-sm font-semibold sm:font-normal text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/30 border-orange-200 dark:border-orange-800"
+                        onClick={() =>
+                          statusMutation.mutate({ visitId: visit.id, status: "in_progress" })
+                        }
+                        disabled={statusMutation.isPending}
+                        data-testid="button-action-start"
+                      >
+                        {updatingStatus === "in_progress" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4" />
+                        )}
+                        Start Job
+                      </Button>
+                    )}
+
+                    {(visit.status === "scheduled" || visit.status === "in_progress") && (
+                      <>
+                        {!showCompletePanel ? (
+                          <Button
+                            variant="outline"
+                            className="w-full justify-center sm:justify-start gap-2 h-11 sm:h-9 text-base sm:text-sm font-semibold sm:font-normal text-green-600 hover:bg-green-50 dark:hover:bg-green-950/30 border-green-200 dark:border-green-800"
+                            onClick={() => setShowCompletePanel(true)}
+                            disabled={statusMutation.isPending || isCompletingWithPhoto}
+                            data-testid="button-action-completed"
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                            Mark Complete
+                          </Button>
+                        ) : (
+                          <div
+                            className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20 p-3 space-y-3"
+                            data-testid="panel-complete-visit"
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                                Complete this visit
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => {
+                                  setShowCompletePanel(false);
+                                  setGatePhotoFile(null);
+                                  setGatePhotoPreview(null);
+                                }}
+                                data-testid="button-cancel-complete-panel"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+
+                            <div className="space-y-2">
+                              <p className="text-xs text-muted-foreground">
+                                Gate closed photo (optional)
+                              </p>
+                              {gatePhotoPreview ? (
+                                <div className="relative">
+                                  <img
+                                    src={gatePhotoPreview}
+                                    alt="Gate closed preview"
+                                    className="w-full rounded-md max-h-32 object-cover"
+                                    data-testid="img-gate-preview"
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="absolute top-1 right-1 h-6 w-6 p-0 bg-black/40 hover:bg-black/60 text-white rounded-full"
+                                    onClick={() => {
+                                      setGatePhotoFile(null);
+                                      setGatePhotoPreview(null);
+                                    }}
+                                    data-testid="button-remove-gate-photo"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <label
+                                  className="flex items-center gap-2 cursor-pointer rounded-md border border-dashed border-green-300 dark:border-green-700 p-2 hover:bg-green-50 dark:hover:bg-green-950/30 transition-colors"
+                                  data-testid="label-gate-photo-upload"
+                                >
+                                  <Camera className="h-4 w-4 text-green-600 shrink-0" />
+                                  <span className="text-xs text-muted-foreground">
+                                    Tap to add gate photo
+                                  </span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    className="hidden"
+                                    onChange={handleGatePhotoChange}
+                                    data-testid="input-gate-photo"
+                                  />
+                                </label>
+                              )}
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                                onClick={handleCompleteConfirm}
+                                disabled={isCompletingWithPhoto}
+                                data-testid="button-confirm-complete"
+                              >
+                                {isCompletingWithPhoto ? (
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                ) : (
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                )}
+                                {gatePhotoFile ? "Complete & Save Photo" : "Complete Visit"}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {statusActions
+                      .filter((a) => a.show)
+                      .map((action) => {
+                        const Icon = action.icon;
+                        const isUpdating = updatingStatus === action.status;
+                        return (
+                          <Button
+                            key={action.status}
+                            variant="outline"
+                            className={`justify-start gap-2 ${action.color}`}
+                            onClick={() =>
+                              statusMutation.mutate({ visitId: visit.id, status: action.status })
+                            }
+                            disabled={statusMutation.isPending}
+                            data-testid={`button-action-${action.status}`}
+                          >
+                            {isUpdating ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Icon className="h-4 w-4" />
+                            )}
+                            {action.label}
+                          </Button>
+                        );
+                      })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
 
-function DroppableDayCell({ dateKey, isOver, children }: {
+function DroppableDayCell({
+  dateKey,
+  isOver,
+  children,
+}: {
   dateKey: string;
   isOver: boolean;
   children: React.ReactNode;
@@ -1844,7 +2450,15 @@ function DroppableDayCell({ dateKey, isOver, children }: {
   );
 }
 
-function DraggableVisitChip({ visit, contacts, properties, routes, servicePlans, compact, onVisitClick }: {
+function DraggableVisitChip({
+  visit,
+  contacts,
+  properties,
+  routes,
+  servicePlans,
+  compact,
+  onVisitClick,
+}: {
   visit: Visit;
   contacts?: Contact[];
   properties?: Property[];
@@ -1857,7 +2471,9 @@ function DraggableVisitChip({ visit, contacts, properties, routes, servicePlans,
     id: `visit-${visit.id}`,
     data: { visit },
   });
-  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
 
   return (
     <div ref={setNodeRef} style={style} className={isDragging ? "opacity-30" : ""} data-visit-chip>
@@ -1871,14 +2487,27 @@ function DraggableVisitChip({ visit, contacts, properties, routes, servicePlans,
           <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
         </div>
         <div className="flex-1 min-w-0">
-          <VisitChip visit={visit} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact={compact} onVisitClick={onVisitClick} />
+          <VisitChip
+            visit={visit}
+            contacts={contacts}
+            properties={properties}
+            routes={routes}
+            servicePlans={servicePlans}
+            compact={compact}
+            onVisitClick={onVisitClick}
+          />
         </div>
       </div>
     </div>
   );
 }
 
-function VisitDragOverlay({ visit, contacts, properties, servicePlans }: {
+function VisitDragOverlay({
+  visit,
+  contacts,
+  properties,
+  servicePlans,
+}: {
   visit: Visit;
   contacts?: Contact[];
   properties?: Property[];
@@ -1890,17 +2519,34 @@ function VisitDragOverlay({ visit, contacts, properties, servicePlans }: {
   return (
     <div className="border rounded-md p-2 bg-background shadow-lg opacity-90 max-w-xs space-y-0.5">
       <div className="flex items-center gap-2">
-        <Badge variant="secondary" className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`}>
+        <Badge
+          variant="secondary"
+          className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`}
+        >
           {visitStatusLabels[visit.status] || visit.status}
         </Badge>
       </div>
-      {contact && <p className="text-xs font-medium">{contact.firstName} {contact.lastName}</p>}
-      {property && <p className="text-[10px] text-muted-foreground truncate">{property.streetAddress}</p>}
+      {contact && (
+        <p className="text-xs font-medium">
+          {contact.firstName} {contact.lastName}
+        </p>
+      )}
+      {property && (
+        <p className="text-[10px] text-muted-foreground truncate">{property.streetAddress}</p>
+      )}
     </div>
   );
 }
 
-function OverflowVisitsPopover({ dayVisits, dateKey, contacts, properties, routes, servicePlans, onVisitClick }: {
+function OverflowVisitsPopover({
+  dayVisits,
+  dateKey,
+  contacts,
+  properties,
+  routes,
+  servicePlans,
+  onVisitClick,
+}: {
   dayVisits: Visit[];
   dateKey: string;
   contacts?: Contact[];
@@ -1917,19 +2563,41 @@ function OverflowVisitsPopover({ dayVisits, dateKey, contacts, properties, route
         className="text-[10px] text-primary font-medium text-center w-full hover:underline cursor-pointer py-0.5"
         data-testid={`button-more-visits-${dateKey}`}
         data-visit-chip
-        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(true);
+        }}
       >
         +{overflowCount} more
       </button>
-      <DialogContent className="sm:max-w-sm p-0 gap-0" data-testid={`dialog-more-visits-${dateKey}`}>
+      <DialogContent
+        className="sm:max-w-sm p-0 gap-0"
+        data-testid={`dialog-more-visits-${dateKey}`}
+      >
         <DialogHeader className="px-4 pt-4 pb-2">
           <DialogTitle className="text-sm">
-            All visits ({dayVisits.length}) — {new Date(dateKey + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+            All visits ({dayVisits.length}) —{" "}
+            {new Date(dateKey + "T12:00:00").toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            })}
           </DialogTitle>
         </DialogHeader>
         <div className="px-4 pb-4 space-y-1 max-h-[60vh] overflow-y-auto">
           {dayVisits.map((v) => (
-            <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} compact onVisitClick={(visit) => { setOpen(false); onVisitClick?.(visit); }} />
+            <VisitChip
+              key={v.id}
+              visit={v}
+              contacts={contacts}
+              properties={properties}
+              routes={routes}
+              servicePlans={servicePlans}
+              compact
+              onVisitClick={(visit) => {
+                setOpen(false);
+                onVisitClick?.(visit);
+              }}
+            />
           ))}
         </div>
       </DialogContent>
@@ -1937,7 +2605,15 @@ function OverflowVisitsPopover({ dayVisits, dateKey, contacts, properties, route
   );
 }
 
-function VisitChip({ visit, contacts, properties, routes, servicePlans, compact, onVisitClick }: {
+function VisitChip({
+  visit,
+  contacts,
+  properties,
+  routes,
+  servicePlans,
+  compact,
+  onVisitClick,
+}: {
   visit: Visit;
   contacts?: Contact[];
   properties?: Property[];
@@ -1965,21 +2641,41 @@ function VisitChip({ visit, contacts, properties, routes, servicePlans, compact,
         onClick={handleClick}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(e); } }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleClick(e);
+          }
+        }}
       >
         <div className="flex items-center justify-between gap-1">
-          <Badge variant="secondary" className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`}>
+          <Badge
+            variant="secondary"
+            className={`text-[10px] px-1 py-0 ${visitStatusColors[visit.status] || ""}`}
+          >
             {visitStatusLabels[visit.status] || visit.status}
           </Badge>
           {visit.status === "completed" && !visit.invoiceId && (
-            <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400" title="Needs invoicing" data-testid={`indicator-needs-invoice-${visit.id}`}>$</span>
+            <span
+              className="text-[10px] font-bold text-orange-600 dark:text-orange-400"
+              title="Needs invoicing"
+              data-testid={`indicator-needs-invoice-${visit.id}`}
+            >
+              $
+            </span>
           )}
-          {route && <span className="text-[10px] text-muted-foreground truncate">{route.name}</span>}
+          {route && (
+            <span className="text-[10px] text-muted-foreground truncate">{route.name}</span>
+          )}
         </div>
         {contact && (
-          <p className="truncate text-[11px] font-medium">{contact.firstName} {contact.lastName}</p>
+          <p className="truncate text-[11px] font-medium">
+            {contact.firstName} {contact.lastName}
+          </p>
         )}
-        {property && <p className="truncate text-[10px] text-muted-foreground">{property.streetAddress}</p>}
+        {property && (
+          <p className="truncate text-[10px] text-muted-foreground">{property.streetAddress}</p>
+        )}
       </div>
     );
   }
@@ -1991,7 +2687,12 @@ function VisitChip({ visit, contacts, properties, routes, servicePlans, compact,
       onClick={handleClick}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(e); } }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleClick(e);
+        }
+      }}
     >
       <CardContent className="p-3 space-y-1">
         <div className="flex items-center justify-between gap-2">
@@ -1999,21 +2700,45 @@ function VisitChip({ visit, contacts, properties, routes, servicePlans, compact,
             {visitStatusLabels[visit.status] || visit.status}
           </Badge>
           {visit.status === "completed" && !visit.invoiceId && (
-            <span className="text-xs font-bold text-orange-600 dark:text-orange-400" title="Needs invoicing" data-testid={`indicator-needs-invoice-${visit.id}`}>$</span>
+            <span
+              className="text-xs font-bold text-orange-600 dark:text-orange-400"
+              title="Needs invoicing"
+              data-testid={`indicator-needs-invoice-${visit.id}`}
+            >
+              $
+            </span>
           )}
           {route && <span className="text-xs text-muted-foreground">{route.name}</span>}
         </div>
         {contact && (
-          <p className="text-sm font-medium">{contact.firstName} {contact.lastName}</p>
+          <p className="text-sm font-medium">
+            {contact.firstName} {contact.lastName}
+          </p>
         )}
-        {property && <p className="text-xs text-muted-foreground">{property.streetAddress}{property.city ? `, ${property.city}` : ""}</p>}
-        {visit.technicianNotes && <p className="text-xs text-muted-foreground italic">{visit.technicianNotes}</p>}
+        {property && (
+          <p className="text-xs text-muted-foreground">
+            {property.streetAddress}
+            {property.city ? `, ${property.city}` : ""}
+          </p>
+        )}
+        {visit.technicianNotes && (
+          <p className="text-xs text-muted-foreground italic">{visit.technicianNotes}</p>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function DayView({ date, visits, contacts, properties, routes, servicePlans, onVisitClick, onAddVisit }: {
+function DayView({
+  date,
+  visits,
+  contacts,
+  properties,
+  routes,
+  servicePlans,
+  onVisitClick,
+  onAddVisit,
+}: {
   date: Date;
   visits: Visit[];
   contacts?: Contact[];
@@ -2025,7 +2750,13 @@ function DayView({ date, visits, contacts, properties, routes, servicePlans, onV
 }) {
   const tz = useCompanyTimezone();
   const statusGroups = useMemo(() => {
-    const groups: Record<string, Visit[]> = { scheduled: [], in_progress: [], completed: [], skipped: [], cancelled: [] };
+    const groups: Record<string, Visit[]> = {
+      scheduled: [],
+      in_progress: [],
+      completed: [],
+      skipped: [],
+      cancelled: [],
+    };
     visits.forEach((v) => {
       if (groups[v.status]) groups[v.status].push(v);
       else groups[v.status] = [v];
@@ -2036,13 +2767,24 @@ function DayView({ date, visits, contacts, properties, routes, servicePlans, onV
   return (
     <div className="space-y-4" data-testid="day-view">
       <div className="flex items-center gap-3">
-        <div className="text-4xl font-bold text-primary" data-testid="text-day-number">{date.getDate()}</div>
+        <div className="text-4xl font-bold text-primary" data-testid="text-day-number">
+          {date.getDate()}
+        </div>
         <div className="flex-1">
-          <p className="text-sm font-medium">{date.toLocaleDateString(undefined, { weekday: "long" })}</p>
-          <p className="text-xs text-muted-foreground">{visits.length} visit{visits.length !== 1 ? "s" : ""}</p>
+          <p className="text-sm font-medium">
+            {date.toLocaleDateString(undefined, { weekday: "long" })}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {visits.length} visit{visits.length !== 1 ? "s" : ""}
+          </p>
         </div>
         {onAddVisit && (
-          <Button variant="outline" size="sm" onClick={() => onAddVisit(formatDate(date, tz))} data-testid="button-day-add-visit">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onAddVisit(formatDate(date, tz))}
+            data-testid="button-day-add-visit"
+          >
             <Plus className="mr-1 h-4 w-4" /> Add Visit
           </Button>
         )}
@@ -2062,11 +2804,21 @@ function DayView({ date, visits, contacts, properties, routes, servicePlans, onV
             return (
               <div key={status}>
                 <div className="flex items-center gap-2 mb-2">
-                  <Badge variant="secondary" className={visitStatusColors[status] || ""}>{status}</Badge>
+                  <Badge variant="secondary" className={visitStatusColors[status] || ""}>
+                    {status}
+                  </Badge>
                   <span className="text-xs text-muted-foreground">({groupVisits.length})</span>
                 </div>
                 {groupVisits.map((v) => (
-                  <VisitChip key={v.id} visit={v} contacts={contacts} properties={properties} routes={routes} servicePlans={servicePlans} onVisitClick={onVisitClick} />
+                  <VisitChip
+                    key={v.id}
+                    visit={v}
+                    contacts={contacts}
+                    properties={properties}
+                    routes={routes}
+                    servicePlans={servicePlans}
+                    onVisitClick={onVisitClick}
+                  />
                 ))}
               </div>
             );

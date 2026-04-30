@@ -16,9 +16,10 @@ interface TokenData {
 type Step = "loading" | "rating" | "positive" | "negative" | "submitted" | "error";
 
 export default function ReviewRouter() {
-  const token = typeof window !== "undefined"
-    ? window.location.pathname.replace(/^\/review\//, "").split("/")[0] || ""
-    : "";
+  const token =
+    typeof window !== "undefined"
+      ? window.location.pathname.replace(/^\/review\//, "").split("/")[0] || ""
+      : "";
 
   const [step, setStep] = useState<Step>("loading");
   const [tokenData, setTokenData] = useState<TokenData | null>(null);
@@ -116,14 +117,16 @@ export default function ReviewRouter() {
               <span className="text-white text-2xl font-bold">{companyName[0]}</span>
             </div>
           )}
-          <h1 className="text-lg font-semibold text-gray-800 dark:text-gray-100" data-testid="text-company-name">
+          <h1
+            className="text-lg font-semibold text-gray-800 dark:text-gray-100"
+            data-testid="text-company-name"
+          >
             {companyName}
           </h1>
         </div>
 
         {/* Card */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-800 p-8">
-
           {step === "loading" && (
             <div className="flex flex-col items-center py-8 gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-green-600" />
@@ -135,14 +138,22 @@ export default function ReviewRouter() {
             <div className="flex flex-col items-center py-6 gap-4 text-center">
               <AlertTriangle className="h-12 w-12 text-amber-500" />
               <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Oops!</h2>
-              <p className="text-gray-500 dark:text-gray-400 text-sm" data-testid="text-error-message">{errorMsg}</p>
+              <p
+                className="text-gray-500 dark:text-gray-400 text-sm"
+                data-testid="text-error-message"
+              >
+                {errorMsg}
+              </p>
             </div>
           )}
 
           {step === "rating" && (
             <div className="text-center space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2" data-testid="heading-step1">
+                <h2
+                  className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2"
+                  data-testid="heading-step1"
+                >
                   How was your service today?
                 </h2>
                 <p className="text-gray-500 dark:text-gray-400 text-sm">
@@ -181,11 +192,16 @@ export default function ReviewRouter() {
             <div className="text-center space-y-6">
               <div className="text-5xl">🎉</div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3" data-testid="heading-positive">
+                <h2
+                  className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3"
+                  data-testid="heading-positive"
+                >
                   You just made our day!
                 </h2>
                 <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
-                  Thank you so much — we're thrilled your yard is looking great. We're a small local team, and reviews like yours are how our neighbors find us and trust us with their homes. It only takes 30 seconds, and it makes a huge difference.
+                  Thank you so much — we're thrilled your yard is looking great. We're a small local
+                  team, and reviews like yours are how our neighbors find us and trust us with their
+                  homes. It only takes 30 seconds, and it makes a huge difference.
                 </p>
               </div>
               {googleReviewUrl ? (
@@ -208,11 +224,16 @@ export default function ReviewRouter() {
           {step === "negative" && (
             <div className="space-y-5">
               <div className="text-center">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3" data-testid="heading-negative">
+                <h2
+                  className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3"
+                  data-testid="heading-negative"
+                >
                   We're sorry we let you down.
                 </h2>
                 <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
-                  We take every visit seriously, and it sounds like we missed the mark today. Please tell us what happened — your feedback goes directly to our owner and we'll follow up personally to make it right.
+                  We take every visit seriously, and it sounds like we missed the mark today. Please
+                  tell us what happened — your feedback goes directly to our owner and we'll follow
+                  up personally to make it right.
                 </p>
               </div>
               <div className="space-y-2">
@@ -239,7 +260,9 @@ export default function ReviewRouter() {
                 data-testid="button-submit-feedback"
               >
                 {submitting ? (
-                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…</>
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Sending…
+                  </>
                 ) : (
                   "Submit Feedback to Management"
                 )}
@@ -255,7 +278,8 @@ export default function ReviewRouter() {
                     data-testid="link-public-review-compliance"
                   >
                     leave a public review here
-                  </a>.
+                  </a>
+                  .
                 </p>
               )}
             </div>
@@ -265,11 +289,15 @@ export default function ReviewRouter() {
             <div className="flex flex-col items-center py-6 gap-4 text-center">
               <CheckCircle2 className="h-14 w-14 text-green-500" />
               <div>
-                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2" data-testid="heading-submitted">
+                <h2
+                  className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2"
+                  data-testid="heading-submitted"
+                >
                   Thank you, {firstName}!
                 </h2>
                 <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
-                  Your feedback has been sent to our owner and we'll be in touch soon to make things right. We appreciate you taking the time.
+                  Your feedback has been sent to our owner and we'll be in touch soon to make things
+                  right. We appreciate you taking the time.
                 </p>
               </div>
               {googleReviewUrl && (

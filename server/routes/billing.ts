@@ -15,13 +15,19 @@ import {
 } from "../services/stripe";
 import { getAutocompleteCached, setAutocompleteCache } from "../services/geocode";
 import { trackApiCall, getApiUsageStats } from "../services/api-usage";
+import { TIER_CONFIG, VOICE_PLAN_CONFIG } from "@shared/schema";
+
 import {
-  TIER_CONFIG,
-  VOICE_PLAN_CONFIG,
-} from "@shared/schema";
-
-import { isAuthenticated, getCompanyContext, requireRole, getBaseUrl, handleError, auditLog, p, notify, qboAutoSync } from "./shared";
-
+  isAuthenticated,
+  getCompanyContext,
+  requireRole,
+  getBaseUrl,
+  handleError,
+  auditLog,
+  p,
+  notify,
+  qboAutoSync,
+} from "./shared";
 
 export async function registerBillingRoutes(app: Express): Promise<void> {
   // ================ Subscription Billing ================
@@ -47,8 +53,17 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
 
       const resolvedPriceId = TIER_PRICE_MAP[tier];
       if (!resolvedPriceId) {
-        console.error(`[Checkout] Invalid or unconfigured tier: "${tier}". Configured tiers: ${Object.entries(TIER_PRICE_MAP).filter(([,v]) => !!v).map(([k]) => k).join(", ")}`);
-        return res.status(400).json({ error: `Invalid tier: ${tier}. Valid tiers: ${Object.keys(TIER_PRICE_MAP).join(", ")}` });
+        console.error(
+          `[Checkout] Invalid or unconfigured tier: "${tier}". Configured tiers: ${Object.entries(
+            TIER_PRICE_MAP
+          )
+            .filter(([, v]) => !!v)
+            .map(([k]) => k)
+            .join(", ")}`
+        );
+        return res.status(400).json({
+          error: `Invalid tier: ${tier}. Valid tiers: ${Object.keys(TIER_PRICE_MAP).join(", ")}`,
+        });
       }
 
       const baseUrl = getBaseUrl(req);
@@ -58,8 +73,7 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         const { companyId } = await getCompanyContext(req);
         const company = await storage.getCompany(companyId);
         if (company?.stripeCustomerId) customerId = company.stripeCustomerId;
-      } catch (_noAuth) {
-      }
+      } catch (_noAuth) {}
 
       let tenantId = "";
       try {
@@ -96,7 +110,8 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       requireRole(role, ["owner", "admin"]);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
-      if (!company.stripeCustomerId) return res.status(400).json({ error: "No Stripe customer linked" });
+      if (!company.stripeCustomerId)
+        return res.status(400).json({ error: "No Stripe customer linked" });
       if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
 
       const baseUrl = getBaseUrl(req);
@@ -123,7 +138,9 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
 
       const baseUrl = getBaseUrl(req);
       const { default: StripeLib } = await import("stripe");
-      const stripeLib = new StripeLib(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-01-28.clover" as any });
+      const stripeLib = new StripeLib(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: "2026-01-28.clover" as any,
+      });
 
       const sessionParams: any = {
         mode: "payment",
@@ -155,11 +172,20 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       const company = await storage.getCompany(companyId);
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString();
+      const endOfMonth = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0,
+        23,
+        59,
+        59
+      ).toISOString();
 
       const summary = await storage.getUsageSummary(companyId, startOfMonth, endOfMonth);
       const activeUsers = await storage.countActiveCompanyUsers(companyId);
-      const tierConfig = company ? TIER_CONFIG[company.subscriptionTier as keyof typeof TIER_CONFIG] : null;
+      const tierConfig = company
+        ? TIER_CONFIG[company.subscriptionTier as keyof typeof TIER_CONFIG]
+        : null;
 
       const voiceMinutesAllowance = company?.voicePlanIncludedMinutes ?? 100;
 
@@ -214,14 +240,18 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         trialEndsAt: company.trialEndsAt,
         stripeCustomerId: company.stripeCustomerId,
         hasStripeSubscription: !!company.stripeSubscriptionId,
-        voicePlan: company.voicePlanTier ? {
-          tier: company.voicePlanTier,
-          name: voicePlanConfig?.name || company.voicePlanTier,
-          status: company.voicePlanStatus || "inactive",
-          includedMinutes: company.voicePlanIncludedMinutes || 0,
-          overageRate: company.voicePlanOverageRate ? parseFloat(company.voicePlanOverageRate) : 0,
-          dedicatedPhoneNumber: company.dedicatedPhoneNumber || null,
-        } : null,
+        voicePlan: company.voicePlanTier
+          ? {
+              tier: company.voicePlanTier,
+              name: voicePlanConfig?.name || company.voicePlanTier,
+              status: company.voicePlanStatus || "inactive",
+              includedMinutes: company.voicePlanIncludedMinutes || 0,
+              overageRate: company.voicePlanOverageRate
+                ? parseFloat(company.voicePlanOverageRate)
+                : 0,
+              dedicatedPhoneNumber: company.dedicatedPhoneNumber || null,
+            }
+          : null,
       });
     } catch (err) {
       handleError(res, err);
@@ -251,44 +281,65 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         .where(eq(contacts.companyId, companyId));
 
       const totalCustomers = allContacts.length;
-      const autopayContacts = allContacts.filter(c => c.autoPayEnabled);
+      const autopayContacts = allContacts.filter((c) => c.autoPayEnabled);
       const autopayCustomers = autopayContacts.length;
-      const autopayPercent = totalCustomers > 0 ? Math.round((autopayCustomers / totalCustomers) * 100) : 0;
+      const autopayPercent =
+        totalCustomers > 0 ? Math.round((autopayCustomers / totalCustomers) * 100) : 0;
 
-      const missingPaymentMethodContacts = autopayContacts.filter(c => !c.stripeCustomerId);
+      const missingPaymentMethodContacts = autopayContacts.filter((c) => !c.stripeCustomerId);
       const missingPaymentMethod = missingPaymentMethodContacts.length;
 
       const [failedInvoices, activeAgreements] = await Promise.all([
-        db.select({ id: invoices.id, contactId: invoices.contactId, total: invoices.total })
+        db
+          .select({ id: invoices.id, contactId: invoices.contactId, total: invoices.total })
           .from(invoices)
           .where(and(eq(invoices.companyId, companyId), eq(invoices.status, "failed"))),
-        db.select({ contactId: agreementsTable.contactId })
+        db
+          .select({ contactId: agreementsTable.contactId })
           .from(agreementsTable)
           .where(and(eq(agreementsTable.companyId, companyId), eq(agreementsTable.isActive, true))),
       ]);
       const failedPayments = failedInvoices.length;
 
-      const contactsWithActiveAgreement = new Set(activeAgreements.map(a => a.contactId));
-      const autopayContactIds = new Set(autopayContacts.map(c => c.id));
-      const noRuleContacts = autopayContacts.filter(c => !contactsWithActiveAgreement.has(c.id));
+      const contactsWithActiveAgreement = new Set(activeAgreements.map((a) => a.contactId));
+      const autopayContactIds = new Set(autopayContacts.map((c) => c.id));
+      const noRuleContacts = autopayContacts.filter((c) => !contactsWithActiveAgreement.has(c.id));
 
       const upcomingInvoices = await db
-        .select({ id: invoices.id, contactId: invoices.contactId, total: invoices.total, dueDate: invoices.dueDate })
+        .select({
+          id: invoices.id,
+          contactId: invoices.contactId,
+          total: invoices.total,
+          dueDate: invoices.dueDate,
+        })
         .from(invoices)
         .where(
           and(
             eq(invoices.companyId, companyId),
-            or(eq(invoices.status, "sent"), eq(invoices.status, "pending"), eq(invoices.status, "draft")),
+            or(
+              eq(invoices.status, "sent"),
+              eq(invoices.status, "pending"),
+              eq(invoices.status, "draft")
+            ),
             sql`${invoices.dueDate} >= ${nowDateStr}`,
             sql`${invoices.dueDate} <= ${sevenDaysStr}`
           )
         );
 
-      const autopayUpcomingInvoices = upcomingInvoices.filter(inv => autopayContactIds.has(inv.contactId));
-      const upcomingChargesTotal = autopayUpcomingInvoices.reduce((sum, inv) => sum + Math.round(parseFloat(inv.total) * 100), 0);
-      const upcomingChargesCustomers = new Set(autopayUpcomingInvoices.map(inv => inv.contactId)).size;
+      const autopayUpcomingInvoices = upcomingInvoices.filter((inv) =>
+        autopayContactIds.has(inv.contactId)
+      );
+      const upcomingChargesTotal = autopayUpcomingInvoices.reduce(
+        (sum, inv) => sum + Math.round(parseFloat(inv.total) * 100),
+        0
+      );
+      const upcomingChargesCustomers = new Set(autopayUpcomingInvoices.map((inv) => inv.contactId))
+        .size;
 
-      const byDate: Record<string, { customers: Set<string>; totalCents: number; invoiceIds: string[] }> = {};
+      const byDate: Record<
+        string,
+        { customers: Set<string>; totalCents: number; invoiceIds: string[] }
+      > = {};
       for (const inv of autopayUpcomingInvoices) {
         const d = inv.dueDate;
         if (!byDate[d]) byDate[d] = { customers: new Set(), totalCents: 0, invoiceIds: [] };
@@ -305,25 +356,42 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
           invoiceIds: info.invoiceIds,
         }));
 
-      const misconfigurations: Array<{ contactId: string; contactName: string; issue: string }> = [];
-      const contactMap = new Map(allContacts.map(c => [c.id, c]));
+      const misconfigurations: Array<{ contactId: string; contactName: string; issue: string }> =
+        [];
+      const contactMap = new Map(allContacts.map((c) => [c.id, c]));
       for (const c of missingPaymentMethodContacts) {
-        misconfigurations.push({ contactId: c.id, contactName: `${c.firstName} ${c.lastName}`.trim(), issue: "no_payment_method" });
+        misconfigurations.push({
+          contactId: c.id,
+          contactName: `${c.firstName} ${c.lastName}`.trim(),
+          issue: "no_payment_method",
+        });
       }
-      const failedContactIdSet = new Set(failedInvoices.map(i => i.contactId));
+      const failedContactIdSet = new Set(failedInvoices.map((i) => i.contactId));
       for (const contactId of failedContactIdSet) {
         const c = contactMap.get(contactId);
-        if (c) misconfigurations.push({ contactId: c.id, contactName: `${c.firstName} ${c.lastName}`.trim(), issue: "failed_charge" });
+        if (c)
+          misconfigurations.push({
+            contactId: c.id,
+            contactName: `${c.firstName} ${c.lastName}`.trim(),
+            issue: "failed_charge",
+          });
       }
       for (const c of noRuleContacts) {
-        misconfigurations.push({ contactId: c.id, contactName: `${c.firstName} ${c.lastName}`.trim(), issue: "no_billing_rule" });
+        misconfigurations.push({
+          contactId: c.id,
+          contactName: `${c.firstName} ${c.lastName}`.trim(),
+          issue: "no_billing_rule",
+        });
       }
 
       res.json({
         autopayCustomers,
         totalCustomers,
         autopayPercent,
-        autopayContacts: autopayContacts.map(c => ({ id: c.id, name: `${c.firstName} ${c.lastName}`.trim() })),
+        autopayContacts: autopayContacts.map((c) => ({
+          id: c.id,
+          name: `${c.firstName} ${c.lastName}`.trim(),
+        })),
         missingPaymentMethod,
         failedPayments,
         upcomingChargesTotal,
@@ -336,7 +404,12 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
     }
   });
 
-  async function chargeInvoiceInternal(invoiceId: string, companyId: string, userId: string | null, ipAddress?: string): Promise<{ status: string }> {
+  async function chargeInvoiceInternal(
+    invoiceId: string,
+    companyId: string,
+    userId: string | null,
+    ipAddress?: string
+  ): Promise<{ status: string }> {
     const invoice = await storage.getInvoice(invoiceId, companyId);
     if (!invoice || invoice.status === "paid") return { status: "skipped" };
     const contact = await storage.getContact(invoice.contactId, companyId);
@@ -351,7 +424,8 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       name: contactName,
       metadata: { contactId: contact.id, companyId },
     });
-    if (wasRecreated) await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustomerId });
+    if (wasRecreated)
+      await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustomerId });
     const result = await chargeInvoiceAutomatically({
       customerId: resolvedCustomerId,
       amount: parseFloat(invoice.total),
@@ -361,35 +435,82 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       tenantId: companyId,
       currency: company?.currency || "usd",
     });
-    const updateData: Record<string, unknown> = { paymentAttempts: (invoice.paymentAttempts || 0) + 1, lastPaymentAttempt: new Date() };
+    const updateData: Record<string, unknown> = {
+      paymentAttempts: (invoice.paymentAttempts || 0) + 1,
+      lastPaymentAttempt: new Date(),
+    };
     if (result.status === "succeeded") {
       updateData.status = "paid";
       updateData.paidAt = new Date();
       updateData.stripePaymentIntentId = result.paymentIntentId;
-      notify(companyId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+      notify(
+        companyId,
+        "invoice_paid",
+        "Invoice Paid",
+        `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`,
+        `/invoices`
+      );
       qboAutoSync(companyId, invoice.id, "payment");
     } else if (result.status === "no_payment_method") {
       // No card on file — leave the invoice in its current status so it can still be paid via link
       updateData.status = invoice.status === "draft" ? "draft" : "sent";
-      notify(companyId, "payment_failed", "No Payment Method", `No payment method on file for ${contactName} (invoice #${invoice.invoiceNumber}). Send them a payment link to collect their card.`, `/invoices`);
+      notify(
+        companyId,
+        "payment_failed",
+        "No Payment Method",
+        `No payment method on file for ${contactName} (invoice #${invoice.invoiceNumber}). Send them a payment link to collect their card.`,
+        `/invoices`
+      );
       try {
         const { fireAutomationTrigger } = await import("../services/automation-runner");
-        await fireAutomationTrigger("payment_failed", companyId, { invoiceId: invoice.id, reason: "no_payment_method" });
-      } catch (autoErr) { console.error("[automation] payment_failed trigger error:", autoErr); }
+        await fireAutomationTrigger("payment_failed", companyId, {
+          invoiceId: invoice.id,
+          reason: "no_payment_method",
+        });
+      } catch (autoErr) {
+        console.error("[automation] payment_failed trigger error:", autoErr);
+      }
     } else {
       updateData.status = "failed";
       if (result.paymentIntentId) updateData.stripePaymentIntentId = result.paymentIntentId;
-      notify(companyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}. The card on file was declined.`, `/invoices`);
+      notify(
+        companyId,
+        "payment_failed",
+        "Payment Failed",
+        `Payment failed for invoice #${invoice.invoiceNumber}. The card on file was declined.`,
+        `/invoices`
+      );
       try {
         const { fireAutomationTrigger } = await import("../services/automation-runner");
-        await fireAutomationTrigger("payment_failed", companyId, { invoiceId: invoice.id, reason: "card_declined" });
-      } catch (autoErr) { console.error("[automation] payment_failed trigger error:", autoErr); }
+        await fireAutomationTrigger("payment_failed", companyId, {
+          invoiceId: invoice.id,
+          reason: "card_declined",
+        });
+      } catch (autoErr) {
+        console.error("[automation] payment_failed trigger error:", autoErr);
+      }
     }
-    const updated = await storage.updateInvoice(invoice.id, companyId, updateData as Parameters<typeof storage.updateInvoice>[2]);
-    auditLog(companyId, userId, "invoice", invoice.id, "update", {
-      old: { status: invoice.status, paymentAttempts: invoice.paymentAttempts },
-      new: { status: updated.status, paymentAttempts: updated.paymentAttempts, chargeResult: result.status },
-    }, ipAddress);
+    const updated = await storage.updateInvoice(
+      invoice.id,
+      companyId,
+      updateData as Parameters<typeof storage.updateInvoice>[2]
+    );
+    auditLog(
+      companyId,
+      userId,
+      "invoice",
+      invoice.id,
+      "update",
+      {
+        old: { status: invoice.status, paymentAttempts: invoice.paymentAttempts },
+        new: {
+          status: updated.status,
+          paymentAttempts: updated.paymentAttempts,
+          chargeResult: result.status,
+        },
+      },
+      ipAddress
+    );
     return { status: result.status };
   }
 
@@ -402,8 +523,14 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       const autopayEligible = await db
         .select({ id: contacts.id })
         .from(contacts)
-        .where(and(eq(contacts.companyId, companyId), eq(contacts.autoPayEnabled, true), isNotNull(contacts.stripeCustomerId)));
-      const autopayContactIds = new Set(autopayEligible.map(c => c.id));
+        .where(
+          and(
+            eq(contacts.companyId, companyId),
+            eq(contacts.autoPayEnabled, true),
+            isNotNull(contacts.stripeCustomerId)
+          )
+        );
+      const autopayContactIds = new Set(autopayEligible.map((c) => c.id));
 
       const dateInvoices = await db
         .select({ id: invoices.id, contactId: invoices.contactId })
@@ -411,16 +538,25 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         .where(
           and(
             eq(invoices.companyId, companyId),
-            or(eq(invoices.status, "sent"), eq(invoices.status, "pending"), eq(invoices.status, "draft")),
+            or(
+              eq(invoices.status, "sent"),
+              eq(invoices.status, "pending"),
+              eq(invoices.status, "draft")
+            ),
             eq(invoices.dueDate, date)
           )
         );
 
-      const toCharge = dateInvoices.filter(inv => autopayContactIds.has(inv.contactId));
+      const toCharge = dateInvoices.filter((inv) => autopayContactIds.has(inv.contactId));
       const results: Array<{ invoiceId: string; status: string }> = [];
       for (const inv of toCharge) {
         try {
-          const chargeResult = await chargeInvoiceInternal(inv.id, companyId, userId, req.ip || undefined);
+          const chargeResult = await chargeInvoiceInternal(
+            inv.id,
+            companyId,
+            userId,
+            req.ip || undefined
+          );
           results.push({ invoiceId: inv.id, status: chargeResult.status });
         } catch {
           results.push({ invoiceId: inv.id, status: "error" });
@@ -439,7 +575,10 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       if (!stripePrices && isStripeConfigured()) {
         stripePrices = await fetchStripePrices();
       }
-      const result: Record<string, { name: string; price: number; maxUsers: number; maxContacts: number | null }> = {};
+      const result: Record<
+        string,
+        { name: string; price: number; maxUsers: number; maxContacts: number | null }
+      > = {};
       for (const [tier, config] of Object.entries(TIER_CONFIG)) {
         if (!config.visible) continue;
         result[tier] = {
@@ -474,16 +613,21 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       requireRole(role, ["owner", "admin"]);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
-      if (company.voicePlanStatus === "active") return res.status(400).json({ error: "Voice plan already active" });
+      if (company.voicePlanStatus === "active")
+        return res.status(400).json({ error: "Voice plan already active" });
 
       const { plan } = req.body;
       if (!plan || !(plan in VOICE_PRICE_MAP)) {
-        return res.status(400).json({ error: `Invalid voice plan. Valid: ${Object.keys(VOICE_PRICE_MAP).join(", ")}` });
+        return res
+          .status(400)
+          .json({ error: `Invalid voice plan. Valid: ${Object.keys(VOICE_PRICE_MAP).join(", ")}` });
       }
 
       const priceId = VOICE_PRICE_MAP[plan];
       if (!priceId) {
-        return res.status(400).json({ error: "Voice plan pricing not configured. Contact support." });
+        return res
+          .status(400)
+          .json({ error: "Voice plan pricing not configured. Contact support." });
       }
 
       const isSubscriber = company.subscriptionStatus === "active";
@@ -510,13 +654,16 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
   app.post("/api/voice-signup/:slug/checkout", async (req: Request, res: Response) => {
     try {
       if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
-      const { slug: _slug } = req.params; const slug = p(_slug);
+      const { slug: _slug } = req.params;
+      const slug = p(_slug);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
       const { plan, email } = req.body;
       if (!plan || !(plan in VOICE_PRICE_MAP)) {
-        return res.status(400).json({ error: `Invalid voice plan. Valid: ${Object.keys(VOICE_PRICE_MAP).join(", ")}` });
+        return res
+          .status(400)
+          .json({ error: `Invalid voice plan. Valid: ${Object.keys(VOICE_PRICE_MAP).join(", ")}` });
       }
       if (!email) return res.status(400).json({ error: "email is required" });
 
@@ -552,7 +699,8 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
 
   app.get("/api/voice-signup/:slug/info", async (req: Request, res: Response) => {
     try {
-      const { slug: _slug } = req.params; const slug = p(_slug);
+      const { slug: _slug } = req.params;
+      const slug = p(_slug);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
       const isSubscriber = company.subscriptionStatus === "active";
@@ -713,10 +861,9 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
     const yi = parseInt(y, 10);
     if (zi < 0 || zi > 20 || xi < 0 || yi < 0) return res.status(400).send("Out of range");
     try {
-      const upstream = await fetch(
-        `https://tile.openstreetmap.org/${zi}/${xi}/${yi}.png`,
-        { headers: { "User-Agent": "ScooPilot/1.0 map-proxy" } }
-      );
+      const upstream = await fetch(`https://tile.openstreetmap.org/${zi}/${xi}/${yi}.png`, {
+        headers: { "User-Agent": "ScooPilot/1.0 map-proxy" },
+      });
       if (!upstream.ok) return res.status(upstream.status).send("Tile unavailable");
       const buf = Buffer.from(await upstream.arrayBuffer());
       res.set({
@@ -748,7 +895,8 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         const geocodeRes = await fetch(geocodeUrl);
         if (!geocodeRes.ok) return res.status(502).json({ error: "Geocoding failed" });
         const geocodeData = await geocodeRes.json();
-        if (!geocodeData.features?.length) return res.status(404).json({ error: "Address not found" });
+        if (!geocodeData.features?.length)
+          return res.status(404).json({ error: "Address not found" });
         [longitude, latitude] = geocodeData.features[0].center;
       } else {
         return res.status(400).json({ error: "address or lat+lng required" });
@@ -793,7 +941,8 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         const geocodeRes = await fetch(geocodeUrl);
         if (!geocodeRes.ok) return res.status(502).json({ error: "Geocoding failed" });
         const geocodeData = await geocodeRes.json();
-        if (!geocodeData.features?.length) return res.status(404).json({ error: "Address not found" });
+        if (!geocodeData.features?.length)
+          return res.status(404).json({ error: "Address not found" });
         [longitude, latitude] = geocodeData.features[0].center;
       } else {
         return res.status(400).json({ error: "address or lat+lng required" });
@@ -823,94 +972,128 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
   });
 
   // Admin: fetch all today's visit data + billing summary
-  app.get("/api/admin/command-center-stats", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const today = (typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date))
-        ? req.query.date
-        : new Date().toISOString().split("T")[0];
+  app.get(
+    "/api/admin/command-center-stats",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const today =
+          typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+            ? req.query.date
+            : new Date().toISOString().split("T")[0];
 
-      const visitsList = await storage.getVisits(companyId, { date: today });
-      const companyRoutes = await storage.getRoutes(companyId);
-      const routeMap = new Map(companyRoutes.map(r => [r.id, r]));
+        const visitsList = await storage.getVisits(companyId, { date: today });
+        const companyRoutes = await storage.getRoutes(companyId);
+        const routeMap = new Map(companyRoutes.map((r) => [r.id, r]));
 
-      // Resolve technician names for each route
-      const techIds = Array.from(new Set(companyRoutes.map(r => r.technicianId).filter(Boolean))) as string[];
-      const techUsers = techIds.length > 0
-        ? await db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
-            .from(users).where(inArray(users.id, techIds))
-        : [];
-      const techMap = new Map(techUsers.map(u => [u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim()]));
+        // Resolve technician names for each route
+        const techIds = Array.from(
+          new Set(companyRoutes.map((r) => r.technicianId).filter(Boolean))
+        ) as string[];
+        const techUsers =
+          techIds.length > 0
+            ? await db
+                .select({ id: users.id, firstName: users.firstName, lastName: users.lastName })
+                .from(users)
+                .where(inArray(users.id, techIds))
+            : [];
+        const techMap = new Map(
+          techUsers.map((u) => [u.id, `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim()])
+        );
 
-      const enriched = await Promise.all(visitsList.map(async (v) => {
-        const plan = v.servicePlanId ? await storage.getServicePlan(v.servicePlanId, companyId) : null;
-        const prop = await storage.getProperty(v.propertyId, companyId);
-        const contact = plan ? await storage.getContact(plan.contactId, companyId) : null;
-        const route = v.routeId ? routeMap.get(v.routeId) : null;
-        const techName = route?.technicianId ? (techMap.get(route.technicianId) ?? null) : null;
-        return {
-          ...v,
-          stopOrder: plan?.stopOrder ?? 999,
-          routeName: route?.name ?? null,
-          routeColor: route?.color ?? null,
-          servicePlanName: plan?.serviceName || (plan?.frequency ? `${plan.frequency} service` : null),
-          pricePerVisit: plan?.pricePerVisit ?? "0",
-          techName,
-          property: prop ? {
-            streetAddress: prop.streetAddress,
-            city: prop.city,
-            state: prop.state,
-            latitude: prop.latitude,
-            longitude: prop.longitude,
-          } : null,
-          contact: contact ? {
-            id: contact.id,
-            firstName: contact.firstName,
-            lastName: contact.lastName,
-          } : null,
+        const enriched = await Promise.all(
+          visitsList.map(async (v) => {
+            const plan = v.servicePlanId
+              ? await storage.getServicePlan(v.servicePlanId, companyId)
+              : null;
+            const prop = await storage.getProperty(v.propertyId, companyId);
+            const contact = plan ? await storage.getContact(plan.contactId, companyId) : null;
+            const route = v.routeId ? routeMap.get(v.routeId) : null;
+            const techName = route?.technicianId ? (techMap.get(route.technicianId) ?? null) : null;
+            return {
+              ...v,
+              stopOrder: plan?.stopOrder ?? 999,
+              routeName: route?.name ?? null,
+              routeColor: route?.color ?? null,
+              servicePlanName:
+                plan?.serviceName || (plan?.frequency ? `${plan.frequency} service` : null),
+              pricePerVisit: plan?.pricePerVisit ?? "0",
+              techName,
+              property: prop
+                ? {
+                    streetAddress: prop.streetAddress,
+                    city: prop.city,
+                    state: prop.state,
+                    latitude: prop.latitude,
+                    longitude: prop.longitude,
+                  }
+                : null,
+              contact: contact
+                ? {
+                    id: contact.id,
+                    firstName: contact.firstName,
+                    lastName: contact.lastName,
+                  }
+                : null,
+            };
+          })
+        );
+
+        // Sort by scheduledTime ascending
+        enriched.sort((a, b) => {
+          const tA = (a as any).scheduledTime ?? "00:00";
+          const tB = (b as any).scheduledTime ?? "00:00";
+          return tA.localeCompare(tB);
+        });
+
+        const stats = {
+          totalToday: enriched.length,
+          inProgress: enriched.filter((v) => v.status === "in_progress").length,
+          completed: enriched.filter((v) => v.status === "completed").length,
+          upcoming: enriched.filter((v) => v.status === "scheduled").length,
         };
-      }));
 
-      // Sort by scheduledTime ascending
-      enriched.sort((a, b) => {
-        const tA = (a as any).scheduledTime ?? "00:00";
-        const tB = (b as any).scheduledTime ?? "00:00";
-        return tA.localeCompare(tB);
-      });
+        const sumPrices = (vs: typeof enriched) =>
+          vs.reduce((s, v) => s + parseFloat((v as any).pricePerVisit || "0"), 0);
 
-      const stats = {
-        totalToday: enriched.length,
-        inProgress: enriched.filter(v => v.status === "in_progress").length,
-        completed: enriched.filter(v => v.status === "completed").length,
-        upcoming: enriched.filter(v => v.status === "scheduled").length,
-      };
+        const nonCancelled = enriched.filter((v) => v.status !== "cancelled");
+        const completedVisits = enriched.filter((v) => v.status === "completed");
+        const pendingVisits = enriched.filter(
+          (v) => v.status === "scheduled" || v.status === "in_progress"
+        );
 
-      const sumPrices = (vs: typeof enriched) =>
-        vs.reduce((s, v) => s + parseFloat((v as any).pricePerVisit || "0"), 0);
+        // Today's invoices
+        const todayStart = new Date(today + "T00:00:00.000Z");
+        const tomorrowStart = new Date(new Date(todayStart).getTime() + 86400000);
+        const todayInvoices = await db
+          .select({ status: invoices.status, total: invoices.total })
+          .from(invoices)
+          .where(
+            and(
+              eq(invoices.companyId, companyId),
+              gte(invoices.createdAt, todayStart),
+              lt(invoices.createdAt, tomorrowStart)
+            )
+          );
 
-      const nonCancelled = enriched.filter(v => v.status !== "cancelled");
-      const completedVisits = enriched.filter(v => v.status === "completed");
-      const pendingVisits = enriched.filter(v => v.status === "scheduled" || v.status === "in_progress");
+        const billing = {
+          expectedRevenue: sumPrices(nonCancelled),
+          completedRevenue: sumPrices(completedVisits),
+          pendingRevenue: sumPrices(pendingVisits),
+          invoicesCreatedToday: todayInvoices.length,
+          totalInvoiced: todayInvoices.reduce((s, inv) => s + parseFloat(inv.total || "0"), 0),
+          totalPaid: todayInvoices
+            .filter((inv) => inv.status === "paid")
+            .reduce((s, inv) => s + parseFloat(inv.total || "0"), 0),
+        };
 
-      // Today's invoices
-      const todayStart = new Date(today + "T00:00:00.000Z");
-      const tomorrowStart = new Date(new Date(todayStart).getTime() + 86400000);
-      const todayInvoices = await db.select({ status: invoices.status, total: invoices.total })
-        .from(invoices)
-        .where(and(eq(invoices.companyId, companyId), gte(invoices.createdAt, todayStart), lt(invoices.createdAt, tomorrowStart)));
-
-      const billing = {
-        expectedRevenue: sumPrices(nonCancelled),
-        completedRevenue: sumPrices(completedVisits),
-        pendingRevenue: sumPrices(pendingVisits),
-        invoicesCreatedToday: todayInvoices.length,
-        totalInvoiced: todayInvoices.reduce((s, inv) => s + parseFloat(inv.total || "0"), 0),
-        totalPaid: todayInvoices.filter(inv => inv.status === "paid").reduce((s, inv) => s + parseFloat(inv.total || "0"), 0),
-      };
-
-      res.json({ visits: enriched, stats, billing });
-    } catch (err) { handleError(res, err); }
-  });
+        res.json({ visits: enriched, stats, billing });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.post("/api/tech/distances", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -941,7 +1124,7 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         return res.status(502).json({ error: "Distance Matrix request failed", fallback: true });
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         code: string;
         durations: number[][];
         distances: number[][];
@@ -1013,5 +1196,4 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
-
 }

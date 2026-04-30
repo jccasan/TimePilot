@@ -1,7 +1,18 @@
 import OpenAI from "openai";
 import { db } from "../db";
 import { trackApiCall } from "./api-usage";
-import { contacts, invoices, visits, routes, servicePlans, companyUsers, users, companies, notifications, properties } from "@shared/schema";
+import {
+  contacts,
+  invoices,
+  visits,
+  routes,
+  servicePlans,
+  companyUsers,
+  users,
+  companies,
+  notifications,
+  properties,
+} from "@shared/schema";
 import type { InsertContact, InsertProperty } from "@shared/schema";
 import { desc } from "drizzle-orm";
 import { eq, and, sql, gte, lte, count, inArray } from "drizzle-orm";
@@ -178,20 +189,28 @@ CURRENT USER CONTEXT:
 - Company: ${ctx.companyName}
 - Subscription: ${ctx.subscriptionTier} (${ctx.subscriptionStatus})
 - Timezone: ${ctx.timezone}
-- Features enabled: ${[
-    ctx.remindersEnabled ? "automated reminders" : null,
-    ctx.autoVisitsEnabled ? "auto visit generation" : null,
-    ctx.roverAiEnabled ? "Rover AI" : null,
-  ].filter(Boolean).join(", ") || "none"}
+- Features enabled: ${
+    [
+      ctx.remindersEnabled ? "automated reminders" : null,
+      ctx.autoVisitsEnabled ? "auto visit generation" : null,
+      ctx.roverAiEnabled ? "Rover AI" : null,
+    ]
+      .filter(Boolean)
+      .join(", ") || "none"
+  }
 
-${["owner", "admin"].includes(ctx.userRole) ? `ACCOUNT STATS (live snapshot):
+${
+  ["owner", "admin"].includes(ctx.userRole)
+    ? `ACCOUNT STATS (live snapshot):
 - Total contacts: ${ctx.contactCount} (${ctx.activeContactCount} active)
 - Invoices: ${ctx.invoiceCount} total (${ctx.overdueInvoiceCount} overdue)
 - MRR: ${ctx.mrrDollars}
 - Team members: ${ctx.teamSize}
 - Routes: ${ctx.routeCount}
-${ctx.recentNotifications.length > 0 ? `\nRecent notifications:\n${ctx.recentNotifications.map((n) => `- [${n.isRead ? "read" : "unread"}] (${n.type}) ${n.title}`).join("\n")}` : ""}` : `ACCOUNT STATS (limited - tech role):
-- Routes: ${ctx.routeCount}`}
+${ctx.recentNotifications.length > 0 ? `\nRecent notifications:\n${ctx.recentNotifications.map((n) => `- [${n.isRead ? "read" : "unread"}] (${n.type}) ${n.title}`).join("\n")}` : ""}`
+    : `ACCOUNT STATS (limited - tech role):
+- Routes: ${ctx.routeCount}`
+}
 
 ${KNOWLEDGE_BASE}
 
@@ -221,7 +240,8 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "get_business_stats",
-      description: "Get high-level business statistics: total contacts by status, active service plans, route count, team size, and monthly revenue.",
+      description:
+        "Get high-level business statistics: total contacts by status, active service plans, route count, team size, and monthly revenue.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -229,7 +249,8 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "get_overdue_invoices",
-      description: "Get a summary of overdue (unpaid, past-due) invoices including count and total amount.",
+      description:
+        "Get a summary of overdue (unpaid, past-due) invoices including count and total amount.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -251,7 +272,8 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "get_recent_activity",
-      description: "Get a summary of recent activity: visits completed today, new contacts this week, invoices sent this week.",
+      description:
+        "Get a summary of recent activity: visits completed today, new contacts this week, invoices sent this week.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -265,13 +287,15 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
        * readable reference via `resolveRouteRef()` before calling `runSkill`, so users can
        * say "optimize route 3" without knowing the underlying UUID.
        */
-      description: "Optimize the stop order for a specific route to minimize drive distance and time. Use this when the user asks to optimize a route or says something like 'optimize route 3' or 'optimize the Monday route'. Supply routeRef as the route name, number, or UUID.",
+      description:
+        "Optimize the stop order for a specific route to minimize drive distance and time. Use this when the user asks to optimize a route or says something like 'optimize route 3' or 'optimize the Monday route'. Supply routeRef as the route name, number, or UUID.",
       parameters: {
         type: "object",
         properties: {
           routeRef: {
             type: "string",
-            description: "The route to optimize — can be a route name (e.g. 'Route 3', 'Monday'), a number (e.g. '3'), or a UUID. The system will resolve this to the correct route.",
+            description:
+              "The route to optimize — can be a route name (e.g. 'Route 3', 'Monday'), a number (e.g. '3'), or a UUID. The system will resolve this to the correct route.",
           },
         },
         required: ["routeRef"],
@@ -288,17 +312,20 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
        * readable reference via `resolveContactRef()` before calling `runSkill`, so users
        * can say "generate invoice for Jane Doe" without knowing the underlying UUID.
        */
-      description: "Generate draft invoice(s) for completed, uninvoiced visits. Use when the user says something like 'generate invoices for all clients', 'invoice all pending work', or 'create an invoice for [client name/id]'. If a specific client is mentioned, supply their name or UUID as contactRef; otherwise use allPending: true to invoice everyone with outstanding work.",
+      description:
+        "Generate draft invoice(s) for completed, uninvoiced visits. Use when the user says something like 'generate invoices for all clients', 'invoice all pending work', or 'create an invoice for [client name/id]'. If a specific client is mentioned, supply their name or UUID as contactRef; otherwise use allPending: true to invoice everyone with outstanding work.",
       parameters: {
         type: "object",
         properties: {
           contactRef: {
             type: "string",
-            description: "The client to invoice — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact. Omit to invoice all pending clients.",
+            description:
+              "The client to invoice — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact. Omit to invoice all pending clients.",
           },
           allPending: {
             type: "boolean",
-            description: "Set to true to generate invoices for all contacts with uninvoiced completed visits.",
+            description:
+              "Set to true to generate invoices for all contacts with uninvoiced completed visits.",
           },
         },
         required: [],
@@ -309,13 +336,15 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "get_client_visits",
-      description: "Look up recent visit history for a specific client. Use when the user asks about a client's past visits, service history, or upcoming scheduled visits. Supply the client's name or UUID as contactRef.",
+      description:
+        "Look up recent visit history for a specific client. Use when the user asks about a client's past visits, service history, or upcoming scheduled visits. Supply the client's name or UUID as contactRef.",
       parameters: {
         type: "object",
         properties: {
           contactRef: {
             type: "string",
-            description: "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
+            description:
+              "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
           },
           limit: {
             type: "number",
@@ -330,13 +359,15 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "get_client_service_plan",
-      description: "Check the active service plan(s) for a specific client — frequency, day of week, property, and whether the plan is active. Use when the user asks what schedule or plan a client is on. Supply the client's name or UUID as contactRef.",
+      description:
+        "Check the active service plan(s) for a specific client — frequency, day of week, property, and whether the plan is active. Use when the user asks what schedule or plan a client is on. Supply the client's name or UUID as contactRef.",
       parameters: {
         type: "object",
         properties: {
           contactRef: {
             type: "string",
-            description: "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
+            description:
+              "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
           },
         },
         required: ["contactRef"],
@@ -347,13 +378,15 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "send_portal_invite",
-      description: "Send a client portal invite to a specific client, granting them access to the self-service portal. Use when the user asks to send a portal invite or enable portal access for a client. The client must have an email address on file. Supply the client's name or UUID as contactRef.",
+      description:
+        "Send a client portal invite to a specific client, granting them access to the self-service portal. Use when the user asks to send a portal invite or enable portal access for a client. The client must have an email address on file. Supply the client's name or UUID as contactRef.",
       parameters: {
         type: "object",
         properties: {
           contactRef: {
             type: "string",
-            description: "The client to invite — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
+            description:
+              "The client to invite — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
           },
         },
         required: ["contactRef"],
@@ -364,7 +397,8 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "create_contact_with_property",
-      description: "Create a new client contact and their service property address. IMPORTANT: You must collect the full address first, display it back to the user, and only call this tool AFTER the user has explicitly confirmed the address is correct (e.g., 'yes', 'confirm', 'that's right'). Never call this tool while the address is still being collected or clarified. The 'confirmed' field must be true — set it to false if the user has not yet confirmed.",
+      description:
+        "Create a new client contact and their service property address. IMPORTANT: You must collect the full address first, display it back to the user, and only call this tool AFTER the user has explicitly confirmed the address is correct (e.g., 'yes', 'confirm', 'that's right'). Never call this tool while the address is still being collected or clarified. The 'confirmed' field must be true — set it to false if the user has not yet confirmed.",
       parameters: {
         type: "object",
         properties: {
@@ -376,11 +410,18 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           city: { type: "string", description: "City." },
           state: { type: "string", description: "State or province abbreviation." },
           zipCode: { type: "string", description: "ZIP or postal code." },
-          numberOfDogs: { type: "number", description: "Number of dogs at the property (optional)." },
-          yardSize: { type: "string", description: "Yard size descriptor, e.g. 'small', 'medium', 'large' (optional)." },
+          numberOfDogs: {
+            type: "number",
+            description: "Number of dogs at the property (optional).",
+          },
+          yardSize: {
+            type: "string",
+            description: "Yard size descriptor, e.g. 'small', 'medium', 'large' (optional).",
+          },
           confirmed: {
             type: "boolean",
-            description: "REQUIRED: Set to true only after the user has explicitly confirmed the address. Set to false if confirmation has not been received — the system will reject the call.",
+            description:
+              "REQUIRED: Set to true only after the user has explicitly confirmed the address. Set to false if confirmation has not been received — the system will reject the call.",
           },
         },
         required: ["firstName", "streetAddress", "confirmed"],
@@ -389,24 +430,27 @@ export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
-const USER_CONFIRMATION_RE = /\b(yes|yep|yup|confirm(ed)?|correct|right|that'?s?\s+(right|correct)|go\s+ahead|proceed|please\s+do|sure|absolutely|ok(ay)?|sounds\s+good|do\s+it)\b/i;
+const USER_CONFIRMATION_RE =
+  /\b(yes|yep|yup|confirm(ed)?|correct|right|that'?s?\s+(right|correct)|go\s+ahead|proceed|please\s+do|sure|absolutely|ok(ay)?|sounds\s+good|do\s+it)\b/i;
 
-function hasUserConfirmedInHistory(messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): boolean {
-  const userMessages = messages.filter(m => m.role === "user");
+function hasUserConfirmedInHistory(
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+): boolean {
+  const userMessages = messages.filter((m) => m.role === "user");
   if (userMessages.length === 0) return false;
   const lastUserMsg = userMessages[userMessages.length - 1];
   const text =
     typeof lastUserMsg.content === "string"
       ? lastUserMsg.content
       : Array.isArray(lastUserMsg.content)
-      ? lastUserMsg.content
-          .map((c) => {
-            if (typeof c === "string") return c;
-            if (c.type === "text") return c.text;
-            return "";
-          })
-          .join(" ")
-      : "";
+        ? lastUserMsg.content
+            .map((c) => {
+              if (typeof c === "string") return c;
+              if (c.type === "text") return c.text;
+              return "";
+            })
+            .join(" ")
+        : "";
   return USER_CONFIRMATION_RE.test(text.trim());
 }
 
@@ -431,11 +475,20 @@ export async function executeToolCall(
       case "optimize_route": {
         const routeRef: string = String(args.routeRef ?? "").trim();
         if (!routeRef) {
-          return JSON.stringify({ success: false, message: "A route name or ID is required. Please specify which route to optimize (e.g. 'optimize route 3').", error: "MISSING_ROUTE_REF" });
+          return JSON.stringify({
+            success: false,
+            message:
+              "A route name or ID is required. Please specify which route to optimize (e.g. 'optimize route 3').",
+            error: "MISSING_ROUTE_REF",
+          });
         }
         const resolvedRouteId = await resolveRouteRef(routeRef, companyId);
         if (!resolvedRouteId) {
-          return JSON.stringify({ success: false, message: `Could not find a route matching "${routeRef}". Check the route name and try again.`, error: "ROUTE_NOT_FOUND" });
+          return JSON.stringify({
+            success: false,
+            message: `Could not find a route matching "${routeRef}". Check the route name and try again.`,
+            error: "ROUTE_NOT_FOUND",
+          });
         }
         const { runSkill } = await import("./skills/index");
         const result = await runSkill(
@@ -452,11 +505,15 @@ export async function executeToolCall(
         if (contactRef) {
           const resolved = await resolveContactRef(contactRef, companyId);
           if (resolved.type === "not_found") {
-            return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
+            return JSON.stringify({
+              success: false,
+              message: `Could not find a client matching "${contactRef}". Check the name and try again.`,
+              error: "CONTACT_NOT_FOUND",
+            });
           }
           if (resolved.type === "ambiguous") {
             const nameList = resolved.matches
-              .map(m => (m.hint ? `${m.name} (${m.hint})` : m.name))
+              .map((m) => (m.hint ? `${m.name} (${m.hint})` : m.name))
               .join(", ");
             return JSON.stringify({
               success: false,
@@ -472,11 +529,11 @@ export async function executeToolCall(
         const skillParams: Record<string, unknown> = contactId
           ? { contactId }
           : { allPending: true };
-        const result = await runSkill(
-          "generate_invoice",
-          skillParams,
-          { companyId, userId: userId ?? "", role: role ?? "system" }
-        );
+        const result = await runSkill("generate_invoice", skillParams, {
+          companyId,
+          userId: userId ?? "",
+          role: role ?? "system",
+        });
         const resultObj = result as Record<string, unknown>;
         if (resolvedContactName) {
           // Always surface who was matched, regardless of skill success/failure.
@@ -495,8 +552,8 @@ export async function executeToolCall(
               transformed !== baseMsg
                 ? transformed
                 : baseMsg
-                ? `${resolvedContactName}: ${baseMsg}`
-                : `Checked invoices for ${resolvedContactName}.`;
+                  ? `${resolvedContactName}: ${baseMsg}`
+                  : `Checked invoices for ${resolvedContactName}.`;
           } else {
             // On failure (e.g., no uninvoiced work), prefix the message with the
             // resolved client name so the user knows which client was checked.
@@ -511,11 +568,19 @@ export async function executeToolCall(
       case "get_client_visits": {
         const contactRef: string = String(args.contactRef ?? "").trim();
         if (!contactRef) {
-          return JSON.stringify({ success: false, message: "A client name or ID is required.", error: "MISSING_CONTACT_REF" });
+          return JSON.stringify({
+            success: false,
+            message: "A client name or ID is required.",
+            error: "MISSING_CONTACT_REF",
+          });
         }
         const resolvedId = await resolveContactRef(contactRef, companyId);
         if (resolvedId.type !== "found") {
-          return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
+          return JSON.stringify({
+            success: false,
+            message: `Could not find a client matching "${contactRef}". Check the name and try again.`,
+            error: "CONTACT_NOT_FOUND",
+          });
         }
         const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 20);
         return await getClientVisits(companyId, resolvedId.id, limit);
@@ -523,22 +588,38 @@ export async function executeToolCall(
       case "get_client_service_plan": {
         const contactRef: string = String(args.contactRef ?? "").trim();
         if (!contactRef) {
-          return JSON.stringify({ success: false, message: "A client name or ID is required.", error: "MISSING_CONTACT_REF" });
+          return JSON.stringify({
+            success: false,
+            message: "A client name or ID is required.",
+            error: "MISSING_CONTACT_REF",
+          });
         }
         const resolvedId = await resolveContactRef(contactRef, companyId);
         if (resolvedId.type !== "found") {
-          return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
+          return JSON.stringify({
+            success: false,
+            message: `Could not find a client matching "${contactRef}". Check the name and try again.`,
+            error: "CONTACT_NOT_FOUND",
+          });
         }
         return await getClientServicePlan(companyId, resolvedId.id);
       }
       case "send_portal_invite": {
         const contactRef: string = String(args.contactRef ?? "").trim();
         if (!contactRef) {
-          return JSON.stringify({ success: false, message: "A client name or ID is required.", error: "MISSING_CONTACT_REF" });
+          return JSON.stringify({
+            success: false,
+            message: "A client name or ID is required.",
+            error: "MISSING_CONTACT_REF",
+          });
         }
         const resolvedId = await resolveContactRef(contactRef, companyId);
         if (resolvedId.type !== "found") {
-          return JSON.stringify({ success: false, message: `Could not find a client matching "${contactRef}". Check the name and try again.`, error: "CONTACT_NOT_FOUND" });
+          return JSON.stringify({
+            success: false,
+            message: `Could not find a client matching "${contactRef}". Check the name and try again.`,
+            error: "CONTACT_NOT_FOUND",
+          });
         }
         return await sendPortalInvite(companyId, resolvedId.id);
       }
@@ -547,13 +628,18 @@ export async function executeToolCall(
           return JSON.stringify({
             success: false,
             error: "ADDRESS_NOT_CONFIRMED",
-            message: "The address has not been confirmed by the user. Please display the full address to the user and wait for their explicit confirmation (e.g. 'yes', 'correct', 'confirm') before creating the contact.",
+            message:
+              "The address has not been confirmed by the user. Please display the full address to the user and wait for their explicit confirmation (e.g. 'yes', 'correct', 'confirm') before creating the contact.",
           });
         }
         const firstName: string = String(args.firstName ?? "").trim();
         const streetAddress: string = String(args.streetAddress ?? "").trim();
         if (!firstName || !streetAddress) {
-          return JSON.stringify({ success: false, error: "MISSING_REQUIRED_FIELDS", message: "First name and street address are required." });
+          return JSON.stringify({
+            success: false,
+            error: "MISSING_REQUIRED_FIELDS",
+            message: "First name and street address are required.",
+          });
         }
         const contactPayload: InsertContact = {
           companyId,
@@ -569,12 +655,14 @@ export async function executeToolCall(
         const zipArg = args.zipCode ? String(args.zipCode).trim() : "";
         const existingProperties = await storage.getProperties(companyId);
         const normalizedStreet = streetAddress.trim().toLowerCase();
-        const matchingProp = existingProperties.find(p =>
-          p.streetAddress?.trim().toLowerCase() === normalizedStreet &&
-          p.city?.trim().toLowerCase() === cityArg.toLowerCase() &&
-          (p.state?.trim().toLowerCase() ?? "") === stateArg.toLowerCase() &&
-          (p.zipCode?.trim() ?? "") === zipArg &&
-          p.latitude && p.longitude
+        const matchingProp = existingProperties.find(
+          (p) =>
+            p.streetAddress?.trim().toLowerCase() === normalizedStreet &&
+            p.city?.trim().toLowerCase() === cityArg.toLowerCase() &&
+            (p.state?.trim().toLowerCase() ?? "") === stateArg.toLowerCase() &&
+            (p.zipCode?.trim() ?? "") === zipArg &&
+            p.latitude &&
+            p.longitude
         );
         let latitude: string | null = null;
         let longitude: string | null = null;
@@ -582,7 +670,12 @@ export async function executeToolCall(
           latitude = matchingProp.latitude ?? null;
           longitude = matchingProp.longitude ?? null;
         } else {
-          const coords = await geocodeAddress(streetAddress, cityArg || null, stateArg || null, zipArg || null);
+          const coords = await geocodeAddress(
+            streetAddress,
+            cityArg || null,
+            stateArg || null,
+            zipArg || null
+          );
           if (coords) {
             latitude = coords.latitude;
             longitude = coords.longitude;
@@ -623,22 +716,29 @@ async function resolveRouteRef(routeRef: string, companyId: string): Promise<str
   if (!normalized) return null;
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (uuidPattern.test(normalized)) {
-    const [row] = await db.select({ id: routes.id }).from(routes)
-      .where(and(eq(routes.id, routeRef), eq(routes.companyId, companyId))).limit(1);
+    const [row] = await db
+      .select({ id: routes.id })
+      .from(routes)
+      .where(and(eq(routes.id, routeRef), eq(routes.companyId, companyId)))
+      .limit(1);
     return row?.id ?? null;
   }
-  const allRoutes = await db.select({ id: routes.id, name: routes.name }).from(routes)
+  const allRoutes = await db
+    .select({ id: routes.id, name: routes.name })
+    .from(routes)
     .where(eq(routes.companyId, companyId));
-  const exact = allRoutes.find(r => r.name.toLowerCase() === normalized);
+  const exact = allRoutes.find((r) => r.name.toLowerCase() === normalized);
   if (exact) return exact.id;
   // For pure numeric refs like "3", match routes whose name contains the number
   // as a word boundary (e.g. "Route 3", "3rd Route") — deterministic digit resolution.
   if (/^\d+$/.test(normalized)) {
-    const numericMatch = allRoutes.find(r => new RegExp(`\\b${normalized}\\b`).test(r.name.toLowerCase()));
+    const numericMatch = allRoutes.find((r) =>
+      new RegExp(`\\b${normalized}\\b`).test(r.name.toLowerCase())
+    );
     if (numericMatch) return numericMatch.id;
   }
   if (normalized.length >= 2) {
-    const partial = allRoutes.find(r => r.name.toLowerCase().includes(normalized));
+    const partial = allRoutes.find((r) => r.name.toLowerCase().includes(normalized));
     if (partial) return partial.id;
   }
   return null;
@@ -656,7 +756,12 @@ async function resolveContactRef(contactRef: string, companyId: string): Promise
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (uuidPattern.test(normalized)) {
     const [row] = await db
-      .select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email })
+      .select({
+        id: contacts.id,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        email: contacts.email,
+      })
       .from(contacts)
       .where(and(eq(contacts.id, contactRef), eq(contacts.companyId, companyId)))
       .limit(1);
@@ -664,44 +769,59 @@ async function resolveContactRef(contactRef: string, companyId: string): Promise
     return { type: "found", id: row.id, name: `${row.firstName} ${row.lastName}`.trim() };
   }
   const allContacts = await db
-    .select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email })
+    .select({
+      id: contacts.id,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
+      email: contacts.email,
+    })
     .from(contacts)
     .where(eq(contacts.companyId, companyId));
 
-  const toName = (c: { firstName: string; lastName: string }) => `${c.firstName} ${c.lastName}`.trim();
+  const toName = (c: { firstName: string; lastName: string }) =>
+    `${c.firstName} ${c.lastName}`.trim();
   const toHint = (c: { email: string | null }) =>
     c.email ? c.email.replace(/(?<=^.{2}).+(?=@)/, "…") : "";
-  const toMatch = (c: { id: string; firstName: string; lastName: string; email: string | null }): ContactMatch =>
-    ({ id: c.id, name: toName(c), hint: toHint(c) });
+  const toMatch = (c: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+  }): ContactMatch => ({ id: c.id, name: toName(c), hint: toHint(c) });
 
   // Exact full-name match (could still be multiple people with the same name)
-  const exactMatches = allContacts.filter(c =>
-    toName(c).toLowerCase() === normalized ||
-    `${c.lastName} ${c.firstName}`.toLowerCase() === normalized
+  const exactMatches = allContacts.filter(
+    (c) =>
+      toName(c).toLowerCase() === normalized ||
+      `${c.lastName} ${c.firstName}`.toLowerCase() === normalized
   );
-  if (exactMatches.length === 1) return { type: "found", id: exactMatches[0].id, name: toName(exactMatches[0]) };
+  if (exactMatches.length === 1)
+    return { type: "found", id: exactMatches[0].id, name: toName(exactMatches[0]) };
   if (exactMatches.length > 1) {
     return { type: "ambiguous", matches: exactMatches.map(toMatch) };
   }
 
   if (normalized.length >= 2) {
     // Partial / fuzzy match — contacts whose full name contains the ref
-    const partialMatches = allContacts.filter(c => toName(c).toLowerCase().includes(normalized));
-    if (partialMatches.length === 1) return { type: "found", id: partialMatches[0].id, name: toName(partialMatches[0]) };
+    const partialMatches = allContacts.filter((c) => toName(c).toLowerCase().includes(normalized));
+    if (partialMatches.length === 1)
+      return { type: "found", id: partialMatches[0].id, name: toName(partialMatches[0]) };
     if (partialMatches.length > 1) {
       return { type: "ambiguous", matches: partialMatches.map(toMatch) };
     }
 
     // Match on last name alone
-    const lastNameMatches = allContacts.filter(c => c.lastName.toLowerCase() === normalized);
-    if (lastNameMatches.length === 1) return { type: "found", id: lastNameMatches[0].id, name: toName(lastNameMatches[0]) };
+    const lastNameMatches = allContacts.filter((c) => c.lastName.toLowerCase() === normalized);
+    if (lastNameMatches.length === 1)
+      return { type: "found", id: lastNameMatches[0].id, name: toName(lastNameMatches[0]) };
     if (lastNameMatches.length > 1) {
       return { type: "ambiguous", matches: lastNameMatches.map(toMatch) };
     }
 
     // Match on first name alone
-    const firstNameMatches = allContacts.filter(c => c.firstName.toLowerCase() === normalized);
-    if (firstNameMatches.length === 1) return { type: "found", id: firstNameMatches[0].id, name: toName(firstNameMatches[0]) };
+    const firstNameMatches = allContacts.filter((c) => c.firstName.toLowerCase() === normalized);
+    if (firstNameMatches.length === 1)
+      return { type: "found", id: firstNameMatches[0].id, name: toName(firstNameMatches[0]) };
     if (firstNameMatches.length > 1) {
       return { type: "ambiguous", matches: firstNameMatches.map(toMatch) };
     }
@@ -710,17 +830,29 @@ async function resolveContactRef(contactRef: string, companyId: string): Promise
   return { type: "not_found" };
 }
 
-async function getClientVisits(companyId: string, contactId: string, limit: number): Promise<string> {
+async function getClientVisits(
+  companyId: string,
+  contactId: string,
+  limit: number
+): Promise<string> {
   const contactPlans = await db
-    .select({ id: servicePlans.id, propertyId: servicePlans.propertyId, frequency: servicePlans.frequency })
+    .select({
+      id: servicePlans.id,
+      propertyId: servicePlans.propertyId,
+      frequency: servicePlans.frequency,
+    })
     .from(servicePlans)
     .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.contactId, contactId)));
 
   if (contactPlans.length === 0) {
-    return JSON.stringify({ visits: [], total: 0, note: "No service plans found for this client." });
+    return JSON.stringify({
+      visits: [],
+      total: 0,
+      note: "No service plans found for this client.",
+    });
   }
 
-  const planIds = contactPlans.map(p => p.id);
+  const planIds = contactPlans.map((p) => p.id);
 
   const [countResult] = await db
     .select({ count: count() })
@@ -741,14 +873,22 @@ async function getClientVisits(companyId: string, contactId: string, limit: numb
     .orderBy(desc(visits.scheduledDate))
     .limit(limit);
 
-  const planMap = new Map(contactPlans.map(p => [p.id, p]));
-  const propertyIds = Array.from(new Set(contactPlans.map(p => p.propertyId)));
-  const propsList = propertyIds.length > 0
-    ? await db.select({ id: properties.id, streetAddress: properties.streetAddress, city: properties.city }).from(properties).where(inArray(properties.id, propertyIds))
-    : [];
-  const propMap = new Map(propsList.map(p => [p.id, p]));
+  const planMap = new Map(contactPlans.map((p) => [p.id, p]));
+  const propertyIds = Array.from(new Set(contactPlans.map((p) => p.propertyId)));
+  const propsList =
+    propertyIds.length > 0
+      ? await db
+          .select({
+            id: properties.id,
+            streetAddress: properties.streetAddress,
+            city: properties.city,
+          })
+          .from(properties)
+          .where(inArray(properties.id, propertyIds))
+      : [];
+  const propMap = new Map(propsList.map((p) => [p.id, p]));
 
-  const enriched = recentVisits.map(v => {
+  const enriched = recentVisits.map((v) => {
     const plan = planMap.get(v.servicePlanId);
     const prop = plan ? propMap.get(plan.propertyId) : undefined;
     return {
@@ -756,7 +896,9 @@ async function getClientVisits(companyId: string, contactId: string, limit: numb
       scheduledDate: v.scheduledDate,
       status: v.status,
       servicePlanFrequency: plan?.frequency ?? "unknown",
-      propertyAddress: prop ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}` : "Unknown",
+      propertyAddress: prop
+        ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}`
+        : "Unknown",
       completedAt: v.completedAt ?? null,
     };
   });
@@ -780,20 +922,30 @@ async function getClientServicePlan(companyId: string, contactId: string): Promi
     return JSON.stringify({ plans: [], note: "No service plans found for this client." });
   }
 
-  const propertyIds = Array.from(new Set(plans.map(p => p.propertyId)));
-  const propsList = propertyIds.length > 0
-    ? await db.select({ id: properties.id, streetAddress: properties.streetAddress, city: properties.city }).from(properties).where(inArray(properties.id, propertyIds))
-    : [];
-  const propMap = new Map(propsList.map(p => [p.id, p]));
+  const propertyIds = Array.from(new Set(plans.map((p) => p.propertyId)));
+  const propsList =
+    propertyIds.length > 0
+      ? await db
+          .select({
+            id: properties.id,
+            streetAddress: properties.streetAddress,
+            city: properties.city,
+          })
+          .from(properties)
+          .where(inArray(properties.id, propertyIds))
+      : [];
+  const propMap = new Map(propsList.map((p) => [p.id, p]));
 
-  const enriched = plans.map(plan => {
+  const enriched = plans.map((plan) => {
     const prop = propMap.get(plan.propertyId);
     return {
       id: plan.id,
       frequency: plan.frequency,
       dayOfWeek: plan.dayOfWeek,
       isActive: plan.isActive,
-      propertyAddress: prop ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}` : "Unknown",
+      propertyAddress: prop
+        ? `${prop.streetAddress}${prop.city ? `, ${prop.city}` : ""}`
+        : "Unknown",
     };
   });
 
@@ -814,10 +966,18 @@ async function sendPortalInvite(companyId: string, contactId: string): Promise<s
     .limit(1);
 
   if (!contact) {
-    return JSON.stringify({ success: false, message: "Contact not found.", error: "CONTACT_NOT_FOUND" });
+    return JSON.stringify({
+      success: false,
+      message: "Contact not found.",
+      error: "CONTACT_NOT_FOUND",
+    });
   }
   if (!contact.email) {
-    return JSON.stringify({ success: false, message: `${contact.firstName} ${contact.lastName} does not have an email address on file. Add an email to their contact record before sending a portal invite.`, error: "NO_EMAIL" });
+    return JSON.stringify({
+      success: false,
+      message: `${contact.firstName} ${contact.lastName} does not have an email address on file. Add an email to their contact record before sending a portal invite.`,
+      error: "NO_EMAIL",
+    });
   }
 
   const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
@@ -837,8 +997,9 @@ async function sendPortalInvite(companyId: string, contactId: string): Promise<s
     .where(eq(companies.id, companyId))
     .limit(1);
 
-  const portalBaseUrl = process.env.PUBLIC_URL
-    || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "");
+  const portalBaseUrl =
+    process.env.PUBLIC_URL ||
+    (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "");
   const portalUrl = `${portalBaseUrl}/portal/login`;
 
   try {
@@ -1002,12 +1163,7 @@ async function getRecentActivity(companyId: string): Promise<string> {
   const [newContacts] = await db
     .select({ count: count() })
     .from(contacts)
-    .where(
-      and(
-        eq(contacts.companyId, companyId),
-        gte(contacts.createdAt, weekAgo)
-      )
-    );
+    .where(and(eq(contacts.companyId, companyId), gte(contacts.createdAt, weekAgo)));
 
   const [invoicesSent] = await db
     .select({ count: count() })
@@ -1112,7 +1268,9 @@ export async function streamRoverChat(
           toolResults.push({
             role: "tool",
             tool_call_id: tc.id,
-            content: JSON.stringify({ error: "Access denied. Data tools are only available to owners and admins." }),
+            content: JSON.stringify({
+              error: "Access denied. Data tools are only available to owners and admins.",
+            }),
           });
           continue;
         }
@@ -1122,7 +1280,14 @@ export async function streamRoverChat(
         } catch {
           args = {};
         }
-        const result = await executeToolCall(tc.name, args, companyId, userId, userCtx.userRole, fullMessages);
+        const result = await executeToolCall(
+          tc.name,
+          args,
+          companyId,
+          userId,
+          userCtx.userRole,
+          fullMessages
+        );
         toolResults.push({
           role: "tool",
           tool_call_id: tc.id,

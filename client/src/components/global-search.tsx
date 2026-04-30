@@ -42,7 +42,14 @@ function getDetailPath(result: SearchResult): string {
 function groupResults(results: SearchResult[]): GroupedResults {
   const grouped: GroupedResults = { contacts: [], properties: [], invoices: [], routes: [] };
   for (const r of results) {
-    const key = r.type === "contact" ? "contacts" : r.type === "property" ? "properties" : r.type === "invoice" ? "invoices" : "routes";
+    const key =
+      r.type === "contact"
+        ? "contacts"
+        : r.type === "property"
+          ? "properties"
+          : r.type === "invoice"
+            ? "invoices"
+            : "routes";
     grouped[key].push(r);
   }
   return grouped;
@@ -116,12 +123,15 @@ export function GlobalSearch() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectResult = useCallback((result: SearchResult) => {
-    setIsOpen(false);
-    setQuery("");
-    setResults([]);
-    setLocation(getDetailPath(result));
-  }, [setLocation]);
+  const selectResult = useCallback(
+    (result: SearchResult) => {
+      setIsOpen(false);
+      setQuery("");
+      setResults([]);
+      setLocation(getDetailPath(result));
+    },
+    [setLocation]
+  );
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
@@ -179,12 +189,18 @@ export function GlobalSearch() {
           data-testid="dropdown-search-results"
         >
           {isLoading && (
-            <div className="px-3 py-2 text-sm text-muted-foreground" data-testid="text-search-loading">
+            <div
+              className="px-3 py-2 text-sm text-muted-foreground"
+              data-testid="text-search-loading"
+            >
               Searching...
             </div>
           )}
           {!isLoading && flatResults.length === 0 && query.trim() && (
-            <div className="px-3 py-2 text-sm text-muted-foreground" data-testid="text-search-no-results">
+            <div
+              className="px-3 py-2 text-sm text-muted-foreground"
+              data-testid="text-search-no-results"
+            >
               No results found
             </div>
           )}
@@ -198,7 +214,10 @@ export function GlobalSearch() {
               runningIndex += items.length;
               return (
                 <div key={groupKey} data-testid={`search-group-${groupKey}`}>
-                  <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide" data-testid={`text-search-group-label-${groupKey}`}>
+                  <div
+                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                    data-testid={`text-search-group-label-${groupKey}`}
+                  >
                     <Icon className="h-3.5 w-3.5" />
                     {config.label}
                   </div>
@@ -214,9 +233,19 @@ export function GlobalSearch() {
                         onMouseEnter={() => setActiveIndex(flatIndex)}
                         data-testid={`search-result-${result.type}-${result.id}`}
                       >
-                        <span className="font-medium truncate" data-testid={`text-search-result-title-${result.type}-${result.id}`}>{result.title}</span>
+                        <span
+                          className="font-medium truncate"
+                          data-testid={`text-search-result-title-${result.type}-${result.id}`}
+                        >
+                          {result.title}
+                        </span>
                         {result.subtitle && (
-                          <span className="text-xs text-muted-foreground truncate" data-testid={`text-search-result-subtitle-${result.type}-${result.id}`}>{result.subtitle}</span>
+                          <span
+                            className="text-xs text-muted-foreground truncate"
+                            data-testid={`text-search-result-subtitle-${result.type}-${result.id}`}
+                          >
+                            {result.subtitle}
+                          </span>
                         )}
                       </button>
                     );

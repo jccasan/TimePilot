@@ -4,9 +4,7 @@ import {
   getEffectivePricingConfig,
   type PriceCalculatorInputs,
 } from "./pricing-calculator";
-import {
-  calculateAllCustomerProfitability,
-} from "./profitability-calculator";
+import { calculateAllCustomerProfitability } from "./profitability-calculator";
 import type { PricingConfig } from "@shared/schema";
 
 export interface SimulationParams {
@@ -94,21 +92,31 @@ export interface CompetitorAnalysisResult {
 
 function getFrequencyVisitsPerMonth(frequency: string): number {
   switch (frequency) {
-    case "weekly": return 4.33;
-    case "biweekly": return 2.17;
-    case "monthly": return 1;
-    case "onetime": return 1;
-    default: return 4.33;
+    case "weekly":
+      return 4.33;
+    case "biweekly":
+      return 2.17;
+    case "monthly":
+      return 1;
+    case "onetime":
+      return 1;
+    default:
+      return 4.33;
   }
 }
 
 function normalizeToWeekly(priceCents: number, frequency: string): number {
   switch (frequency) {
-    case "weekly": return priceCents;
-    case "biweekly": return Math.round(priceCents / 2);
-    case "monthly": return Math.round(priceCents / 4.33);
-    case "onetime": return priceCents;
-    default: return priceCents;
+    case "weekly":
+      return priceCents;
+    case "biweekly":
+      return Math.round(priceCents / 2);
+    case "monthly":
+      return Math.round(priceCents / 4.33);
+    case "onetime":
+      return priceCents;
+    default:
+      return priceCents;
   }
 }
 
@@ -143,13 +151,14 @@ export async function runPricingSimulation(
   };
 
   const overheadTotal = await storage.getTotalMonthlyOverheadCents(companyId);
-  const adjustedOverhead = overheadTotal > 0
-    ? Math.round(overheadTotal * (1 + params.overheadAdjustmentPct / 100))
-    : undefined;
+  const adjustedOverhead =
+    overheadTotal > 0
+      ? Math.round(overheadTotal * (1 + params.overheadAdjustmentPct / 100))
+      : undefined;
 
   const allProfitability = await calculateAllCustomerProfitability(companyId);
   const allProperties = await storage.getProperties(companyId);
-  const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+  const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
   const simulatedProperties: SimulatedProperty[] = [];
 
@@ -172,14 +181,12 @@ export async function runPricingSimulation(
       const simulatedCostCents = simResult.minimumPriceCents;
 
       const changeCents = simulatedPriceCents - prop.revenuePerVisitCents;
-      const changePct = prop.revenuePerVisitCents > 0
-        ? (changeCents / prop.revenuePerVisitCents) * 100
-        : 0;
+      const changePct =
+        prop.revenuePerVisitCents > 0 ? (changeCents / prop.revenuePerVisitCents) * 100 : 0;
 
       const projectedProfit = simulatedPriceCents - simulatedCostCents;
-      const projectedMargin = simulatedPriceCents > 0
-        ? (projectedProfit / simulatedPriceCents) * 100
-        : 0;
+      const projectedMargin =
+        simulatedPriceCents > 0 ? (projectedProfit / simulatedPriceCents) * 100 : 0;
 
       simulatedProperties.push({
         propertyId: prop.propertyId,
@@ -245,12 +252,17 @@ export async function runPriceElasticitySimulation(
 ): Promise<ElasticityResult> {
   const allProfitability = await calculateAllCustomerProfitability(companyId);
 
-  let properties: Array<{ revenuePerVisitCents: number; frequency: string; contactName: string; propertyAddress: string }> = [];
+  let properties: Array<{
+    revenuePerVisitCents: number;
+    frequency: string;
+    contactName: string;
+    propertyAddress: string;
+  }> = [];
   let label = "All Properties";
 
   if (propertyId) {
     for (const customer of allProfitability) {
-      const prop = customer.properties.find(p => p.propertyId === propertyId);
+      const prop = customer.properties.find((p) => p.propertyId === propertyId);
       if (prop) {
         properties.push({
           revenuePerVisitCents: prop.revenuePerVisitCents,
@@ -282,7 +294,7 @@ export async function runPriceElasticitySimulation(
     return sum + Math.round(p.revenuePerVisitCents * getFrequencyVisitsPerMonth(p.frequency));
   }, 0);
 
-  const points: ElasticityPoint[] = pricePoints.map(changePct => {
+  const points: ElasticityPoint[] = pricePoints.map((changePct) => {
     const churnPct = estimateChurnPct(changePct);
     const retained = Math.round(totalCustomers * (1 - churnPct / 100));
 
@@ -296,9 +308,10 @@ export async function runPriceElasticitySimulation(
       adjustedMonthly += Math.round(monthly * (1 - churnPct / 100));
     }
 
-    const avgNewPrice = avgPrices.length > 0
-      ? Math.round(avgPrices.reduce((a, b) => a + b, 0) / avgPrices.length)
-      : 0;
+    const avgNewPrice =
+      avgPrices.length > 0
+        ? Math.round(avgPrices.reduce((a, b) => a + b, 0) / avgPrices.length)
+        : 0;
 
     return {
       priceChangePct: changePct,
@@ -332,7 +345,7 @@ export async function runCompetitorAnalysis(
 
   const allProfitability = await calculateAllCustomerProfitability(companyId);
   const allProperties = await storage.getProperties(companyId);
-  const propertyMap = new Map(allProperties.map(p => [p.id, p]));
+  const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
   interface PropertyPriceInfo {
     zipCode: string;
@@ -355,23 +368,29 @@ export async function runCompetitorAnalysis(
   }
 
   const allZips = new Set<string>();
-  propertyPrices.forEach(p => allZips.add(p.zipCode));
-  competitors.forEach(c => allZips.add(c.zipCode));
+  propertyPrices.forEach((p) => allZips.add(p.zipCode));
+  competitors.forEach((c) => allZips.add(c.zipCode));
 
   const zipEntries: CompetitorAnalysisEntry[] = [];
 
   for (const zip of Array.from(allZips)) {
-    const myProps = propertyPrices.filter(p => p.zipCode === zip);
-    const myWeeklyPrices = myProps.map(p => normalizeToWeekly(p.priceCents, p.frequency));
-    const myAvg = myWeeklyPrices.length > 0
-      ? Math.round(myWeeklyPrices.reduce((a, b) => a + b, 0) / myWeeklyPrices.length)
-      : 0;
+    const myProps = propertyPrices.filter((p) => p.zipCode === zip);
+    const myWeeklyPrices = myProps.map((p) => normalizeToWeekly(p.priceCents, p.frequency));
+    const myAvg =
+      myWeeklyPrices.length > 0
+        ? Math.round(myWeeklyPrices.reduce((a, b) => a + b, 0) / myWeeklyPrices.length)
+        : 0;
 
-    const zipCompetitors = competitors.filter(c => c.zipCode === zip);
-    const competitorWeeklyPrices = zipCompetitors.map(c => normalizeToWeekly(c.priceCents, c.frequency));
-    const marketAvg = competitorWeeklyPrices.length > 0
-      ? Math.round(competitorWeeklyPrices.reduce((a, b) => a + b, 0) / competitorWeeklyPrices.length)
-      : 0;
+    const zipCompetitors = competitors.filter((c) => c.zipCode === zip);
+    const competitorWeeklyPrices = zipCompetitors.map((c) =>
+      normalizeToWeekly(c.priceCents, c.frequency)
+    );
+    const marketAvg =
+      competitorWeeklyPrices.length > 0
+        ? Math.round(
+            competitorWeeklyPrices.reduce((a, b) => a + b, 0) / competitorWeeklyPrices.length
+          )
+        : 0;
 
     let positionPct = 0;
     let position: "below_market" | "at_market" | "above_market" = "at_market";
@@ -387,7 +406,7 @@ export async function runCompetitorAnalysis(
       yourPropertyCount: myProps.length,
       marketAvgPriceCents: marketAvg,
       competitorCount: zipCompetitors.length,
-      competitors: zipCompetitors.map(c => ({
+      competitors: zipCompetitors.map((c) => ({
         name: c.competitorName,
         priceCents: c.priceCents,
         frequency: c.frequency,
@@ -399,16 +418,20 @@ export async function runCompetitorAnalysis(
     });
   }
 
-  const overallMyAvg = propertyPrices.length > 0
-    ? Math.round(
-        propertyPrices.map(p => normalizeToWeekly(p.priceCents, p.frequency)).reduce((a, b) => a + b, 0) / propertyPrices.length
-      )
-    : 0;
+  const overallMyAvg =
+    propertyPrices.length > 0
+      ? Math.round(
+          propertyPrices
+            .map((p) => normalizeToWeekly(p.priceCents, p.frequency))
+            .reduce((a, b) => a + b, 0) / propertyPrices.length
+        )
+      : 0;
 
-  const allCompWeekly = competitors.map(c => normalizeToWeekly(c.priceCents, c.frequency));
-  const overallMarketAvg = allCompWeekly.length > 0
-    ? Math.round(allCompWeekly.reduce((a, b) => a + b, 0) / allCompWeekly.length)
-    : 0;
+  const allCompWeekly = competitors.map((c) => normalizeToWeekly(c.priceCents, c.frequency));
+  const overallMarketAvg =
+    allCompWeekly.length > 0
+      ? Math.round(allCompWeekly.reduce((a, b) => a + b, 0) / allCompWeekly.length)
+      : 0;
 
   let overallPosition: "below_market" | "at_market" | "above_market" = "at_market";
   if (overallMarketAvg > 0 && overallMyAvg > 0) {

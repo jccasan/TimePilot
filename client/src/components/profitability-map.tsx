@@ -86,17 +86,14 @@ export default function ProfitabilityMap({
       try {
         const workerModule = await import("mapbox-gl/dist/mapbox-gl-csp-worker?worker");
         (mapboxgl as any).workerClass = workerModule.default;
-      } catch {
-      }
+      } catch {}
 
       mapboxglRef.current = mapboxgl;
       mapboxgl.accessToken = tokenData.token;
 
       const allStops = routes.flatMap((r) => r.stops);
       const center: [number, number] =
-        allStops.length > 0
-          ? [allStops[0].longitude, allStops[0].latitude]
-          : [-98.5795, 39.8283];
+        allStops.length > 0 ? [allStops[0].longitude, allStops[0].latitude] : [-98.5795, 39.8283];
 
       const map = new mapboxgl.Map({
         container: mapContainerRef.current!,
@@ -165,8 +162,12 @@ export default function ProfitabilityMap({
 
     const layerIds = ["heatmap-profit-layer", "heatmap-loss-layer"];
     const sourceIds = ["heatmap-profit-source", "heatmap-loss-source"];
-    layerIds.forEach((id) => { if (map.getLayer(id)) map.removeLayer(id); });
-    sourceIds.forEach((id) => { if (map.getSource(id)) map.removeSource(id); });
+    layerIds.forEach((id) => {
+      if (map.getLayer(id)) map.removeLayer(id);
+    });
+    sourceIds.forEach((id) => {
+      if (map.getSource(id)) map.removeSource(id);
+    });
 
     routes.forEach((route) => {
       const lineId = `route-line-${route.routeId}`;
@@ -178,8 +179,8 @@ export default function ProfitabilityMap({
     const allVisibleStops = visibleRoutes.flatMap((r) => r.stops);
 
     if (viewMode === "zones") {
-      const profitStops = allVisibleStops.filter(s => s.profitPerVisitCents >= 0);
-      const lossStops = allVisibleStops.filter(s => s.profitPerVisitCents < 0);
+      const profitStops = allVisibleStops.filter((s) => s.profitPerVisitCents >= 0);
+      const lossStops = allVisibleStops.filter((s) => s.profitPerVisitCents < 0);
 
       if (profitStops.length > 0) {
         map.addSource("heatmap-profit-source", {
@@ -203,11 +204,17 @@ export default function ProfitabilityMap({
             "heatmap-intensity": 1,
             "heatmap-radius": 40,
             "heatmap-color": [
-              "interpolate", ["linear"], ["heatmap-density"],
-              0, "rgba(34,197,94,0)",
-              0.3, "rgba(34,197,94,0.3)",
-              0.6, "rgba(22,163,74,0.5)",
-              1, "rgba(21,128,61,0.7)",
+              "interpolate",
+              ["linear"],
+              ["heatmap-density"],
+              0,
+              "rgba(34,197,94,0)",
+              0.3,
+              "rgba(34,197,94,0.3)",
+              0.6,
+              "rgba(22,163,74,0.5)",
+              1,
+              "rgba(21,128,61,0.7)",
             ],
             "heatmap-opacity": 0.8,
           },
@@ -236,11 +243,17 @@ export default function ProfitabilityMap({
             "heatmap-intensity": 1,
             "heatmap-radius": 40,
             "heatmap-color": [
-              "interpolate", ["linear"], ["heatmap-density"],
-              0, "rgba(239,68,68,0)",
-              0.3, "rgba(239,68,68,0.3)",
-              0.6, "rgba(220,38,38,0.5)",
-              1, "rgba(185,28,28,0.7)",
+              "interpolate",
+              ["linear"],
+              ["heatmap-density"],
+              0,
+              "rgba(239,68,68,0)",
+              0.3,
+              "rgba(239,68,68,0.3)",
+              0.6,
+              "rgba(220,38,38,0.5)",
+              1,
+              "rgba(185,28,28,0.7)",
             ],
             "heatmap-opacity": 0.8,
           },
@@ -261,17 +274,14 @@ export default function ProfitabilityMap({
           .addTo(map);
         markersRef.current.push(marker);
       });
-
     } else {
       for (const route of visibleRoutes) {
-        const validStops = route.stops.filter(
-          (s) => s.latitude && s.longitude
-        );
+        const validStops = route.stops.filter((s) => s.latitude && s.longitude);
 
         if (validStops.length >= 2) {
           const coordinates = validStops.map((s) => [s.longitude, s.latitude]);
           const lineId = `route-line-${route.routeId}`;
-          const lineColor = useRouteColors ? (route.color || "#3b82f6") : STATUS_COLORS[route.status];
+          const lineColor = useRouteColors ? route.color || "#3b82f6" : STATUS_COLORS[route.status];
 
           map.addSource(lineId, {
             type: "geojson",
@@ -297,7 +307,7 @@ export default function ProfitabilityMap({
         }
 
         validStops.forEach((stop) => {
-          const color = useRouteColors ? (route.color || "#3b82f6") : STATUS_COLORS[stop.status];
+          const color = useRouteColors ? route.color || "#3b82f6" : STATUS_COLORS[stop.status];
           const el = document.createElement("div");
           el.setAttribute("data-testid", `marker-stop-${stop.propertyId}`);
           el.style.width = "24px";
@@ -333,7 +343,12 @@ export default function ProfitabilityMap({
           } else {
             Object.assign(addrEl.style, { fontSize: "12px", color: "#666", marginBottom: "6px" });
             const grid = document.createElement("div");
-            Object.assign(grid.style, { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 8px", fontSize: "12px" });
+            Object.assign(grid.style, {
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "2px 8px",
+              fontSize: "12px",
+            });
             const addRow = (label: string, value: string, valueColor?: string) => {
               const lbl = document.createElement("span");
               lbl.style.color = "#888";
@@ -346,14 +361,28 @@ export default function ProfitabilityMap({
             };
             addRow("Revenue:", formatDollars(stop.revenuePerVisitCents));
             addRow("Cost:", formatDollars(stop.costPerVisitCents));
-            addRow("Profit:", formatDollars(stop.profitPerVisitCents), stop.profitPerVisitCents >= 0 ? "#16a34a" : "#dc2626");
-            addRow("Margin:", `${stop.profitMarginPct.toFixed(1)}%`, stop.profitMarginPct >= 15 ? "#16a34a" : stop.profitMarginPct >= 0 ? "#ca8a04" : "#dc2626");
+            addRow(
+              "Profit:",
+              formatDollars(stop.profitPerVisitCents),
+              stop.profitPerVisitCents >= 0 ? "#16a34a" : "#dc2626"
+            );
+            addRow(
+              "Margin:",
+              `${stop.profitMarginPct.toFixed(1)}%`,
+              stop.profitMarginPct >= 15
+                ? "#16a34a"
+                : stop.profitMarginPct >= 0
+                  ? "#ca8a04"
+                  : "#dc2626"
+            );
             const footerEl = document.createElement("div");
             Object.assign(footerEl.style, { marginTop: "6px", fontSize: "11px", color: "#888" });
             footerEl.textContent = `${stop.frequency} | ${stop.dogCount} dog${stop.dogCount !== 1 ? "s" : ""} | ${stop.yardSize}`;
             popupEl.append(grid, footerEl);
           }
-          const popup = new mapboxgl.Popup({ offset: 25, maxWidth: "260px" }).setDOMContent(popupEl);
+          const popup = new mapboxgl.Popup({ offset: 25, maxWidth: "260px" }).setDOMContent(
+            popupEl
+          );
 
           el.addEventListener("click", () => {
             if (onStopClick) onStopClick(stop);
@@ -397,7 +426,10 @@ export default function ProfitabilityMap({
 
   if (!tokenData?.token) {
     return (
-      <div className="w-full h-full flex items-center justify-center text-muted-foreground" data-testid="map-no-token">
+      <div
+        className="w-full h-full flex items-center justify-center text-muted-foreground"
+        data-testid="map-no-token"
+      >
         Mapbox token not configured. Set MAPBOX_PUBLIC_TOKEN to enable map view.
       </div>
     );
@@ -410,7 +442,12 @@ export default function ProfitabilityMap({
           <Skeleton className="w-full h-full" />
         </div>
       )}
-      <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: "400px" }} data-testid="profitability-map-canvas" />
+      <div
+        ref={mapContainerRef}
+        className="w-full h-full"
+        style={{ minHeight: "400px" }}
+        data-testid="profitability-map-canvas"
+      />
     </div>
   );
 }

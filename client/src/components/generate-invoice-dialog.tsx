@@ -51,7 +51,10 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function getMonthRange(monthsAgo: number, timezone?: string): { start: string; end: string; label: string } {
+function getMonthRange(
+  monthsAgo: number,
+  timezone?: string
+): { start: string; end: string; label: string } {
   const d = new Date();
   d.setMonth(d.getMonth() - monthsAgo);
   const year = d.getFullYear();
@@ -98,7 +101,11 @@ export function GenerateInvoiceDialog({
     enabled: showContactPicker && open,
   });
 
-  const { data: uninvoicedData, isLoading, isError } = useQuery<UninvoicedResult>({
+  const {
+    data: uninvoicedData,
+    isLoading,
+    isError,
+  } = useQuery<UninvoicedResult>({
     queryKey: ["/api/contacts", activeContactId, "uninvoiced-visits"],
     enabled: !!activeContactId && open,
   });
@@ -122,11 +129,11 @@ export function GenerateInvoiceDialog({
     }
 
     if (rangeStart && rangeEnd) {
-      visits = visits.filter(v => v.scheduledDate >= rangeStart && v.scheduledDate <= rangeEnd);
+      visits = visits.filter((v) => v.scheduledDate >= rangeStart && v.scheduledDate <= rangeEnd);
     } else if (rangeStart) {
-      visits = visits.filter(v => v.scheduledDate >= rangeStart);
+      visits = visits.filter((v) => v.scheduledDate >= rangeStart);
     } else if (rangeEnd) {
-      visits = visits.filter(v => v.scheduledDate <= rangeEnd);
+      visits = visits.filter((v) => v.scheduledDate <= rangeEnd);
     }
 
     return visits;
@@ -145,24 +152,24 @@ export function GenerateInvoiceDialog({
   const selectedTotal = useMemo(() => {
     if (!uninvoicedData?.visits) return 0;
     return uninvoicedData.visits
-      .filter(v => selectedVisitIds.has(v.id))
+      .filter((v) => selectedVisitIds.has(v.id))
       .reduce((sum, v) => sum + (parseFloat(v.pricePerVisit) || 0), 0);
   }, [uninvoicedData, selectedVisitIds]);
 
-  const allSelected = filteredVisits.length > 0 &&
-    filteredVisits.every(v => selectedVisitIds.has(v.id));
+  const allSelected =
+    filteredVisits.length > 0 && filteredVisits.every((v) => selectedVisitIds.has(v.id));
 
   const toggleAll = () => {
     if (filteredVisits.length === 0) return;
     if (allSelected) {
       setSelectedVisitIds(new Set());
     } else {
-      setSelectedVisitIds(new Set(filteredVisits.map(v => v.id)));
+      setSelectedVisitIds(new Set(filteredVisits.map((v) => v.id)));
     }
   };
 
   const toggleVisit = (visitId: string) => {
-    setSelectedVisitIds(prev => {
+    setSelectedVisitIds((prev) => {
       const next = new Set(prev);
       if (next.has(visitId)) next.delete(visitId);
       else next.add(visitId);
@@ -181,13 +188,19 @@ export function GenerateInvoiceDialog({
       return res.json();
     },
     onSuccess: (data: Invoice & { lineItems: InvoiceLineItem[] }) => {
-      queryClient.invalidateQueries({ predicate: (query) => {
-        const key = query.queryKey[0] as string;
-        return key?.startsWith("/api/invoices") ||
-          key?.startsWith("/api/company/uninvoiced") ||
-          (key === "/api/contacts" && query.queryKey[2] === "uninvoiced-visits");
-      }});
-      queryClient.invalidateQueries({ queryKey: ["/api/contacts", activeContactId, "uninvoiced-visits"] });
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return (
+            key?.startsWith("/api/invoices") ||
+            key?.startsWith("/api/company/uninvoiced") ||
+            (key === "/api/contacts" && query.queryKey[2] === "uninvoiced-visits")
+          );
+        },
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/contacts", activeContactId, "uninvoiced-visits"],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       toast({
@@ -221,13 +234,14 @@ export function GenerateInvoiceDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2" data-testid="text-generate-invoice-title">
+          <DialogTitle
+            className="flex items-center gap-2"
+            data-testid="text-generate-invoice-title"
+          >
             <FileText className="h-5 w-5" />
             Generate Invoice from Completed Work
           </DialogTitle>
-          <DialogDescription>
-            Select completed visits to include in the invoice.
-          </DialogDescription>
+          <DialogDescription>Select completed visits to include in the invoice.</DialogDescription>
         </DialogHeader>
 
         {showContactPicker && !initialContactId && (
@@ -238,11 +252,13 @@ export function GenerateInvoiceDialog({
                 <SelectValue placeholder="Select a client" />
               </SelectTrigger>
               <SelectContent>
-                {contacts?.filter(c => c.status === "active").map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.firstName} {c.lastName}
-                  </SelectItem>
-                ))}
+                {contacts
+                  ?.filter((c) => c.status === "active")
+                  .map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.firstName} {c.lastName}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
@@ -255,27 +271,85 @@ export function GenerateInvoiceDialog({
               <Label className="text-sm font-medium">Filter by date range</Label>
             </div>
             <div className="flex flex-wrap gap-1">
-              <Button variant={dateFilter === "all" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("all"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-all">
+              <Button
+                variant={dateFilter === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setDateFilter("all");
+                  setSelectedVisitIds(new Set());
+                }}
+                data-testid="button-filter-all"
+              >
                 All
               </Button>
-              <Button variant={dateFilter === "0" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("0"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-this-month">
+              <Button
+                variant={dateFilter === "0" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setDateFilter("0");
+                  setSelectedVisitIds(new Set());
+                }}
+                data-testid="button-filter-this-month"
+              >
                 {getMonthRange(0, tz).label}
               </Button>
-              <Button variant={dateFilter === "1" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("1"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-last-month">
+              <Button
+                variant={dateFilter === "1" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setDateFilter("1");
+                  setSelectedVisitIds(new Set());
+                }}
+                data-testid="button-filter-last-month"
+              >
                 {getMonthRange(1, tz).label}
               </Button>
-              <Button variant={dateFilter === "2" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("2"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-2-months">
+              <Button
+                variant={dateFilter === "2" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setDateFilter("2");
+                  setSelectedVisitIds(new Set());
+                }}
+                data-testid="button-filter-2-months"
+              >
                 {getMonthRange(2, tz).label}
               </Button>
-              <Button variant={dateFilter === "custom" ? "default" : "outline"} size="sm" onClick={() => { setDateFilter("custom"); setSelectedVisitIds(new Set()); }} data-testid="button-filter-custom">
+              <Button
+                variant={dateFilter === "custom" ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setDateFilter("custom");
+                  setSelectedVisitIds(new Set());
+                }}
+                data-testid="button-filter-custom"
+              >
                 Custom
               </Button>
             </div>
             {dateFilter === "custom" && (
               <div className="flex items-center gap-2">
-                <Input type="date" value={customStart} onChange={e => { setCustomStart(e.target.value); setSelectedVisitIds(new Set()); }} className="w-auto" data-testid="input-filter-start" />
+                <Input
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => {
+                    setCustomStart(e.target.value);
+                    setSelectedVisitIds(new Set());
+                  }}
+                  className="w-auto"
+                  data-testid="input-filter-start"
+                />
                 <span className="text-sm text-muted-foreground">to</span>
-                <Input type="date" value={customEnd} onChange={e => { setCustomEnd(e.target.value); setSelectedVisitIds(new Set()); }} className="w-auto" data-testid="input-filter-end" />
+                <Input
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => {
+                    setCustomEnd(e.target.value);
+                    setSelectedVisitIds(new Set());
+                  }}
+                  className="w-auto"
+                  data-testid="input-filter-end"
+                />
               </div>
             )}
             {dateFilter !== "all" && (
@@ -287,7 +361,10 @@ export function GenerateInvoiceDialog({
         )}
 
         {!activeContactId ? (
-          <div className="text-center py-8 text-muted-foreground" data-testid="text-select-client-prompt">
+          <div
+            className="text-center py-8 text-muted-foreground"
+            data-testid="text-select-client-prompt"
+          >
             <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-40" />
             <p>Select a client to see their uninvoiced completed work.</p>
           </div>
@@ -309,7 +386,10 @@ export function GenerateInvoiceDialog({
             <p className="text-sm">No uninvoiced completed visits for this client.</p>
           </div>
         ) : filteredVisits.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground" data-testid="text-no-filtered-visits">
+          <div
+            className="text-center py-8 text-muted-foreground"
+            data-testid="text-no-filtered-visits"
+          >
             <Calendar className="h-8 w-8 mx-auto mb-2 opacity-40" />
             <p className="font-medium">No visits in this date range</p>
             <p className="text-sm">Try selecting a different date range above.</p>
@@ -328,7 +408,11 @@ export function GenerateInvoiceDialog({
                 </span>
               </div>
               <Badge variant="secondary" className="text-sm" data-testid="badge-total-uninvoiced">
-                ${filteredVisits.reduce((sum, v) => sum + (parseFloat(v.pricePerVisit) || 0), 0).toFixed(2)} total
+                $
+                {filteredVisits
+                  .reduce((sum, v) => sum + (parseFloat(v.pricePerVisit) || 0), 0)
+                  .toFixed(2)}{" "}
+                total
               </Badge>
             </div>
 
@@ -357,12 +441,18 @@ export function GenerateInvoiceDialog({
                           <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span className="text-sm">{formatDate(visit.scheduledDate)}</span>
                           {visit.completedAt && (
-                            <Badge variant="secondary" className="text-[10px] px-1 py-0 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] px-1 py-0 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                            >
                               Completed
                             </Badge>
                           )}
                         </div>
-                        <span className="text-sm font-medium tabular-nums" data-testid={`text-visit-price-${visit.id}`}>
+                        <span
+                          className="text-sm font-medium tabular-nums"
+                          data-testid={`text-visit-price-${visit.id}`}
+                        >
                           ${(parseFloat(visit.pricePerVisit) || 0).toFixed(2)}
                         </span>
                       </label>
@@ -404,7 +494,10 @@ export function GenerateInvoiceDialog({
                   onCheckedChange={setSuppressNotifications}
                   data-testid="switch-suppress-notifications"
                 />
-                <Label htmlFor="invoice-suppress-notifications" className="text-sm text-muted-foreground cursor-pointer">
+                <Label
+                  htmlFor="invoice-suppress-notifications"
+                  className="text-sm text-muted-foreground cursor-pointer"
+                >
                   Suppress notifications
                 </Label>
               </div>
@@ -460,7 +553,9 @@ export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDate
       return res.json();
     },
     onSuccess: (data: { created: number; totalDollars: number }) => {
-      queryClient.invalidateQueries({ predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({
+        predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
       if (data.created > 0) {
         const dollarStr = data.totalDollars.toFixed(2);
@@ -469,7 +564,10 @@ export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDate
           description: `${data.created} invoice${data.created !== 1 ? "s" : ""} created`,
         });
       } else {
-        toast({ title: "No invoices generated", description: "No uninvoiced completed work found in this date range." });
+        toast({
+          title: "No invoices generated",
+          description: "No uninvoiced completed work found in this date range.",
+        });
       }
       onOpenChange(false);
     },
@@ -549,7 +647,7 @@ export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDate
                 <Input
                   type="date"
                   value={customStart}
-                  onChange={e => setCustomStart(e.target.value)}
+                  onChange={(e) => setCustomStart(e.target.value)}
                   className="w-auto"
                   data-testid="input-dr-start"
                 />
@@ -557,7 +655,7 @@ export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDate
                 <Input
                   type="date"
                   value={customEnd}
-                  onChange={e => setCustomEnd(e.target.value)}
+                  onChange={(e) => setCustomEnd(e.target.value)}
                   className="w-auto"
                   data-testid="input-dr-end"
                 />
@@ -572,7 +670,8 @@ export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDate
           </div>
 
           <p className="text-sm text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
-            One invoice will be created per customer for all their completed, uninvoiced visits that fall within this period.
+            One invoice will be created per customer for all their completed, uninvoiced visits that
+            fall within this period.
           </p>
 
           <div className="flex items-center gap-2 border-t pt-3">
@@ -582,7 +681,10 @@ export function GenerateByDateRangeDialog({ open, onOpenChange }: GenerateByDate
               onCheckedChange={setSuppressNotifications}
               data-testid="switch-suppress-notifications"
             />
-            <Label htmlFor="dr-suppress-notifications" className="text-sm text-muted-foreground cursor-pointer">
+            <Label
+              htmlFor="dr-suppress-notifications"
+              className="text-sm text-muted-foreground cursor-pointer"
+            >
               Suppress notifications
             </Label>
           </div>

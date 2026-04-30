@@ -4,24 +4,55 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  Building2, DollarSign, TrendingUp, AlertTriangle,
-  CreditCard, Repeat, Target, MessageSquare, Calculator, Search,
-  ChevronRight, ArrowUpRight, ArrowDownRight, Activity,
-  Mail, Phone, BarChart3, Wallet, ArrowUpDown, Plus, Pencil,
-  Filter, Cpu,
+  Building2,
+  DollarSign,
+  TrendingUp,
+  AlertTriangle,
+  CreditCard,
+  Repeat,
+  Target,
+  MessageSquare,
+  Calculator,
+  Search,
+  ChevronRight,
+  ArrowUpRight,
+  ArrowDownRight,
+  Activity,
+  Mail,
+  Phone,
+  BarChart3,
+  Wallet,
+  ArrowUpDown,
+  Plus,
+  Pencil,
+  Filter,
+  Cpu,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState, useMemo } from "react";
@@ -47,8 +78,20 @@ function marginColor(n: number): string {
   return n >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400";
 }
 
-function StatCard({ label, value, icon: Icon, trend, subtitle, onClick }: {
-  label: string; value: string | number; icon: any; trend?: "up" | "down" | null; subtitle?: string; onClick?: () => void;
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  trend,
+  subtitle,
+  onClick,
+}: {
+  label: string;
+  value: string | number;
+  icon: any;
+  trend?: "up" | "down" | null;
+  subtitle?: string;
+  onClick?: () => void;
 }) {
   const testId = `text-stat-${label.toLowerCase().replace(/\s/g, "-")}`;
   return (
@@ -61,11 +104,17 @@ function StatCard({ label, value, icon: Icon, trend, subtitle, onClick }: {
         <div className="flex items-center gap-2 mb-1">
           <Icon className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs text-muted-foreground">{label}</span>
-          {trend === "up" && <ArrowUpRight className="h-3 w-3 text-green-700 dark:text-green-400" />}
-          {trend === "down" && <ArrowDownRight className="h-3 w-3 text-red-700 dark:text-red-400" />}
+          {trend === "up" && (
+            <ArrowUpRight className="h-3 w-3 text-green-700 dark:text-green-400" />
+          )}
+          {trend === "down" && (
+            <ArrowDownRight className="h-3 w-3 text-red-700 dark:text-red-400" />
+          )}
           {onClick && <ChevronRight className="h-3 w-3 text-muted-foreground ml-auto" />}
         </div>
-        <p className="text-xl font-bold" data-testid={testId}>{value}</p>
+        <p className="text-xl font-bold" data-testid={testId}>
+          {value}
+        </p>
         {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
       </CardContent>
     </Card>
@@ -78,25 +127,86 @@ function ExecutiveTab({ onDrillDown }: { onDrillDown: (tab: string) => void }) {
     queryFn: adminFetchFn("/api/admin/analytics/executive"),
   });
 
-  if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;
+  if (isLoading)
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-24" />
+        ))}
+      </div>
+    );
 
   return (
     <div className="space-y-6" data-testid="tab-content-executive">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Active Accounts" value={data?.activeAccounts ?? 0} icon={Building2} subtitle={`${data?.totalAccounts ?? 0} total`} onClick={() => onDrillDown("accounts")} />
-        <StatCard label="MRR" value={fmt(data?.mrr)} icon={DollarSign} onClick={() => onDrillDown("billing")} />
-        <StatCard label="ARR" value={fmt(data?.arr)} icon={TrendingUp} onClick={() => onDrillDown("billing")} />
-        <StatCard label="Gross Margin" value={pct(data?.estimatedGrossMarginPct)} icon={Calculator} onClick={() => onDrillDown("costs")} />
+        <StatCard
+          label="Active Accounts"
+          value={data?.activeAccounts ?? 0}
+          icon={Building2}
+          subtitle={`${data?.totalAccounts ?? 0} total`}
+          onClick={() => onDrillDown("accounts")}
+        />
+        <StatCard
+          label="MRR"
+          value={fmt(data?.mrr)}
+          icon={DollarSign}
+          onClick={() => onDrillDown("billing")}
+        />
+        <StatCard
+          label="ARR"
+          value={fmt(data?.arr)}
+          icon={TrendingUp}
+          onClick={() => onDrillDown("billing")}
+        />
+        <StatCard
+          label="Gross Margin"
+          value={pct(data?.estimatedGrossMarginPct)}
+          icon={Calculator}
+          onClick={() => onDrillDown("costs")}
+        />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="New MRR" value={fmt(data?.newMrrThisMonth)} icon={ArrowUpRight} subtitle="this month" onClick={() => onDrillDown("billing")} />
-        <StatCard label="Churned MRR" value={fmt(data?.churnedMrrThisMonth)} icon={ArrowDownRight} subtitle="this month" onClick={() => onDrillDown("retention")} />
-        <StatCard label="Logo Churn" value={pct(data?.logoChurnPct)} icon={AlertTriangle} onClick={() => onDrillDown("retention")} />
-        <StatCard label="Net Revenue Retention" value={pct(data?.nrr)} icon={Repeat} onClick={() => onDrillDown("retention")} />
+        <StatCard
+          label="New MRR"
+          value={fmt(data?.newMrrThisMonth)}
+          icon={ArrowUpRight}
+          subtitle="this month"
+          onClick={() => onDrillDown("billing")}
+        />
+        <StatCard
+          label="Churned MRR"
+          value={fmt(data?.churnedMrrThisMonth)}
+          icon={ArrowDownRight}
+          subtitle="this month"
+          onClick={() => onDrillDown("retention")}
+        />
+        <StatCard
+          label="Logo Churn"
+          value={pct(data?.logoChurnPct)}
+          icon={AlertTriangle}
+          onClick={() => onDrillDown("retention")}
+        />
+        <StatCard
+          label="Net Revenue Retention"
+          value={pct(data?.nrr)}
+          icon={Repeat}
+          onClick={() => onDrillDown("retention")}
+        />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatCard label="GRR" value={pct(data?.grr)} icon={Activity} onClick={() => onDrillDown("retention")} />
-        <StatCard label="Total Overhead" value={fmt(data?.totalOverhead)} icon={Wallet} subtitle="last 30 days" onClick={() => onDrillDown("costs")} />
+        <StatCard
+          label="GRR"
+          value={pct(data?.grr)}
+          icon={Activity}
+          onClick={() => onDrillDown("retention")}
+        />
+        <StatCard
+          label="Total Overhead"
+          value={fmt(data?.totalOverhead)}
+          icon={Wallet}
+          subtitle="last 30 days"
+          onClick={() => onDrillDown("costs")}
+        />
       </div>
     </div>
   );
@@ -108,15 +218,17 @@ function AccountsTab() {
 
   const { data: accounts, isLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/analytics/accounts", filter],
-    queryFn: adminFetchFn(`/api/admin/analytics/accounts${filter !== "all" ? `?filter=${filter}` : ""}`),
+    queryFn: adminFetchFn(
+      `/api/admin/analytics/accounts${filter !== "all" ? `?filter=${filter}` : ""}`
+    ),
   });
 
   const filtered = useMemo(() => {
     if (!accounts) return [];
     if (!search.trim()) return accounts;
     const q = search.toLowerCase();
-    return accounts.filter((a: any) =>
-      a.name?.toLowerCase().includes(q) || a.id?.toLowerCase().includes(q)
+    return accounts.filter(
+      (a: any) => a.name?.toLowerCase().includes(q) || a.id?.toLowerCase().includes(q)
     );
   }, [accounts, search]);
 
@@ -137,14 +249,26 @@ function AccountsTab() {
         </Select>
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search accounts..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} data-testid="input-accounts-search" />
+          <Input
+            placeholder="Search accounts..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            data-testid="input-accounts-search"
+          />
         </div>
       </div>
 
       {isLoading ? (
-        <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-16" />
+          ))}
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground" data-testid="text-no-accounts">No accounts match the current filter</div>
+        <div className="text-center py-8 text-muted-foreground" data-testid="text-no-accounts">
+          No accounts match the current filter
+        </div>
       ) : (
         <div className="space-y-2">
           {filtered.map((a: any) => {
@@ -157,19 +281,57 @@ function AccountsTab() {
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
                         <div className="min-w-0">
-                          <p className="font-medium truncate" data-testid={`text-account-name-${a.id}`}>{a.name}</p>
-                          <p className="text-xs text-muted-foreground" data-testid={`text-account-stats-${a.id}`}>
-                            {a.userCount} users, {a.contactCount} contacts, {a.servicePlanCount} plans
+                          <p
+                            className="font-medium truncate"
+                            data-testid={`text-account-name-${a.id}`}
+                          >
+                            {a.name}
+                          </p>
+                          <p
+                            className="text-xs text-muted-foreground"
+                            data-testid={`text-account-stats-${a.id}`}
+                          >
+                            {a.userCount} users, {a.contactCount} contacts, {a.servicePlanCount}{" "}
+                            plans
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant="outline" data-testid={`badge-tier-${a.id}`}>{tierConfig?.name || a.subscriptionTier}</Badge>
-                        {a.isActivated && <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" data-testid={`badge-activated-${a.id}`}>Activated</Badge>}
-                        {a.churnRiskScore > 5 && <Badge variant="destructive" data-testid={`badge-risk-${a.id}`}>Risk: {a.churnRiskScore}</Badge>}
-                        {a.churnRiskScore > 0 && a.churnRiskScore <= 5 && <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" data-testid={`badge-risk-${a.id}`}>Risk: {a.churnRiskScore}</Badge>}
-                        {a.failedPayments30d > 0 && <Badge variant="destructive" data-testid={`badge-failed-${a.id}`}>{a.failedPayments30d} failed</Badge>}
-                        <span className="text-xs text-muted-foreground" data-testid={`text-margin-${a.id}`}>{fmt(a.estimatedMargin30d)}/mo margin</span>
+                        <Badge variant="outline" data-testid={`badge-tier-${a.id}`}>
+                          {tierConfig?.name || a.subscriptionTier}
+                        </Badge>
+                        {a.isActivated && (
+                          <Badge
+                            className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                            data-testid={`badge-activated-${a.id}`}
+                          >
+                            Activated
+                          </Badge>
+                        )}
+                        {a.churnRiskScore > 5 && (
+                          <Badge variant="destructive" data-testid={`badge-risk-${a.id}`}>
+                            Risk: {a.churnRiskScore}
+                          </Badge>
+                        )}
+                        {a.churnRiskScore > 0 && a.churnRiskScore <= 5 && (
+                          <Badge
+                            className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                            data-testid={`badge-risk-${a.id}`}
+                          >
+                            Risk: {a.churnRiskScore}
+                          </Badge>
+                        )}
+                        {a.failedPayments30d > 0 && (
+                          <Badge variant="destructive" data-testid={`badge-failed-${a.id}`}>
+                            {a.failedPayments30d} failed
+                          </Badge>
+                        )}
+                        <span
+                          className="text-xs text-muted-foreground"
+                          data-testid={`text-margin-${a.id}`}
+                        >
+                          {fmt(a.estimatedMargin30d)}/mo margin
+                        </span>
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </div>
                     </div>
@@ -190,19 +352,40 @@ function BillingTab() {
     queryFn: adminFetchFn("/api/admin/analytics/billing"),
   });
 
-  if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;
+  if (isLoading)
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-24" />
+        ))}
+      </div>
+    );
 
   return (
     <div className="space-y-6" data-testid="tab-content-billing">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Failed Payment Rate" value={pct(data?.failedPaymentRate)} icon={AlertTriangle} />
+        <StatCard
+          label="Failed Payment Rate"
+          value={pct(data?.failedPaymentRate)}
+          icon={AlertTriangle}
+        />
         <StatCard label="Recovery Rate" value={pct(data?.recoveryRate)} icon={TrendingUp} />
-        <StatCard label="Past Due Invoices" value={data?.pastDueCount ?? 0} icon={CreditCard} subtitle={fmt(data?.pastDueAmount)} />
+        <StatCard
+          label="Past Due Invoices"
+          value={data?.pastDueCount ?? 0}
+          icon={CreditCard}
+          subtitle={fmt(data?.pastDueAmount)}
+        />
         <StatCard label="Stripe Fees" value={fmt(data?.totalStripeFees)} icon={DollarSign} />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Refunds" value={data?.refundCount ?? 0} icon={Repeat} subtitle={fmt(data?.refundAmount)} />
+        <StatCard
+          label="Refunds"
+          value={data?.refundCount ?? 0}
+          icon={Repeat}
+          subtitle={fmt(data?.refundAmount)}
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -214,13 +397,19 @@ function BillingTab() {
             {data?.invoicesByStatus ? (
               <div className="space-y-2">
                 {Object.entries(data.invoicesByStatus).map(([status, cnt]) => (
-                  <div key={status} className="flex items-center justify-between gap-2" data-testid={`row-invoice-status-${status}`}>
+                  <div
+                    key={status}
+                    className="flex items-center justify-between gap-2"
+                    data-testid={`row-invoice-status-${status}`}
+                  >
                     <span className="text-sm capitalize">{status}</span>
                     <Badge variant="outline">{cnt as number}</Badge>
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-muted-foreground">No data</p>}
+            ) : (
+              <p className="text-sm text-muted-foreground">No data</p>
+            )}
           </CardContent>
         </Card>
 
@@ -232,16 +421,27 @@ function BillingTab() {
             {data?.monthlyPayments?.length > 0 ? (
               <div className="space-y-2">
                 {data.monthlyPayments.map((m: any) => (
-                  <div key={m.month} className="flex items-center justify-between gap-2" data-testid={`row-payment-${m.month}`}>
+                  <div
+                    key={m.month}
+                    className="flex items-center justify-between gap-2"
+                    data-testid={`row-payment-${m.month}`}
+                  >
                     <span className="text-sm">{m.month}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium" data-testid={`text-payment-amount-${m.month}`}>{fmt(m.amount)}</span>
+                      <span
+                        className="text-sm font-medium"
+                        data-testid={`text-payment-amount-${m.month}`}
+                      >
+                        {fmt(m.amount)}
+                      </span>
                       <Badge variant="outline">{m.count} paid</Badge>
                     </div>
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-muted-foreground">No payment data yet</p>}
+            ) : (
+              <p className="text-sm text-muted-foreground">No payment data yet</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -255,7 +455,14 @@ function RetentionTab() {
     queryFn: adminFetchFn("/api/admin/analytics/retention"),
   });
 
-  if (isLoading) return <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40" />)}</div>;
+  if (isLoading)
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-40" />
+        ))}
+      </div>
+    );
 
   return (
     <div className="space-y-6" data-testid="tab-content-retention">
@@ -272,18 +479,33 @@ function RetentionTab() {
                     <TableHead>Cohort</TableHead>
                     <TableHead className="text-center">Started</TableHead>
                     {data.cohorts[0]?.retentionPct?.map((_: any, i: number) => (
-                      <TableHead key={i} className="text-center">M{i + 1}</TableHead>
+                      <TableHead key={i} className="text-center">
+                        M{i + 1}
+                      </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.cohorts.map((c: any) => (
                     <TableRow key={c.month} data-testid={`row-cohort-${c.month}`}>
-                      <TableCell className="font-medium" data-testid={`text-cohort-month-${c.month}`}>{c.month}</TableCell>
-                      <TableCell className="text-center" data-testid={`text-cohort-started-${c.month}`}>{c.started}</TableCell>
+                      <TableCell
+                        className="font-medium"
+                        data-testid={`text-cohort-month-${c.month}`}
+                      >
+                        {c.month}
+                      </TableCell>
+                      <TableCell
+                        className="text-center"
+                        data-testid={`text-cohort-started-${c.month}`}
+                      >
+                        {c.started}
+                      </TableCell>
                       {c.retentionPct?.map((p: number, i: number) => (
                         <TableCell key={i} className="text-center">
-                          <span className={retentionColor(p)} data-testid={`text-retention-${c.month}-m${i + 1}`}>
+                          <span
+                            className={retentionColor(p)}
+                            data-testid={`text-retention-${c.month}-m${i + 1}`}
+                          >
                             {p.toFixed(0)}%
                           </span>
                         </TableCell>
@@ -293,7 +515,9 @@ function RetentionTab() {
                 </TableBody>
               </Table>
             </div>
-          ) : <p className="text-sm text-muted-foreground">Not enough data for cohort analysis</p>}
+          ) : (
+            <p className="text-sm text-muted-foreground">Not enough data for cohort analysis</p>
+          )}
         </CardContent>
       </Card>
 
@@ -308,14 +532,20 @@ function RetentionTab() {
                 {Object.entries(data.churnByPlan).map(([plan, cnt]) => {
                   const tierConfig = TIER_CONFIG[plan as keyof typeof TIER_CONFIG];
                   return (
-                    <div key={plan} className="flex items-center justify-between gap-2" data-testid={`row-churn-plan-${plan}`}>
+                    <div
+                      key={plan}
+                      className="flex items-center justify-between gap-2"
+                      data-testid={`row-churn-plan-${plan}`}
+                    >
                       <span className="text-sm">{tierConfig?.name || plan}</span>
                       <Badge variant="destructive">{cnt as number}</Badge>
                     </div>
                   );
                 })}
               </div>
-            ) : <p className="text-sm text-muted-foreground">No churn data</p>}
+            ) : (
+              <p className="text-sm text-muted-foreground">No churn data</p>
+            )}
           </CardContent>
         </Card>
 
@@ -327,13 +557,19 @@ function RetentionTab() {
             {data?.churnByTenure?.length > 0 ? (
               <div className="space-y-2">
                 {data.churnByTenure.map((b: any, i: number) => (
-                  <div key={b.bucket} className="flex items-center justify-between gap-2" data-testid={`row-churn-tenure-${i}`}>
+                  <div
+                    key={b.bucket}
+                    className="flex items-center justify-between gap-2"
+                    data-testid={`row-churn-tenure-${i}`}
+                  >
                     <span className="text-sm">{b.bucket}</span>
                     <Badge variant="outline">{b.count}</Badge>
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-muted-foreground">No churn data</p>}
+            ) : (
+              <p className="text-sm text-muted-foreground">No churn data</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -347,22 +583,44 @@ function ActivationTab() {
     queryFn: adminFetchFn("/api/admin/analytics/activation"),
   });
 
-  if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;
+  if (isLoading)
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24" />
+        ))}
+      </div>
+    );
 
   return (
     <div className="space-y-6" data-testid="tab-content-activation">
       <Card>
         <CardContent className="pt-4 pb-3 px-4">
           <p className="text-xs text-muted-foreground mb-1">Activation Definition</p>
-          <p className="text-sm" data-testid="text-activation-definition">{data?.activationDefinition || "10+ contacts AND 1+ recurring plan AND (1+ invoice OR 1+ payment)"}</p>
+          <p className="text-sm" data-testid="text-activation-definition">
+            {data?.activationDefinition ||
+              "10+ contacts AND 1+ recurring plan AND (1+ invoice OR 1+ payment)"}
+          </p>
         </CardContent>
       </Card>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Activation Rate" value={pct(data?.activationRate)} icon={Target} />
-        <StatCard label="Activated" value={`${data?.activatedCount ?? 0} / ${data?.totalAccounts ?? 0}`} icon={Building2} />
-        <StatCard label="Avg Days to Activate" value={data?.avgDaysToActivation?.toFixed(1) ?? "N/A"} icon={Activity} />
-        <StatCard label="Not Activated 7d+" value={data?.notActivated7d ?? 0} icon={AlertTriangle} />
+        <StatCard
+          label="Activated"
+          value={`${data?.activatedCount ?? 0} / ${data?.totalAccounts ?? 0}`}
+          icon={Building2}
+        />
+        <StatCard
+          label="Avg Days to Activate"
+          value={data?.avgDaysToActivation?.toFixed(1) ?? "N/A"}
+          icon={Activity}
+        />
+        <StatCard
+          label="Not Activated 7d+"
+          value={data?.notActivated7d ?? 0}
+          icon={AlertTriangle}
+        />
       </div>
 
       <Card>
@@ -375,17 +633,30 @@ function ActivationTab() {
               {data.byPlan.map((p: any) => {
                 const tierConfig = TIER_CONFIG[p.plan as keyof typeof TIER_CONFIG];
                 return (
-                  <div key={p.plan} className="flex items-center justify-between gap-2" data-testid={`row-activation-plan-${p.plan}`}>
+                  <div
+                    key={p.plan}
+                    className="flex items-center justify-between gap-2"
+                    data-testid={`row-activation-plan-${p.plan}`}
+                  >
                     <span className="text-sm">{tierConfig?.name || p.plan}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm" data-testid={`text-activation-count-${p.plan}`}>{p.activated}/{p.total}</span>
-                      <Badge variant={p.rate >= 50 ? "default" : "outline"} data-testid={`badge-activation-rate-${p.plan}`}>{pct(p.rate)}</Badge>
+                      <span className="text-sm" data-testid={`text-activation-count-${p.plan}`}>
+                        {p.activated}/{p.total}
+                      </span>
+                      <Badge
+                        variant={p.rate >= 50 ? "default" : "outline"}
+                        data-testid={`badge-activation-rate-${p.plan}`}
+                      >
+                        {pct(p.rate)}
+                      </Badge>
                     </div>
                   </div>
                 );
               })}
             </div>
-          ) : <p className="text-sm text-muted-foreground">No data</p>}
+          ) : (
+            <p className="text-sm text-muted-foreground">No data</p>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -398,7 +669,14 @@ function MessagingTab() {
     queryFn: adminFetchFn("/api/admin/analytics/messaging-costs"),
   });
 
-  if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;
+  if (isLoading)
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24" />
+        ))}
+      </div>
+    );
 
   return (
     <div className="space-y-6" data-testid="tab-content-messaging">
@@ -418,16 +696,29 @@ function MessagingTab() {
             {data?.topAccountsBySms?.length > 0 ? (
               <div className="space-y-2">
                 {data.topAccountsBySms.map((a: any) => (
-                  <div key={a.companyId} className="flex items-center justify-between gap-2" data-testid={`row-sms-top-${a.companyId}`}>
-                    <span className="text-sm truncate flex-1" data-testid={`text-sms-company-${a.companyId}`}>{a.companyName}</span>
+                  <div
+                    key={a.companyId}
+                    className="flex items-center justify-between gap-2"
+                    data-testid={`row-sms-top-${a.companyId}`}
+                  >
+                    <span
+                      className="text-sm truncate flex-1"
+                      data-testid={`text-sms-company-${a.companyId}`}
+                    >
+                      {a.companyName}
+                    </span>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" data-testid={`badge-sms-count-${a.companyId}`}>{a.smsCount} msgs</Badge>
+                      <Badge variant="outline" data-testid={`badge-sms-count-${a.companyId}`}>
+                        {a.smsCount} msgs
+                      </Badge>
                       <span className="text-xs text-muted-foreground">{fmt(a.cost)}</span>
                     </div>
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-muted-foreground">No SMS data</p>}
+            ) : (
+              <p className="text-sm text-muted-foreground">No SMS data</p>
+            )}
           </CardContent>
         </Card>
 
@@ -439,16 +730,29 @@ function MessagingTab() {
             {data?.topAccountsByEmail?.length > 0 ? (
               <div className="space-y-2">
                 {data.topAccountsByEmail.map((a: any) => (
-                  <div key={a.companyId} className="flex items-center justify-between gap-2" data-testid={`row-email-top-${a.companyId}`}>
-                    <span className="text-sm truncate flex-1" data-testid={`text-email-company-${a.companyId}`}>{a.companyName}</span>
+                  <div
+                    key={a.companyId}
+                    className="flex items-center justify-between gap-2"
+                    data-testid={`row-email-top-${a.companyId}`}
+                  >
+                    <span
+                      className="text-sm truncate flex-1"
+                      data-testid={`text-email-company-${a.companyId}`}
+                    >
+                      {a.companyName}
+                    </span>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" data-testid={`badge-email-count-${a.companyId}`}>{a.emailCount} emails</Badge>
+                      <Badge variant="outline" data-testid={`badge-email-count-${a.companyId}`}>
+                        {a.emailCount} emails
+                      </Badge>
                       <span className="text-xs text-muted-foreground">{fmt(a.cost)}</span>
                     </div>
                   </div>
                 ))}
               </div>
-            ) : <p className="text-sm text-muted-foreground">No email data</p>}
+            ) : (
+              <p className="text-sm text-muted-foreground">No email data</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -464,11 +768,19 @@ function MessagingTab() {
           <CardContent>
             <div className="space-y-2">
               {data.anomalies.map((a: any, i: number) => (
-                <div key={i} className="flex items-center justify-between gap-2" data-testid={`row-anomaly-${i}`}>
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-2"
+                  data-testid={`row-anomaly-${i}`}
+                >
                   <span className="text-sm truncate flex-1">{a.companyName}</span>
                   <div className="flex items-center gap-2">
-                    <Badge variant="destructive" data-testid={`badge-anomaly-type-${i}`}>{a.type}</Badge>
-                    <span className="text-xs text-muted-foreground">{a.current} vs avg {a.trailing7dAvg?.toFixed(1)}</span>
+                    <Badge variant="destructive" data-testid={`badge-anomaly-type-${i}`}>
+                      {a.type}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {a.current} vs avg {a.trailing7dAvg?.toFixed(1)}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -485,16 +797,32 @@ function MessagingTab() {
           {data?.monthlyVolume?.length > 0 ? (
             <div className="space-y-2">
               {data.monthlyVolume.map((m: any) => (
-                <div key={m.month} className="flex items-center justify-between gap-2" data-testid={`row-volume-${m.month}`}>
+                <div
+                  key={m.month}
+                  className="flex items-center justify-between gap-2"
+                  data-testid={`row-volume-${m.month}`}
+                >
                   <span className="text-sm">{m.month}</span>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-muted-foreground" data-testid={`text-sms-volume-${m.month}`}>{m.sms} SMS</span>
-                    <span className="text-xs text-muted-foreground" data-testid={`text-email-volume-${m.month}`}>{m.email} emails</span>
+                    <span
+                      className="text-xs text-muted-foreground"
+                      data-testid={`text-sms-volume-${m.month}`}
+                    >
+                      {m.sms} SMS
+                    </span>
+                    <span
+                      className="text-xs text-muted-foreground"
+                      data-testid={`text-email-volume-${m.month}`}
+                    >
+                      {m.email} emails
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
-          ) : <p className="text-sm text-muted-foreground">No messaging data yet</p>}
+          ) : (
+            <p className="text-sm text-muted-foreground">No messaging data yet</p>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -507,17 +835,40 @@ function UnitEconomicsTab() {
     queryFn: adminFetchFn("/api/admin/analytics/unit-economics"),
   });
 
-  if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;
+  if (isLoading)
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24" />
+        ))}
+      </div>
+    );
 
   return (
     <div className="space-y-6" data-testid="tab-content-economics">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Current Active" value={data?.currentActiveAccounts ?? 0} icon={Building2} />
-        <StatCard label="Avg Revenue per Acct" value={fmt(data?.avgRevenuePerAccount)} icon={DollarSign} />
-        <StatCard label="Break-Even Accounts" value={data?.breakEvenAccounts?.toFixed(1) ?? "N/A"} icon={Target} />
+        <StatCard
+          label="Current Active"
+          value={data?.currentActiveAccounts ?? 0}
+          icon={Building2}
+        />
+        <StatCard
+          label="Avg Revenue per Acct"
+          value={fmt(data?.avgRevenuePerAccount)}
+          icon={DollarSign}
+        />
+        <StatCard
+          label="Break-Even Accounts"
+          value={data?.breakEvenAccounts?.toFixed(1) ?? "N/A"}
+          icon={Target}
+        />
         <StatCard
           label="Status"
-          value={(data?.currentActiveAccounts ?? 0) >= (data?.breakEvenAccounts ?? Infinity) ? "Profitable" : "Pre-Profit"}
+          value={
+            (data?.currentActiveAccounts ?? 0) >= (data?.breakEvenAccounts ?? Infinity)
+              ? "Profitable"
+              : "Pre-Profit"
+          }
           icon={TrendingUp}
         />
       </div>
@@ -547,21 +898,55 @@ function UnitEconomicsTab() {
                 <TableBody>
                   {data.months.map((m: any) => (
                     <TableRow key={m.month} data-testid={`row-economics-${m.month}`}>
-                      <TableCell className="font-medium" data-testid={`text-economics-month-${m.month}`}>{m.month}</TableCell>
-                      <TableCell className="text-right" data-testid={`text-economics-revenue-${m.month}`}>{fmt(m.revenueGross)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{fmt(m.stripeFees)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{fmt(m.telnyxCost)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{fmt(m.emailCost)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{fmt(m.fixedCosts)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-weight-${m.month}`}>{m.totalActiveWeight ?? 0}</TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-cost-per-weight-${m.month}`}>{fmt(m.costPerWeight)}</TableCell>
+                      <TableCell
+                        className="font-medium"
+                        data-testid={`text-economics-month-${m.month}`}
+                      >
+                        {m.month}
+                      </TableCell>
+                      <TableCell
+                        className="text-right"
+                        data-testid={`text-economics-revenue-${m.month}`}
+                      >
+                        {fmt(m.revenueGross)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {fmt(m.stripeFees)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {fmt(m.telnyxCost)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {fmt(m.emailCost)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {fmt(m.fixedCosts)}
+                      </TableCell>
+                      <TableCell
+                        className="text-right text-muted-foreground"
+                        data-testid={`text-weight-${m.month}`}
+                      >
+                        {m.totalActiveWeight ?? 0}
+                      </TableCell>
+                      <TableCell
+                        className="text-right text-muted-foreground"
+                        data-testid={`text-cost-per-weight-${m.month}`}
+                      >
+                        {fmt(m.costPerWeight)}
+                      </TableCell>
                       <TableCell className="text-right">
-                        <span className={`font-medium ${marginColor(m.contributionMargin)}`} data-testid={`text-contrib-margin-${m.month}`}>
+                        <span
+                          className={`font-medium ${marginColor(m.contributionMargin)}`}
+                          data-testid={`text-contrib-margin-${m.month}`}
+                        >
                           {fmt(m.contributionMargin)} ({pct(m.contributionMarginPct)})
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <span className={`font-medium ${marginColor(m.netMargin)}`} data-testid={`text-net-margin-${m.month}`}>
+                        <span
+                          className={`font-medium ${marginColor(m.netMargin)}`}
+                          data-testid={`text-net-margin-${m.month}`}
+                        >
                           {fmt(m.netMargin)} ({pct(m.netMarginPct)})
                         </span>
                       </TableCell>
@@ -570,7 +955,9 @@ function UnitEconomicsTab() {
                 </TableBody>
               </Table>
             </div>
-          ) : <p className="text-sm text-muted-foreground">No data available yet</p>}
+          ) : (
+            <p className="text-sm text-muted-foreground">No data available yet</p>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -612,7 +999,8 @@ function FixedCostsSection() {
     },
   });
 
-  const cFmt = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const cFmt = (cents: number) =>
+    `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const openNew = () => {
     const now = new Date();
@@ -640,7 +1028,10 @@ function FixedCostsSection() {
     mutation.mutate(body);
   };
 
-  const formTotal = COST_FIELDS.reduce((s, f) => s + (parseFloat(formValues[f.key] || "0") || 0), 0);
+  const formTotal = COST_FIELDS.reduce(
+    (s, f) => s + (parseFloat(formValues[f.key] || "0") || 0),
+    0
+  );
 
   const currentMonthKey = (() => {
     const now = new Date();
@@ -661,14 +1052,24 @@ function FixedCostsSection() {
         {isLoading ? (
           <Skeleton className="h-32" />
         ) : !fixedCosts?.length ? (
-          <p className="text-sm text-muted-foreground text-center py-6" data-testid="text-no-fixed-costs">No fixed costs entered yet. Add your monthly platform costs to see accurate overhead calculations.</p>
+          <p
+            className="text-sm text-muted-foreground text-center py-6"
+            data-testid="text-no-fixed-costs"
+          >
+            No fixed costs entered yet. Add your monthly platform costs to see accurate overhead
+            calculations.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Month</TableHead>
-                  {COST_FIELDS.map(f => <TableHead key={f.key} className="text-right">{f.label}</TableHead>)}
+                  {COST_FIELDS.map((f) => (
+                    <TableHead key={f.key} className="text-right">
+                      {f.label}
+                    </TableHead>
+                  ))}
                   <TableHead className="text-right font-medium">Total</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
@@ -678,17 +1079,33 @@ function FixedCostsSection() {
                   const total = COST_FIELDS.reduce((s, f) => s + (row[f.key] ?? 0), 0);
                   const isCurrent = row.month === currentMonthKey;
                   return (
-                    <TableRow key={row.id} className={isCurrent ? "bg-primary/5" : ""} data-testid={`row-fixed-cost-${row.month}`}>
+                    <TableRow
+                      key={row.id}
+                      className={isCurrent ? "bg-primary/5" : ""}
+                      data-testid={`row-fixed-cost-${row.month}`}
+                    >
                       <TableCell className="font-medium">
                         {row.month}
-                        {isCurrent && <Badge variant="outline" className="ml-2 text-[10px] px-1 py-0">current</Badge>}
+                        {isCurrent && (
+                          <Badge variant="outline" className="ml-2 text-[10px] px-1 py-0">
+                            current
+                          </Badge>
+                        )}
                       </TableCell>
-                      {COST_FIELDS.map(f => (
-                        <TableCell key={f.key} className="text-right text-muted-foreground">{cFmt(row[f.key] ?? 0)}</TableCell>
+                      {COST_FIELDS.map((f) => (
+                        <TableCell key={f.key} className="text-right text-muted-foreground">
+                          {cFmt(row[f.key] ?? 0)}
+                        </TableCell>
                       ))}
                       <TableCell className="text-right font-medium">{cFmt(total)}</TableCell>
                       <TableCell>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(row)} data-testid={`button-edit-fixed-cost-${row.month}`}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => openEdit(row)}
+                          data-testid={`button-edit-fixed-cost-${row.month}`}
+                        >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       </TableCell>
@@ -704,14 +1121,22 @@ function FixedCostsSection() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md" data-testid="dialog-fixed-costs">
           <DialogHeader>
-            <DialogTitle>{formValues.hostingCents !== undefined ? "Edit" : "Add"} Monthly Fixed Costs</DialogTitle>
+            <DialogTitle>
+              {formValues.hostingCents !== undefined ? "Edit" : "Add"} Monthly Fixed Costs
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
               <Label htmlFor="fc-month">Month</Label>
-              <Input id="fc-month" type="month" value={editMonth} onChange={(e) => setEditMonth(e.target.value)} data-testid="input-fixed-cost-month" />
+              <Input
+                id="fc-month"
+                type="month"
+                value={editMonth}
+                onChange={(e) => setEditMonth(e.target.value)}
+                data-testid="input-fixed-cost-month"
+              />
             </div>
-            {COST_FIELDS.map(f => (
+            {COST_FIELDS.map((f) => (
               <div key={f.key} className="flex items-center gap-3">
                 <Label className="w-36 shrink-0 text-sm">{f.label}</Label>
                 <div className="relative flex-1">
@@ -722,7 +1147,9 @@ function FixedCostsSection() {
                     min="0"
                     className="pl-6"
                     value={formValues[f.key] ?? ""}
-                    onChange={(e) => setFormValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                    onChange={(e) =>
+                      setFormValues((prev) => ({ ...prev, [f.key]: e.target.value }))
+                    }
                     placeholder="0.00"
                     data-testid={`input-fixed-cost-${f.key}`}
                   />
@@ -731,12 +1158,24 @@ function FixedCostsSection() {
             ))}
             <div className="flex items-center justify-between pt-2 border-t">
               <span className="text-sm font-medium">Total</span>
-              <span className="text-sm font-bold" data-testid="text-fixed-cost-total">${formTotal.toFixed(2)}</span>
+              <span className="text-sm font-bold" data-testid="text-fixed-cost-total">
+                ${formTotal.toFixed(2)}
+              </span>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} data-testid="button-cancel-fixed-cost">Cancel</Button>
-            <Button onClick={handleSave} disabled={mutation.isPending} data-testid="button-save-fixed-cost">
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              data-testid="button-cancel-fixed-cost"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={mutation.isPending}
+              data-testid="button-save-fixed-cost"
+            >
               {mutation.isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
@@ -759,14 +1198,15 @@ function CustomerCostsTab() {
 
   const toggleSort = (col: string) => {
     if (sortCol === col) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortCol(col);
       setSortDir("desc");
     }
   };
 
-  const cFmt = (cents: number) => `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const cFmt = (cents: number) =>
+    `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const sorted = useMemo(() => {
     if (!data?.rows) return [];
@@ -786,166 +1226,373 @@ function CustomerCostsTab() {
     return rows;
   }, [data?.rows, search, sortCol, sortDir]);
 
-  if (isLoading) return <div className="space-y-4"><div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div><Skeleton className="h-64" /></div>;
+  if (isLoading)
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
+        <Skeleton className="h-64" />
+      </div>
+    );
 
   const summary = data?.summary;
   const SortIcon = ({ col }: { col: string }) => (
-    <ArrowUpDown className={`h-3 w-3 inline ml-1 ${sortCol === col ? "text-foreground" : "text-muted-foreground/40"}`} />
+    <ArrowUpDown
+      className={`h-3 w-3 inline ml-1 ${sortCol === col ? "text-foreground" : "text-muted-foreground/40"}`}
+    />
   );
 
   return (
     <TooltipProvider>
-    <div className="space-y-6" data-testid="tab-content-overhead">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Platform Cost" value={cFmt(summary?.totalPlatformCostCents ?? 0)} icon={Wallet} subtitle="last 30 days" />
-        <StatCard label="Avg Cost / Customer" value={cFmt(summary?.avgCostPerCustomerCents ?? 0)} icon={Calculator} subtitle={`${summary?.totalCustomers ?? 0} customers`} />
-        <StatCard label="Highest Cost" value={summary?.highestCostCustomer?.name ?? "—"} icon={AlertTriangle} subtitle={cFmt(summary?.highestCostCustomer?.totalCostCents ?? 0)} />
-        <StatCard label="Unprofitable" value={summary?.unprofitableCount ?? 0} icon={ArrowDownRight} subtitle="negative margin" />
-      </div>
+      <div className="space-y-6" data-testid="tab-content-overhead">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard
+            label="Total Platform Cost"
+            value={cFmt(summary?.totalPlatformCostCents ?? 0)}
+            icon={Wallet}
+            subtitle="last 30 days"
+          />
+          <StatCard
+            label="Avg Cost / Customer"
+            value={cFmt(summary?.avgCostPerCustomerCents ?? 0)}
+            icon={Calculator}
+            subtitle={`${summary?.totalCustomers ?? 0} customers`}
+          />
+          <StatCard
+            label="Highest Cost"
+            value={summary?.highestCostCustomer?.name ?? "—"}
+            icon={AlertTriangle}
+            subtitle={cFmt(summary?.highestCostCustomer?.totalCostCents ?? 0)}
+          />
+          <StatCard
+            label="Unprofitable"
+            value={summary?.unprofitableCount ?? 0}
+            icon={ArrowDownRight}
+            subtitle="negative margin"
+          />
+        </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search customers..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} data-testid="input-customer-costs-search" />
-      </div>
+        <div className="relative max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search customers..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            data-testid="input-customer-costs-search"
+          />
+        </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("name")}>Customer<SortIcon col="name" /></TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("mrrCents")}>MRR<SortIcon col="mrrCents" /></TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("smsCostCents")}>SMS<SortIcon col="smsCostCents" /></TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("emailCostCents")}>Email<SortIcon col="emailCostCents" /></TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("voiceCostCents")}>Voice AI<SortIcon col="voiceCostCents" /></TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("stripeFeesCents")}>Stripe Fees<SortIcon col="stripeFeesCents" /></TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("allocatedInfraCents")}>Infra<SortIcon col="allocatedInfraCents" /></TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("totalCostCents")}>Total Cost<SortIcon col="totalCostCents" /></TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("netMarginCents")}>Net Margin<SortIcon col="netMarginCents" /></TableHead>
-                  <TableHead className="cursor-pointer select-none text-right" onClick={() => toggleSort("costRatioPct")}>Cost Ratio<SortIcon col="costRatioPct" /></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sorted.length === 0 ? (
-                  <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground" data-testid="text-no-customer-costs">No customers found</TableCell></TableRow>
-                ) : sorted.map((r: any) => {
-                  const tierConfig = TIER_CONFIG[r.subscriptionTier as keyof typeof TIER_CONFIG];
-                  const barPct = Math.min(r.costRatioPct, 100);
-                  const barColor = r.costRatioPct > 100 ? "bg-red-500" : r.costRatioPct > 70 ? "bg-yellow-500" : "bg-green-500";
-                  const smsTip = `${r.smsSegments} segments × $0.0075 = ${cFmt(r.smsCostCents)}`;
-                  const emailTip = `${r.emailCount} emails × $0.001 = ${cFmt(r.emailCostCents)}`;
-                  const voiceTip = `${r.voiceMinutes} min × $0.50 = ${cFmt(r.voiceCostCents)}`;
-                  const stripeTip = r.stripeFeesPassedThrough
-                    ? "Passed to clients"
-                    : `${r.paidInvoiceCount} inv × $0.30 + $${Number(r.paidInvoiceTotal ?? 0).toFixed(2)} × 2.9% = ${cFmt(r.stripeFeesCents)}`;
-                  const infraTip = `Plan weight allocation = ${cFmt(r.allocatedInfraCents)}`;
-                  const totalTip = `SMS ${cFmt(r.smsCostCents)} + Email ${cFmt(r.emailCostCents)} + Voice ${cFmt(r.voiceCostCents)} + Stripe ${cFmt(r.stripeFeesCents)} + Infra ${cFmt(r.allocatedInfraCents)} = ${cFmt(r.totalCostCents)}`;
-                  const marginTip = `MRR ${cFmt(r.mrrCents)} − SMS ${cFmt(r.smsCostCents)} − Email ${cFmt(r.emailCostCents)} − Voice ${cFmt(r.voiceCostCents)} − Stripe ${cFmt(r.stripeFeesCents)} − Infra ${cFmt(r.allocatedInfraCents)} = ${cFmt(r.netMarginCents)}`;
-                  return (
-                    <TableRow key={r.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/admin/companies/${r.id}`)} data-testid={`row-customer-cost-${r.id}`}>
-                      <TableCell>
-                        <div className="flex items-center gap-2" data-testid={`link-customer-${r.id}`}>
-                          <div className="min-w-0">
-                            <p className="font-medium truncate text-sm" data-testid={`text-customer-name-${r.id}`}>{r.name}</p>
-                            <div className="flex items-center gap-1">
-                              <Badge variant="outline" className="text-[10px] px-1 py-0">{tierConfig?.name || r.subscriptionTier}</Badge>
-                              {r.subscriptionStatus !== "active" && <Badge variant="destructive" className="text-[10px] px-1 py-0">{r.subscriptionStatus}</Badge>}
-                              {r.stripeFeesPassedThrough && <Badge variant="outline" className="text-[10px] px-1 py-0 border-blue-400 text-blue-600 dark:text-blue-400">fees→client</Badge>}
-                            </div>
-                          </div>
-                          <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-medium" data-testid={`text-mrr-${r.id}`}>{cFmt(r.mrrCents)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-sms-cost-${r.id}`}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted">{cFmt(r.smsCostCents)}</span>
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs">{smsTip}</p></TooltipContent>
-                        </Tooltip>
-                        <span className="text-[10px] block">{r.smsSegments} seg</span>
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-email-cost-${r.id}`}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted">{cFmt(r.emailCostCents)}</span>
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs">{emailTip}</p></TooltipContent>
-                        </Tooltip>
-                        <span className="text-[10px] block">{r.emailCount}</span>
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-voice-cost-${r.id}`}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted">{cFmt(r.voiceCostCents)}</span>
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs">{voiceTip}</p></TooltipContent>
-                        </Tooltip>
-                        <span className="text-[10px] block">{r.voiceMinutes} min</span>
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-stripe-cost-${r.id}`}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted">{r.stripeFeesPassedThrough ? "$0.00" : cFmt(r.stripeFeesCents)}</span>
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs max-w-[240px]">{stripeTip}</p></TooltipContent>
-                        </Tooltip>
-                        <span className="text-[10px] block">{r.paidInvoiceCount} inv</span>
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground" data-testid={`text-infra-cost-${r.id}`}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted">{cFmt(r.allocatedInfraCents)}</span>
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs">{infraTip}</p></TooltipContent>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell className="text-right font-medium" data-testid={`text-total-cost-${r.id}`}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted">{cFmt(r.totalCostCents)}</span>
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs max-w-[280px]">{totalTip}</p></TooltipContent>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className={`font-medium cursor-help underline decoration-dotted ${r.netMarginCents >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`} data-testid={`text-margin-${r.id}`}>
-                              {cFmt(r.netMarginCents)}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs max-w-[320px]">{marginTip}</p></TooltipContent>
-                        </Tooltip>
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-cost-ratio-${r.id}`}>
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${barPct}%` }} />
-                          </div>
-                          <span className={`text-xs font-medium ${r.costRatioPct > 100 ? "text-red-700 dark:text-red-400" : "text-muted-foreground"}`}>{r.costRatioPct >= 999 ? "N/A" : `${r.costRatioPct}%`}</span>
-                        </div>
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
+                      className="cursor-pointer select-none"
+                      onClick={() => toggleSort("name")}
+                    >
+                      Customer
+                      <SortIcon col="name" />
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right"
+                      onClick={() => toggleSort("mrrCents")}
+                    >
+                      MRR
+                      <SortIcon col="mrrCents" />
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right"
+                      onClick={() => toggleSort("smsCostCents")}
+                    >
+                      SMS
+                      <SortIcon col="smsCostCents" />
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right"
+                      onClick={() => toggleSort("emailCostCents")}
+                    >
+                      Email
+                      <SortIcon col="emailCostCents" />
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right"
+                      onClick={() => toggleSort("voiceCostCents")}
+                    >
+                      Voice AI
+                      <SortIcon col="voiceCostCents" />
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right"
+                      onClick={() => toggleSort("stripeFeesCents")}
+                    >
+                      Stripe Fees
+                      <SortIcon col="stripeFeesCents" />
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right"
+                      onClick={() => toggleSort("allocatedInfraCents")}
+                    >
+                      Infra
+                      <SortIcon col="allocatedInfraCents" />
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right"
+                      onClick={() => toggleSort("totalCostCents")}
+                    >
+                      Total Cost
+                      <SortIcon col="totalCostCents" />
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right"
+                      onClick={() => toggleSort("netMarginCents")}
+                    >
+                      Net Margin
+                      <SortIcon col="netMarginCents" />
+                    </TableHead>
+                    <TableHead
+                      className="cursor-pointer select-none text-right"
+                      onClick={() => toggleSort("costRatioPct")}
+                    >
+                      Cost Ratio
+                      <SortIcon col="costRatioPct" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sorted.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={10}
+                        className="text-center py-8 text-muted-foreground"
+                        data-testid="text-no-customer-costs"
+                      >
+                        No customers found
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                  ) : (
+                    sorted.map((r: any) => {
+                      const tierConfig =
+                        TIER_CONFIG[r.subscriptionTier as keyof typeof TIER_CONFIG];
+                      const barPct = Math.min(r.costRatioPct, 100);
+                      const barColor =
+                        r.costRatioPct > 100
+                          ? "bg-red-500"
+                          : r.costRatioPct > 70
+                            ? "bg-yellow-500"
+                            : "bg-green-500";
+                      const smsTip = `${r.smsSegments} segments × $0.0075 = ${cFmt(r.smsCostCents)}`;
+                      const emailTip = `${r.emailCount} emails × $0.001 = ${cFmt(r.emailCostCents)}`;
+                      const voiceTip = `${r.voiceMinutes} min × $0.50 = ${cFmt(r.voiceCostCents)}`;
+                      const stripeTip = r.stripeFeesPassedThrough
+                        ? "Passed to clients"
+                        : `${r.paidInvoiceCount} inv × $0.30 + $${Number(r.paidInvoiceTotal ?? 0).toFixed(2)} × 2.9% = ${cFmt(r.stripeFeesCents)}`;
+                      const infraTip = `Plan weight allocation = ${cFmt(r.allocatedInfraCents)}`;
+                      const totalTip = `SMS ${cFmt(r.smsCostCents)} + Email ${cFmt(r.emailCostCents)} + Voice ${cFmt(r.voiceCostCents)} + Stripe ${cFmt(r.stripeFeesCents)} + Infra ${cFmt(r.allocatedInfraCents)} = ${cFmt(r.totalCostCents)}`;
+                      const marginTip = `MRR ${cFmt(r.mrrCents)} − SMS ${cFmt(r.smsCostCents)} − Email ${cFmt(r.emailCostCents)} − Voice ${cFmt(r.voiceCostCents)} − Stripe ${cFmt(r.stripeFeesCents)} − Infra ${cFmt(r.allocatedInfraCents)} = ${cFmt(r.netMarginCents)}`;
+                      return (
+                        <TableRow
+                          key={r.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => setLocation(`/admin/companies/${r.id}`)}
+                          data-testid={`row-customer-cost-${r.id}`}
+                        >
+                          <TableCell>
+                            <div
+                              className="flex items-center gap-2"
+                              data-testid={`link-customer-${r.id}`}
+                            >
+                              <div className="min-w-0">
+                                <p
+                                  className="font-medium truncate text-sm"
+                                  data-testid={`text-customer-name-${r.id}`}
+                                >
+                                  {r.name}
+                                </p>
+                                <div className="flex items-center gap-1">
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0">
+                                    {tierConfig?.name || r.subscriptionTier}
+                                  </Badge>
+                                  {r.subscriptionStatus !== "active" && (
+                                    <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                                      {r.subscriptionStatus}
+                                    </Badge>
+                                  )}
+                                  {r.stripeFeesPassedThrough && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] px-1 py-0 border-blue-400 text-blue-600 dark:text-blue-400"
+                                    >
+                                      fees→client
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                            </div>
+                          </TableCell>
+                          <TableCell
+                            className="text-right font-medium"
+                            data-testid={`text-mrr-${r.id}`}
+                          >
+                            {cFmt(r.mrrCents)}
+                          </TableCell>
+                          <TableCell
+                            className="text-right text-muted-foreground"
+                            data-testid={`text-sms-cost-${r.id}`}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">
+                                  {cFmt(r.smsCostCents)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">{smsTip}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className="text-[10px] block">{r.smsSegments} seg</span>
+                          </TableCell>
+                          <TableCell
+                            className="text-right text-muted-foreground"
+                            data-testid={`text-email-cost-${r.id}`}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">
+                                  {cFmt(r.emailCostCents)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">{emailTip}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className="text-[10px] block">{r.emailCount}</span>
+                          </TableCell>
+                          <TableCell
+                            className="text-right text-muted-foreground"
+                            data-testid={`text-voice-cost-${r.id}`}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">
+                                  {cFmt(r.voiceCostCents)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">{voiceTip}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className="text-[10px] block">{r.voiceMinutes} min</span>
+                          </TableCell>
+                          <TableCell
+                            className="text-right text-muted-foreground"
+                            data-testid={`text-stripe-cost-${r.id}`}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">
+                                  {r.stripeFeesPassedThrough ? "$0.00" : cFmt(r.stripeFeesCents)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs max-w-[240px]">{stripeTip}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <span className="text-[10px] block">{r.paidInvoiceCount} inv</span>
+                          </TableCell>
+                          <TableCell
+                            className="text-right text-muted-foreground"
+                            data-testid={`text-infra-cost-${r.id}`}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">
+                                  {cFmt(r.allocatedInfraCents)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">{infraTip}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell
+                            className="text-right font-medium"
+                            data-testid={`text-total-cost-${r.id}`}
+                          >
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help underline decoration-dotted">
+                                  {cFmt(r.totalCostCents)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs max-w-[280px]">{totalTip}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  className={`font-medium cursor-help underline decoration-dotted ${r.netMarginCents >= 0 ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}`}
+                                  data-testid={`text-margin-${r.id}`}
+                                >
+                                  {cFmt(r.netMarginCents)}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs max-w-[320px]">{marginTip}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell className="text-right" data-testid={`text-cost-ratio-${r.id}`}>
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${barColor}`}
+                                  style={{ width: `${barPct}%` }}
+                                />
+                              </div>
+                              <span
+                                className={`text-xs font-medium ${r.costRatioPct > 100 ? "text-red-700 dark:text-red-400" : "text-muted-foreground"}`}
+                              >
+                                {r.costRatioPct >= 999 ? "N/A" : `${r.costRatioPct}%`}
+                              </span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
 
-      <FixedCostsSection />
-    </div>
+        <FixedCostsSection />
+      </div>
     </TooltipProvider>
   );
 }
 
 type FunnelStep = { step: string; event: string; sessions: number; pct: number };
 type FunnelZip = { zipCode: string; submissions: number };
-type FunnelCompany = { companyId: string; companyName: string; loaded: number; zipPassed: number; submitted: number; quoteShown: number; conversionPct: number };
+type FunnelCompany = {
+  companyId: string;
+  companyName: string;
+  loaded: number;
+  zipPassed: number;
+  submitted: number;
+  quoteShown: number;
+  conversionPct: number;
+};
 type FunnelData = {
   days: number;
   totalSessions: number;
@@ -965,7 +1612,14 @@ function FunnelTab() {
     queryFn: adminFetchFn(`/api/admin/analytics/quote-funnel?days=${days}`),
   });
 
-  if (isLoading) return <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>;
+  if (isLoading)
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24" />
+        ))}
+      </div>
+    );
 
   const funnel: FunnelStep[] = data?.funnel || [];
   const topLoaded = funnel.find((f) => f.event === "form_loaded")?.sessions || 0;
@@ -1015,16 +1669,24 @@ function FunnelTab() {
               {funnel.map((f, idx) => {
                 const widthPct = topLoaded > 0 ? Math.max((f.sessions / topLoaded) * 100, 4) : 0;
                 const prevSessions = idx > 0 ? funnel[idx - 1].sessions : f.sessions;
-                const dropoff = prevSessions > 0 ? ((prevSessions - f.sessions) / prevSessions * 100) : 0;
+                const dropoff =
+                  prevSessions > 0 ? ((prevSessions - f.sessions) / prevSessions) * 100 : 0;
                 return (
                   <div key={f.event} data-testid={`row-funnel-${f.event}`}>
                     <div className="flex items-center justify-between text-sm mb-1">
                       <span className="font-medium">{f.step}</span>
                       <div className="flex items-center gap-3">
-                        <span className="tabular-nums" data-testid={`text-funnel-count-${f.event}`}>{f.sessions}</span>
-                        <Badge variant="outline" data-testid={`badge-funnel-pct-${f.event}`}>{pct(f.pct)}</Badge>
+                        <span className="tabular-nums" data-testid={`text-funnel-count-${f.event}`}>
+                          {f.sessions}
+                        </span>
+                        <Badge variant="outline" data-testid={`badge-funnel-pct-${f.event}`}>
+                          {pct(f.pct)}
+                        </Badge>
                         {idx > 0 && dropoff > 0 && (
-                          <span className="text-xs text-red-500" data-testid={`text-funnel-drop-${f.event}`}>
+                          <span
+                            className="text-xs text-red-500"
+                            data-testid={`text-funnel-drop-${f.event}`}
+                          >
                             -{dropoff.toFixed(0)}%
                           </span>
                         )}
@@ -1035,7 +1697,12 @@ function FunnelTab() {
                         className="h-full rounded-md transition-all duration-500"
                         style={{
                           width: `${widthPct}%`,
-                          backgroundColor: idx < 3 ? "hsl(var(--primary))" : idx < 5 ? "hsl(var(--primary) / 0.7)" : "hsl(142 60% 45%)",
+                          backgroundColor:
+                            idx < 3
+                              ? "hsl(var(--primary))"
+                              : idx < 5
+                                ? "hsl(var(--primary) / 0.7)"
+                                : "hsl(142 60% 45%)",
                         }}
                       />
                     </div>
@@ -1044,7 +1711,10 @@ function FunnelTab() {
               })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-8" data-testid="text-no-funnel-data">
+            <p
+              className="text-sm text-muted-foreground text-center py-8"
+              data-testid="text-no-funnel-data"
+            >
               No funnel data yet. Events will appear once visitors use the quote form.
             </p>
           )}
@@ -1059,9 +1729,17 @@ function FunnelTab() {
           <CardContent>
             <div className="space-y-2">
               {data!.topZipCodes!.map((z) => (
-                <div key={z.zipCode} className="flex items-center justify-between gap-2" data-testid={`row-zip-${z.zipCode}`}>
-                  <span className="text-sm font-mono" data-testid={`text-zip-code-${z.zipCode}`}>{z.zipCode}</span>
-                  <Badge variant="outline" data-testid={`badge-zip-count-${z.zipCode}`}>{z.submissions} submissions</Badge>
+                <div
+                  key={z.zipCode}
+                  className="flex items-center justify-between gap-2"
+                  data-testid={`row-zip-${z.zipCode}`}
+                >
+                  <span className="text-sm font-mono" data-testid={`text-zip-code-${z.zipCode}`}>
+                    {z.zipCode}
+                  </span>
+                  <Badge variant="outline" data-testid={`badge-zip-count-${z.zipCode}`}>
+                    {z.submissions} submissions
+                  </Badge>
                 </div>
               ))}
             </div>
@@ -1088,12 +1766,20 @@ function FunnelTab() {
               <TableBody>
                 {data!.byCompany!.map((c) => (
                   <TableRow key={c.companyId} data-testid={`row-funnel-company-${c.companyId}`}>
-                    <TableCell className="font-medium truncate max-w-[200px]" data-testid={`text-funnel-company-${c.companyId}`}>{c.companyName}</TableCell>
+                    <TableCell
+                      className="font-medium truncate max-w-[200px]"
+                      data-testid={`text-funnel-company-${c.companyId}`}
+                    >
+                      {c.companyName}
+                    </TableCell>
                     <TableCell className="text-center">{c.loaded}</TableCell>
                     <TableCell className="text-center">{c.zipPassed}</TableCell>
                     <TableCell className="text-center">{c.submitted}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant={c.conversionPct >= 10 ? "default" : "outline"} data-testid={`badge-funnel-conv-${c.companyId}`}>
+                      <Badge
+                        variant={c.conversionPct >= 10 ? "default" : "outline"}
+                        data-testid={`badge-funnel-conv-${c.companyId}`}
+                      >
                         {pct(c.conversionPct)}
                       </Badge>
                     </TableCell>
@@ -1184,7 +1870,9 @@ function ApiUsageTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">API Usage</h2>
-          <p className="text-sm text-muted-foreground">Third-party API calls and estimated costs across all services</p>
+          <p className="text-sm text-muted-foreground">
+            Third-party API calls and estimated costs across all services
+          </p>
         </div>
         <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
           <SelectTrigger className="w-32" data-testid="select-api-days">
@@ -1203,25 +1891,39 @@ function ApiUsageTab() {
         <Card>
           <CardContent className="pt-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Total API Calls</p>
-            {isLoading ? <Skeleton className="h-7 w-24 mt-1" /> : (
-              <p className="text-2xl font-bold mt-1" data-testid="text-total-api-calls">{totalCalls.toLocaleString()}</p>
+            {isLoading ? (
+              <Skeleton className="h-7 w-24 mt-1" />
+            ) : (
+              <p className="text-2xl font-bold mt-1" data-testid="text-total-api-calls">
+                {totalCalls.toLocaleString()}
+              </p>
             )}
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Est. Total Cost</p>
-            {isLoading ? <Skeleton className="h-7 w-24 mt-1" /> : (
-              <p className="text-2xl font-bold mt-1" data-testid="text-total-api-cost">{fmt(totalCost)}</p>
+            {isLoading ? (
+              <Skeleton className="h-7 w-24 mt-1" />
+            ) : (
+              <p className="text-2xl font-bold mt-1" data-testid="text-total-api-cost">
+                {fmt(totalCost)}
+              </p>
             )}
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Mapbox Calls</p>
-            {isLoading ? <Skeleton className="h-7 w-24 mt-1" /> : (
+            {isLoading ? (
+              <Skeleton className="h-7 w-24 mt-1" />
+            ) : (
               <p className="text-2xl font-bold mt-1" data-testid="text-mapbox-calls">
-                {(data?.providers.filter(p => p.provider === "mapbox").reduce((a, p) => a + p.calls, 0) ?? 0).toLocaleString()}
+                {(
+                  data?.providers
+                    .filter((p) => p.provider === "mapbox")
+                    .reduce((a, p) => a + p.calls, 0) ?? 0
+                ).toLocaleString()}
               </p>
             )}
           </CardContent>
@@ -1229,9 +1931,13 @@ function ApiUsageTab() {
         <Card>
           <CardContent className="pt-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">OpenAI Calls</p>
-            {isLoading ? <Skeleton className="h-7 w-24 mt-1" /> : (
+            {isLoading ? (
+              <Skeleton className="h-7 w-24 mt-1" />
+            ) : (
               <p className="text-2xl font-bold mt-1" data-testid="text-openai-calls">
-                {(data?.providers.find(p => p.provider === "openai")?.calls ?? 0).toLocaleString()}
+                {(
+                  data?.providers.find((p) => p.provider === "openai")?.calls ?? 0
+                ).toLocaleString()}
               </p>
             )}
           </CardContent>
@@ -1254,36 +1960,53 @@ function ApiUsageTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell><Skeleton className="h-4 w-36" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                    <TableCell><Skeleton className="h-8 w-32" /></TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                data?.providers.map((p) => (
-                  <TableRow key={`${p.provider}-${p.metric}`} data-testid={`row-api-${p.provider}-${p.metric}`}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge className={`text-xs ${PROVIDER_COLORS[p.provider] || "bg-muted"}`}>
-                          {p.provider}
-                        </Badge>
-                        <span className="text-sm">{p.label}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">{p.calls.toLocaleString()}</TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">{p.unit}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">{fmt(p.costCents / 100)}</TableCell>
-                    <TableCell>
-                      <MiniSparkline daily={p.daily} days={Math.min(days, 30)} />
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+              {isLoading
+                ? Array.from({ length: 6 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <Skeleton className="h-4 w-36" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-16 ml-auto" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-16 ml-auto" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-16 ml-auto" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-8 w-32" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                : data?.providers.map((p) => (
+                    <TableRow
+                      key={`${p.provider}-${p.metric}`}
+                      data-testid={`row-api-${p.provider}-${p.metric}`}
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Badge className={`text-xs ${PROVIDER_COLORS[p.provider] || "bg-muted"}`}>
+                            {p.provider}
+                          </Badge>
+                          <span className="text-sm">{p.label}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {p.calls.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {p.unit}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {fmt(p.costCents / 100)}
+                      </TableCell>
+                      <TableCell>
+                        <MiniSparkline daily={p.daily} days={Math.min(days, 30)} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
             </TableBody>
           </Table>
         </CardContent>
@@ -1292,9 +2015,11 @@ function ApiUsageTab() {
       <Card className="bg-muted/30">
         <CardContent className="pt-4 pb-3">
           <p className="text-xs text-muted-foreground">
-            <span className="font-medium">Cost estimates</span> are approximations based on standard public pricing:
-            Mapbox $0.00075/call, OpenAI ~$0.003/call (gpt-5-mini), Telnyx $0.0075/segment, SendGrid $0.001/email, Retell $0.005/min, Stripe 2.9%+$0.30.
-            Mapbox and OpenAI calls are tracked from when this feature was deployed; historical data starts accumulating now.
+            <span className="font-medium">Cost estimates</span> are approximations based on standard
+            public pricing: Mapbox $0.00075/call, OpenAI ~$0.003/call (gpt-5-mini), Telnyx
+            $0.0075/segment, SendGrid $0.001/email, Retell $0.005/min, Stripe 2.9%+$0.30. Mapbox and
+            OpenAI calls are tracked from when this feature was deployed; historical data starts
+            accumulating now.
           </p>
         </CardContent>
       </Card>
@@ -1311,14 +2036,33 @@ function InactiveUsersAlert() {
   if (!inactiveUsers || !Object.values(inactiveUsers).some((arr) => arr.length > 0)) return null;
 
   const tiers = [
-    { key: "3d", label: "3+ days", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-    { key: "5d", label: "5+ days", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
-    { key: "7d", label: "7+ days", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
-    { key: "14d", label: "14+ days", color: "bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-200" },
+    {
+      key: "3d",
+      label: "3+ days",
+      color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+    },
+    {
+      key: "5d",
+      label: "5+ days",
+      color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+    },
+    {
+      key: "7d",
+      label: "7+ days",
+      color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+    },
+    {
+      key: "14d",
+      label: "14+ days",
+      color: "bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-200",
+    },
   ];
 
   return (
-    <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" data-testid="card-analytics-inactive-users">
+    <Card
+      className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20"
+      data-testid="card-analytics-inactive-users"
+    >
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -1330,7 +2074,11 @@ function InactiveUsersAlert() {
           {tiers.map((tier) => {
             const count = inactiveUsers[tier.key]?.length || 0;
             return (
-              <div key={tier.key} className="flex items-center justify-between p-3 rounded-lg border bg-background" data-testid={`stat-analytics-inactive-${tier.key}`}>
+              <div
+                key={tier.key}
+                className="flex items-center justify-between p-3 rounded-lg border bg-background"
+                data-testid={`stat-analytics-inactive-${tier.key}`}
+              >
                 <div>
                   <p className="text-xs text-muted-foreground">No login</p>
                   <p className="text-sm font-medium">{tier.label}</p>
@@ -1348,13 +2096,23 @@ function InactiveUsersAlert() {
               <p className="text-xs font-medium text-muted-foreground">14+ day inactive users:</p>
               {worst.slice(0, 5).map((u: any) => (
                 <Link key={u.userId} href={`/admin/companies/${u.companyId}`}>
-                  <div className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-muted cursor-pointer" data-testid={`row-analytics-inactive-${u.userId}`}>
-                    <span className="truncate">{u.firstName} {u.lastName} ({u.email})</span>
-                    <span className="text-muted-foreground shrink-0 ml-2">{u.companyName} - {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Never"}</span>
+                  <div
+                    className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-muted cursor-pointer"
+                    data-testid={`row-analytics-inactive-${u.userId}`}
+                  >
+                    <span className="truncate">
+                      {u.firstName} {u.lastName} ({u.email})
+                    </span>
+                    <span className="text-muted-foreground shrink-0 ml-2">
+                      {u.companyName} -{" "}
+                      {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Never"}
+                    </span>
                   </div>
                 </Link>
               ))}
-              {worst.length > 5 && <p className="text-xs text-muted-foreground">+{worst.length - 5} more</p>}
+              {worst.length > 5 && (
+                <p className="text-xs text-muted-foreground">+{worst.length - 5} more</p>
+              )}
             </div>
           );
         })()}
@@ -1369,8 +2127,12 @@ export default function AdminAnalytics() {
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto" data-testid="admin-analytics">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-analytics-title">Analytics</h1>
-        <p className="text-muted-foreground text-sm mt-1">Platform performance and business metrics</p>
+        <h1 className="text-2xl font-bold" data-testid="text-analytics-title">
+          Analytics
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Platform performance and business metrics
+        </p>
       </div>
 
       <InactiveUsersAlert />

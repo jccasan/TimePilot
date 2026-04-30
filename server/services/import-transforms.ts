@@ -164,12 +164,16 @@ export function applyTransformations(
 ): TransformedRow[] {
   const results: TransformedRow[] = [];
   const columnIndex: Record<string, number> = {};
-  headers.forEach((h, i) => { columnIndex[h] = i; });
+  headers.forEach((h, i) => {
+    columnIndex[h] = i;
+  });
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const original: Record<string, string> = {};
-    headers.forEach((h, idx) => { original[h] = row[idx] || ""; });
+    headers.forEach((h, idx) => {
+      original[h] = row[idx] || "";
+    });
 
     const transformed: Record<string, any> = {};
     const errors: ValidationError[] = [];
@@ -201,7 +205,12 @@ export function applyTransformations(
           if (parsed) {
             transformed[transform.field] = parsed;
           } else {
-            errors.push({ row: i, field: transform.field, value, message: `Unable to parse date: "${value}"` });
+            errors.push({
+              row: i,
+              field: transform.field,
+              value,
+              message: `Unable to parse date: "${value}"`,
+            });
           }
           break;
         }
@@ -210,7 +219,12 @@ export function applyTransformations(
           if (parsed !== null) {
             transformed[transform.field] = parsed;
           } else {
-            errors.push({ row: i, field: transform.field, value, message: `Unable to parse currency: "${value}"` });
+            errors.push({
+              row: i,
+              field: transform.field,
+              value,
+              message: `Unable to parse currency: "${value}"`,
+            });
           }
           break;
         }
@@ -222,7 +236,12 @@ export function applyTransformations(
           if (freq) {
             transformed[transform.field] = freq;
           } else {
-            errors.push({ row: i, field: transform.field, value, message: `Unknown frequency: "${value}"` });
+            errors.push({
+              row: i,
+              field: transform.field,
+              value,
+              message: `Unknown frequency: "${value}"`,
+            });
           }
           break;
         }
@@ -231,7 +250,12 @@ export function applyTransformations(
           if (mapped) {
             transformed[transform.field] = mapped;
           } else {
-            errors.push({ row: i, field: transform.field, value, message: `Unknown status: "${value}"` });
+            errors.push({
+              row: i,
+              field: transform.field,
+              value,
+              message: `Unknown status: "${value}"`,
+            });
           }
           break;
         }
@@ -239,15 +263,30 @@ export function applyTransformations(
     }
 
     if (transformed.email && !validateEmail(transformed.email)) {
-      errors.push({ row: i, field: "email", value: transformed.email, message: "Invalid email format" });
+      errors.push({
+        row: i,
+        field: "email",
+        value: transformed.email,
+        message: "Invalid email format",
+      });
     }
     if (transformed.phone && !validatePhone(transformed.phone)) {
-      errors.push({ row: i, field: "phone", value: transformed.phone, message: "Invalid phone format" });
+      errors.push({
+        row: i,
+        field: "phone",
+        value: transformed.phone,
+        message: "Invalid phone format",
+      });
     }
 
     for (const req of requiredFields) {
       if (!transformed[req] || String(transformed[req]).trim() === "") {
-        errors.push({ row: i, field: req, value: "", message: `Required field "${req}" is missing` });
+        errors.push({
+          row: i,
+          field: req,
+          value: "",
+          message: `Required field "${req}" is missing`,
+        });
       }
     }
 
@@ -264,7 +303,7 @@ export function applyTransformations(
 }
 
 export function parseCSV(text: string): { headers: string[]; rows: string[][] } {
-  const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
   if (lines.length === 0) return { headers: [], rows: [] };
 
   const parseLine = (line: string): string[] => {

@@ -33,7 +33,8 @@ function hashToken(token: string): string {
 }
 
 export function validatePasswordPolicy(password: string): string | null {
-  if (password.length < MIN_PASSWORD_LENGTH) return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+  if (password.length < MIN_PASSWORD_LENGTH)
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
   if (!/[a-z]/.test(password)) return "Password must contain a lowercase letter";
   if (!/[A-Z]/.test(password)) return "Password must contain an uppercase letter";
   if (!/[0-9]/.test(password)) return "Password must contain a number";
@@ -48,7 +49,10 @@ export async function seedAdminUser(email: string, password: string) {
   await db.insert(adminUsers).values({ email, passwordHash: hashed });
 }
 
-export async function loginAdmin(email: string, password: string): Promise<{ token: string; mustChangePassword: boolean } | { error: string }> {
+export async function loginAdmin(
+  email: string,
+  password: string
+): Promise<{ token: string; mustChangePassword: boolean } | { error: string }> {
   const [user] = await db.select().from(adminUsers).where(eq(adminUsers.email, email));
   if (!user) return { error: "Invalid credentials" };
 
@@ -71,9 +75,14 @@ export async function loginAdmin(email: string, password: string): Promise<{ tok
   return { token, mustChangePassword };
 }
 
-export async function validateAdminSession(token: string): Promise<{ userId: string; email: string } | null> {
+export async function validateAdminSession(
+  token: string
+): Promise<{ userId: string; email: string } | null> {
   const tokenH = hashToken(token);
-  const [session] = await db.select().from(adminSessions).where(eq(adminSessions.tokenHash, tokenH));
+  const [session] = await db
+    .select()
+    .from(adminSessions)
+    .where(eq(adminSessions.tokenHash, tokenH));
   if (!session || session.expiresAt < new Date()) return null;
 
   const [user] = await db.select().from(adminUsers).where(eq(adminUsers.id, session.adminUserId));
@@ -87,7 +96,11 @@ export async function logoutAdmin(token: string) {
   await db.delete(adminSessions).where(eq(adminSessions.tokenHash, tokenH));
 }
 
-export async function changeAdminPassword(userId: string, currentPassword: string, newPassword: string): Promise<{ error?: string }> {
+export async function changeAdminPassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<{ error?: string }> {
   const [user] = await db.select().from(adminUsers).where(eq(adminUsers.id, userId));
   if (!user) return { error: "User not found" };
 
@@ -107,7 +120,8 @@ export async function changeAdminPassword(userId: string, currentPassword: strin
   const newHash = await hashPassword(newPassword);
   const updatedPrevious = [...user.previousPasswordHashes, user.passwordHash].slice(-10);
 
-  await db.update(adminUsers)
+  await db
+    .update(adminUsers)
     .set({
       passwordHash: newHash,
       previousPasswordHashes: updatedPrevious,

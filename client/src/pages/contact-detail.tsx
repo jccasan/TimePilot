@@ -8,7 +8,18 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
-import type { Contact, Property, ServicePlan, Tag, ServicePricingItem, ActivityLog, Invoice, Message, Route, ServiceBillingRule } from "@shared/schema";
+import type {
+  Contact,
+  Property,
+  ServicePlan,
+  Tag,
+  ServicePricingItem,
+  ActivityLog,
+  Invoice,
+  Message,
+  Route,
+  ServiceBillingRule,
+} from "@shared/schema";
 import {
   BILLING_CADENCE_LABELS,
   BILLING_TRIGGER_LABELS,
@@ -56,8 +67,55 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle, Star, ClipboardList, ClipboardCheck, Copy, ExternalLink, RefreshCw, Sparkles, Users } from "lucide-react";
-import { compressMessageAttachment, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/compress-image";
+import {
+  ArrowLeft,
+  Plus,
+  X,
+  Edit2,
+  Save,
+  Receipt,
+  Shield,
+  ShieldOff,
+  Trash2,
+  ArrowRight,
+  CheckCircle,
+  Calendar,
+  FileText,
+  DollarSign,
+  Mail,
+  MessageSquare,
+  StickyNote,
+  LogIn,
+  Ruler,
+  Calculator,
+  AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  KeyRound,
+  Zap,
+  Clock,
+  MapPin,
+  ChevronDown,
+  ShieldAlert,
+  Dog,
+  Paperclip,
+  Send,
+  Loader2,
+  AlertCircle,
+  Star,
+  ClipboardList,
+  ClipboardCheck,
+  Copy,
+  ExternalLink,
+  RefreshCw,
+  Sparkles,
+  Users,
+} from "lucide-react";
+import {
+  compressMessageAttachment,
+  ALLOWED_IMAGE_TYPES,
+  MAX_ATTACHMENT_SIZE,
+} from "@/lib/compress-image";
 import { Switch } from "@/components/ui/switch";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
@@ -196,7 +254,8 @@ export default function ContactDetail() {
       if (result?.geocodeFailed) {
         toast({
           title: "Property added",
-          description: "Property saved, but we couldn't locate this address—distance will not appear for this property. Check the address and try again.",
+          description:
+            "Property saved, but we couldn't locate this address—distance will not appear for this property. Check the address and try again.",
           variant: "destructive",
         });
       } else {
@@ -225,7 +284,15 @@ export default function ContactDetail() {
   });
 
   const saveMeasurementMutation = useMutation({
-    mutationFn: async ({ propertyId, polygon, areaSqft }: { propertyId: string; polygon: number[][]; areaSqft: number }) => {
+    mutationFn: async ({
+      propertyId,
+      polygon,
+      areaSqft,
+    }: {
+      propertyId: string;
+      polygon: number[][];
+      areaSqft: number;
+    }) => {
       await apiRequest("PATCH", `/api/properties/${propertyId}`, {
         yardPolygon: polygon,
         measuredYardSqft: areaSqft,
@@ -243,8 +310,19 @@ export default function ContactDetail() {
   });
 
   const updateDangerousDogMutation = useMutation({
-    mutationFn: async ({ propertyId, hasDangerousDog, dangerousDogNotes }: { propertyId: string; hasDangerousDog: boolean; dangerousDogNotes?: string }) => {
-      await apiRequest("PATCH", `/api/properties/${propertyId}`, { hasDangerousDog, dangerousDogNotes });
+    mutationFn: async ({
+      propertyId,
+      hasDangerousDog,
+      dangerousDogNotes,
+    }: {
+      propertyId: string;
+      hasDangerousDog: boolean;
+      dangerousDogNotes?: string;
+    }) => {
+      await apiRequest("PATCH", `/api/properties/${propertyId}`, {
+        hasDangerousDog,
+        dangerousDogNotes,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${id}`] });
@@ -268,7 +346,13 @@ export default function ContactDetail() {
   });
 
   const updateAddressMutation = useMutation({
-    mutationFn: async ({ propertyId, data }: { propertyId: string; data: z.infer<typeof editAddressSchema> }) => {
+    mutationFn: async ({
+      propertyId,
+      data,
+    }: {
+      propertyId: string;
+      data: z.infer<typeof editAddressSchema>;
+    }) => {
       const res = await apiRequest("PATCH", `/api/properties/${propertyId}`, data);
       return res.json() as Promise<{ geocodeFailed?: boolean }>;
     },
@@ -278,16 +362,24 @@ export default function ContactDetail() {
       if (result?.geocodeFailed) {
         toast({
           title: "Address updated",
-          description: "Address saved, but we still couldn't locate it on the map—coordinates were not updated. Double-check the address and try again.",
+          description:
+            "Address saved, but we still couldn't locate it on the map—coordinates were not updated. Double-check the address and try again.",
           variant: "destructive",
         });
       } else {
-        toast({ title: "Address updated", description: "Address and coordinates updated successfully." });
+        toast({
+          title: "Address updated",
+          description: "Address and coordinates updated successfully.",
+        });
         setEditAddressPropertyId(null);
       }
     },
     onError: (error: Error) => {
-      toast({ title: "Error updating address", description: error.message, variant: "destructive" });
+      toast({
+        title: "Error updating address",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -363,7 +455,9 @@ export default function ContactDetail() {
   if (!contact) {
     return (
       <div className="p-4 md:p-6">
-        <p className="text-muted-foreground" data-testid="text-contact-not-found">Contact not found</p>
+        <p className="text-muted-foreground" data-testid="text-contact-not-found">
+          Contact not found
+        </p>
         <Button asChild variant="ghost" className="mt-2">
           <Link href="/contacts">
             <ArrowLeft className="mr-1 h-4 w-4" /> Back to Contacts
@@ -387,7 +481,11 @@ export default function ContactDetail() {
             {contact.firstName} {contact.lastName}
           </CardTitle>
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="secondary" className={statusColors[contact.status] || ""} data-testid="badge-contact-status">
+            <Badge
+              variant="secondary"
+              className={statusColors[contact.status] || ""}
+              data-testid="badge-contact-status"
+            >
               {contact.status}
             </Badge>
             {(() => {
@@ -395,13 +493,19 @@ export default function ContactDetail() {
               if (!firstProp) return null;
               if (firstProp.onboardingCompletedAt) {
                 return (
-                  <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex items-center gap-1" data-testid="badge-header-onboarding-complete">
+                  <Badge
+                    className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex items-center gap-1"
+                    data-testid="badge-header-onboarding-complete"
+                  >
                     <ClipboardCheck className="h-3 w-3" /> Onboarded
                   </Badge>
                 );
               }
               return (
-                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-header-onboarding-pending">
+                <Badge
+                  className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                  data-testid="badge-header-onboarding-pending"
+                >
                   Onboarding Pending
                 </Badge>
               );
@@ -410,7 +514,9 @@ export default function ContactDetail() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => smsComposeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                onClick={() =>
+                  smsComposeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+                }
                 data-testid="button-text-contact"
               >
                 <MessageSquare className="mr-1 h-4 w-4" /> Text
@@ -458,11 +564,15 @@ export default function ContactDetail() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete Contact</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to delete {contact.firstName} {contact.lastName}? This action is permanent and will remove all associated data including properties, service plans, and job history.
+                    Are you sure you want to delete {contact.firstName} {contact.lastName}? This
+                    action is permanent and will remove all associated data including properties,
+                    service plans, and job history.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel data-testid="button-delete-contact-cancel">Cancel</AlertDialogCancel>
+                  <AlertDialogCancel data-testid="button-delete-contact-cancel">
+                    Cancel
+                  </AlertDialogCancel>
                   <AlertDialogAction
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     onClick={() => deleteContactMutation.mutate()}
@@ -508,13 +618,15 @@ export default function ContactDetail() {
               <AddressAutocomplete
                 value={editForm.streetAddress || ""}
                 onChange={(v) => setEditForm({ ...editForm, streetAddress: v })}
-                onSelect={(addr) => setEditForm({
-                  ...editForm,
-                  streetAddress: addr.streetAddress,
-                  city: addr.city,
-                  state: addr.state,
-                  zipCode: addr.zipCode,
-                })}
+                onSelect={(addr) =>
+                  setEditForm({
+                    ...editForm,
+                    streetAddress: addr.streetAddress,
+                    city: addr.city,
+                    state: addr.state,
+                    zipCode: addr.zipCode,
+                  })
+                }
                 placeholder="Street Address"
                 data-testid="input-edit-street-address"
               />
@@ -565,7 +677,12 @@ export default function ContactDetail() {
                   min="0"
                   placeholder="Number of Dogs"
                   value={editForm.numberOfDogs ?? ""}
-                  onChange={(e) => setEditForm({ ...editForm, numberOfDogs: e.target.value ? parseInt(e.target.value) : null })}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      numberOfDogs: e.target.value ? parseInt(e.target.value) : null,
+                    })
+                  }
                   data-testid="input-edit-number-of-dogs"
                 />
                 <Select
@@ -591,7 +708,9 @@ export default function ContactDetail() {
                   </SelectTrigger>
                   <SelectContent>
                     {leadSources.map((source) => (
-                      <SelectItem key={source.id} value={source.name}>{source.name}</SelectItem>
+                      <SelectItem key={source.id} value={source.name}>
+                        {source.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -629,7 +748,11 @@ export default function ContactDetail() {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={() => updateMutation.mutate(editForm)} disabled={updateMutation.isPending} data-testid="button-save-contact">
+              <Button
+                onClick={() => updateMutation.mutate(editForm)}
+                disabled={updateMutation.isPending}
+                data-testid="button-save-contact"
+              >
                 <Save className="mr-1 h-4 w-4" /> Save
               </Button>
             </div>
@@ -639,29 +762,56 @@ export default function ContactDetail() {
               <p data-testid="text-contact-phone">Phone: {contact.phone || "N/A"}</p>
               {contact.streetAddress && (
                 <p data-testid="text-contact-address">
-                  Address: {contact.streetAddress}{contact.address2 ? `, ${contact.address2}` : ""}{contact.city ? `, ${contact.city}` : ""}{contact.state ? `, ${contact.state}` : ""} {contact.zipCode || ""}
+                  Address: {contact.streetAddress}
+                  {contact.address2 ? `, ${contact.address2}` : ""}
+                  {contact.city ? `, ${contact.city}` : ""}
+                  {contact.state ? `, ${contact.state}` : ""} {contact.zipCode || ""}
                 </p>
               )}
               {contact.yardSize && (
-                <p data-testid="text-contact-yard-size">Yard Size: {
-                  { "0.25_or_less": "0.25 Acre or Less", "0.26_0.5": ".26-.5 Acre", "0.51_0.75": ".51-.75 Acre", "0.75_1": ".75-1 Acre", "over_1": "Over 1 Acre" }[contact.yardSize] || contact.yardSize
-                }</p>
+                <p data-testid="text-contact-yard-size">
+                  Yard Size:{" "}
+                  {{
+                    "0.25_or_less": "0.25 Acre or Less",
+                    "0.26_0.5": ".26-.5 Acre",
+                    "0.51_0.75": ".51-.75 Acre",
+                    "0.75_1": ".75-1 Acre",
+                    over_1: "Over 1 Acre",
+                  }[contact.yardSize] || contact.yardSize}
+                </p>
               )}
               {contact.numberOfDogs != null && (
                 <p data-testid="text-contact-dogs">Number of Dogs: {contact.numberOfDogs}</p>
               )}
               {contact.serviceFrequency && (
-                <p data-testid="text-contact-frequency">Service Frequency: {
-                  { "1_per_week": "1x per week", "2_per_week": "2x per week", "biweekly": "Bi-weekly", "as_needed": "As needed" }[contact.serviceFrequency] || contact.serviceFrequency
-                }</p>
+                <p data-testid="text-contact-frequency">
+                  Service Frequency:{" "}
+                  {{
+                    "1_per_week": "1x per week",
+                    "2_per_week": "2x per week",
+                    biweekly: "Bi-weekly",
+                    as_needed: "As needed",
+                  }[contact.serviceFrequency] || contact.serviceFrequency}
+                </p>
               )}
               {contact.leadSource && (
-                <p data-testid="text-contact-lead-source">Lead Source: {
-                  { "referral": "Referral", "facebook": "Facebook", "google": "Google", "bing": "Bing", "nextdoor": "NextDoor", "yard_sign": "Yard Sign", "local_advertising": "Local Advertising" }[contact.leadSource] || contact.leadSource
-                }</p>
+                <p data-testid="text-contact-lead-source">
+                  Lead Source:{" "}
+                  {{
+                    referral: "Referral",
+                    facebook: "Facebook",
+                    google: "Google",
+                    bing: "Bing",
+                    nextdoor: "NextDoor",
+                    yard_sign: "Yard Sign",
+                    local_advertising: "Local Advertising",
+                  }[contact.leadSource] || contact.leadSource}
+                </p>
               )}
               {contact.serviceDay && (
-                <p data-testid="text-contact-service-day">Service Day: <span className="capitalize">{contact.serviceDay}</span></p>
+                <p data-testid="text-contact-service-day">
+                  Service Day: <span className="capitalize">{contact.serviceDay}</span>
+                </p>
               )}
             </div>
           )}
@@ -700,78 +850,203 @@ export default function ContactDetail() {
                 <DialogTitle>Add Property</DialogTitle>
               </DialogHeader>
               <Form {...propertyForm}>
-                <form onSubmit={propertyForm.handleSubmit((v) => createPropertyMutation.mutate(v))} className="space-y-3">
-                  <FormField control={propertyForm.control} name="streetAddress" render={({ field }) => (
-                    <FormItem><FormLabel>Street Address</FormLabel><FormControl>
-                      <AddressAutocomplete
-                        value={field.value || ""}
-                        onChange={field.onChange}
-                        onSelect={(addr) => {
-                          propertyForm.setValue("streetAddress", addr.streetAddress);
-                          propertyForm.setValue("city", addr.city);
-                          propertyForm.setValue("state", addr.state);
-                          propertyForm.setValue("zipCode", addr.zipCode);
-                          if (addr.latitude) propertyForm.setValue("latitude" as any, String(addr.latitude));
-                          if (addr.longitude) propertyForm.setValue("longitude" as any, String(addr.longitude));
-                        }}
-                        data-testid="input-street"
-                      />
-                    </FormControl><FormMessage /></FormItem>
-                  )} />
+                <form
+                  onSubmit={propertyForm.handleSubmit((v) => createPropertyMutation.mutate(v))}
+                  className="space-y-3"
+                >
+                  <FormField
+                    control={propertyForm.control}
+                    name="streetAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Street Address</FormLabel>
+                        <FormControl>
+                          <AddressAutocomplete
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                            onSelect={(addr) => {
+                              propertyForm.setValue("streetAddress", addr.streetAddress);
+                              propertyForm.setValue("city", addr.city);
+                              propertyForm.setValue("state", addr.state);
+                              propertyForm.setValue("zipCode", addr.zipCode);
+                              if (addr.latitude)
+                                propertyForm.setValue("latitude" as any, String(addr.latitude));
+                              if (addr.longitude)
+                                propertyForm.setValue("longitude" as any, String(addr.longitude));
+                            }}
+                            data-testid="input-street"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <div className="grid grid-cols-2 gap-3">
-                    <FormField control={propertyForm.control} name="city" render={({ field }) => (
-                      <FormItem><FormLabel>City</FormLabel><FormControl><Input {...field} data-testid="input-city" /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={propertyForm.control} name="state" render={({ field }) => (
-                      <FormItem><FormLabel>State</FormLabel><FormControl><Input {...field} data-testid="input-state" /></FormControl><FormMessage /></FormItem>
-                    )} />
+                    <FormField
+                      control={propertyForm.control}
+                      name="city"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>City</FormLabel>
+                          <FormControl>
+                            <Input {...field} data-testid="input-city" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={propertyForm.control}
+                      name="state"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>State</FormLabel>
+                          <FormControl>
+                            <Input {...field} data-testid="input-state" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                  <FormField control={propertyForm.control} name="zipCode" render={({ field }) => (
-                    <FormItem><FormLabel>Zip Code</FormLabel><FormControl><Input {...field} data-testid="input-zip" /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField control={propertyForm.control} name="numberOfDogs" render={({ field }) => (
-                    <FormItem><FormLabel>Number of Dogs</FormLabel><FormControl><Input type="number" {...field} data-testid="input-dogs" /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField control={propertyForm.control} name="yardDifficulty" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Yard Difficulty</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || "flat"}>
-                        <FormControl><SelectTrigger data-testid="select-yard-difficulty"><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="flat">Flat</SelectItem>
-                          <SelectItem value="moderate">Moderate</SelectItem>
-                          <SelectItem value="difficult">Difficult</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={propertyForm.control} name="gateCode" render={({ field }) => (
-                    <FormItem><FormLabel>Gate Code</FormLabel><FormControl><Input {...field} data-testid="input-gate-code" /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField control={propertyForm.control} name="lotSize" render={({ field }) => (
-                    <FormItem><FormLabel>Yard Size</FormLabel><FormControl><Input {...field} placeholder="e.g. 0.18 acres, 7,840 sqft" data-testid="input-lot-size" /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField control={propertyForm.control} name="specialInstructions" render={({ field }) => (
-                    <FormItem><FormLabel>Special Instructions</FormLabel><FormControl><Textarea {...field} data-testid="input-special-instructions" /></FormControl><FormMessage /></FormItem>
-                  )} />
-                  <FormField control={propertyForm.control} name="hasDangerousDog" render={({ field }) => (
-                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                      <div className="flex items-center gap-2">
-                        <ShieldAlert className={`h-4 w-4 ${field.value ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} />
-                        <FormLabel className="text-sm font-medium cursor-pointer">Dangerous Dog</FormLabel>
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value || false} onCheckedChange={field.onChange} data-testid="switch-add-dangerous-dog" />
-                      </FormControl>
-                    </FormItem>
-                  )} />
+                  <FormField
+                    control={propertyForm.control}
+                    name="zipCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Zip Code</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-zip" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={propertyForm.control}
+                    name="numberOfDogs"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Number of Dogs</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} data-testid="input-dogs" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={propertyForm.control}
+                    name="yardDifficulty"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Yard Difficulty</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || "flat"}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-yard-difficulty">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="flat">Flat</SelectItem>
+                            <SelectItem value="moderate">Moderate</SelectItem>
+                            <SelectItem value="difficult">Difficult</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={propertyForm.control}
+                    name="gateCode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Gate Code</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-gate-code" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={propertyForm.control}
+                    name="lotSize"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Yard Size</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="e.g. 0.18 acres, 7,840 sqft"
+                            data-testid="input-lot-size"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={propertyForm.control}
+                    name="specialInstructions"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Special Instructions</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} data-testid="input-special-instructions" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={propertyForm.control}
+                    name="hasDangerousDog"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center gap-2">
+                          <ShieldAlert
+                            className={`h-4 w-4 ${field.value ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                          />
+                          <FormLabel className="text-sm font-medium cursor-pointer">
+                            Dangerous Dog
+                          </FormLabel>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value || false}
+                            onCheckedChange={field.onChange}
+                            data-testid="switch-add-dangerous-dog"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
                   {propertyForm.watch("hasDangerousDog") && (
-                    <FormField control={propertyForm.control} name="dangerousDogNotes" render={({ field }) => (
-                      <FormItem><FormLabel>Hazard Notes</FormLabel><FormControl><Textarea {...field} placeholder="e.g. Aggressive dog in backyard" data-testid="input-dangerous-dog-notes" /></FormControl><FormMessage /></FormItem>
-                    )} />
+                    <FormField
+                      control={propertyForm.control}
+                      name="dangerousDogNotes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Hazard Notes</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              {...field}
+                              placeholder="e.g. Aggressive dog in backyard"
+                              data-testid="input-dangerous-dog-notes"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   )}
-                  <Button type="submit" disabled={createPropertyMutation.isPending} data-testid="button-submit-property">
+                  <Button
+                    type="submit"
+                    disabled={createPropertyMutation.isPending}
+                    data-testid="button-submit-property"
+                  >
                     {createPropertyMutation.isPending ? "Adding..." : "Add Property"}
                   </Button>
                 </form>
@@ -786,279 +1061,367 @@ export default function ContactDetail() {
                 const propAddress = `${prop.streetAddress}, ${prop.city}, ${prop.state} ${prop.zipCode}`;
                 const propLat = prop.latitude ? Number(prop.latitude) : undefined;
                 const propLng = prop.longitude ? Number(prop.longitude) : undefined;
-                const yardCat = prop.measuredYardSqft ? getYardCategory(prop.measuredYardSqft) : null;
+                const yardCat = prop.measuredYardSqft
+                  ? getYardCategory(prop.measuredYardSqft)
+                  : null;
                 return (
-                <div key={prop.id} className="border rounded-md overflow-hidden" data-testid={`text-property-${prop.id}`}>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 border-b">
-                    <StreetViewImage
-                      address={propAddress}
-                      lat={propLat}
-                      lng={propLng}
-                      className="rounded-none border-0 h-[120px]"
-                      size="600x300"
-                    />
-                    <SatelliteImage
-                      address={propAddress}
-                      lat={propLat}
-                      lng={propLng}
-                      className="rounded-none border-0 border-t sm:border-t-0 sm:border-l h-[120px]"
-                      size="600x300"
-                      zoom={19}
-                      clickToNavigate={false}
-                    />
-                  </div>
-                  <div className="p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="font-medium">{prop.streetAddress}</p>
-                        <p className="text-sm text-muted-foreground">{prop.city}, {prop.state} {prop.zipCode}</p>
-                        {prop.gateCode && <p className="text-sm text-muted-foreground">Gate: {prop.gateCode}</p>}
-                        {prop.numberOfDogs != null && prop.numberOfDogs > 0 && (
-                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                            <Dog className="h-3.5 w-3.5" />
-                            <span>{prop.numberOfDogs} {prop.numberOfDogs === 1 ? "dog" : "dogs"}</span>
+                  <div
+                    key={prop.id}
+                    className="border rounded-md overflow-hidden"
+                    data-testid={`text-property-${prop.id}`}
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 border-b">
+                      <StreetViewImage
+                        address={propAddress}
+                        lat={propLat}
+                        lng={propLng}
+                        className="rounded-none border-0 h-[120px]"
+                        size="600x300"
+                      />
+                      <SatelliteImage
+                        address={propAddress}
+                        lat={propLat}
+                        lng={propLng}
+                        className="rounded-none border-0 border-t sm:border-t-0 sm:border-l h-[120px]"
+                        size="600x300"
+                        zoom={19}
+                        clickToNavigate={false}
+                      />
+                    </div>
+                    <div className="p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium">{prop.streetAddress}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {prop.city}, {prop.state} {prop.zipCode}
+                          </p>
+                          {prop.gateCode && (
+                            <p className="text-sm text-muted-foreground">Gate: {prop.gateCode}</p>
+                          )}
+                          {prop.numberOfDogs != null && prop.numberOfDogs > 0 && (
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                              <Dog className="h-3.5 w-3.5" />
+                              <span>
+                                {prop.numberOfDogs} {prop.numberOfDogs === 1 ? "dog" : "dogs"}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {(!prop.latitude || !prop.longitude) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs gap-1"
+                              onClick={() => {
+                                if (editAddressPropertyId === prop.id) {
+                                  setEditAddressPropertyId(null);
+                                } else {
+                                  editAddressForm.reset({
+                                    streetAddress: prop.streetAddress || "",
+                                    city: prop.city || "",
+                                    state: prop.state || "",
+                                    zipCode: prop.zipCode || "",
+                                  });
+                                  setEditAddressPropertyId(prop.id);
+                                }
+                              }}
+                              data-testid={`button-edit-address-${prop.id}`}
+                            >
+                              <MapPin className="h-3.5 w-3.5" />
+                              {editAddressPropertyId === prop.id ? "Cancel" : "Edit Address"}
+                            </Button>
+                          )}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                                data-testid={`button-delete-property-${prop.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Property</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete {prop.streetAddress}? This action
+                                  cannot be undone. Any jobs linked to this property will also be
+                                  affected.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deletePropertyMutation.mutate(prop.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  data-testid={`button-confirm-delete-property-${prop.id}`}
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+                      {editAddressPropertyId === prop.id && (
+                        <div className="rounded-md border bg-muted/40 p-3 space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5" /> Fix address &amp; re-geocode
+                          </p>
+                          <Form {...editAddressForm}>
+                            <form
+                              onSubmit={editAddressForm.handleSubmit((data) =>
+                                updateAddressMutation.mutate({ propertyId: prop.id, data })
+                              )}
+                              className="space-y-2"
+                            >
+                              <FormField
+                                control={editAddressForm.control}
+                                name="streetAddress"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-xs">Street Address</FormLabel>
+                                    <FormControl>
+                                      <AddressAutocomplete
+                                        value={field.value}
+                                        onChange={field.onChange}
+                                        onSelect={(addr) => {
+                                          editAddressForm.setValue(
+                                            "streetAddress",
+                                            addr.streetAddress
+                                          );
+                                          editAddressForm.setValue("city", addr.city);
+                                          editAddressForm.setValue("state", addr.state);
+                                          editAddressForm.setValue("zipCode", addr.zipCode);
+                                        }}
+                                        data-testid={`input-edit-street-${prop.id}`}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <div className="grid grid-cols-3 gap-2">
+                                <FormField
+                                  control={editAddressForm.control}
+                                  name="city"
+                                  render={({ field }) => (
+                                    <FormItem className="col-span-1">
+                                      <FormLabel className="text-xs">City</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          {...field}
+                                          className="h-8 text-sm"
+                                          data-testid={`input-edit-city-${prop.id}`}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={editAddressForm.control}
+                                  name="state"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs">State</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          {...field}
+                                          className="h-8 text-sm"
+                                          data-testid={`input-edit-state-${prop.id}`}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                                <FormField
+                                  control={editAddressForm.control}
+                                  name="zipCode"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-xs">Zip</FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          {...field}
+                                          className="h-8 text-sm"
+                                          data-testid={`input-edit-zip-${prop.id}`}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                              <Button
+                                type="submit"
+                                size="sm"
+                                className="h-8 text-xs w-full"
+                                disabled={updateAddressMutation.isPending}
+                                data-testid={`button-save-address-${prop.id}`}
+                              >
+                                {updateAddressMutation.isPending ? (
+                                  <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Saving
+                                    &amp; geocoding…
+                                  </>
+                                ) : (
+                                  "Save &amp; Re-geocode"
+                                )}
+                              </Button>
+                            </form>
+                          </Form>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {prop.measuredYardSqft && yardCat ? (
+                          <>
+                            <Badge
+                              className={`text-xs ${yardCat.color}`}
+                              data-testid={`badge-yard-category-${prop.id}`}
+                            >
+                              {yardCat.label}
+                            </Badge>
+                            <span
+                              className="text-sm text-muted-foreground"
+                              data-testid={`text-yard-area-${prop.id}`}
+                            >
+                              {formatArea(prop.measuredYardSqft)}
+                            </span>
+                          </>
+                        ) : null}
+                        {prop.lotSize && (
+                          <span className="text-sm text-muted-foreground">
+                            Yard Size: {prop.lotSize}
+                          </span>
+                        )}
+                        {prop.yardDifficulty && prop.yardDifficulty !== "flat" && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs"
+                            data-testid={`badge-yard-difficulty-${prop.id}`}
+                          >
+                            {prop.yardDifficulty === "moderate"
+                              ? "Moderate Terrain"
+                              : "Difficult Terrain"}
+                          </Badge>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          onClick={() => {
+                            if (propLat == null || propLng == null) {
+                              toast({
+                                title: "Geocoding required",
+                                description:
+                                  "This property needs coordinates before measuring. Use Geocode All on the properties page.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+                            setMeasurePropertyId(measurePropertyId === prop.id ? null : prop.id);
+                          }}
+                          data-testid={`button-measure-yard-${prop.id}`}
+                        >
+                          <Ruler className="h-3.5 w-3.5" />
+                          {measurePropertyId === prop.id
+                            ? "Hide Measure Tool"
+                            : prop.measuredYardSqft
+                              ? "Re-measure Yard"
+                              : "Measure Yard"}
+                        </Button>
+                      </div>
+                      <div className="space-y-2 pt-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <ShieldAlert
+                              className={`h-4 w-4 ${prop.hasDangerousDog ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                            />
+                            <Label
+                              htmlFor={`dangerous-dog-${prop.id}`}
+                              className="text-sm font-medium"
+                            >
+                              Dangerous Dog
+                            </Label>
+                          </div>
+                          <Switch
+                            id={`dangerous-dog-${prop.id}`}
+                            checked={prop.hasDangerousDog || false}
+                            onCheckedChange={(checked) =>
+                              updateDangerousDogMutation.mutate({
+                                propertyId: prop.id,
+                                hasDangerousDog: checked,
+                                dangerousDogNotes: checked ? prop.dangerousDogNotes || "" : "",
+                              })
+                            }
+                            data-testid={`switch-dangerous-dog-${prop.id}`}
+                          />
+                        </div>
+                        {prop.hasDangerousDog && (
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Hazard Notes</Label>
+                            <Textarea
+                              placeholder="e.g. Aggressive German Shepherd in backyard - do not enter without owner present"
+                              defaultValue={prop.dangerousDogNotes || ""}
+                              onBlur={(e) => {
+                                if (e.target.value !== (prop.dangerousDogNotes || "")) {
+                                  updateDangerousDogMutation.mutate({
+                                    propertyId: prop.id,
+                                    hasDangerousDog: true,
+                                    dangerousDogNotes: e.target.value,
+                                  });
+                                }
+                              }}
+                              className="mt-1 text-sm"
+                              rows={2}
+                              data-testid={`textarea-dangerous-dog-notes-${prop.id}`}
+                            />
+                          </div>
+                        )}
+                        {prop.hasDangerousDog && (
+                          <div className="flex items-start gap-2 rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-3 py-2">
+                            <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                            <p className="text-xs text-red-600 dark:text-red-400">
+                              This warning will be shown to field technicians on their mobile device
+                              before they enter the property.
+                            </p>
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {(!prop.latitude || !prop.longitude) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-xs gap-1"
-                            onClick={() => {
-                              if (editAddressPropertyId === prop.id) {
-                                setEditAddressPropertyId(null);
-                              } else {
-                                editAddressForm.reset({
-                                  streetAddress: prop.streetAddress || "",
-                                  city: prop.city || "",
-                                  state: prop.state || "",
-                                  zipCode: prop.zipCode || "",
-                                });
-                                setEditAddressPropertyId(prop.id);
-                              }
-                            }}
-                            data-testid={`button-edit-address-${prop.id}`}
-                          >
-                            <MapPin className="h-3.5 w-3.5" />
-                            {editAddressPropertyId === prop.id ? "Cancel" : "Edit Address"}
-                          </Button>
-                        )}
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0" data-testid={`button-delete-property-${prop.id}`}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Property</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete {prop.streetAddress}? This action cannot be undone. Any jobs linked to this property will also be affected.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deletePropertyMutation.mutate(prop.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              data-testid={`button-confirm-delete-property-${prop.id}`}
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                      </div>
                     </div>
-                    {editAddressPropertyId === prop.id && (
-                      <div className="rounded-md border bg-muted/40 p-3 space-y-2">
-                        <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                          <MapPin className="h-3.5 w-3.5" /> Fix address &amp; re-geocode
-                        </p>
-                        <Form {...editAddressForm}>
-                          <form
-                            onSubmit={editAddressForm.handleSubmit((data) =>
-                              updateAddressMutation.mutate({ propertyId: prop.id, data })
-                            )}
-                            className="space-y-2"
-                          >
-                            <FormField
-                              control={editAddressForm.control}
-                              name="streetAddress"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel className="text-xs">Street Address</FormLabel>
-                                  <FormControl>
-                                    <AddressAutocomplete
-                                      value={field.value}
-                                      onChange={field.onChange}
-                                      onSelect={(addr) => {
-                                        editAddressForm.setValue("streetAddress", addr.streetAddress);
-                                        editAddressForm.setValue("city", addr.city);
-                                        editAddressForm.setValue("state", addr.state);
-                                        editAddressForm.setValue("zipCode", addr.zipCode);
-                                      }}
-                                      data-testid={`input-edit-street-${prop.id}`}
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                            <div className="grid grid-cols-3 gap-2">
-                              <FormField
-                                control={editAddressForm.control}
-                                name="city"
-                                render={({ field }) => (
-                                  <FormItem className="col-span-1">
-                                    <FormLabel className="text-xs">City</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} className="h-8 text-sm" data-testid={`input-edit-city-${prop.id}`} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={editAddressForm.control}
-                                name="state"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs">State</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} className="h-8 text-sm" data-testid={`input-edit-state-${prop.id}`} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={editAddressForm.control}
-                                name="zipCode"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-xs">Zip</FormLabel>
-                                    <FormControl>
-                                      <Input {...field} className="h-8 text-sm" data-testid={`input-edit-zip-${prop.id}`} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-                            <Button
-                              type="submit"
-                              size="sm"
-                              className="h-8 text-xs w-full"
-                              disabled={updateAddressMutation.isPending}
-                              data-testid={`button-save-address-${prop.id}`}
-                            >
-                              {updateAddressMutation.isPending ? (
-                                <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Saving &amp; geocoding…</>
-                              ) : (
-                                "Save &amp; Re-geocode"
-                              )}
-                            </Button>
-                          </form>
-                        </Form>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {prop.measuredYardSqft && yardCat ? (
-                        <>
-                          <Badge className={`text-xs ${yardCat.color}`} data-testid={`badge-yard-category-${prop.id}`}>
-                            {yardCat.label}
-                          </Badge>
-                          <span className="text-sm text-muted-foreground" data-testid={`text-yard-area-${prop.id}`}>
-                            {formatArea(prop.measuredYardSqft)}
-                          </span>
-                        </>
-                      ) : null}
-                      {prop.lotSize && (
-                        <span className="text-sm text-muted-foreground">Yard Size: {prop.lotSize}</span>
-                      )}
-                      {prop.yardDifficulty && prop.yardDifficulty !== "flat" && (
-                        <Badge variant="outline" className="text-xs" data-testid={`badge-yard-difficulty-${prop.id}`}>
-                          {prop.yardDifficulty === "moderate" ? "Moderate Terrain" : "Difficult Terrain"}
-                        </Badge>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => {
-                          if (propLat == null || propLng == null) {
-                            toast({ title: "Geocoding required", description: "This property needs coordinates before measuring. Use Geocode All on the properties page.", variant: "destructive" });
-                            return;
+                    {measurePropertyId === prop.id && propLat != null && propLng != null && (
+                      <div className="border-t p-3">
+                        <YardMeasureTool
+                          lat={propLat}
+                          lng={propLng}
+                          propertyId={prop.id}
+                          existingPolygon={prop.yardPolygon as number[][] | null}
+                          existingArea={prop.measuredYardSqft}
+                          onSave={(polygon, areaSqft) =>
+                            saveMeasurementMutation.mutate({
+                              propertyId: prop.id,
+                              polygon,
+                              areaSqft,
+                            })
                           }
-                          setMeasurePropertyId(measurePropertyId === prop.id ? null : prop.id);
-                        }}
-                        data-testid={`button-measure-yard-${prop.id}`}
-                      >
-                        <Ruler className="h-3.5 w-3.5" />
-                        {measurePropertyId === prop.id ? "Hide Measure Tool" : prop.measuredYardSqft ? "Re-measure Yard" : "Measure Yard"}
-                      </Button>
-                    </div>
-                    <div className="space-y-2 pt-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <ShieldAlert className={`h-4 w-4 ${prop.hasDangerousDog ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} />
-                          <Label htmlFor={`dangerous-dog-${prop.id}`} className="text-sm font-medium">Dangerous Dog</Label>
-                        </div>
-                        <Switch
-                          id={`dangerous-dog-${prop.id}`}
-                          checked={prop.hasDangerousDog || false}
-                          onCheckedChange={(checked) => updateDangerousDogMutation.mutate({ propertyId: prop.id, hasDangerousDog: checked, dangerousDogNotes: checked ? (prop.dangerousDogNotes || "") : "" })}
-                          data-testid={`switch-dangerous-dog-${prop.id}`}
+                          onCancel={() => setMeasurePropertyId(null)}
                         />
                       </div>
-                      {prop.hasDangerousDog && (
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Hazard Notes</Label>
-                          <Textarea
-                            placeholder="e.g. Aggressive German Shepherd in backyard - do not enter without owner present"
-                            defaultValue={prop.dangerousDogNotes || ""}
-                            onBlur={(e) => {
-                              if (e.target.value !== (prop.dangerousDogNotes || "")) {
-                                updateDangerousDogMutation.mutate({ propertyId: prop.id, hasDangerousDog: true, dangerousDogNotes: e.target.value });
-                              }
-                            }}
-                            className="mt-1 text-sm"
-                            rows={2}
-                            data-testid={`textarea-dangerous-dog-notes-${prop.id}`}
-                          />
-                        </div>
-                      )}
-                      {prop.hasDangerousDog && (
-                        <div className="flex items-start gap-2 rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-3 py-2">
-                          <ShieldAlert className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                          <p className="text-xs text-red-600 dark:text-red-400">This warning will be shown to field technicians on their mobile device before they enter the property.</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {measurePropertyId === prop.id && propLat != null && propLng != null && (
-                    <div className="border-t p-3">
-                      <YardMeasureTool
-                        lat={propLat}
-                        lng={propLng}
-                        propertyId={prop.id}
-                        existingPolygon={prop.yardPolygon as number[][] | null}
-                        existingArea={prop.measuredYardSqft}
-                        onSave={(polygon, areaSqft) => saveMeasurementMutation.mutate({ propertyId: prop.id, polygon, areaSqft })}
-                        onCancel={() => setMeasurePropertyId(null)}
+                    )}
+                    <div className="border-t">
+                      <PriceCalculatorCard
+                        property={prop}
+                        servicePlans={servicePlansForPricing?.filter(
+                          (sp) => sp.propertyId === prop.id
+                        )}
                       />
                     </div>
-                  )}
-                  <div className="border-t">
-                    <PriceCalculatorCard
-                      property={prop}
-                      servicePlans={servicePlansForPricing?.filter((sp) => sp.propertyId === prop.id)}
-                    />
                   </div>
-                </div>
                 );
               })}
             </div>
@@ -1079,7 +1442,12 @@ export default function ContactDetail() {
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2">
             {contactTags?.map((tag) => (
-              <Badge key={tag.id} variant="outline" className="gap-1" data-testid={`badge-tag-${tag.id}`}>
+              <Badge
+                key={tag.id}
+                variant="outline"
+                className="gap-1"
+                data-testid={`badge-tag-${tag.id}`}
+              >
                 {tag.name}
                 <button
                   onClick={() => removeTagMutation.mutate(tag.id)}
@@ -1092,17 +1460,19 @@ export default function ContactDetail() {
             ))}
           </div>
           <div className="flex flex-wrap gap-2">
-            {allTags?.filter((t) => !contactTags?.some((ct) => ct.id === t.id)).map((tag) => (
-              <Button
-                key={tag.id}
-                variant="outline"
-                size="sm"
-                onClick={() => addTagMutation.mutate(tag.id)}
-                data-testid={`button-add-tag-${tag.id}`}
-              >
-                <Plus className="mr-1 h-3 w-3" /> {tag.name}
-              </Button>
-            ))}
+            {allTags
+              ?.filter((t) => !contactTags?.some((ct) => ct.id === t.id))
+              .map((tag) => (
+                <Button
+                  key={tag.id}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => addTagMutation.mutate(tag.id)}
+                  data-testid={`button-add-tag-${tag.id}`}
+                >
+                  <Plus className="mr-1 h-3 w-3" /> {tag.name}
+                </Button>
+              ))}
           </div>
           <div className="flex gap-2">
             <Input
@@ -1172,7 +1542,10 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
-      toast({ title: "Portal enabled", description: "Customer can now log into the client portal." });
+      toast({
+        title: "Portal enabled",
+        description: "Customer can now log into the client portal.",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1197,7 +1570,10 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
       await apiRequest("POST", `/api/contacts/${contactId}/portal-access/resend`);
     },
     onSuccess: () => {
-      toast({ title: "Portal link sent", description: "A new password and portal link have been emailed to the customer." });
+      toast({
+        title: "Portal link sent",
+        description: "A new password and portal link have been emailed to the customer.",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1206,14 +1582,21 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
 
   const resetPortalPasswordMutation = useMutation({
     mutationFn: async (newPassword: string) => {
-      const res = await apiRequest("POST", `/api/contacts/${contactId}/portal-access/reset-password`, { newPassword });
+      const res = await apiRequest(
+        "POST",
+        `/api/contacts/${contactId}/portal-access/reset-password`,
+        { newPassword }
+      );
       return res.json();
     },
     onSuccess: () => {
       setResetDialogOpen(false);
       setPortalNewPassword("");
       setPortalConfirmPassword("");
-      toast({ title: "Password updated", description: "The client's portal password has been changed." });
+      toast({
+        title: "Password updated",
+        description: "The client's portal password has been changed.",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -1283,7 +1666,16 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
         </CardContent>
       </Card>
 
-      <Dialog open={resetDialogOpen} onOpenChange={(open) => { if (!open) { setResetDialogOpen(false); setPortalNewPassword(""); setPortalConfirmPassword(""); } }}>
+      <Dialog
+        open={resetDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setResetDialogOpen(false);
+            setPortalNewPassword("");
+            setPortalConfirmPassword("");
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset Portal Password</DialogTitle>
@@ -1312,14 +1704,30 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
                 data-testid="input-portal-confirm-password"
               />
             </div>
-            {portalNewPassword && portalConfirmPassword && portalNewPassword !== portalConfirmPassword && (
-              <p className="text-sm text-destructive">Passwords do not match</p>
-            )}
+            {portalNewPassword &&
+              portalConfirmPassword &&
+              portalNewPassword !== portalConfirmPassword && (
+                <p className="text-sm text-destructive">Passwords do not match</p>
+              )}
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => { setResetDialogOpen(false); setPortalNewPassword(""); setPortalConfirmPassword(""); }}>Cancel</Button>
             <Button
-              disabled={!portalNewPassword || portalNewPassword.length < 8 || portalNewPassword !== portalConfirmPassword || resetPortalPasswordMutation.isPending}
+              variant="outline"
+              onClick={() => {
+                setResetDialogOpen(false);
+                setPortalNewPassword("");
+                setPortalConfirmPassword("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                !portalNewPassword ||
+                portalNewPassword.length < 8 ||
+                portalNewPassword !== portalConfirmPassword ||
+                resetPortalPasswordMutation.isPending
+              }
               onClick={() => resetPortalPasswordMutation.mutate(portalNewPassword)}
               data-testid="button-confirm-portal-password-reset"
             >
@@ -1332,7 +1740,15 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
   );
 }
 
-function OnboardingCard({ contact, contactId, properties }: { contact: Contact; contactId: string; properties: Property[] }) {
+function OnboardingCard({
+  contact,
+  contactId,
+  properties,
+}: {
+  contact: Contact;
+  contactId: string;
+  properties: Property[];
+}) {
   const { toast } = useToast();
   const [linkCopied, setLinkCopied] = useState(false);
   const [onboardingLink, setOnboardingLink] = useState<string | null>(null);
@@ -1358,7 +1774,10 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${contactId}`] });
       setEditOpen(false);
-      toast({ title: "Onboarding details updated", description: "The property record has been saved." });
+      toast({
+        title: "Onboarding details updated",
+        description: "The property record has been saved.",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Error saving changes", description: error.message, variant: "destructive" });
@@ -1387,11 +1806,23 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
       queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${contactId}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       if (data.emailed) {
-        toast({ title: "Onboarding email sent", description: "An email with the onboarding form link has been sent to the client." });
+        toast({
+          title: "Onboarding email sent",
+          description: "An email with the onboarding form link has been sent to the client.",
+        });
       } else if (data.noEmail) {
-        toast({ title: "No email address on file", description: "This client has no email address. Copy the link below and share it manually.", variant: "destructive" });
+        toast({
+          title: "No email address on file",
+          description:
+            "This client has no email address. Copy the link below and share it manually.",
+          variant: "destructive",
+        });
       } else {
-        toast({ title: "Onboarding link generated", description: "The link was generated but could not be emailed. Copy it below and share manually." });
+        toast({
+          title: "Onboarding link generated",
+          description:
+            "The link was generated but could not be emailed. Copy it below and share manually.",
+        });
       }
     },
     onError: (error: Error) => {
@@ -1409,9 +1840,15 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
       queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${contactId}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       if (data.emailed) {
-        toast({ title: "Link regenerated & sent", description: "The old link is now invalid. A new link has been emailed to the client." });
+        toast({
+          title: "Link regenerated & sent",
+          description: "The old link is now invalid. A new link has been emailed to the client.",
+        });
       } else {
-        toast({ title: "Link regenerated", description: "The old link is now invalid. Copy the new link below." });
+        toast({
+          title: "Link regenerated",
+          description: "The old link is now invalid. Copy the new link below.",
+        });
       }
     },
     onError: (error: Error) => {
@@ -1430,247 +1867,335 @@ function OnboardingCard({ contact, contactId, properties }: { contact: Contact; 
 
   return (
     <>
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <ClipboardList className="h-5 w-5" /> Client Onboarding
-        </CardTitle>
-        <div className="flex items-center gap-2">
-          {onboardingCompleted && (
-            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex items-center gap-1" data-testid="badge-onboarding-complete">
-              <ClipboardCheck className="h-3.5 w-3.5" /> Onboarded
-            </Badge>
-          )}
-          {onboardingPending && (
-            <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-onboarding-pending">
-              Onboarding Pending
-            </Badge>
-          )}
-          {onboardingCompleted && (
-            <Button size="sm" variant="outline" onClick={openEdit} data-testid="button-edit-onboarding">
-              <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-xs text-muted-foreground">
-          {onboardingCompleted
-            ? `Completed on ${new Date(firstProperty!.onboardingCompletedAt!).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
-            : onboardingPending
-              ? "An onboarding link has been sent. Waiting for the client to complete the form."
-              : "Send the client a form to collect dog details, gate codes, access instructions, and contact preferences before their first visit."}
-        </p>
-        {onboardingCompleted && (
-          <div className="space-y-3 pt-1">
-            {(firstProperty?.dogNames || firstProperty?.dogBreeds) && (
-              <div>
-                <p className="text-xs font-medium text-foreground mb-1">Dogs</p>
-                <div className="text-xs text-muted-foreground space-y-0.5">
-                  {firstProperty.dogNames && (
-                    <p data-testid="text-dog-names"><span className="font-medium text-foreground">Names:</span> {firstProperty.dogNames}</p>
-                  )}
-                  {firstProperty.dogBreeds && (
-                    <p data-testid="text-dog-breeds"><span className="font-medium text-foreground">Breeds:</span> {firstProperty.dogBreeds}</p>
-                  )}
-                </div>
-              </div>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <ClipboardList className="h-5 w-5" /> Client Onboarding
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {onboardingCompleted && (
+              <Badge
+                className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 flex items-center gap-1"
+                data-testid="badge-onboarding-complete"
+              >
+                <ClipboardCheck className="h-3.5 w-3.5" /> Onboarded
+              </Badge>
             )}
-            {firstProperty?.hasDangerousDog && (
-              <div className="flex items-start gap-2 p-2 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800">
-                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-                <div className="text-xs">
-                  <p className="font-medium text-amber-800 dark:text-amber-200" data-testid="text-dangerous-dog-flag">Dangerous dog on property</p>
-                  {firstProperty.dangerousDogNotes && (
-                    <p className="text-amber-700 dark:text-amber-300 mt-0.5" data-testid="text-dangerous-dog-notes">{firstProperty.dangerousDogNotes}</p>
-                  )}
-                </div>
-              </div>
-            )}
-            {firstProperty?.gateCode && (
-              <div>
-                <p className="text-xs font-medium text-foreground mb-1">Gate Code</p>
-                <p className="text-xs text-muted-foreground font-mono" data-testid="text-gate-code">{firstProperty.gateCode}</p>
-              </div>
-            )}
-            {firstProperty?.specialInstructions && (
-              <div>
-                <p className="text-xs font-medium text-foreground mb-1">Access Instructions</p>
-                <p className="text-xs text-muted-foreground whitespace-pre-wrap" data-testid="text-access-instructions">{firstProperty.specialInstructions}</p>
-              </div>
-            )}
-            {(() => {
-              const prefs = contact.reminderPreferences as Record<string, unknown> | null | undefined;
-              const contactMethod = prefs?.contactMethod as string | undefined;
-              const bestContactTime = prefs?.bestContactTime as string | undefined;
-              if (!contactMethod && !bestContactTime) return null;
-              const methodLabels: Record<string, string> = { phone: "Phone", email: "Email", text: "Text / SMS" };
-              const timeLabels: Record<string, string> = { morning: "Morning", afternoon: "Afternoon", evening: "Evening" };
-              return (
-                <div>
-                  <p className="text-xs font-medium text-foreground mb-1">Contact Preferences</p>
-                  <div className="text-xs text-muted-foreground space-y-0.5">
-                    {contactMethod && (
-                      <p data-testid="text-preferred-contact-method"><span className="font-medium text-foreground">Preferred method:</span> {methodLabels[contactMethod] ?? contactMethod}</p>
-                    )}
-                    {bestContactTime && (
-                      <p data-testid="text-best-contact-time"><span className="font-medium text-foreground">Best time:</span> {timeLabels[bestContactTime] ?? bestContactTime}</p>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        )}
-        {!onboardingCompleted && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant={onboardingPending ? "outline" : "default"}
-              onClick={() => sendOnboardingMutation.mutate()}
-              disabled={sendOnboardingMutation.isPending || regenerateOnboardingMutation.isPending}
-              data-testid="button-send-onboarding"
-            >
-              {sendOnboardingMutation.isPending ? (
-                <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Generating...</>
-              ) : onboardingPending ? (
-                <><Mail className="mr-1 h-4 w-4" /> Resend Link</>
-              ) : (
-                <><ClipboardList className="mr-1 h-4 w-4" /> Send Onboarding Form</>
-              )}
-            </Button>
             {onboardingPending && (
+              <Badge
+                className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                data-testid="badge-onboarding-pending"
+              >
+                Onboarding Pending
+              </Badge>
+            )}
+            {onboardingCompleted && (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => regenerateOnboardingMutation.mutate()}
-                disabled={sendOnboardingMutation.isPending || regenerateOnboardingMutation.isPending}
-                data-testid="button-regenerate-onboarding"
-                title="Generate a new link and invalidate the current one"
+                onClick={openEdit}
+                data-testid="button-edit-onboarding"
               >
-                {regenerateOnboardingMutation.isPending ? (
-                  <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Regenerating...</>
-                ) : (
-                  <><RefreshCw className="mr-1 h-4 w-4" /> Regenerate Link</>
-                )}
+                <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
               </Button>
             )}
-            {(onboardingLink || (hasToken && firstProperty)) && (
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            {onboardingCompleted
+              ? `Completed on ${new Date(firstProperty!.onboardingCompletedAt!).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+              : onboardingPending
+                ? "An onboarding link has been sent. Waiting for the client to complete the form."
+                : "Send the client a form to collect dog details, gate codes, access instructions, and contact preferences before their first visit."}
+          </p>
+          {onboardingCompleted && (
+            <div className="space-y-3 pt-1">
+              {(firstProperty?.dogNames || firstProperty?.dogBreeds) && (
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-1">Dogs</p>
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    {firstProperty.dogNames && (
+                      <p data-testid="text-dog-names">
+                        <span className="font-medium text-foreground">Names:</span>{" "}
+                        {firstProperty.dogNames}
+                      </p>
+                    )}
+                    {firstProperty.dogBreeds && (
+                      <p data-testid="text-dog-breeds">
+                        <span className="font-medium text-foreground">Breeds:</span>{" "}
+                        {firstProperty.dogBreeds}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {firstProperty?.hasDangerousDog && (
+                <div className="flex items-start gap-2 p-2 bg-amber-50 dark:bg-amber-950 rounded-md border border-amber-200 dark:border-amber-800">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                  <div className="text-xs">
+                    <p
+                      className="font-medium text-amber-800 dark:text-amber-200"
+                      data-testid="text-dangerous-dog-flag"
+                    >
+                      Dangerous dog on property
+                    </p>
+                    {firstProperty.dangerousDogNotes && (
+                      <p
+                        className="text-amber-700 dark:text-amber-300 mt-0.5"
+                        data-testid="text-dangerous-dog-notes"
+                      >
+                        {firstProperty.dangerousDogNotes}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {firstProperty?.gateCode && (
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-1">Gate Code</p>
+                  <p
+                    className="text-xs text-muted-foreground font-mono"
+                    data-testid="text-gate-code"
+                  >
+                    {firstProperty.gateCode}
+                  </p>
+                </div>
+              )}
+              {firstProperty?.specialInstructions && (
+                <div>
+                  <p className="text-xs font-medium text-foreground mb-1">Access Instructions</p>
+                  <p
+                    className="text-xs text-muted-foreground whitespace-pre-wrap"
+                    data-testid="text-access-instructions"
+                  >
+                    {firstProperty.specialInstructions}
+                  </p>
+                </div>
+              )}
+              {(() => {
+                const prefs = contact.reminderPreferences as
+                  | Record<string, unknown>
+                  | null
+                  | undefined;
+                const contactMethod = prefs?.contactMethod as string | undefined;
+                const bestContactTime = prefs?.bestContactTime as string | undefined;
+                if (!contactMethod && !bestContactTime) return null;
+                const methodLabels: Record<string, string> = {
+                  phone: "Phone",
+                  email: "Email",
+                  text: "Text / SMS",
+                };
+                const timeLabels: Record<string, string> = {
+                  morning: "Morning",
+                  afternoon: "Afternoon",
+                  evening: "Evening",
+                };
+                return (
+                  <div>
+                    <p className="text-xs font-medium text-foreground mb-1">Contact Preferences</p>
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      {contactMethod && (
+                        <p data-testid="text-preferred-contact-method">
+                          <span className="font-medium text-foreground">Preferred method:</span>{" "}
+                          {methodLabels[contactMethod] ?? contactMethod}
+                        </p>
+                      )}
+                      {bestContactTime && (
+                        <p data-testid="text-best-contact-time">
+                          <span className="font-medium text-foreground">Best time:</span>{" "}
+                          {timeLabels[bestContactTime] ?? bestContactTime}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          {!onboardingCompleted && (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={onboardingPending ? "outline" : "default"}
+                onClick={() => sendOnboardingMutation.mutate()}
+                disabled={
+                  sendOnboardingMutation.isPending || regenerateOnboardingMutation.isPending
+                }
+                data-testid="button-send-onboarding"
+              >
+                {sendOnboardingMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Generating...
+                  </>
+                ) : onboardingPending ? (
+                  <>
+                    <Mail className="mr-1 h-4 w-4" /> Resend Link
+                  </>
+                ) : (
+                  <>
+                    <ClipboardList className="mr-1 h-4 w-4" /> Send Onboarding Form
+                  </>
+                )}
+              </Button>
+              {onboardingPending && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => regenerateOnboardingMutation.mutate()}
+                  disabled={
+                    sendOnboardingMutation.isPending || regenerateOnboardingMutation.isPending
+                  }
+                  data-testid="button-regenerate-onboarding"
+                  title="Generate a new link and invalidate the current one"
+                >
+                  {regenerateOnboardingMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Regenerating...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-1 h-4 w-4" /> Regenerate Link
+                    </>
+                  )}
+                </Button>
+              )}
+              {(onboardingLink || (hasToken && firstProperty)) && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    const url =
+                      onboardingLink ||
+                      `${window.location.origin}/onboarding/${firstProperty?.onboardingToken}`;
+                    window.open(url, "_blank");
+                  }}
+                  data-testid="button-open-onboarding"
+                >
+                  <ExternalLink className="mr-1 h-4 w-4" /> Fill Out for Client
+                </Button>
+              )}
+            </div>
+          )}
+          {onboardingLink && (
+            <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+              <p className="text-xs font-mono flex-1 truncate">{onboardingLink}</p>
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => {
-                  const url = onboardingLink || `${window.location.origin}/onboarding/${firstProperty?.onboardingToken}`;
-                  window.open(url, "_blank");
-                }}
-                data-testid="button-open-onboarding"
+                onClick={() => handleCopy(onboardingLink)}
+                data-testid="button-copy-onboarding-link"
               >
-                <ExternalLink className="mr-1 h-4 w-4" /> Fill Out for Client
+                <Copy className="h-4 w-4" /> {linkCopied ? "Copied!" : "Copy"}
               </Button>
-            )}
-          </div>
-        )}
-        {onboardingLink && (
-          <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-            <p className="text-xs font-mono flex-1 truncate">{onboardingLink}</p>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => handleCopy(onboardingLink)}
-              data-testid="button-copy-onboarding-link"
-            >
-              <Copy className="h-4 w-4" /> {linkCopied ? "Copied!" : "Copy"}
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-
-    <Dialog open={editOpen} onOpenChange={setEditOpen}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Edit Onboarding Details</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-dog-names">Dog Names</Label>
-            <Input
-              id="edit-dog-names"
-              data-testid="input-edit-dog-names"
-              value={editForm.dogNames}
-              onChange={e => setEditForm(f => ({ ...f, dogNames: e.target.value }))}
-              placeholder="e.g. Buddy, Max"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-dog-breeds">Breeds</Label>
-            <Input
-              id="edit-dog-breeds"
-              data-testid="input-edit-dog-breeds"
-              value={editForm.dogBreeds}
-              onChange={e => setEditForm(f => ({ ...f, dogBreeds: e.target.value }))}
-              placeholder="e.g. Labrador, Poodle"
-            />
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <Label htmlFor="edit-dangerous-dog">Dangerous dog on property</Label>
-              <p className="text-xs text-muted-foreground mt-0.5">Flag for technician safety awareness</p>
-            </div>
-            <Switch
-              id="edit-dangerous-dog"
-              data-testid="switch-edit-dangerous-dog"
-              checked={editForm.hasDangerousDog}
-              onCheckedChange={val => setEditForm(f => ({ ...f, hasDangerousDog: val }))}
-            />
-          </div>
-          {editForm.hasDangerousDog && (
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-dangerous-dog-notes">Dangerous Dog Notes</Label>
-              <Textarea
-                id="edit-dangerous-dog-notes"
-                data-testid="textarea-edit-dangerous-dog-notes"
-                value={editForm.dangerousDogNotes}
-                onChange={e => setEditForm(f => ({ ...f, dangerousDogNotes: e.target.value }))}
-                placeholder="Describe the concern…"
-                rows={2}
-              />
             </div>
           )}
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-gate-code">Gate Code</Label>
-            <Input
-              id="edit-gate-code"
-              data-testid="input-edit-gate-code"
-              value={editForm.gateCode}
-              onChange={e => setEditForm(f => ({ ...f, gateCode: e.target.value }))}
-              placeholder="e.g. #1234"
-            />
+        </CardContent>
+      </Card>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Onboarding Details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-dog-names">Dog Names</Label>
+              <Input
+                id="edit-dog-names"
+                data-testid="input-edit-dog-names"
+                value={editForm.dogNames}
+                onChange={(e) => setEditForm((f) => ({ ...f, dogNames: e.target.value }))}
+                placeholder="e.g. Buddy, Max"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-dog-breeds">Breeds</Label>
+              <Input
+                id="edit-dog-breeds"
+                data-testid="input-edit-dog-breeds"
+                value={editForm.dogBreeds}
+                onChange={(e) => setEditForm((f) => ({ ...f, dogBreeds: e.target.value }))}
+                placeholder="e.g. Labrador, Poodle"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="edit-dangerous-dog">Dangerous dog on property</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Flag for technician safety awareness
+                </p>
+              </div>
+              <Switch
+                id="edit-dangerous-dog"
+                data-testid="switch-edit-dangerous-dog"
+                checked={editForm.hasDangerousDog}
+                onCheckedChange={(val) => setEditForm((f) => ({ ...f, hasDangerousDog: val }))}
+              />
+            </div>
+            {editForm.hasDangerousDog && (
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-dangerous-dog-notes">Dangerous Dog Notes</Label>
+                <Textarea
+                  id="edit-dangerous-dog-notes"
+                  data-testid="textarea-edit-dangerous-dog-notes"
+                  value={editForm.dangerousDogNotes}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, dangerousDogNotes: e.target.value }))
+                  }
+                  placeholder="Describe the concern…"
+                  rows={2}
+                />
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-gate-code">Gate Code</Label>
+              <Input
+                id="edit-gate-code"
+                data-testid="input-edit-gate-code"
+                value={editForm.gateCode}
+                onChange={(e) => setEditForm((f) => ({ ...f, gateCode: e.target.value }))}
+                placeholder="e.g. #1234"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-access-instructions">Access Instructions</Label>
+              <Textarea
+                id="edit-access-instructions"
+                data-testid="textarea-edit-access-instructions"
+                value={editForm.specialInstructions}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, specialInstructions: e.target.value }))
+                }
+                placeholder="e.g. Use side gate, latch is tricky…"
+                rows={3}
+              />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-access-instructions">Access Instructions</Label>
-            <Textarea
-              id="edit-access-instructions"
-              data-testid="textarea-edit-access-instructions"
-              value={editForm.specialInstructions}
-              onChange={e => setEditForm(f => ({ ...f, specialInstructions: e.target.value }))}
-              placeholder="e.g. Use side gate, latch is tricky…"
-              rows={3}
-            />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(false)}
+              data-testid="button-cancel-onboarding-edit"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => editOnboardingMutation.mutate(editForm)}
+              disabled={editOnboardingMutation.isPending}
+              data-testid="button-save-onboarding-edit"
+            >
+              {editOnboardingMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Saving…
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
           </div>
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={() => setEditOpen(false)} data-testid="button-cancel-onboarding-edit">Cancel</Button>
-          <Button
-            onClick={() => editOnboardingMutation.mutate(editForm)}
-            disabled={editOnboardingMutation.isPending}
-            data-testid="button-save-onboarding-edit"
-          >
-            {editOnboardingMutation.isPending ? <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Saving…</> : "Save Changes"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -1700,7 +2225,9 @@ function GoogleReviewToggle({ contact, contactId }: { contact: Contact; contactI
       <CardContent className="py-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Star className={`h-5 w-5 ${contact.googleReviewLeft ? "text-yellow-500 fill-yellow-400" : "text-muted-foreground"}`} />
+            <Star
+              className={`h-5 w-5 ${contact.googleReviewLeft ? "text-yellow-500 fill-yellow-400" : "text-muted-foreground"}`}
+            />
             <div>
               <p className="text-sm font-medium">Has left a Google review</p>
               <p className="text-xs text-muted-foreground">
@@ -1738,7 +2265,13 @@ interface PropertyProfitData {
   };
 }
 
-function CostBreakdownBar({ breakdown, totalCost }: { breakdown: PropertyProfitData["costBreakdown"]; totalCost: number }) {
+function CostBreakdownBar({
+  breakdown,
+  totalCost,
+}: {
+  breakdown: PropertyProfitData["costBreakdown"];
+  totalCost: number;
+}) {
   if (!breakdown || totalCost <= 0) return null;
   const items = [
     { label: "Labor", cents: breakdown.laborCostCents, color: "bg-blue-500" },
@@ -1750,15 +2283,18 @@ function CostBreakdownBar({ breakdown, totalCost }: { breakdown: PropertyProfitD
   return (
     <div className="space-y-1">
       <div className="flex h-2 rounded-full overflow-hidden" data-testid="bar-cost-breakdown">
-        {items.map(item => {
+        {items.map((item) => {
           const pct = (item.cents / totalCost) * 100;
           if (pct < 1) return null;
           return <div key={item.label} className={`${item.color}`} style={{ width: `${pct}%` }} />;
         })}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-        {items.map(item => (
-          <span key={item.label} className={item.label === dominant.label ? "font-semibold text-foreground" : ""}>
+        {items.map((item) => (
+          <span
+            key={item.label}
+            className={item.label === dominant.label ? "font-semibold text-foreground" : ""}
+          >
             {item.label}: ${(item.cents / 100).toFixed(2)}
             {item.label === dominant.label && " (highest)"}
           </span>
@@ -1772,12 +2308,14 @@ function CostOverridesEditor({ contactId }: { contactId: string }) {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
 
-  const { data: overridesData, isLoading } = useQuery<{ costOverrides: {
-    techHourlyWageCents?: number;
-    burdenMultiplier?: number;
-    distanceFromNearestStopMiles?: number;
-    overheadAllocationCents?: number;
-  } | null }>({
+  const { data: overridesData, isLoading } = useQuery<{
+    costOverrides: {
+      techHourlyWageCents?: number;
+      burdenMultiplier?: number;
+      distanceFromNearestStopMiles?: number;
+      overheadAllocationCents?: number;
+    } | null;
+  }>({
     queryKey: [`/api/contacts/${contactId}/cost-overrides`],
   });
 
@@ -1790,11 +2328,16 @@ function CostOverridesEditor({ contactId }: { contactId: string }) {
     const o = overridesData?.costOverrides;
     setWage(o?.techHourlyWageCents !== undefined ? (o.techHourlyWageCents / 100).toFixed(2) : "");
     setBurden(o?.burdenMultiplier !== undefined ? String(o.burdenMultiplier) : "");
-    setDistance(o?.distanceFromNearestStopMiles !== undefined ? String(o.distanceFromNearestStopMiles) : "");
-    setOverhead(o?.overheadAllocationCents !== undefined ? (o.overheadAllocationCents / 100).toFixed(2) : "");
+    setDistance(
+      o?.distanceFromNearestStopMiles !== undefined ? String(o.distanceFromNearestStopMiles) : ""
+    );
+    setOverhead(
+      o?.overheadAllocationCents !== undefined ? (o.overheadAllocationCents / 100).toFixed(2) : ""
+    );
   }, [overridesData]);
 
-  const hasOverrides = overridesData?.costOverrides && Object.keys(overridesData.costOverrides).length > 0;
+  const hasOverrides =
+    overridesData?.costOverrides && Object.keys(overridesData.costOverrides).length > 0;
 
   const saveMutation = useMutation({
     mutationFn: async (body: Record<string, number | null>) => {
@@ -1804,7 +2347,10 @@ function CostOverridesEditor({ contactId }: { contactId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/contacts/${contactId}/cost-overrides`] });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
-      toast({ title: "Cost overrides saved", description: "Profitability will recalculate with your custom values." });
+      toast({
+        title: "Cost overrides saved",
+        description: "Profitability will recalculate with your custom values.",
+      });
     },
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
@@ -1816,16 +2362,20 @@ function CostOverridesEditor({ contactId }: { contactId: string }) {
     const overheadNum = overhead ? parseFloat(overhead) : NaN;
 
     if (wage && (isNaN(wageNum) || wageNum < 0)) {
-      toast({ title: "Invalid hourly wage", variant: "destructive" }); return;
+      toast({ title: "Invalid hourly wage", variant: "destructive" });
+      return;
     }
     if (burden && (isNaN(burdenNum) || burdenNum < 1 || burdenNum > 5)) {
-      toast({ title: "Burden multiplier must be between 1 and 5", variant: "destructive" }); return;
+      toast({ title: "Burden multiplier must be between 1 and 5", variant: "destructive" });
+      return;
     }
     if (distance && (isNaN(distanceNum) || distanceNum < 0)) {
-      toast({ title: "Invalid travel distance", variant: "destructive" }); return;
+      toast({ title: "Invalid travel distance", variant: "destructive" });
+      return;
     }
     if (overhead && (isNaN(overheadNum) || overheadNum < 0)) {
-      toast({ title: "Invalid overhead amount", variant: "destructive" }); return;
+      toast({ title: "Invalid overhead amount", variant: "destructive" });
+      return;
     }
 
     saveMutation.mutate({
@@ -1858,9 +2408,15 @@ function CostOverridesEditor({ contactId }: { contactId: string }) {
         className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground w-full"
         data-testid="button-toggle-cost-overrides"
       >
-        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-0" : "-rotate-90"}`} />
+        <ChevronDown
+          className={`h-4 w-4 transition-transform ${isOpen ? "rotate-0" : "-rotate-90"}`}
+        />
         Cost Overrides
-        {hasOverrides && <Badge variant="secondary" className="ml-2 text-xs">Custom</Badge>}
+        {hasOverrides && (
+          <Badge variant="secondary" className="ml-2 text-xs">
+            Custom
+          </Badge>
+        )}
       </button>
       {isOpen && (
         <div className="mt-3 space-y-3">
@@ -1920,12 +2476,23 @@ function CostOverridesEditor({ contactId }: { contactId: string }) {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-overrides">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={saveMutation.isPending}
+              data-testid="button-save-overrides"
+            >
               <Save className="h-3.5 w-3.5 mr-1" />
               {saveMutation.isPending ? "Saving..." : "Save"}
             </Button>
             {hasOverrides && (
-              <Button size="sm" variant="outline" onClick={handleReset} disabled={saveMutation.isPending} data-testid="button-reset-overrides">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleReset}
+                disabled={saveMutation.isPending}
+                data-testid="button-reset-overrides"
+              >
                 Reset to Defaults
               </Button>
             )}
@@ -1964,12 +2531,18 @@ interface AiSuggestion {
 
 function suggestionIcon(type: AiSuggestionType) {
   switch (type) {
-    case "route_day_move": return <MapPin className="h-4 w-4 shrink-0" />;
-    case "yard_size_mismatch": return <Ruler className="h-4 w-4 shrink-0" />;
-    case "price_increase": return <DollarSign className="h-4 w-4 shrink-0" />;
-    case "frequency_upgrade": return <Clock className="h-4 w-4 shrink-0" />;
-    case "add_nearby_customers": return <Users className="h-4 w-4 shrink-0" />;
-    case "no_path_to_profitability": return <AlertTriangle className="h-4 w-4 shrink-0" />;
+    case "route_day_move":
+      return <MapPin className="h-4 w-4 shrink-0" />;
+    case "yard_size_mismatch":
+      return <Ruler className="h-4 w-4 shrink-0" />;
+    case "price_increase":
+      return <DollarSign className="h-4 w-4 shrink-0" />;
+    case "frequency_upgrade":
+      return <Clock className="h-4 w-4 shrink-0" />;
+    case "add_nearby_customers":
+      return <Users className="h-4 w-4 shrink-0" />;
+    case "no_path_to_profitability":
+      return <AlertTriangle className="h-4 w-4 shrink-0" />;
   }
 }
 
@@ -2039,7 +2612,10 @@ function SuggestionActionRow({
 
   if (done) {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400" data-testid={`suggestion-action-done-${suggestion.type}`}>
+      <div
+        className="flex items-center gap-1.5 text-xs text-green-700 dark:text-green-400"
+        data-testid={`suggestion-action-done-${suggestion.type}`}
+      >
         <CheckCircle className="h-3.5 w-3.5" />
         <span>Applied successfully</span>
       </div>
@@ -2072,7 +2648,10 @@ function SuggestionActionRow({
           size="sm"
           variant="outline"
           className="h-7 text-xs"
-          onClick={() => { setShowPriceEdit(true); setPriceEditValue(suggestedDollars); }}
+          onClick={() => {
+            setShowPriceEdit(true);
+            setPriceEditValue(suggestedDollars);
+          }}
           data-testid="button-action-price-increase-open"
         >
           <DollarSign className="h-3 w-3 mr-1" />
@@ -2133,7 +2712,10 @@ function SuggestionActionRow({
           size="sm"
           variant="outline"
           className="h-7 text-xs"
-          onClick={() => { setShowYardEdit(true); setYardSizeValue(suggestedLabel); }}
+          onClick={() => {
+            setShowYardEdit(true);
+            setYardSizeValue(suggestedLabel);
+          }}
           data-testid="button-action-yard-size-open"
         >
           <Ruler className="h-3 w-3 mr-1" />
@@ -2149,7 +2731,11 @@ function SuggestionActionRow({
           </SelectTrigger>
           <SelectContent>
             {yardSizeOptions.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value} data-testid={`yard-size-option-${opt.value}`}>
+              <SelectItem
+                key={opt.value}
+                value={opt.value}
+                data-testid={`yard-size-option-${opt.value}`}
+              >
                 {opt.label}
               </SelectItem>
             ))}
@@ -2176,7 +2762,12 @@ function SuggestionActionRow({
   }
 
   if (suggestion.type === "frequency_upgrade" && ad.servicePlanId && ad.targetFrequency) {
-    const newFreqLabel = ad.targetFrequency === "weekly" ? "Weekly" : ad.targetFrequency === "biweekly" ? "Biweekly" : capitalize(ad.targetFrequency);
+    const newFreqLabel =
+      ad.targetFrequency === "weekly"
+        ? "Weekly"
+        : ad.targetFrequency === "biweekly"
+          ? "Biweekly"
+          : capitalize(ad.targetFrequency);
     return (
       <Button
         size="sm"
@@ -2206,14 +2797,15 @@ function AiSuggestionsPanel({ contactId }: { contactId: string }) {
   const { data, isLoading, isError, error } = useQuery<{ suggestions: AiSuggestion[] }>({
     queryKey: ["/api/profitability/customer", contactId, "suggestions", fetchKey],
     queryFn: () =>
-      fetch(`/api/profitability/customer/${contactId}/suggestions`, { credentials: "include" })
-        .then(async (r) => {
-          if (!r.ok) {
-            const body = await r.json().catch(() => ({}));
-            throw new Error(body.message || `Error ${r.status}`);
-          }
-          return r.json();
-        }),
+      fetch(`/api/profitability/customer/${contactId}/suggestions`, {
+        credentials: "include",
+      }).then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.message || `Error ${r.status}`);
+        }
+        return r.json();
+      }),
     staleTime: Infinity,
     retry: false,
   });
@@ -2235,12 +2827,20 @@ function AiSuggestionsPanel({ contactId }: { contactId: string }) {
   if (isError) {
     const msg = (error as Error)?.message ?? "Unknown error";
     return (
-      <div className="p-3 rounded-md bg-muted text-sm text-muted-foreground space-y-2" data-testid="ai-suggestions-error">
+      <div
+        className="p-3 rounded-md bg-muted text-sm text-muted-foreground space-y-2"
+        data-testid="ai-suggestions-error"
+      >
         <div className="flex items-center gap-2">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{msg}</span>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setFetchKey((k) => k + 1)} data-testid="button-retry-suggestions">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setFetchKey((k) => k + 1)}
+          data-testid="button-retry-suggestions"
+        >
           <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Try Again
         </Button>
       </div>
@@ -2252,7 +2852,9 @@ function AiSuggestionsPanel({ contactId }: { contactId: string }) {
   return (
     <div className="space-y-2" data-testid="ai-suggestions-panel">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">AI Suggestions</p>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          AI Suggestions
+        </p>
         <Button
           variant="ghost"
           size="sm"
@@ -2276,16 +2878,23 @@ function AiSuggestionsPanel({ contactId }: { contactId: string }) {
             }`}
             data-testid={`ai-suggestion-${s.type}-${i}`}
           >
-            <div className={`flex items-center gap-2 font-medium ${isNoPath ? "text-amber-800 dark:text-amber-300" : ""}`}>
+            <div
+              className={`flex items-center gap-2 font-medium ${isNoPath ? "text-amber-800 dark:text-amber-300" : ""}`}
+            >
               {suggestionIcon(s.type)}
               <span>{s.title}</span>
               {s.impactCents > 0 && (
-                <Badge variant="outline" className="ml-auto text-xs text-green-700 dark:text-green-400 border-green-300 dark:border-green-700">
+                <Badge
+                  variant="outline"
+                  className="ml-auto text-xs text-green-700 dark:text-green-400 border-green-300 dark:border-green-700"
+                >
                   +${(s.impactCents / 100).toFixed(0)}/mo
                 </Badge>
               )}
             </div>
-            <p className={`text-xs leading-relaxed ${isNoPath ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
+            <p
+              className={`text-xs leading-relaxed ${isNoPath ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+            >
               {s.explanation}
             </p>
             {!isNoPath && s.actionData && (
@@ -2302,7 +2911,13 @@ function AiSuggestionsPanel({ contactId }: { contactId: string }) {
   );
 }
 
-function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: string; contactStatus: string }) {
+function ProfitabilityIndicator({
+  contactId,
+  contactStatus,
+}: {
+  contactId: string;
+  contactStatus: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const { data, isLoading, isError } = useQuery<{
@@ -2343,16 +2958,25 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
   const centsToDisplay = (cents: number) => `$${(Math.abs(cents) / 100).toFixed(2)}`;
 
   const statusConfig: Record<string, { label: string; badgeClass: string }> = {
-    profitable: { label: "Profitable", badgeClass: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-    marginal: { label: "Marginal", badgeClass: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-    unprofitable: { label: "Unprofitable", badgeClass: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
+    profitable: {
+      label: "Profitable",
+      badgeClass: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+    },
+    marginal: {
+      label: "Marginal",
+      badgeClass: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+    },
+    unprofitable: {
+      label: "Unprofitable",
+      badgeClass: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+    },
   };
 
   const cfg = statusConfig[data.status] || statusConfig.profitable;
   const isUnprofitable = data.status === "unprofitable";
   const isMarginalOrWorse = data.status === "marginal" || data.status === "unprofitable";
 
-  const flaggedProperties = (data.properties || []).filter(p => p.profitMarginPct <= 15);
+  const flaggedProperties = (data.properties || []).filter((p) => p.profitMarginPct <= 15);
   const showBreakdowns = flaggedProperties.length > 0;
 
   return (
@@ -2367,7 +2991,11 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
           Profitability
         </CardTitle>
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="secondary" className={cfg.badgeClass} data-testid="badge-profitability-status">
+          <Badge
+            variant="secondary"
+            className={cfg.badgeClass}
+            data-testid="badge-profitability-status"
+          >
             {cfg.label}
           </Badge>
           <Button variant="ghost" size="sm" asChild data-testid="link-profitability-drilldown">
@@ -2381,20 +3009,28 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
         <div className="grid grid-cols-3 gap-3" data-testid="grid-profitability-metrics">
           <div className="text-center" data-testid="metric-profit-per-visit">
             <p className="text-xs text-muted-foreground">Profit/Visit</p>
-            <p className={`text-lg font-bold ${data.totalProfitPerVisitCents < 0 ? "text-destructive" : ""}`}>
-              {data.totalProfitPerVisitCents < 0 ? "-" : ""}{centsToDisplay(data.totalProfitPerVisitCents)}
+            <p
+              className={`text-lg font-bold ${data.totalProfitPerVisitCents < 0 ? "text-destructive" : ""}`}
+            >
+              {data.totalProfitPerVisitCents < 0 ? "-" : ""}
+              {centsToDisplay(data.totalProfitPerVisitCents)}
             </p>
           </div>
           <div className="text-center" data-testid="metric-margin">
             <p className="text-xs text-muted-foreground">Margin</p>
-            <p className={`text-lg font-bold ${data.profitMarginPct < 0 ? "text-destructive" : data.profitMarginPct <= 15 ? "text-yellow-600 dark:text-yellow-400" : ""}`}>
+            <p
+              className={`text-lg font-bold ${data.profitMarginPct < 0 ? "text-destructive" : data.profitMarginPct <= 15 ? "text-yellow-600 dark:text-yellow-400" : ""}`}
+            >
               {data.profitMarginPct.toFixed(1)}%
             </p>
           </div>
           <div className="text-center" data-testid="metric-monthly-profit">
             <p className="text-xs text-muted-foreground">Monthly Profit</p>
-            <p className={`text-lg font-bold ${data.monthlyProfitCents < 0 ? "text-destructive" : ""}`}>
-              {data.monthlyProfitCents < 0 ? "-" : ""}{centsToDisplay(data.monthlyProfitCents)}
+            <p
+              className={`text-lg font-bold ${data.monthlyProfitCents < 0 ? "text-destructive" : ""}`}
+            >
+              {data.monthlyProfitCents < 0 ? "-" : ""}
+              {centsToDisplay(data.monthlyProfitCents)}
             </p>
           </div>
         </div>
@@ -2402,7 +3038,7 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
         {showBreakdowns && flaggedProperties.length > 0 && (
           <div
             className={`p-3 rounded-md text-sm space-y-2 ${
-              flaggedProperties.some(p => p.profitMarginPct < 0)
+              flaggedProperties.some((p) => p.profitMarginPct < 0)
                 ? "bg-destructive/10 text-destructive"
                 : "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300"
             }`}
@@ -2411,8 +3047,11 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <p className="font-medium">
-                {flaggedProperties.length} {flaggedProperties.length === 1 ? "property" : "properties"}{" "}
-                {flaggedProperties.some(p => p.profitMarginPct < 0) ? "losing money" : "below target margin"}
+                {flaggedProperties.length}{" "}
+                {flaggedProperties.length === 1 ? "property" : "properties"}{" "}
+                {flaggedProperties.some((p) => p.profitMarginPct < 0)
+                  ? "losing money"
+                  : "below target margin"}
               </p>
               <button
                 onClick={() => setExpanded(!expanded)}
@@ -2423,39 +3062,49 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
               </button>
             </div>
 
-            {!expanded && flaggedProperties.slice(0, 2).map(p => (
-              <p key={p.propertyId} className="text-xs opacity-75">
-                {p.propertyAddress}: Current {centsToDisplay(p.revenuePerVisitCents)}/visit — Recommended {centsToDisplay(p.recommendedPriceCents)}/visit
-              </p>
-            ))}
+            {!expanded &&
+              flaggedProperties.slice(0, 2).map((p) => (
+                <p key={p.propertyId} className="text-xs opacity-75">
+                  {p.propertyAddress}: Current {centsToDisplay(p.revenuePerVisitCents)}/visit —
+                  Recommended {centsToDisplay(p.recommendedPriceCents)}/visit
+                </p>
+              ))}
 
-            {expanded && flaggedProperties.map(p => (
-              <div key={p.propertyId} className="border-t border-current/10 pt-2 space-y-1.5" data-testid={`breakdown-property-${p.propertyId}`}>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium">{p.propertyAddress}</p>
-                  <Badge variant={p.profitMarginPct < 0 ? "destructive" : "secondary"} className="text-xs">
-                    {p.profitMarginPct.toFixed(1)}% margin
-                  </Badge>
+            {expanded &&
+              flaggedProperties.map((p) => (
+                <div
+                  key={p.propertyId}
+                  className="border-t border-current/10 pt-2 space-y-1.5"
+                  data-testid={`breakdown-property-${p.propertyId}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium">{p.propertyAddress}</p>
+                    <Badge
+                      variant={p.profitMarginPct < 0 ? "destructive" : "secondary"}
+                      className="text-xs"
+                    >
+                      {p.profitMarginPct.toFixed(1)}% margin
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <span className="opacity-60">Current:</span>{" "}
+                      <span className="font-medium">{centsToDisplay(p.revenuePerVisitCents)}</span>
+                    </div>
+                    <div>
+                      <span className="opacity-60">Cost:</span>{" "}
+                      <span className="font-medium">{centsToDisplay(p.costPerVisitCents)}</span>
+                    </div>
+                    <div>
+                      <span className="opacity-60">Recommended:</span>{" "}
+                      <span className="font-medium">{centsToDisplay(p.recommendedPriceCents)}</span>
+                    </div>
+                  </div>
+                  {p.costBreakdown && (
+                    <CostBreakdownBar breakdown={p.costBreakdown} totalCost={p.costPerVisitCents} />
+                  )}
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <span className="opacity-60">Current:</span>{" "}
-                    <span className="font-medium">{centsToDisplay(p.revenuePerVisitCents)}</span>
-                  </div>
-                  <div>
-                    <span className="opacity-60">Cost:</span>{" "}
-                    <span className="font-medium">{centsToDisplay(p.costPerVisitCents)}</span>
-                  </div>
-                  <div>
-                    <span className="opacity-60">Recommended:</span>{" "}
-                    <span className="font-medium">{centsToDisplay(p.recommendedPriceCents)}</span>
-                  </div>
-                </div>
-                {p.costBreakdown && (
-                  <CostBreakdownBar breakdown={p.costBreakdown} totalCost={p.costPerVisitCents} />
-                )}
-              </div>
-            ))}
+              ))}
           </div>
         )}
 
@@ -2473,9 +3122,7 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
                 Get AI Suggestions
               </Button>
             ) : (
-              <AiSuggestionsPanel
-                contactId={contactId}
-              />
+              <AiSuggestionsPanel contactId={contactId} />
             )}
           </div>
         )}
@@ -2525,7 +3172,8 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
     per_month: "Per Month",
   };
 
-  const hasChanges = timing !== (contact.invoiceTiming || "after_service") ||
+  const hasChanges =
+    timing !== (contact.invoiceTiming || "after_service") ||
     frequency !== (contact.invoiceFrequency || "per_service") ||
     autoInvoice !== (contact.autoInvoiceEnabled !== false);
 
@@ -2554,11 +3202,15 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors min-h-[44px] min-w-[44px] ${autoInvoice ? "bg-green-600" : "bg-gray-300 dark:bg-gray-600"}`}
             data-testid="toggle-auto-invoice"
           >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoInvoice ? "translate-x-6" : "translate-x-1"}`} />
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoInvoice ? "translate-x-6" : "translate-x-1"}`}
+            />
           </button>
         </div>
 
-        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${!autoInvoice ? "opacity-50 pointer-events-none" : ""}`}>
+        <div
+          className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${!autoInvoice ? "opacity-50 pointer-events-none" : ""}`}
+        >
           <div>
             <Label className="text-sm text-muted-foreground">Invoice Timing</Label>
             <Select value={timing} onValueChange={setTiming}>
@@ -2607,7 +3259,9 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
           </Button>
         )}
         <p className="text-xs text-muted-foreground">
-          Current: {autoInvoice ? "Auto" : "Manual"} / {timingLabels[contact.invoiceTiming || "after_service"]} / {frequencyLabels[contact.invoiceFrequency || "per_service"]}
+          Current: {autoInvoice ? "Auto" : "Manual"} /{" "}
+          {timingLabels[contact.invoiceTiming || "after_service"]} /{" "}
+          {frequencyLabels[contact.invoiceFrequency || "per_service"]}
         </p>
       </CardContent>
     </Card>
@@ -2617,21 +3271,37 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
 function BillingOverrideSection({ contact, contactId }: { contact: Contact; contactId: string }) {
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(
-    !!(contact.billingCadenceOverride || contact.billingTriggerOverride || contact.paymentBehaviorOverride)
+    !!(
+      contact.billingCadenceOverride ||
+      contact.billingTriggerOverride ||
+      contact.paymentBehaviorOverride
+    )
   );
   const [cadence, setCadence] = useState(contact.billingCadenceOverride || "");
   const [trigger, setTrigger] = useState(contact.billingTriggerOverride || "");
   const [payment, setPayment] = useState(contact.paymentBehaviorOverride || "");
 
   useEffect(() => {
-    const hasOverride = !!(contact.billingCadenceOverride || contact.billingTriggerOverride || contact.paymentBehaviorOverride);
+    const hasOverride = !!(
+      contact.billingCadenceOverride ||
+      contact.billingTriggerOverride ||
+      contact.paymentBehaviorOverride
+    );
     setEnabled(hasOverride);
     setCadence(contact.billingCadenceOverride || "");
     setTrigger(contact.billingTriggerOverride || "");
     setPayment(contact.paymentBehaviorOverride || "");
-  }, [contact.billingCadenceOverride, contact.billingTriggerOverride, contact.paymentBehaviorOverride]);
+  }, [
+    contact.billingCadenceOverride,
+    contact.billingTriggerOverride,
+    contact.paymentBehaviorOverride,
+  ]);
 
-  const { data: company } = useQuery<{ billingCadence: string; billingTrigger: string; defaultPaymentBehavior: string }>({
+  const { data: company } = useQuery<{
+    billingCadence: string;
+    billingTrigger: string;
+    defaultPaymentBehavior: string;
+  }>({
     queryKey: ["/api/company"],
   });
 
@@ -2639,7 +3309,11 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
     queryKey: ["/api/service-billing-rules"],
   });
 
-  const { data: contactServicePlans = [] } = useQuery<(ServicePlan & { addOns?: { id: string; servicePricingId: string; name: string; price: string }[] })[]>({
+  const { data: contactServicePlans = [] } = useQuery<
+    (ServicePlan & {
+      addOns?: { id: string; servicePricingId: string; name: string; price: string }[];
+    })[]
+  >({
     queryKey: ["/api/service-plans" + `?contactId=${contactId}`],
     enabled: !!contactId,
   });
@@ -2652,23 +3326,43 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
   const systemTrigger = company?.billingTrigger || "after_job";
   const systemBehavior = company?.defaultPaymentBehavior || "send_invoice";
 
-  const contactPricingIds = Array.from(new Set(
-    contactServicePlans.flatMap(plan => (plan.addOns || []).map(a => a.servicePricingId))
-  ));
-  const matchedServiceRule = (serviceBillingRules as ServiceBillingRule[]).find(
-    r => contactPricingIds.includes(r.servicePricingId)
+  const contactPricingIds = Array.from(
+    new Set(
+      contactServicePlans.flatMap((plan) => (plan.addOns || []).map((a) => a.servicePricingId))
+    )
+  );
+  const matchedServiceRule = (serviceBillingRules as ServiceBillingRule[]).find((r) =>
+    contactPricingIds.includes(r.servicePricingId)
   );
   const matchedPricingItem = matchedServiceRule
-    ? (pricingItems as ServicePricingItem[]).find(p => p.id === matchedServiceRule.servicePricingId)
+    ? (pricingItems as ServicePricingItem[]).find(
+        (p) => p.id === matchedServiceRule.servicePricingId
+      )
     : undefined;
   const matchedServiceName = matchedPricingItem?.name;
 
-  const resolvedCadence = resolveBillingField(contact.billingCadenceOverride, matchedServiceRule?.billingCadence, systemCadence);
-  const resolvedTrigger = resolveBillingField(contact.billingTriggerOverride, matchedServiceRule?.billingTrigger, systemTrigger);
-  const resolvedPayment = resolveBillingField(contact.paymentBehaviorOverride, matchedServiceRule?.paymentBehavior, systemBehavior);
+  const resolvedCadence = resolveBillingField(
+    contact.billingCadenceOverride,
+    matchedServiceRule?.billingCadence,
+    systemCadence
+  );
+  const resolvedTrigger = resolveBillingField(
+    contact.billingTriggerOverride,
+    matchedServiceRule?.billingTrigger,
+    systemTrigger
+  );
+  const resolvedPayment = resolveBillingField(
+    contact.paymentBehaviorOverride,
+    matchedServiceRule?.paymentBehavior,
+    systemBehavior
+  );
 
   const saveMutation = useMutation({
-    mutationFn: async (data: { billingCadenceOverride: string | null; billingTriggerOverride: string | null; paymentBehaviorOverride: string | null }) => {
+    mutationFn: async (data: {
+      billingCadenceOverride: string | null;
+      billingTriggerOverride: string | null;
+      paymentBehaviorOverride: string | null;
+    }) => {
       await apiRequest("PATCH", `/api/contacts/${contactId}`, data);
     },
     onSuccess: () => {
@@ -2697,11 +3391,11 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
     });
   };
 
-  const hasChanges = enabled && (
-    cadence !== (contact.billingCadenceOverride || "") ||
-    trigger !== (contact.billingTriggerOverride || "") ||
-    payment !== (contact.paymentBehaviorOverride || "")
-  );
+  const hasChanges =
+    enabled &&
+    (cadence !== (contact.billingCadenceOverride || "") ||
+      trigger !== (contact.billingTriggerOverride || "") ||
+      payment !== (contact.paymentBehaviorOverride || ""));
 
   return (
     <Card data-testid="section-contact-billing-override">
@@ -2709,7 +3403,11 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
         <div>
           <CardTitle className="text-lg flex items-center gap-2">
             <Receipt className="h-5 w-5" /> Billing Override
-            {enabled && <Badge variant="outline" className="text-xs">Override</Badge>}
+            {enabled && (
+              <Badge variant="outline" className="text-xs">
+                Override
+              </Badge>
+            )}
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-0.5">
             {enabled
@@ -2727,10 +3425,30 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
       <CardContent className="space-y-3">
         {!enabled ? (
           <div className="space-y-1.5">
-            <p className="text-xs text-muted-foreground font-medium mb-2">Resolved billing settings (inherited):</p>
-            <BillingRuleInheritance label="Cadence" value={resolvedCadence.value} labels={BILLING_CADENCE_LABELS} origin={resolvedCadence.origin} sourceName={resolvedCadence.origin === "service" ? matchedServiceName : undefined} />
-            <BillingRuleInheritance label="Trigger" value={resolvedTrigger.value} labels={BILLING_TRIGGER_LABELS} origin={resolvedTrigger.origin} sourceName={resolvedTrigger.origin === "service" ? matchedServiceName : undefined} />
-            <BillingRuleInheritance label="Payment" value={resolvedPayment.value} labels={PAYMENT_BEHAVIOR_LABELS} origin={resolvedPayment.origin} sourceName={resolvedPayment.origin === "service" ? matchedServiceName : undefined} />
+            <p className="text-xs text-muted-foreground font-medium mb-2">
+              Resolved billing settings (inherited):
+            </p>
+            <BillingRuleInheritance
+              label="Cadence"
+              value={resolvedCadence.value}
+              labels={BILLING_CADENCE_LABELS}
+              origin={resolvedCadence.origin}
+              sourceName={resolvedCadence.origin === "service" ? matchedServiceName : undefined}
+            />
+            <BillingRuleInheritance
+              label="Trigger"
+              value={resolvedTrigger.value}
+              labels={BILLING_TRIGGER_LABELS}
+              origin={resolvedTrigger.origin}
+              sourceName={resolvedTrigger.origin === "service" ? matchedServiceName : undefined}
+            />
+            <BillingRuleInheritance
+              label="Payment"
+              value={resolvedPayment.value}
+              labels={PAYMENT_BEHAVIOR_LABELS}
+              origin={resolvedPayment.origin}
+              sourceName={resolvedPayment.origin === "service" ? matchedServiceName : undefined}
+            />
           </div>
         ) : (
           <div className="space-y-3">
@@ -2742,7 +3460,11 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(BILLING_CADENCE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                    {Object.entries(BILLING_CADENCE_LABELS).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>
+                        {l}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -2753,7 +3475,11 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(BILLING_TRIGGER_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                    {Object.entries(BILLING_TRIGGER_LABELS).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>
+                        {l}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -2764,13 +3490,22 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(PAYMENT_BEHAVIOR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                    {Object.entries(PAYMENT_BEHAVIOR_LABELS).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>
+                        {l}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
             {hasChanges && (
-              <Button size="sm" onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-billing-override">
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={saveMutation.isPending}
+                data-testid="button-save-billing-override"
+              >
                 <Save className="mr-1 h-4 w-4" />
                 {saveMutation.isPending ? "Saving..." : "Save Override"}
               </Button>
@@ -2785,7 +3520,9 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
 const servicePlanFormSchema = z.object({
   propertyId: z.string().min(1, "Property is required"),
   frequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]),
-  dayOfWeek: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
+  dayOfWeek: z
+    .enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"])
+    .optional(),
   pricePerVisit: z.string().min(1, "Price is required"),
   discount: z.string().optional(),
   startDate: z.string().min(1, "Start date is required"),
@@ -2805,7 +3542,15 @@ const servicePlanFormSchema = z.object({
 
 type ServicePlanFormValues = z.infer<typeof servicePlanFormSchema>;
 
-const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+const daysOfWeek = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
 const frequencyLabelsMap: Record<string, string> = {
   weekly: "Weekly",
   biweekly: "Biweekly",
@@ -2885,7 +3630,9 @@ function useInlinePriceCalc(
       }
     }
 
-    const currentPriceCents = debouncedPrice ? Math.round(parseFloat(debouncedPrice) * 100) : undefined;
+    const currentPriceCents = debouncedPrice
+      ? Math.round(parseFloat(debouncedPrice) * 100)
+      : undefined;
 
     const body = {
       yardSizeAcres,
@@ -2935,7 +3682,10 @@ function InlinePriceSuggestion({
 }) {
   if (calcLoading) {
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1" data-testid="text-calc-loading">
+      <div
+        className="flex items-center gap-2 text-xs text-muted-foreground mt-1"
+        data-testid="text-calc-loading"
+      >
         <Calculator className="h-3.5 w-3.5 animate-spin" />
         Calculating suggested price...
       </div>
@@ -2971,8 +3721,7 @@ function InlinePriceSuggestion({
           onClick={() => onUsePrice(recommendedDollars)}
           data-testid="badge-price-recommended"
         >
-          <TrendingUp className="h-3 w-3 mr-1" />
-          ${recommendedDollars}
+          <TrendingUp className="h-3 w-3 mr-1" />${recommendedDollars}
         </Badge>
         <Badge
           variant="outline"
@@ -2985,12 +3734,17 @@ function InlinePriceSuggestion({
       </div>
 
       {isBelowMinimum && (
-        <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/20 p-2" data-testid="alert-profit-warning">
+        <div
+          className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/20 p-2"
+          data-testid="alert-profit-warning"
+        >
           <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
           <div className="text-xs">
             <p className="font-medium text-destructive">Below cost</p>
             <p className="text-muted-foreground">
-              Entered price ${pricePerVisit} is below the estimated minimum cost of ${minimumDollars}/visit. You may lose ${((calcResult.minimumPriceCents - enteredCents) / 100).toFixed(2)} per visit.
+              Entered price ${pricePerVisit} is below the estimated minimum cost of $
+              {minimumDollars}/visit. You may lose $
+              {((calcResult.minimumPriceCents - enteredCents) / 100).toFixed(2)} per visit.
             </p>
           </div>
         </div>
@@ -2998,14 +3752,21 @@ function InlinePriceSuggestion({
 
       {calcResult.profitWarning && enteredCents > 0 && !isBelowMinimum && (
         <p className="text-xs text-muted-foreground" data-testid="text-profit-info">
-          {calcResult.profitWarning.message} (${(calcResult.profitWarning.profitPerHourCents / 100).toFixed(2)}/hr)
+          {calcResult.profitWarning.message} ($
+          {(calcResult.profitWarning.profitPerHourCents / 100).toFixed(2)}/hr)
         </p>
       )}
     </div>
   );
 }
 
-function RouteAssignmentCard({ servicePlans, routes }: { servicePlans: ServicePlan[] | undefined; routes: Route[] | undefined }) {
+function RouteAssignmentCard({
+  servicePlans,
+  routes,
+}: {
+  servicePlans: ServicePlan[] | undefined;
+  routes: Route[] | undefined;
+}) {
   const routeMap = useMemo(() => {
     const m = new Map<string, Route>();
     for (const r of routes || []) m.set(r.id, r);
@@ -3025,7 +3786,8 @@ function RouteAssignmentCard({ servicePlans, routes }: { servicePlans: ServicePl
     return Array.from(seen.values());
   }, [servicePlans, routeMap]);
 
-  const dayLabel = (d: string) => d === "tbd" ? "TBD" : d.charAt(0).toUpperCase() + d.slice(1) + "s";
+  const dayLabel = (d: string) =>
+    d === "tbd" ? "TBD" : d.charAt(0).toUpperCase() + d.slice(1) + "s";
 
   return (
     <Card>
@@ -3041,20 +3803,29 @@ function RouteAssignmentCard({ servicePlans, routes }: { servicePlans: ServicePl
         ) : (
           <div className="space-y-3">
             {assignedRoutes.map(({ route, plans }) => {
-              const stopOrders = plans.map(p => p.stopOrder).filter(s => s != null).sort((a, b) => (a ?? 0) - (b ?? 0));
+              const stopOrders = plans
+                .map((p) => p.stopOrder)
+                .filter((s) => s != null)
+                .sort((a, b) => (a ?? 0) - (b ?? 0));
               return (
-                <div key={route.id} className="flex items-center gap-3" data-testid={`route-assignment-${route.id}`}>
+                <div
+                  key={route.id}
+                  className="flex items-center gap-3"
+                  data-testid={`route-assignment-${route.id}`}
+                >
                   <div
                     className="h-3 w-3 rounded-full flex-shrink-0 border border-black/10"
                     style={{ backgroundColor: route.color || "#3b82f6" }}
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium leading-none truncate">{route.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{dayLabel(route.dayOfWeek ?? "")}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {dayLabel(route.dayOfWeek ?? "")}
+                    </p>
                   </div>
                   {stopOrders.length > 0 && (
                     <Badge variant="outline" className="text-xs font-normal shrink-0">
-                      Stop {stopOrders.map(s => `#${s}`).join(", ")}
+                      Stop {stopOrders.map((s) => `#${s}`).join(", ")}
                     </Badge>
                   )}
                 </div>
@@ -3067,13 +3838,23 @@ function RouteAssignmentCard({ servicePlans, routes }: { servicePlans: ServicePl
   );
 }
 
-function ServicePlansCard({ contactId, properties }: { contactId: string; properties: Property[] }) {
+function ServicePlansCard({
+  contactId,
+  properties,
+}: {
+  contactId: string;
+  properties: Property[];
+}) {
   const tz = useCompanyTimezone();
   const { toast } = useToast();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<ServicePlan | null>(null);
 
-  const { data: servicePlans } = useQuery<(ServicePlan & { addOns?: { id: string; servicePricingId: string; name: string; price: string }[] })[]>({
+  const { data: servicePlans } = useQuery<
+    (ServicePlan & {
+      addOns?: { id: string; servicePricingId: string; name: string; price: string }[];
+    })[]
+  >({
     queryKey: ["/api/service-plans" + `?contactId=${contactId}`],
     enabled: !!contactId,
   });
@@ -3082,7 +3863,9 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
     queryKey: ["/api/pricing"],
   });
 
-  const { data: team } = useQuery<{ id: string; firstName: string; lastName: string; role: string }[]>({
+  const { data: team } = useQuery<
+    { id: string; firstName: string; lastName: string; role: string }[]
+  >({
     queryKey: ["/api/company/team"],
   });
 
@@ -3091,17 +3874,20 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
   const [createTemplateId, setCreateTemplateId] = useState<string>("");
   const [editTemplateId, setEditTemplateId] = useState<string>("");
 
-  const basePricingForFreq = useCallback((freq: string) => {
-    if (!pricingItems) return [];
-    const categoryMap: Record<string, string> = {
-      weekly: "recurring_service",
-      biweekly: "recurring_service",
-      monthly: "one_time_service",
-      onetime: "one_time_service",
-    };
-    const cat = categoryMap[freq] || "recurring_service";
-    return pricingItems.filter((p) => p.category === cat && p.isActive);
-  }, [pricingItems]);
+  const basePricingForFreq = useCallback(
+    (freq: string) => {
+      if (!pricingItems) return [];
+      const categoryMap: Record<string, string> = {
+        weekly: "recurring_service",
+        biweekly: "recurring_service",
+        monthly: "one_time_service",
+        onetime: "one_time_service",
+      };
+      const cat = categoryMap[freq] || "recurring_service";
+      return pricingItems.filter((p) => p.category === cat && p.isActive);
+    },
+    [pricingItems]
+  );
 
   const addOnPricing = useMemo(() => {
     if (!pricingItems) return [];
@@ -3137,7 +3923,6 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
     },
   });
 
-
   useEffect(() => {
     if (createDialogOpen && properties.length === 1) {
       createForm.setValue("propertyId", properties[0].id);
@@ -3162,18 +3947,19 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
         visitInstructions: editingPlan.visitInstructions || "",
         assignedUserId: editingPlan.assignedUserId || "",
         endsAfterCount: editingPlan.endsAfterCount || undefined,
-        endsAfterUnit: (editingPlan.endsAfterUnit || undefined) as ServicePlanFormValues["endsAfterUnit"],
+        endsAfterUnit: (editingPlan.endsAfterUnit ||
+          undefined) as ServicePlanFormValues["endsAfterUnit"],
         endDate: editingPlan.endDate || "",
         isStopOnly: editingPlan.isStopOnly || false,
       });
-      const planWithAddOns = servicePlans?.find(sp => sp.id === editingPlan.id);
-      setEditSelectedAddOns(planWithAddOns?.addOns?.map(a => a.servicePricingId) || []);
+      const planWithAddOns = servicePlans?.find((sp) => sp.id === editingPlan.id);
+      setEditSelectedAddOns(planWithAddOns?.addOns?.map((a) => a.servicePricingId) || []);
     }
   }, [editingPlan, editForm, servicePlans]);
 
   const buildAddOnsPayload = (selectedIds: string[]) => {
-    return selectedIds.map(id => {
-      const item = addOnPricing.find(p => p.id === id);
+    return selectedIds.map((id) => {
+      const item = addOnPricing.find((p) => p.id === id);
       return { servicePricingId: id, name: item?.name || "", price: item?.basePrice || "0" };
     });
   };
@@ -3183,14 +3969,14 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
     const isOneOff = rest.jobType === "one_off";
     return {
       ...rest,
-      frequency: isOneOff ? "onetime" as const : rest.frequency,
+      frequency: isOneOff ? ("onetime" as const) : rest.frequency,
       discount: rest.discount ? rest.discount : null,
-      assignedUserId: (assignedUserId && assignedUserId !== "none") ? assignedUserId : null,
-      startTime: rest.anytime ? null : (rest.startTime || null),
-      endTime: rest.anytime ? null : (rest.endTime || null),
-      endsAfterCount: isOneOff ? null : (rest.endsAfterCount || null),
-      endsAfterUnit: isOneOff ? null : (rest.endsAfterUnit || null),
-      endDate: isOneOff ? null : (rest.endDate || null),
+      assignedUserId: assignedUserId && assignedUserId !== "none" ? assignedUserId : null,
+      startTime: rest.anytime ? null : rest.startTime || null,
+      endTime: rest.anytime ? null : rest.endTime || null,
+      endsAfterCount: isOneOff ? null : rest.endsAfterCount || null,
+      endsAfterUnit: isOneOff ? null : rest.endsAfterUnit || null,
+      endDate: isOneOff ? null : rest.endDate || null,
     };
   };
 
@@ -3204,11 +3990,16 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/service-plans" + `?contactId=${contactId}`],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
       toast({ title: "Job created" });
       setCreateDialogOpen(false);
@@ -3229,11 +4020,16 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/service-plans" + `?contactId=${contactId}`],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
       toast({ title: "Job updated" });
       setEditingPlan(null);
@@ -3249,11 +4045,16 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
       await apiRequest("DELETE", `/api/service-plans/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/service-plans" + `?contactId=${contactId}`],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
       toast({ title: "Job deleted" });
     },
@@ -3270,10 +4071,15 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/service-plans" + `?contactId=${contactId}`],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
       toast({ title: "Job cancelled" });
     },
     onError: (error: Error) => {
@@ -3289,10 +4095,15 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans" + `?contactId=${contactId}`] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/service-plans" + `?contactId=${contactId}`],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
       toast({ title: "Job updated" });
     },
     onError: (error: Error) => {
@@ -3300,7 +4111,10 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
     },
   });
 
-  const handlePricingSelect = (pricingId: string, form: ReturnType<typeof useForm<ServicePlanFormValues>>) => {
+  const handlePricingSelect = (
+    pricingId: string,
+    form: ReturnType<typeof useForm<ServicePlanFormValues>>
+  ) => {
     const item = pricingItems?.find((p) => p.id === pricingId);
     if (item) {
       form.setValue("pricePerVisit", item.basePrice);
@@ -3316,10 +4130,16 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
   const editPrice = editForm.watch("pricePerVisit");
 
   const { calcResult: createCalcResult, calcLoading: createCalcLoading } = useInlinePriceCalc(
-    createPropertyId, createFrequency, createPrice, properties
+    createPropertyId,
+    createFrequency,
+    createPrice,
+    properties
   );
   const { calcResult: editCalcResult, calcLoading: editCalcLoading } = useInlinePriceCalc(
-    editPropertyId, editFrequency, editPrice, properties
+    editPropertyId,
+    editFrequency,
+    editPrice,
+    properties
   );
 
   const prevCreateFrequencyRef = useRef(createFrequency);
@@ -3333,7 +4153,11 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
         createForm.setValue("pricePerVisit", freqTemplates[0].basePrice);
       }
       setCreateTemplateId("");
-    } else if (!frequencyChanged && basePricingForFreq(createFrequency).length > 0 && !createForm.getValues("pricePerVisit")) {
+    } else if (
+      !frequencyChanged &&
+      basePricingForFreq(createFrequency).length > 0 &&
+      !createForm.getValues("pricePerVisit")
+    ) {
       createForm.setValue("pricePerVisit", basePricingForFreq(createFrequency)[0].basePrice);
     }
   }, [createFrequency, basePricingForFreq, createDialogOpen, createForm]);
@@ -3357,7 +4181,7 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
     const anytimeVal = form.watch("anytime");
     const templates = basePricingForFreq(freq);
     const addOnsTotal = (selectedAddOns || []).reduce((sum, id) => {
-      const item = addOnPricing.find(p => p.id === id);
+      const item = addOnPricing.find((p) => p.id === id);
       return sum + parseFloat(item?.basePrice || "0");
     }, 0);
     const totalPerVisit = parseFloat(basePrice || "0") + addOnsTotal;
@@ -3396,58 +4220,104 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
               </Button>
             </div>
           </div>
-          <FormField control={form.control} name="serviceName" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Service Name (optional)</FormLabel>
-              <FormControl><Input placeholder="e.g. Yard Cleanup" {...field} data-testid="input-plan-service-name" /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="propertyId" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Property</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl><SelectTrigger data-testid="select-plan-property"><SelectValue placeholder={properties.length === 0 ? "No properties" : "Select property"} /></SelectTrigger></FormControl>
-                <SelectContent>
-                  {properties.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.streetAddress}, {p.city}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )} />
-          {jobType !== "one_off" && (
-            <FormField control={form.control} name="frequency" render={({ field }) => (
+          <FormField
+            control={form.control}
+            name="serviceName"
+            render={({ field }) => (
               <FormItem>
-                <FormLabel>Frequency</FormLabel>
-                <Select onValueChange={(v) => { field.onChange(v); setSelectedTemplateId?.(""); }} value={field.value}>
-                  <FormControl><SelectTrigger data-testid="select-plan-frequency"><SelectValue /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="biweekly">Biweekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormLabel>Service Name (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="e.g. Yard Cleanup"
+                    {...field}
+                    data-testid="input-plan-service-name"
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
-            )} />
-          )}
-          {jobType !== "one_off" && (
-            <FormField control={form.control} name="dayOfWeek" render={({ field }) => (
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="propertyId"
+            render={({ field }) => (
               <FormItem>
-                <FormLabel>Day of Week</FormLabel>
+                <FormLabel>Property</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger data-testid="select-plan-day"><SelectValue /></SelectTrigger></FormControl>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-plan-property">
+                      <SelectValue
+                        placeholder={properties.length === 0 ? "No properties" : "Select property"}
+                      />
+                    </SelectTrigger>
+                  </FormControl>
                   <SelectContent>
-                    {daysOfWeek.map((d) => (
-                      <SelectItem key={d} value={d} className="capitalize">{d}</SelectItem>
+                    {properties.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.streetAddress}, {p.city}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <FormMessage />
               </FormItem>
-            )} />
+            )}
+          />
+          {jobType !== "one_off" && (
+            <FormField
+              control={form.control}
+              name="frequency"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Frequency</FormLabel>
+                  <Select
+                    onValueChange={(v) => {
+                      field.onChange(v);
+                      setSelectedTemplateId?.("");
+                    }}
+                    value={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger data-testid="select-plan-frequency">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="biweekly">Biweekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+          {jobType !== "one_off" && (
+            <FormField
+              control={form.control}
+              name="dayOfWeek"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Day of Week</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-plan-day">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {daysOfWeek.map((d) => (
+                        <SelectItem key={d} value={d} className="capitalize">
+                          {d}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           )}
           {templates.length > 0 && (
             <div>
@@ -3464,25 +4334,33 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
                 </SelectTrigger>
                 <SelectContent>
                   {templates.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name} - ${p.basePrice}</SelectItem>
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} - ${p.basePrice}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           )}
-          <FormField control={form.control} name="pricePerVisit" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Base Price Per Visit ($)</FormLabel>
-              <FormControl><Input type="number" step="0.01" {...field} data-testid="input-plan-price" /></FormControl>
-              <InlinePriceSuggestion
-                calcResult={calcResult || null}
-                calcLoading={calcLoading || false}
-                pricePerVisit={field.value || ""}
-                onUsePrice={(price) => form.setValue("pricePerVisit", price)}
-              />
-              <FormMessage />
-            </FormItem>
-          )} />
+          <FormField
+            control={form.control}
+            name="pricePerVisit"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Base Price Per Visit ($)</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.01" {...field} data-testid="input-plan-price" />
+                </FormControl>
+                <InlinePriceSuggestion
+                  calcResult={calcResult || null}
+                  calcLoading={calcLoading || false}
+                  pricePerVisit={field.value || ""}
+                  onUsePrice={(price) => form.setValue("pricePerVisit", price)}
+                />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           {addOnPricing.length > 0 && (
             <div className="space-y-2">
               <Label className="text-sm">Add-Ons (per visit)</Label>
@@ -3490,7 +4368,11 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
                 {addOnPricing.map((addon) => {
                   const checked = (selectedAddOns || []).includes(addon.id);
                   return (
-                    <label key={addon.id} className="flex items-center gap-2 cursor-pointer" data-testid={`addon-${addon.id}`}>
+                    <label
+                      key={addon.id}
+                      className="flex items-center gap-2 cursor-pointer"
+                      data-testid={`addon-${addon.id}`}
+                    >
                       <input
                         type="checkbox"
                         checked={checked}
@@ -3498,7 +4380,7 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
                           if (!setSelectedAddOns) return;
                           setSelectedAddOns(
                             checked
-                              ? (selectedAddOns || []).filter(id => id !== addon.id)
+                              ? (selectedAddOns || []).filter((id) => id !== addon.id)
                               : [...(selectedAddOns || []), addon.id]
                           );
                         }}
@@ -3513,13 +4395,16 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
             </div>
           )}
           {addOnsTotal > 0 && (
-            <div className="bg-muted/50 rounded-md p-3 text-sm space-y-1" data-testid="price-breakdown">
+            <div
+              className="bg-muted/50 rounded-md p-3 text-sm space-y-1"
+              data-testid="price-breakdown"
+            >
               <div className="flex justify-between">
                 <span>Base price</span>
                 <span>${parseFloat(basePrice || "0").toFixed(2)}</span>
               </div>
-              {(selectedAddOns || []).map(id => {
-                const item = addOnPricing.find(p => p.id === id);
+              {(selectedAddOns || []).map((id) => {
+                const item = addOnPricing.find((p) => p.id === id);
                 return item ? (
                   <div key={id} className="flex justify-between text-muted-foreground">
                     <span>+ {item.name}</span>
@@ -3533,20 +4418,40 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
               </div>
             </div>
           )}
-          <FormField control={form.control} name="startDate" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Start Date</FormLabel>
-              <FormControl><Input type="date" {...field} data-testid="input-plan-start-date" /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="discount" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Discount % (optional)</FormLabel>
-              <FormControl><Input type="number" step="0.01" min="0" max="100" placeholder="e.g. 10" {...field} data-testid="input-plan-discount" /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
+          <FormField
+            control={form.control}
+            name="startDate"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Start Date</FormLabel>
+                <FormControl>
+                  <Input type="date" {...field} data-testid="input-plan-start-date" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="discount"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Discount % (optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder="e.g. 10"
+                    {...field}
+                    data-testid="input-plan-discount"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <div className="space-y-3 rounded-md border p-3">
             <Label className="text-sm font-semibold">Time Window</Label>
             <div className="flex items-center gap-2">
@@ -3561,100 +4466,220 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
             </div>
             {!anytimeVal && (
               <div className="flex gap-2">
-                <FormField control={form.control} name="startTime" render={({ field }) => (
-                  <FormItem className="flex-1">
-                    <FormLabel>Start</FormLabel>
-                    <FormControl><Input type="time" {...field} data-testid="input-plan-start-time" /></FormControl>
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="endTime" render={({ field }) => (
-                  <FormItem className="flex-1">
-                    <FormLabel>End</FormLabel>
-                    <FormControl><Input type="time" {...field} data-testid="input-plan-end-time" /></FormControl>
-                  </FormItem>
-                )} />
+                <FormField
+                  control={form.control}
+                  name="startTime"
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel>Start</FormLabel>
+                      <FormControl>
+                        <Input type="time" {...field} data-testid="input-plan-start-time" />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="endTime"
+                  render={({ field }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel>End</FormLabel>
+                      <FormControl>
+                        <Input type="time" {...field} data-testid="input-plan-end-time" />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
               </div>
             )}
           </div>
-          <FormField control={form.control} name="assignedUserId" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Assigned Team Member (optional)</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl><SelectTrigger data-testid="select-plan-assigned-user"><SelectValue placeholder="Unassigned" /></SelectTrigger></FormControl>
-                <SelectContent>
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {team?.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.firstName} {m.lastName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )} />
-          <FormField control={form.control} name="visitInstructions" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Visit Instructions (optional)</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Special instructions for this job..." {...field} rows={2} data-testid="input-plan-visit-instructions" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
-          {jobType === "recurring" && (() => {
-            const endMode = form.watch("endsAfterCount") ? "count" : form.watch("endDate") ? "date" : "none";
-            return (
-              <div className="space-y-3 rounded-md border p-3">
-                <Label className="text-sm font-semibold">End Conditions (optional)</Label>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" variant={endMode === "none" ? "default" : "outline"} onClick={() => { form.setValue("endsAfterCount", undefined); form.setValue("endsAfterUnit", undefined); form.setValue("endDate", ""); }} data-testid="button-plan-end-none">
-                    No End
-                  </Button>
-                  <Button type="button" size="sm" variant={endMode === "count" ? "default" : "outline"} onClick={() => { form.setValue("endsAfterCount", form.getValues("endsAfterCount") || 12); form.setValue("endsAfterUnit", form.getValues("endsAfterUnit") || "months"); form.setValue("endDate", ""); }} data-testid="button-plan-end-count">
-                    After Count
-                  </Button>
-                  <Button type="button" size="sm" variant={endMode === "date" ? "default" : "outline"} onClick={() => { form.setValue("endsAfterCount", undefined); form.setValue("endsAfterUnit", undefined); form.setValue("endDate", form.getValues("endDate") || toLocalDateString(new Date(), tz)); }} data-testid="button-plan-end-date">
-                    On Date
-                  </Button>
-                </div>
-                {endMode === "count" && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <FormField control={form.control} name="endsAfterCount" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Count</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={1} placeholder="e.g. 12" value={field.value ?? ""} onChange={e => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)} data-testid="input-plan-ends-after-count" />
-                        </FormControl>
-                      </FormItem>
-                    )} />
-                    <FormField control={form.control} name="endsAfterUnit" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Unit</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || "months"}>
-                          <FormControl><SelectTrigger data-testid="select-plan-ends-after-unit"><SelectValue /></SelectTrigger></FormControl>
-                          <SelectContent>
-                            <SelectItem value="days">Days</SelectItem>
-                            <SelectItem value="weeks">Weeks</SelectItem>
-                            <SelectItem value="months">Months</SelectItem>
-                            <SelectItem value="years">Years</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )} />
+          <FormField
+            control={form.control}
+            name="assignedUserId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Assigned Team Member (optional)</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-plan-assigned-user">
+                      <SelectValue placeholder="Unassigned" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {team?.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.firstName} {m.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="visitInstructions"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Visit Instructions (optional)</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Special instructions for this job..."
+                    {...field}
+                    rows={2}
+                    data-testid="input-plan-visit-instructions"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          {jobType === "recurring" &&
+            (() => {
+              const endMode = form.watch("endsAfterCount")
+                ? "count"
+                : form.watch("endDate")
+                  ? "date"
+                  : "none";
+              return (
+                <div className="space-y-3 rounded-md border p-3">
+                  <Label className="text-sm font-semibold">End Conditions (optional)</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={endMode === "none" ? "default" : "outline"}
+                      onClick={() => {
+                        form.setValue("endsAfterCount", undefined);
+                        form.setValue("endsAfterUnit", undefined);
+                        form.setValue("endDate", "");
+                      }}
+                      data-testid="button-plan-end-none"
+                    >
+                      No End
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={endMode === "count" ? "default" : "outline"}
+                      onClick={() => {
+                        form.setValue("endsAfterCount", form.getValues("endsAfterCount") || 12);
+                        form.setValue("endsAfterUnit", form.getValues("endsAfterUnit") || "months");
+                        form.setValue("endDate", "");
+                      }}
+                      data-testid="button-plan-end-count"
+                    >
+                      After Count
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={endMode === "date" ? "default" : "outline"}
+                      onClick={() => {
+                        form.setValue("endsAfterCount", undefined);
+                        form.setValue("endsAfterUnit", undefined);
+                        form.setValue(
+                          "endDate",
+                          form.getValues("endDate") || toLocalDateString(new Date(), tz)
+                        );
+                      }}
+                      data-testid="button-plan-end-date"
+                    >
+                      On Date
+                    </Button>
                   </div>
-                )}
-                {endMode === "date" && (
-                  <FormField control={form.control} name="endDate" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>End Date</FormLabel>
-                      <FormControl><Input type="date" {...field} data-testid="input-plan-end-date" /></FormControl>
-                    </FormItem>
-                  )} />
-                )}
-              </div>
-            );
-          })()}
+                  {endMode === "count" && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField
+                        control={form.control}
+                        name="endsAfterCount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Count</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={1}
+                                placeholder="e.g. 12"
+                                value={field.value ?? ""}
+                                onChange={(e) =>
+                                  field.onChange(
+                                    e.target.value ? parseInt(e.target.value) : undefined
+                                  )
+                                }
+                                data-testid="input-plan-ends-after-count"
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="endsAfterUnit"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Unit</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || "months"}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-plan-ends-after-unit">
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="days">Days</SelectItem>
+                                <SelectItem value="weeks">Weeks</SelectItem>
+                                <SelectItem value="months">Months</SelectItem>
+                                <SelectItem value="years">Years</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                  {endMode === "date" && (
+                    <FormField
+                      control={form.control}
+                      name="endDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>End Date</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} data-testid="input-plan-end-date" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+              );
+            })()}
           {isEdit && (
-            <FormField control={form.control} name="isActive" render={({ field }) => (
+            <FormField
+              control={form.control}
+              name="isActive"
+              render={({ field }) => (
+                <FormItem className="flex items-center gap-2">
+                  <FormControl>
+                    <input
+                      type="checkbox"
+                      checked={!!field.value}
+                      onChange={(e) => field.onChange(e.target.checked)}
+                      className="accent-primary"
+                      data-testid="checkbox-plan-active"
+                    />
+                  </FormControl>
+                  <FormLabel className="!mt-0">Active</FormLabel>
+                </FormItem>
+              )}
+            />
+          )}
+          <FormField
+            control={form.control}
+            name="isStopOnly"
+            render={({ field }) => (
               <FormItem className="flex items-center gap-2">
                 <FormControl>
                   <input
@@ -3662,27 +4687,15 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
                     checked={!!field.value}
                     onChange={(e) => field.onChange(e.target.checked)}
                     className="accent-primary"
-                    data-testid="checkbox-plan-active"
+                    data-testid="checkbox-plan-stop-only"
                   />
                 </FormControl>
-                <FormLabel className="!mt-0">Active</FormLabel>
+                <FormLabel className="!mt-0 text-sm">
+                  Stop only (no service) — excluded from invoicing &amp; revenue
+                </FormLabel>
               </FormItem>
-            )} />
-          )}
-          <FormField control={form.control} name="isStopOnly" render={({ field }) => (
-            <FormItem className="flex items-center gap-2">
-              <FormControl>
-                <input
-                  type="checkbox"
-                  checked={!!field.value}
-                  onChange={(e) => field.onChange(e.target.checked)}
-                  className="accent-primary"
-                  data-testid="checkbox-plan-stop-only"
-                />
-              </FormControl>
-              <FormLabel className="!mt-0 text-sm">Stop only (no service) — excluded from invoicing &amp; revenue</FormLabel>
-            </FormItem>
-          )} />
+            )}
+          />
           <Button type="submit" disabled={isPending} data-testid="button-submit-plan">
             {isPending ? "Saving..." : submitLabel}
           </Button>
@@ -3695,10 +4708,13 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
         <CardTitle className="text-lg">Jobs</CardTitle>
-        <Dialog open={createDialogOpen} onOpenChange={(open) => {
-          setCreateDialogOpen(open);
-          if (!open) createForm.reset();
-        }}>
+        <Dialog
+          open={createDialogOpen}
+          onOpenChange={(open) => {
+            setCreateDialogOpen(open);
+            if (!open) createForm.reset();
+          }}
+        >
           <DialogTrigger asChild>
             <Button size="sm" data-testid="button-add-service-plan">
               <Plus className="mr-1 h-4 w-4" /> Add Job
@@ -3708,187 +4724,285 @@ function ServicePlansCard({ contactId, properties }: { contactId: string; proper
             <DialogHeader>
               <DialogTitle>Add Job</DialogTitle>
             </DialogHeader>
-            {renderPlanForm(createForm, (v) => createMutation.mutate(v), createMutation.isPending, "Create Job", false, createCalcResult, createCalcLoading, createSelectedAddOns, setCreateSelectedAddOns, createTemplateId, setCreateTemplateId)}
+            {renderPlanForm(
+              createForm,
+              (v) => createMutation.mutate(v),
+              createMutation.isPending,
+              "Create Job",
+              false,
+              createCalcResult,
+              createCalcLoading,
+              createSelectedAddOns,
+              setCreateSelectedAddOns,
+              createTemplateId,
+              setCreateTemplateId
+            )}
           </DialogContent>
         </Dialog>
       </CardHeader>
       <CardContent>
-        {servicePlans && servicePlans.length > 0 ? (() => {
-          const cancelledServices = servicePlans.filter(p => p.jobStatus === "cancelled");
-          const currentServices = servicePlans.filter(p => p.jobStatus !== "cancelled");
-          return (
-          <div className="space-y-4">
-            <div className="space-y-2">
-            {currentServices.map((plan) => {
-              const isPaused = !!plan.pausedAt;
-              const discountVal = plan.discount;
-              return (
-              <div key={plan.id} className="border rounded-md p-3" data-testid={`text-plan-${plan.id}`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-medium capitalize">{plan.serviceName || `${frequencyLabelsMap[plan.frequency] || plan.frequency} job`}</p>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>${plan.pricePerVisit}/visit</span>
-                      {discountVal && parseFloat(discountVal) > 0 && (
-                        <Badge variant="outline" className="text-xs">{discountVal}% off</Badge>
-                      )}
-                    </div>
-                    {plan.addOns && plan.addOns.length > 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        {plan.addOns.map(a => (
-                          <span key={a.id} className="inline-block mr-2">+ {a.name} (${a.price})</span>
-                        ))}
-                        <p className="font-medium text-foreground text-sm mt-0.5">
-                          Total: ${(parseFloat(plan.pricePerVisit) + plan.addOns.reduce((s, a) => s + parseFloat(a.price), 0)).toFixed(2)}/visit
-                        </p>
-                      </div>
-                    )}
-                    {plan.dayOfWeek && (
-                      <p className="text-xs text-muted-foreground capitalize">Day: {plan.dayOfWeek}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">Started: {plan.startDate}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {plan.isStopOnly && (
-                      <Badge variant="outline" className="text-xs" data-testid={`badge-stop-only-${plan.id}`}>Stop Only</Badge>
-                    )}
-                    <Badge variant={plan.jobStatus === "cancelled" ? "destructive" : isPaused ? "secondary" : plan.isActive ? "default" : "secondary"}>
-                      {plan.jobStatus === "cancelled" ? "Cancelled" : isPaused ? "Paused" : plan.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                    {plan.jobStatus !== "cancelled" && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => togglePauseMutation.mutate({ id: plan.id, isPaused })}
-                        disabled={togglePauseMutation.isPending}
-                        data-testid={`button-pause-plan-${plan.id}`}
+        {servicePlans && servicePlans.length > 0 ? (
+          (() => {
+            const cancelledServices = servicePlans.filter((p) => p.jobStatus === "cancelled");
+            const currentServices = servicePlans.filter((p) => p.jobStatus !== "cancelled");
+            return (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  {currentServices.map((plan) => {
+                    const isPaused = !!plan.pausedAt;
+                    const discountVal = plan.discount;
+                    return (
+                      <div
+                        key={plan.id}
+                        className="border rounded-md p-3"
+                        data-testid={`text-plan-${plan.id}`}
                       >
-                        {isPaused ? "Resume" : "Pause"}
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setEditingPlan(plan)}
-                      data-testid={`button-edit-plan-${plan.id}`}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    {plan.jobStatus !== "cancelled" && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm" className="text-orange-600 hover:text-orange-700" data-testid={`button-cancel-plan-${plan.id}`}>
-                            Cancel
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Cancel Job</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will cancel this job. Future visits will no longer be generated. You can still view the job history.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Keep Job</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => cancelMutation.mutate(plan.id)}
-                              data-testid={`button-confirm-cancel-plan-${plan.id}`}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium capitalize">
+                              {plan.serviceName ||
+                                `${frequencyLabelsMap[plan.frequency] || plan.frequency} job`}
+                            </p>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <span>${plan.pricePerVisit}/visit</span>
+                              {discountVal && parseFloat(discountVal) > 0 && (
+                                <Badge variant="outline" className="text-xs">
+                                  {discountVal}% off
+                                </Badge>
+                              )}
+                            </div>
+                            {plan.addOns && plan.addOns.length > 0 && (
+                              <div className="text-xs text-muted-foreground">
+                                {plan.addOns.map((a) => (
+                                  <span key={a.id} className="inline-block mr-2">
+                                    + {a.name} (${a.price})
+                                  </span>
+                                ))}
+                                <p className="font-medium text-foreground text-sm mt-0.5">
+                                  Total: $
+                                  {(
+                                    parseFloat(plan.pricePerVisit) +
+                                    plan.addOns.reduce((s, a) => s + parseFloat(a.price), 0)
+                                  ).toFixed(2)}
+                                  /visit
+                                </p>
+                              </div>
+                            )}
+                            {plan.dayOfWeek && (
+                              <p className="text-xs text-muted-foreground capitalize">
+                                Day: {plan.dayOfWeek}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              Started: {plan.startDate}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {plan.isStopOnly && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs"
+                                data-testid={`badge-stop-only-${plan.id}`}
+                              >
+                                Stop Only
+                              </Badge>
+                            )}
+                            <Badge
+                              variant={
+                                plan.jobStatus === "cancelled"
+                                  ? "destructive"
+                                  : isPaused
+                                    ? "secondary"
+                                    : plan.isActive
+                                      ? "default"
+                                      : "secondary"
+                              }
                             >
-                              Cancel Job
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" data-testid={`button-delete-plan-${plan.id}`}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Job</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will permanently delete this job and all its data. This action cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Keep Job</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteMutation.mutate(plan.id)}
-                            data-testid={`button-confirm-delete-plan-${plan.id}`}
-                          >
-                            Delete Job
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </div>
-              </div>
-              );
-            })}
-            </div>
-            {cancelledServices.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider pt-2 border-t">Cancelled</p>
-                {cancelledServices.map((plan) => (
-                  <div key={plan.id} className="border rounded-md p-3 opacity-60" data-testid={`text-plan-cancelled-${plan.id}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="font-medium capitalize line-through">{plan.serviceName || `${frequencyLabelsMap[plan.frequency] || plan.frequency} job`}</p>
-                        <p className="text-sm text-muted-foreground">${plan.pricePerVisit}/visit</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="destructive">Cancelled</Badge>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" data-testid={`button-delete-plan-${plan.id}`}>
-                              <Trash2 className="h-4 w-4" />
+                              {plan.jobStatus === "cancelled"
+                                ? "Cancelled"
+                                : isPaused
+                                  ? "Paused"
+                                  : plan.isActive
+                                    ? "Active"
+                                    : "Inactive"}
+                            </Badge>
+                            {plan.jobStatus !== "cancelled" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  togglePauseMutation.mutate({ id: plan.id, isPaused })
+                                }
+                                disabled={togglePauseMutation.isPending}
+                                data-testid={`button-pause-plan-${plan.id}`}
+                              >
+                                {isPaused ? "Resume" : "Pause"}
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setEditingPlan(plan)}
+                              data-testid={`button-edit-plan-${plan.id}`}
+                            >
+                              <Edit2 className="h-4 w-4" />
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Job</AlertDialogTitle>
-                              <AlertDialogDescription>This will permanently delete this job and all its data. This action cannot be undone.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Keep Job</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteMutation.mutate(plan.id)} data-testid={`button-confirm-delete-plan-${plan.id}`}>Delete Job</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                            {plan.jobStatus !== "cancelled" && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-orange-600 hover:text-orange-700"
+                                    data-testid={`button-cancel-plan-${plan.id}`}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Cancel Job</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will cancel this job. Future visits will no longer be
+                                      generated. You can still view the job history.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Keep Job</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => cancelMutation.mutate(plan.id)}
+                                      data-testid={`button-confirm-cancel-plan-${plan.id}`}
+                                    >
+                                      Cancel Job
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  data-testid={`button-delete-plan-${plan.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Job</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete this job and all its data. This
+                                    action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Keep Job</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteMutation.mutate(plan.id)}
+                                    data-testid={`button-confirm-delete-plan-${plan.id}`}
+                                  >
+                                    Delete Job
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    );
+                  })}
+                </div>
+                {cancelledServices.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider pt-2 border-t">
+                      Cancelled
+                    </p>
+                    {cancelledServices.map((plan) => (
+                      <div
+                        key={plan.id}
+                        className="border rounded-md p-3 opacity-60"
+                        data-testid={`text-plan-cancelled-${plan.id}`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium capitalize line-through">
+                              {plan.serviceName ||
+                                `${frequencyLabelsMap[plan.frequency] || plan.frequency} job`}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              ${plan.pricePerVisit}/visit
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="destructive">Cancelled</Badge>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  data-testid={`button-delete-plan-${plan.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Job</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete this job and all its data. This
+                                    action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Keep Job</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteMutation.mutate(plan.id)}
+                                    data-testid={`button-confirm-delete-plan-${plan.id}`}
+                                  >
+                                    Delete Job
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>
-          );
-        })() : (
+            );
+          })()
+        ) : (
           <p className="text-sm text-muted-foreground">No jobs yet.</p>
         )}
 
-        <Dialog open={!!editingPlan} onOpenChange={(open) => { if (!open) setEditingPlan(null); }}>
+        <Dialog
+          open={!!editingPlan}
+          onOpenChange={(open) => {
+            if (!open) setEditingPlan(null);
+          }}
+        >
           <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Job</DialogTitle>
             </DialogHeader>
-            {editingPlan && renderPlanForm(
-              editForm,
-              (v) => updateMutation.mutate({ id: editingPlan.id, data: v }),
-              updateMutation.isPending,
-              "Save Job",
-              true,
-              editCalcResult,
-              editCalcLoading,
-              editSelectedAddOns,
-              setEditSelectedAddOns,
-              editTemplateId,
-              setEditTemplateId
-            )}
+            {editingPlan &&
+              renderPlanForm(
+                editForm,
+                (v) => updateMutation.mutate({ id: editingPlan.id, data: v }),
+                updateMutation.isPending,
+                "Save Job",
+                true,
+                editCalcResult,
+                editCalcLoading,
+                editSelectedAddOns,
+                setEditSelectedAddOns,
+                editTemplateId,
+                setEditTemplateId
+              )}
           </DialogContent>
         </Dialog>
       </CardContent>
@@ -3924,7 +5038,15 @@ const activityActionLabels: Record<string, string> = {
   portal_login: "Portal Login",
 };
 
-function InlineSmsCompose({ contactId, contactName: _contactName, phone }: { contactId: string; contactName: string; phone: string }) {
+function InlineSmsCompose({
+  contactId,
+  contactName: _contactName,
+  phone,
+}: {
+  contactId: string;
+  contactName: string;
+  phone: string;
+}) {
   const { toast } = useToast();
   const [messageText, setMessageText] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -3963,51 +5085,74 @@ function InlineSmsCompose({ contactId, contactName: _contactName, phone }: { con
     };
   }, []);
 
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files;
-    if (!selectedFiles || selectedFiles.length === 0) return;
-    if (e.target) e.target.value = "";
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFiles = e.target.files;
+      if (!selectedFiles || selectedFiles.length === 0) return;
+      if (e.target) e.target.value = "";
 
-    const maxAttach = 5;
-    if (attachedFiles.length >= maxAttach) {
-      toast({ title: "Limit reached", description: `Maximum ${maxAttach} images per message.`, variant: "destructive" });
-      return;
-    }
-
-    setIsCompressing(true);
-    try {
-      const newFiles: File[] = [];
-      const newPreviews: string[] = [];
-      const newOrigSizes: number[] = [];
-
-      for (let i = 0; i < selectedFiles.length && (attachedFiles.length + newFiles.length) < maxAttach; i++) {
-        const file = selectedFiles[i];
-        if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-          toast({ title: "Unsupported file type", description: `${file.name}: Only JPG, PNG, and WebP images are allowed.`, variant: "destructive" });
-          continue;
-        }
-        if (file.size > MAX_ATTACHMENT_SIZE) {
-          toast({ title: "File too large", description: `${file.name}: Maximum size is ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
-          continue;
-        }
-        const preCompressSize = file.size;
-        const compressed = await compressMessageAttachment(file);
-        newFiles.push(compressed);
-        newPreviews.push(URL.createObjectURL(compressed));
-        newOrigSizes.push(preCompressSize);
+      const maxAttach = 5;
+      if (attachedFiles.length >= maxAttach) {
+        toast({
+          title: "Limit reached",
+          description: `Maximum ${maxAttach} images per message.`,
+          variant: "destructive",
+        });
+        return;
       }
 
-      if (newFiles.length > 0) {
-        setAttachedFiles((prev) => [...prev, ...newFiles]);
-        setAttachedPreviews((prev) => [...prev, ...newPreviews]);
-        setOriginalFileSizes((prev) => [...prev, ...newOrigSizes]);
+      setIsCompressing(true);
+      try {
+        const newFiles: File[] = [];
+        const newPreviews: string[] = [];
+        const newOrigSizes: number[] = [];
+
+        for (
+          let i = 0;
+          i < selectedFiles.length && attachedFiles.length + newFiles.length < maxAttach;
+          i++
+        ) {
+          const file = selectedFiles[i];
+          if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+            toast({
+              title: "Unsupported file type",
+              description: `${file.name}: Only JPG, PNG, and WebP images are allowed.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+          if (file.size > MAX_ATTACHMENT_SIZE) {
+            toast({
+              title: "File too large",
+              description: `${file.name}: Maximum size is ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+          const preCompressSize = file.size;
+          const compressed = await compressMessageAttachment(file);
+          newFiles.push(compressed);
+          newPreviews.push(URL.createObjectURL(compressed));
+          newOrigSizes.push(preCompressSize);
+        }
+
+        if (newFiles.length > 0) {
+          setAttachedFiles((prev) => [...prev, ...newFiles]);
+          setAttachedPreviews((prev) => [...prev, ...newPreviews]);
+          setOriginalFileSizes((prev) => [...prev, ...newOrigSizes]);
+        }
+      } catch {
+        toast({
+          title: "Compression failed",
+          description: "Could not process the image.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsCompressing(false);
       }
-    } catch {
-      toast({ title: "Compression failed", description: "Could not process the image.", variant: "destructive" });
-    } finally {
-      setIsCompressing(false);
-    }
-  }, [toast, attachedFiles.length]);
+    },
+    [toast, attachedFiles.length]
+  );
 
   const removeAttachment = useCallback((index: number) => {
     setAttachedPreviews((prev) => {
@@ -4026,7 +5171,15 @@ function InlineSmsCompose({ contactId, contactName: _contactName, phone }: { con
   }, [attachedPreviews]);
 
   const sendMutation = useMutation({
-    mutationFn: async ({ body, files, origSizes }: { body: string; files: File[]; origSizes: number[] }) => {
+    mutationFn: async ({
+      body,
+      files,
+      origSizes,
+    }: {
+      body: string;
+      files: File[];
+      origSizes: number[];
+    }) => {
       if (files.length > 0) {
         const formData = new FormData();
         files.forEach((f) => formData.append("media", f));
@@ -4108,7 +5261,9 @@ function InlineSmsCompose({ contactId, contactName: _contactName, phone }: { con
   }, [messageText, attachedFiles, originalFileSizes, sendMutation]);
 
   const sortedMessages = threadMessages
-    ? [...threadMessages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    ? [...threadMessages].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      )
     : [];
 
   return (
@@ -4117,7 +5272,9 @@ function InlineSmsCompose({ contactId, contactName: _contactName, phone }: { con
         <CardTitle className="text-lg flex items-center gap-2">
           <MessageSquare className="h-5 w-5" /> Messages
         </CardTitle>
-        <Badge variant="secondary" data-testid="badge-sms-phone">{phone}</Badge>
+        <Badge variant="secondary" data-testid="badge-sms-phone">
+          {phone}
+        </Badge>
       </CardHeader>
       <CardContent className="space-y-3">
         <div
@@ -4130,7 +5287,10 @@ function InlineSmsCompose({ contactId, contactName: _contactName, phone }: { con
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : sortedMessages.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6" data-testid="text-no-sms-messages">
+            <p
+              className="text-sm text-muted-foreground text-center py-6"
+              data-testid="text-no-sms-messages"
+            >
               No messages yet. Send a text to start the conversation.
             </p>
           ) : (
@@ -4142,15 +5302,19 @@ function InlineSmsCompose({ contactId, contactName: _contactName, phone }: { con
               >
                 <div
                   className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                    msg.direction === "outbound"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                    msg.direction === "outbound" ? "bg-primary text-primary-foreground" : "bg-muted"
                   }`}
                 >
                   {msg.mediaUrls && msg.mediaUrls.length > 0 && (
                     <div className="mb-1.5 space-y-1">
                       {msg.mediaUrls.map((url, idx) => (
-                        <a key={idx} href={url} target="_blank" rel="noopener noreferrer" data-testid={`sms-media-link-${msg.id}-${idx}`}>
+                        <a
+                          key={idx}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-testid={`sms-media-link-${msg.id}-${idx}`}
+                        >
                           <img
                             src={url}
                             alt="Attached image"
@@ -4162,10 +5326,19 @@ function InlineSmsCompose({ contactId, contactName: _contactName, phone }: { con
                       ))}
                     </div>
                   )}
-                  {msg.body && <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>}
-                  <div className={`flex items-center gap-1.5 mt-1 ${msg.direction === "outbound" ? "justify-end" : ""}`}>
-                    <span className={`text-[10px] ${msg.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  {msg.body && (
+                    <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>
+                  )}
+                  <div
+                    className={`flex items-center gap-1.5 mt-1 ${msg.direction === "outbound" ? "justify-end" : ""}`}
+                  >
+                    <span
+                      className={`text-[10px] ${msg.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                    >
+                      {new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
                     </span>
                     {msg.status === "failed" && (
                       <AlertCircle className="h-3 w-3 text-destructive" />
@@ -4181,7 +5354,12 @@ function InlineSmsCompose({ contactId, contactName: _contactName, phone }: { con
           <div className="flex gap-2 flex-wrap" data-testid="inline-mms-preview-container">
             {attachedPreviews.map((preview, idx) => (
               <div key={idx} className="relative inline-block">
-                <img src={preview} alt={`Attached ${idx + 1}`} className="h-16 w-16 object-cover rounded border" data-testid={`inline-mms-preview-img-${idx}`} />
+                <img
+                  src={preview}
+                  alt={`Attached ${idx + 1}`}
+                  className="h-16 w-16 object-cover rounded border"
+                  data-testid={`inline-mms-preview-img-${idx}`}
+                />
                 <button
                   onClick={() => removeAttachment(idx)}
                   className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
@@ -4311,11 +5489,17 @@ function ActivitySection({ contactId }: { contactId: string }) {
                       {label}
                     </p>
                     {description && (
-                      <p className="text-xs text-muted-foreground" data-testid={`activity-details-${log.id}`}>
+                      <p
+                        className="text-xs text-muted-foreground"
+                        data-testid={`activity-details-${log.id}`}
+                      >
                         {description}
                       </p>
                     )}
-                    <p className="text-xs text-muted-foreground" data-testid={`activity-time-${log.id}`}>
+                    <p
+                      className="text-xs text-muted-foreground"
+                      data-testid={`activity-time-${log.id}`}
+                    >
                       {formatRelativeTime(log.createdAt as unknown as string)}
                     </p>
                   </div>
@@ -4324,7 +5508,9 @@ function ActivitySection({ contactId }: { contactId: string }) {
             })}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground" data-testid="text-no-activity">No activity recorded yet.</p>
+          <p className="text-sm text-muted-foreground" data-testid="text-no-activity">
+            No activity recorded yet.
+          </p>
         )}
       </CardContent>
     </Card>
@@ -4382,7 +5568,10 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
       const token = localStorage.getItem("sessionToken");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res = await fetch(`/api/contacts/${contactId}/visits?limit=${limit}`, { credentials: "include", headers });
+      const res = await fetch(`/api/contacts/${contactId}/visits?limit=${limit}`, {
+        credentials: "include",
+        headers,
+      });
       if (!res.ok) throw new Error("Failed to fetch visits");
       return res.json();
     },
@@ -4412,7 +5601,7 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
           </p>
         ) : isLoading ? (
           <div className="space-y-2">
-            {[1, 2, 3].map(i => (
+            {[1, 2, 3].map((i) => (
               <div key={i} className="h-12 bg-muted/50 rounded animate-pulse" />
             ))}
           </div>
@@ -4435,9 +5624,14 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
                         <div className="flex flex-col min-w-0">
                           <div className="flex items-center gap-2">
                             <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            <span className="text-sm font-medium" data-testid={`text-visit-date-${v.id}`}>
+                            <span
+                              className="text-sm font-medium"
+                              data-testid={`text-visit-date-${v.id}`}
+                            >
                               {new Date(v.scheduledDate + "T12:00:00").toLocaleDateString("en-US", {
-                                month: "short", day: "numeric", year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
                               })}
                             </span>
                             <Badge
@@ -4449,7 +5643,10 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
                             </Badge>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-muted-foreground" data-testid={`text-visit-plan-${v.id}`}>
+                            <span
+                              className="text-xs text-muted-foreground"
+                              data-testid={`text-visit-plan-${v.id}`}
+                            >
                               {v.servicePlanName}
                             </span>
                             {v.propertyAddress && v.propertyAddress !== "Unknown" && (
@@ -4466,7 +5663,10 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
                       />
                     </div>
                     {isExpanded && (
-                      <div className="px-3 pb-3 pt-1 border-t bg-muted/30 space-y-1.5" data-testid={`visit-details-${v.id}`}>
+                      <div
+                        className="px-3 pb-3 pt-1 border-t bg-muted/30 space-y-1.5"
+                        data-testid={`visit-details-${v.id}`}
+                      >
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">Status:</span>
                           <Badge
@@ -4481,8 +5681,11 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
                             <span className="font-medium text-foreground">Completed:</span>
                             <span className="text-muted-foreground">
                               {new Date(v.completedAt).toLocaleString("en-US", {
-                                month: "short", day: "numeric", year: "numeric",
-                                hour: "numeric", minute: "2-digit",
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
                               })}
                             </span>
                           </div>
@@ -4492,8 +5695,11 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
                             <span className="font-medium text-foreground">Started:</span>
                             <span className="text-muted-foreground">
                               {new Date(v.startedAt).toLocaleString("en-US", {
-                                month: "short", day: "numeric", year: "numeric",
-                                hour: "numeric", minute: "2-digit",
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
                               })}
                             </span>
                           </div>
@@ -4522,7 +5728,7 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
                 variant="outline"
                 size="sm"
                 className="w-full"
-                onClick={() => setLimit(prev => prev + 20)}
+                onClick={() => setLimit((prev) => prev + 20)}
                 data-testid="button-show-more-visits"
               >
                 <ChevronDown className="h-4 w-4 mr-1" />
@@ -4531,7 +5737,10 @@ function VisitHistoryCard({ contactId }: { contactId: string }) {
             )}
           </>
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-3" data-testid="text-no-visits">
+          <p
+            className="text-sm text-muted-foreground text-center py-3"
+            data-testid="text-no-visits"
+          >
             No visit history yet
           </p>
         )}
@@ -4565,10 +5774,16 @@ function SuggestionsCard({ contactId }: { contactId: string }) {
   const { toast } = useToast();
   const [collapsed, setCollapsed] = useState(false);
 
-  const { data: opportunities = [], isLoading, refetch } = useQuery<Opportunity[]>({
+  const {
+    data: opportunities = [],
+    isLoading,
+    refetch,
+  } = useQuery<Opportunity[]>({
     queryKey: ["/api/contacts", contactId, "opportunities"],
     queryFn: async () => {
-      const res = await fetch(`/api/contacts/${contactId}/opportunities`, { credentials: "include" });
+      const res = await fetch(`/api/contacts/${contactId}/opportunities`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to load");
       return res.json();
     },
@@ -4587,7 +5802,10 @@ function SuggestionsCard({ contactId }: { contactId: string }) {
     onSuccess: () => {
       refetch();
       queryClient.invalidateQueries({ queryKey: ["/api/company/growth-opportunities"] });
-      toast({ title: "Suggestion dismissed", description: "This suggestion won't appear again for this contact." });
+      toast({
+        title: "Suggestion dismissed",
+        description: "This suggestion won't appear again for this contact.",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -4618,16 +5836,22 @@ function SuggestionsCard({ contactId }: { contactId: string }) {
     <Card data-testid="section-suggestions">
       <CardHeader
         className="flex flex-row items-center justify-between cursor-pointer select-none pb-3"
-        onClick={() => setCollapsed(c => !c)}
+        onClick={() => setCollapsed((c) => !c)}
       >
         <CardTitle className="text-lg flex items-center gap-2">
           <Star className="h-4 w-4 text-amber-500" />
           Suggestions
-          <Badge variant="secondary" className="ml-1 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-suggestion-count">
+          <Badge
+            variant="secondary"
+            className="ml-1 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+            data-testid="badge-suggestion-count"
+          >
             {opportunities.length}
           </Badge>
         </CardTitle>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`} />
+        <ChevronDown
+          className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${collapsed ? "" : "rotate-180"}`}
+        />
       </CardHeader>
       {!collapsed && (
         <CardContent className="space-y-3 pt-0" data-testid="suggestions-list">
@@ -4638,14 +5862,23 @@ function SuggestionsCard({ contactId }: { contactId: string }) {
               data-testid={`suggestion-${opp.key}`}
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground" data-testid={`suggestion-label-${opp.key}`}>
+                <p
+                  className="text-sm font-medium text-foreground"
+                  data-testid={`suggestion-label-${opp.key}`}
+                >
                   {opp.label}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5" data-testid={`suggestion-detail-${opp.key}`}>
+                <p
+                  className="text-xs text-muted-foreground mt-0.5"
+                  data-testid={`suggestion-detail-${opp.key}`}
+                >
                   {opp.detail}
                 </p>
                 {opp.estimatedMonthlyUplift > 0 && (
-                  <p className="text-xs font-medium text-green-700 dark:text-green-400 mt-1" data-testid={`suggestion-uplift-${opp.key}`}>
+                  <p
+                    className="text-xs font-medium text-green-700 dark:text-green-400 mt-1"
+                    data-testid={`suggestion-uplift-${opp.key}`}
+                  >
                     ~${opp.estimatedMonthlyUplift.toFixed(0)}/mo potential uplift
                   </p>
                 )}
@@ -4680,10 +5913,12 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
       const token = localStorage.getItem("sessionToken");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      return fetch(`/api/invoices?contactId=${contactId}`, { credentials: "include", headers }).then(r => {
-        if (!r.ok) throw new Error("Failed to fetch");
-        return r.json();
-      }).then((all: Invoice[]) => all.filter(inv => inv.status !== "voided"));
+      return fetch(`/api/invoices?contactId=${contactId}`, { credentials: "include", headers })
+        .then((r) => {
+          if (!r.ok) throw new Error("Failed to fetch");
+          return r.json();
+        })
+        .then((all: Invoice[]) => all.filter((inv) => inv.status !== "voided"));
     },
   });
 
@@ -4694,36 +5929,37 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
   const totalOutstanding = useMemo(() => {
     if (!invoicesData) return 0;
     return invoicesData
-      .filter(inv => ["pending", "sent"].includes(inv.status))
+      .filter((inv) => ["pending", "sent"].includes(inv.status))
       .reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0);
   }, [invoicesData]);
 
   const totalPaid = useMemo(() => {
     if (!invoicesData) return 0;
     return invoicesData
-      .filter(inv => inv.status === "paid")
+      .filter((inv) => inv.status === "paid")
       .reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0);
   }, [invoicesData]);
 
   const sortedInvoices = useMemo(() => {
     if (!invoicesData) return [];
-    return [...invoicesData].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return [...invoicesData].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
   }, [invoicesData]);
 
   const filteredInvoices = useMemo(() => {
     if (activeFilter === "outstanding") {
-      return sortedInvoices.filter(inv => ["pending", "sent"].includes(inv.status));
+      return sortedInvoices.filter((inv) => ["pending", "sent"].includes(inv.status));
     }
     if (activeFilter === "paid") {
-      return sortedInvoices.filter(inv => inv.status === "paid");
+      return sortedInvoices.filter((inv) => inv.status === "paid");
     }
     return sortedInvoices;
   }, [sortedInvoices, activeFilter]);
 
   function handleFilterClick(filter: "outstanding" | "paid") {
-    setActiveFilter(prev => prev === filter ? null : filter);
+    setActiveFilter((prev) => (prev === filter ? null : filter));
   }
-
 
   return (
     <>
@@ -4733,7 +5969,11 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
             <Receipt className="h-5 w-5" />
             Billing
           </CardTitle>
-          <Button size="sm" onClick={() => setGenerateOpen(true)} data-testid="button-generate-invoice-contact">
+          <Button
+            size="sm"
+            onClick={() => setGenerateOpen(true)}
+            data-testid="button-generate-invoice-contact"
+          >
             <Zap className="mr-1 h-4 w-4" /> Generate Invoice
           </Button>
         </CardHeader>
@@ -4748,7 +5988,9 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
               <p className="text-lg font-bold text-orange-600 dark:text-orange-400">
                 ${(uninvoicedData?.totalDollars ?? 0).toFixed(2)}
               </p>
-              <p className="text-[10px] text-muted-foreground">{uninvoicedData?.visits?.length ?? 0} visits</p>
+              <p className="text-[10px] text-muted-foreground">
+                {uninvoicedData?.visits?.length ?? 0} visits
+              </p>
             </div>
             <div
               className={`text-center p-3 rounded-lg cursor-pointer transition-all duration-150 select-none ${
@@ -4781,12 +6023,16 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
           </div>
 
           {uninvoicedData && uninvoicedData.visits.length > 0 && (
-            <div className="border border-orange-200 dark:border-orange-800 rounded-lg p-3 bg-orange-50 dark:bg-orange-950/30 space-y-2" data-testid="section-uninvoiced-alert">
+            <div
+              className="border border-orange-200 dark:border-orange-800 rounded-lg p-3 bg-orange-50 dark:bg-orange-950/30 space-y-2"
+              data-testid="section-uninvoiced-alert"
+            >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                   <span className="text-sm font-medium">
-                    {uninvoicedData.visits.length} completed visit{uninvoicedData.visits.length !== 1 ? "s" : ""} need invoicing
+                    {uninvoicedData.visits.length} completed visit
+                    {uninvoicedData.visits.length !== 1 ? "s" : ""} need invoicing
                   </span>
                 </div>
                 <Button
@@ -4809,12 +6055,20 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
                     <div className="flex items-center gap-2 min-w-0">
                       <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <span className="truncate">
-                        {new Date(v.scheduledDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        {new Date(v.scheduledDate + "T12:00:00").toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
                       </span>
-                      <span className="text-xs text-muted-foreground truncate">{v.servicePlanName}</span>
+                      <span className="text-xs text-muted-foreground truncate">
+                        {v.servicePlanName}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium tabular-nums">${(parseFloat(v.pricePerVisit) || 0).toFixed(2)}</span>
+                      <span className="font-medium tabular-nums">
+                        ${(parseFloat(v.pricePerVisit) || 0).toFixed(2)}
+                      </span>
                       <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
@@ -4840,7 +6094,9 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
 
           {filteredInvoices.length > 0 ? (
             <div className="space-y-1" data-testid="section-invoice-history">
-              {!activeFilter && <p className="text-sm font-medium text-muted-foreground">Recent Invoices</p>}
+              {!activeFilter && (
+                <p className="text-sm font-medium text-muted-foreground">Recent Invoices</p>
+              )}
               {filteredInvoices.slice(0, 10).map((inv) => (
                 <div
                   key={inv.id}
@@ -4849,23 +6105,34 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
                   data-testid={`row-invoice-${inv.id}`}
                 >
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary" className={`text-[10px] ${invoiceStatusColors[inv.status] || ""}`}>
+                    <Badge
+                      variant="secondary"
+                      className={`text-[10px] ${invoiceStatusColors[inv.status] || ""}`}
+                    >
                       {inv.status}
                     </Badge>
                     <span className="text-sm">#{inv.invoiceNumber}</span>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(inv.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      {new Date(inv.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium tabular-nums">${parseFloat(inv.total).toFixed(2)}</span>
+                    <span className="text-sm font-medium tabular-nums">
+                      ${parseFloat(inv.total).toFixed(2)}
+                    </span>
                     <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-3" data-testid="text-no-invoices">
+            <p
+              className="text-sm text-muted-foreground text-center py-3"
+              data-testid="text-no-invoices"
+            >
               {activeFilter ? "No invoices match this filter" : "No invoices yet"}
             </p>
           )}

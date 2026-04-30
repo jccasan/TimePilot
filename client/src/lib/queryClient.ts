@@ -31,7 +31,7 @@ async function throwIfResNotOk(res: Response) {
 export async function apiRequest(
   method: string,
   url: string,
-  data?: unknown | undefined,
+  data?: unknown | undefined
 ): Promise<Response> {
   const res = await fetch(url, {
     method,
@@ -48,9 +48,7 @@ export async function apiRequest(
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
-export const getQueryFn: <T>(options: {
-  on401: UnauthorizedBehavior;
-}) => QueryFunction<T> =
+export const getQueryFn: <T>(options: { on401: UnauthorizedBehavior }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const res = await fetch(queryKey.join("/") as string, {
@@ -89,10 +87,16 @@ queryClient.getQueryCache().subscribe((event) => {
     const err = event.action.error;
     const msg = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;
-    if (/^5\d\d[^0-9]/.test(msg) || msg.includes("Internal Server Error") || msg.includes("Bad Gateway")) {
-      import("./errorReporter").then(({ reportError }) => {
-        reportError(msg, stack, "api");
-      }).catch(() => {});
+    if (
+      /^5\d\d[^0-9]/.test(msg) ||
+      msg.includes("Internal Server Error") ||
+      msg.includes("Bad Gateway")
+    ) {
+      import("./errorReporter")
+        .then(({ reportError }) => {
+          reportError(msg, stack, "api");
+        })
+        .catch(() => {});
     }
   }
 });
@@ -102,10 +106,16 @@ queryClient.getMutationCache().subscribe((event) => {
     const err = event.mutation.state.error;
     const msg = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;
-    if (/^5\d\d[^0-9]/.test(msg) || msg.includes("Internal Server Error") || msg.includes("Bad Gateway")) {
-      import("./errorReporter").then(({ reportError }) => {
-        reportError(msg, stack, "api");
-      }).catch(() => {});
+    if (
+      /^5\d\d[^0-9]/.test(msg) ||
+      msg.includes("Internal Server Error") ||
+      msg.includes("Bad Gateway")
+    ) {
+      import("./errorReporter")
+        .then(({ reportError }) => {
+          reportError(msg, stack, "api");
+        })
+        .catch(() => {});
     }
   }
 });

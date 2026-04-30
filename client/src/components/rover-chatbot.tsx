@@ -3,7 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { MessageCircle, X, Send, Bug, Lightbulb, ArrowLeft, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -148,11 +154,17 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
   const [submittingTicket, setSubmittingTicket] = useState(false);
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
 
-  const btnHeight = typeof window !== "undefined" && window.innerWidth < 640 ? BTN_SIZE_SM : BTN_SIZE;
+  const btnHeight =
+    typeof window !== "undefined" && window.innerWidth < 640 ? BTN_SIZE_SM : BTN_SIZE;
   const fabRef = useRef<HTMLDivElement>(null);
   const fabWidthRef = useRef(120);
   const [fabPos, setFabPos] = useState<{ x: number; y: number }>(() =>
-    user ? loadPosition(user.id.toString(), fabWidthRef.current) : { x: window.innerWidth - fabWidthRef.current - EDGE_MARGIN, y: window.innerHeight - btnHeight - EDGE_MARGIN }
+    user
+      ? loadPosition(user.id.toString(), fabWidthRef.current)
+      : {
+          x: window.innerWidth - fabWidthRef.current - EDGE_MARGIN,
+          y: window.innerHeight - btnHeight - EDGE_MARGIN,
+        }
   );
   const draggingRef = useRef(false);
   const dragStartRef = useRef<{ mx: number; my: number; fx: number; fy: number } | null>(null);
@@ -274,7 +286,12 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
       if (!draggingRef.current && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
       draggingRef.current = true;
       e.preventDefault();
-      const newPos = clampPos(dragStartRef.current.fx + dx, dragStartRef.current.fy + dy, fabWidthRef.current, btnHeight);
+      const newPos = clampPos(
+        dragStartRef.current.fx + dx,
+        dragStartRef.current.fy + dy,
+        fabWidthRef.current,
+        btnHeight
+      );
       setFabPos(newPos);
     },
     [btnHeight]
@@ -339,7 +356,9 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
       }));
   };
 
-  const parseActions = (text: string): {
+  const parseActions = (
+    text: string
+  ): {
     cleanText: string;
     actions: ("ticket" | "feature")[];
     suggestedSubject?: string;
@@ -407,7 +426,11 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
           setMessages((prev) =>
             prev.map((m) =>
               m.id === streamingMsgId
-                ? { ...m, text: "You're sending messages too quickly. Please wait a moment and try again.", streaming: false }
+                ? {
+                    ...m,
+                    text: "You're sending messages too quickly. Please wait a moment and try again.",
+                    streaming: false,
+                  }
                 : m
             )
           );
@@ -442,16 +465,22 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
             if (event.type === "chunk") {
               fullText += event.content;
               setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === streamingMsgId ? { ...m, text: fullText } : m
-                )
+                prev.map((m) => (m.id === streamingMsgId ? { ...m, text: fullText } : m))
               );
             } else if (event.type === "done") {
-              const { cleanText, actions, suggestedSubject, suggestedDescription } = parseActions(fullText);
+              const { cleanText, actions, suggestedSubject, suggestedDescription } =
+                parseActions(fullText);
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === streamingMsgId
-                    ? { ...m, text: cleanText, streaming: false, actions: actions.length > 0 ? actions : undefined, suggestedSubject, suggestedDescription }
+                    ? {
+                        ...m,
+                        text: cleanText,
+                        streaming: false,
+                        actions: actions.length > 0 ? actions : undefined,
+                        suggestedSubject,
+                        suggestedDescription,
+                      }
                     : m
                 )
               );
@@ -466,11 +495,19 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
       }
 
       if (fullText) {
-        const { cleanText, actions, suggestedSubject, suggestedDescription } = parseActions(fullText);
+        const { cleanText, actions, suggestedSubject, suggestedDescription } =
+          parseActions(fullText);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === streamingMsgId
-              ? { ...m, text: cleanText, streaming: false, actions: actions.length > 0 ? actions : undefined, suggestedSubject, suggestedDescription }
+              ? {
+                  ...m,
+                  text: cleanText,
+                  streaming: false,
+                  actions: actions.length > 0 ? actions : undefined,
+                  suggestedSubject,
+                  suggestedDescription,
+                }
               : m
           )
         );
@@ -547,7 +584,11 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
     }
   };
 
-  const openTicketForm = (type: "bug" | "feature_request", subject?: string, description?: string) => {
+  const openTicketForm = (
+    type: "bug" | "feature_request",
+    subject?: string,
+    description?: string
+  ) => {
     setTicketType(type);
     setTicketSubject(subject || "");
     setTicketDescription(description || "");
@@ -563,7 +604,12 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
         subject: ticketSubject.trim(),
         description: ticketDescription.trim(),
       });
-      const label = ticketType === "bug" ? "Trouble ticket" : ticketType === "feature_request" ? "Feature request" : "Question";
+      const label =
+        ticketType === "bug"
+          ? "Trouble ticket"
+          : ticketType === "feature_request"
+            ? "Feature request"
+            : "Question";
       toast({ title: `${label} submitted`, description: "We'll review it soon." });
       setView("chat");
       setMessages((prev) => [
@@ -576,7 +622,11 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
         },
       ]);
     } catch {
-      toast({ title: "Failed to submit", description: "Please try again.", variant: "destructive" });
+      toast({
+        title: "Failed to submit",
+        description: "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setSubmittingTicket(false);
     }
@@ -585,8 +635,14 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
   return (
     <>
       {showIntro && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm" data-testid="rover-intro-overlay">
-          <div className="bg-background rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-300" data-testid="rover-intro-modal">
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          data-testid="rover-intro-overlay"
+        >
+          <div
+            className="bg-background rounded-2xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-300"
+            data-testid="rover-intro-modal"
+          >
             <div className="relative">
               <img
                 src={roverImage}
@@ -601,7 +657,8 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
             </div>
             <div className="p-5 space-y-3">
               <p className="text-sm text-foreground leading-relaxed">
-                Rover is your built-in ScooPilot assistant, now powered by AI. Ask questions about the app, look up your business data, or get help with any issue.
+                Rover is your built-in ScooPilot assistant, now powered by AI. Ask questions about
+                the app, look up your business data, or get help with any issue.
               </p>
               <ul className="text-sm text-muted-foreground space-y-1.5">
                 <li className="flex items-start gap-2">
@@ -621,10 +678,19 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
                 Look for the green "Ask Rover" button on screen anytime. You can drag it to move it.
               </p>
               <div className="flex gap-2 pt-1">
-                <Button variant="outline" className="flex-1" onClick={dismissIntro} data-testid="button-rover-intro-dismiss">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={dismissIntro}
+                  data-testid="button-rover-intro-dismiss"
+                >
                   Got it
                 </Button>
-                <Button className="flex-1" onClick={dismissAndOpen} data-testid="button-rover-intro-open">
+                <Button
+                  className="flex-1"
+                  onClick={dismissAndOpen}
+                  data-testid="button-rover-intro-open"
+                >
                   Say hi to Rover
                 </Button>
               </div>
@@ -640,8 +706,16 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onPointerCancel={() => { dragStartRef.current = null; draggingRef.current = false; }}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(true); } }}
+          onPointerCancel={() => {
+            dragStartRef.current = null;
+            draggingRef.current = false;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setOpen(true);
+            }
+          }}
           className="fixed z-[100] flex items-center gap-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all select-none touch-none group"
           ref={fabRef}
           style={{
@@ -660,7 +734,10 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onPointerUp={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); dismissFAB(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              dismissFAB();
+            }}
             className="ml-0.5 flex items-center justify-center w-5 h-5 rounded-full hover:bg-primary-foreground/20 transition-colors shrink-0"
             data-testid="button-rover-dismiss"
             aria-label="Dismiss Rover"
@@ -671,180 +748,245 @@ const RoverChatbot = forwardRef<RoverChatbotHandle>(function RoverChatbot(_, ref
         </div>
       )}
 
-      {open && (() => {
-        const ps = getPanelStyle(fabPos.x, fabPos.y, fabWidthRef.current, btnHeight);
-        return (
-        <div
-          className="fixed z-[100] flex flex-col bg-background border rounded-xl shadow-2xl overflow-hidden"
-          style={{ left: ps.left, top: ps.top, width: ps.width, height: ps.height }}
-          data-testid="rover-chatbot-panel"
-        >
-          <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground shrink-0">
-            <div className="flex items-center gap-2">
-              {view === "ticket-form" && (
-                <button onClick={() => setView("chat")} className="hover:opacity-80" data-testid="button-rover-back">
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-              )}
-              <img src={roverImage} alt="Rover" className="w-6 h-6 rounded-full object-cover" />
-              <span className="font-semibold text-sm">Rover</span>
-              <span className="text-xs opacity-80">
-                {aiAvailable === false ? "Basic Mode" : "AI Assistant"}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              {view === "chat" && messages.length > 1 && (
-                <button onClick={clearChat} className="hover:opacity-80 p-1" data-testid="button-rover-clear" title="Clear conversation">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              )}
-              <button onClick={() => setOpen(false)} className="hover:opacity-80 p-1" data-testid="button-rover-close">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+      {open &&
+        (() => {
+          const ps = getPanelStyle(fabPos.x, fabPos.y, fabWidthRef.current, btnHeight);
+          return (
+            <div
+              className="fixed z-[100] flex flex-col bg-background border rounded-xl shadow-2xl overflow-hidden"
+              style={{ left: ps.left, top: ps.top, width: ps.width, height: ps.height }}
+              data-testid="rover-chatbot-panel"
+            >
+              <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground shrink-0">
+                <div className="flex items-center gap-2">
+                  {view === "ticket-form" && (
+                    <button
+                      onClick={() => setView("chat")}
+                      className="hover:opacity-80"
+                      data-testid="button-rover-back"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+                  )}
+                  <img src={roverImage} alt="Rover" className="w-6 h-6 rounded-full object-cover" />
+                  <span className="font-semibold text-sm">Rover</span>
+                  <span className="text-xs opacity-80">
+                    {aiAvailable === false ? "Basic Mode" : "AI Assistant"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {view === "chat" && messages.length > 1 && (
+                    <button
+                      onClick={clearChat}
+                      className="hover:opacity-80 p-1"
+                      data-testid="button-rover-clear"
+                      title="Clear conversation"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setOpen(false)}
+                    className="hover:opacity-80 p-1"
+                    data-testid="button-rover-close"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
 
-          {view === "chat" && (
-            <>
-              <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                      <p className="whitespace-pre-wrap">{msg.text}</p>
-                      {msg.streaming && (
-                        <span className="inline-block w-1.5 h-4 bg-current opacity-60 animate-pulse ml-0.5 align-text-bottom" />
-                      )}
-                      {msg.isFallback && !msg.streaming && (
-                        <p className="text-[10px] opacity-50 mt-1 italic">AI temporarily unavailable - basic mode</p>
-                      )}
-                      {msg.actions && !msg.streaming && (
-                        <div className="flex gap-2 mt-2">
-                          {msg.actions.includes("ticket") && (
-                            <button
-                              onClick={() => openTicketForm("bug", msg.suggestedSubject, msg.suggestedDescription)}
-                              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-background/20 hover:bg-background/30 transition-colors border border-current/20"
-                              data-testid="button-rover-submit-ticket"
-                            >
-                              <Bug className="h-3 w-3" /> Report Issue
-                            </button>
+              {view === "chat" && (
+                <>
+                  <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                    {messages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                      >
+                        <div
+                          className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+                        >
+                          <p className="whitespace-pre-wrap">{msg.text}</p>
+                          {msg.streaming && (
+                            <span className="inline-block w-1.5 h-4 bg-current opacity-60 animate-pulse ml-0.5 align-text-bottom" />
                           )}
-                          {msg.actions.includes("feature") && (
-                            <button
-                              onClick={() => openTicketForm("feature_request", msg.suggestedSubject, msg.suggestedDescription)}
-                              className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-background/20 hover:bg-background/30 transition-colors border border-current/20"
-                              data-testid="button-rover-submit-feature"
-                            >
-                              <Lightbulb className="h-3 w-3" /> Request Feature
-                            </button>
+                          {msg.isFallback && !msg.streaming && (
+                            <p className="text-[10px] opacity-50 mt-1 italic">
+                              AI temporarily unavailable - basic mode
+                            </p>
+                          )}
+                          {msg.actions && !msg.streaming && (
+                            <div className="flex gap-2 mt-2">
+                              {msg.actions.includes("ticket") && (
+                                <button
+                                  onClick={() =>
+                                    openTicketForm(
+                                      "bug",
+                                      msg.suggestedSubject,
+                                      msg.suggestedDescription
+                                    )
+                                  }
+                                  className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-background/20 hover:bg-background/30 transition-colors border border-current/20"
+                                  data-testid="button-rover-submit-ticket"
+                                >
+                                  <Bug className="h-3 w-3" /> Report Issue
+                                </button>
+                              )}
+                              {msg.actions.includes("feature") && (
+                                <button
+                                  onClick={() =>
+                                    openTicketForm(
+                                      "feature_request",
+                                      msg.suggestedSubject,
+                                      msg.suggestedDescription
+                                    )
+                                  }
+                                  className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-background/20 hover:bg-background/30 transition-colors border border-current/20"
+                                  data-testid="button-rover-submit-feature"
+                                >
+                                  <Lightbulb className="h-3 w-3" /> Request Feature
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
-                      )}
+                      </div>
+                    ))}
+                    {sending && !messages.some((m) => m.streaming) && (
+                      <div className="flex justify-start">
+                        <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-1.5">
+                          <span className="flex gap-1">
+                            <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:0ms]" />
+                            <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:150ms]" />
+                            <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:300ms]" />
+                          </span>
+                          Thinking...
+                        </div>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  <div className="shrink-0 p-3 border-t">
+                    <div className="flex gap-2 mb-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => openTicketForm("bug")}
+                        data-testid="button-rover-bug"
+                      >
+                        <Bug className="h-3 w-3 mr-1" /> Trouble Ticket
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => openTicketForm("feature_request")}
+                        data-testid="button-rover-feature"
+                      >
+                        <Lightbulb className="h-3 w-3 mr-1" /> Feature Request
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        ref={inputRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Ask Rover anything..."
+                        className="text-sm"
+                        disabled={sending}
+                        data-testid="input-rover-question"
+                      />
+                      <Button
+                        size="icon"
+                        className="shrink-0"
+                        onClick={handleSend}
+                        disabled={!input.trim() || sending}
+                        data-testid="button-rover-send"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                ))}
-                {sending && !messages.some((m) => m.streaming) && (
-                  <div className="flex justify-start">
-                    <div className="bg-muted rounded-lg px-3 py-2 text-sm text-muted-foreground flex items-center gap-1.5">
-                      <span className="flex gap-1">
-                        <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:0ms]" />
-                        <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:150ms]" />
-                        <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce [animation-delay:300ms]" />
-                      </span>
-                      Thinking...
-                    </div>
+                </>
+              )}
+
+              {view === "ticket-form" && (
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  <h3 className="font-semibold text-sm">
+                    {ticketType === "bug" ? "Submit Trouble Ticket" : "Submit Feature Request"}
+                  </h3>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Type</Label>
+                    <Select
+                      value={ticketType}
+                      onValueChange={(v: "bug" | "feature_request" | "question") =>
+                        setTicketType(v)
+                      }
+                    >
+                      <SelectTrigger className="text-sm" data-testid="select-rover-ticket-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bug">Trouble Ticket / Bug</SelectItem>
+                        <SelectItem value="feature_request">Feature Request</SelectItem>
+                        <SelectItem value="question">General Question</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
 
-              <div className="shrink-0 p-3 border-t">
-                <div className="flex gap-2 mb-2">
-                  <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => openTicketForm("bug")} data-testid="button-rover-bug">
-                    <Bug className="h-3 w-3 mr-1" /> Trouble Ticket
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => openTicketForm("feature_request")} data-testid="button-rover-feature">
-                    <Lightbulb className="h-3 w-3 mr-1" /> Feature Request
-                  </Button>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Subject</Label>
+                    <Input
+                      value={ticketSubject}
+                      onChange={(e) => setTicketSubject(e.target.value)}
+                      placeholder="Brief summary..."
+                      className="text-sm"
+                      data-testid="input-rover-ticket-subject"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Description</Label>
+                    <Textarea
+                      value={ticketDescription}
+                      onChange={(e) => setTicketDescription(e.target.value)}
+                      placeholder="Describe the issue or feature in detail..."
+                      className="text-sm min-h-[120px]"
+                      data-testid="textarea-rover-ticket-description"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setView("chat")}
+                      className="flex-1"
+                      data-testid="button-rover-ticket-cancel"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={submitTicket}
+                      disabled={
+                        submittingTicket ||
+                        ticketSubject.trim().length < 3 ||
+                        ticketDescription.trim().length < 10
+                      }
+                      className="flex-1"
+                      data-testid="button-rover-ticket-submit"
+                    >
+                      {submittingTicket ? "Submitting..." : "Submit"}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Input
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Ask Rover anything..."
-                    className="text-sm"
-                    disabled={sending}
-                    data-testid="input-rover-question"
-                  />
-                  <Button size="icon" className="shrink-0" onClick={handleSend} disabled={!input.trim() || sending} data-testid="button-rover-send">
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-
-          {view === "ticket-form" && (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <h3 className="font-semibold text-sm">
-                {ticketType === "bug" ? "Submit Trouble Ticket" : "Submit Feature Request"}
-              </h3>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Type</Label>
-                <Select value={ticketType} onValueChange={(v: "bug" | "feature_request" | "question") => setTicketType(v)}>
-                  <SelectTrigger className="text-sm" data-testid="select-rover-ticket-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bug">Trouble Ticket / Bug</SelectItem>
-                    <SelectItem value="feature_request">Feature Request</SelectItem>
-                    <SelectItem value="question">General Question</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Subject</Label>
-                <Input
-                  value={ticketSubject}
-                  onChange={(e) => setTicketSubject(e.target.value)}
-                  placeholder="Brief summary..."
-                  className="text-sm"
-                  data-testid="input-rover-ticket-subject"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Description</Label>
-                <Textarea
-                  value={ticketDescription}
-                  onChange={(e) => setTicketDescription(e.target.value)}
-                  placeholder="Describe the issue or feature in detail..."
-                  className="text-sm min-h-[120px]"
-                  data-testid="textarea-rover-ticket-description"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" onClick={() => setView("chat")} className="flex-1" data-testid="button-rover-ticket-cancel">
-                  Cancel
-                </Button>
-                <Button
-                  onClick={submitTicket}
-                  disabled={submittingTicket || ticketSubject.trim().length < 3 || ticketDescription.trim().length < 10}
-                  className="flex-1"
-                  data-testid="button-rover-ticket-submit"
-                >
-                  {submittingTicket ? "Submitting..." : "Submit"}
-                </Button>
-              </div>
+              )}
             </div>
-          )}
-        </div>
-        );
-      })()}
+          );
+        })()}
     </>
   );
 });

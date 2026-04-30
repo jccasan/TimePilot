@@ -1,5 +1,12 @@
 import { db } from "../db";
-import { contacts, servicePlans, visits, servicePricing, properties, servicePlanAddOns } from "@shared/schema";
+import {
+  contacts,
+  servicePlans,
+  visits,
+  servicePricing,
+  properties,
+  servicePlanAddOns,
+} from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 
 export interface Opportunity {
@@ -31,7 +38,10 @@ interface ContactProfile {
   activeAddOnNames: string[];
 }
 
-async function buildContactProfile(contactId: string, companyId: string): Promise<ContactProfile | null> {
+async function buildContactProfile(
+  contactId: string,
+  companyId: string
+): Promise<ContactProfile | null> {
   const contact = await db.query.contacts.findFirst({
     where: and(eq(contacts.id, contactId), eq(contacts.companyId, companyId)),
   });
@@ -41,7 +51,7 @@ async function buildContactProfile(contactId: string, companyId: string): Promis
     where: and(eq(servicePlans.contactId, contactId), eq(servicePlans.companyId, companyId)),
   });
 
-  const activePlans = plans.filter(p => p.isActive && p.jobStatus === "active");
+  const activePlans = plans.filter((p) => p.isActive && p.jobStatus === "active");
 
   const propRows = await db.query.properties.findMany({
     where: eq(properties.contactId, contactId),
@@ -50,22 +60,23 @@ async function buildContactProfile(contactId: string, companyId: string): Promis
 
   let visitStats = { total: 0, completed: 0 };
   if (activePlans.length > 0) {
-    const planIds = activePlans.map(p => p.id);
-    const visitRows = await db.select({ status: visits.status })
+    const planIds = activePlans.map((p) => p.id);
+    const visitRows = await db
+      .select({ status: visits.status })
       .from(visits)
       .where(and(eq(visits.companyId, companyId), inArray(visits.servicePlanId, planIds)));
     visitStats.total = visitRows.length;
-    visitStats.completed = visitRows.filter(v => v.status === "completed").length;
+    visitStats.completed = visitRows.filter((v) => v.status === "completed").length;
   }
 
   const addOnRows = await db.query.servicePricing.findMany({
     where: and(eq(servicePricing.companyId, companyId), eq(servicePricing.category, "add_on")),
   });
-  const availableAddOns = addOnRows.map(a => a.name);
+  const availableAddOns = addOnRows.map((a) => a.name);
 
   const activeAddOnNames: string[] = [];
   if (activePlans.length > 0) {
-    const planIds = activePlans.map(p => p.id);
+    const planIds = activePlans.map((p) => p.id);
     const planAddOnRows = await db.query.servicePlanAddOns.findMany({
       where: inArray(servicePlanAddOns.servicePlanId, planIds),
     });
@@ -82,7 +93,7 @@ async function buildContactProfile(contactId: string, companyId: string): Promis
     status: contact.status,
     createdAt: contact.createdAt,
     dismissedOpportunities: (contact.dismissedOpportunities as string[] | null) ?? [],
-    plans: activePlans.map(p => ({
+    plans: activePlans.map((p) => ({
       id: p.id,
       frequency: p.frequency,
       pricePerVisit: parseFloat(p.pricePerVisit as string),
@@ -100,9 +111,9 @@ function evaluateOpportunities(profile: ContactProfile): Opportunity[] {
   const opps: Opportunity[] = [];
   const dismissed = new Set(profile.dismissedOpportunities ?? []);
 
-  const biweeklyPlans = profile.plans.filter(p => p.frequency === "biweekly");
-  const weeklyPlans = profile.plans.filter(p => p.frequency === "weekly");
-  const monthlyPlans = profile.plans.filter(p => p.frequency === "monthly");
+  const biweeklyPlans = profile.plans.filter((p) => p.frequency === "biweekly");
+  const weeklyPlans = profile.plans.filter((p) => p.frequency === "weekly");
+  const monthlyPlans = profile.plans.filter((p) => p.frequency === "monthly");
 
   if (
     !dismissed.has("upgrade_biweekly_to_weekly") &&
@@ -139,11 +150,11 @@ function evaluateOpportunities(profile: ContactProfile): Opportunity[] {
     });
   }
 
-  const deodorizerAvailable = profile.availableAddOns.some(a =>
-    a.toLowerCase().includes("deodorizer") || a.toLowerCase().includes("deodoriz")
+  const deodorizerAvailable = profile.availableAddOns.some(
+    (a) => a.toLowerCase().includes("deodorizer") || a.toLowerCase().includes("deodoriz")
   );
-  const deodorizerActive = profile.activeAddOnNames.some(a =>
-    a.toLowerCase().includes("deodorizer") || a.toLowerCase().includes("deodoriz")
+  const deodorizerActive = profile.activeAddOnNames.some(
+    (a) => a.toLowerCase().includes("deodorizer") || a.toLowerCase().includes("deodoriz")
   );
   if (
     !dismissed.has("add_deodorizer") &&
@@ -166,9 +177,10 @@ function evaluateOpportunities(profile: ContactProfile): Opportunity[] {
     !dismissed.has("loyalty_upsell") &&
     tenureMonths >= 12 &&
     profile.plans.length > 0 &&
-    profile.plans.every(p => p.frequency !== "weekly")
+    profile.plans.every((p) => p.frequency !== "weekly")
   ) {
-    const avgPrice = profile.plans.reduce((s, p) => s + p.pricePerVisit, 0) / Math.max(1, profile.plans.length);
+    const avgPrice =
+      profile.plans.reduce((s, p) => s + p.pricePerVisit, 0) / Math.max(1, profile.plans.length);
     opps.push({
       key: "loyalty_upsell",
       label: "Loyalty upgrade offer",
@@ -182,9 +194,10 @@ function evaluateOpportunities(profile: ContactProfile): Opportunity[] {
     profile.visitStats.total >= 10 &&
     profile.visitStats.total > 0 &&
     profile.visitStats.completed / profile.visitStats.total >= 0.9 &&
-    profile.plans.some(p => p.frequency === "biweekly" || p.frequency === "monthly")
+    profile.plans.some((p) => p.frequency === "biweekly" || p.frequency === "monthly")
   ) {
-    const avgPrice = profile.plans.reduce((s, p) => s + p.pricePerVisit, 0) / Math.max(1, profile.plans.length);
+    const avgPrice =
+      profile.plans.reduce((s, p) => s + p.pricePerVisit, 0) / Math.max(1, profile.plans.length);
     opps.push({
       key: "reliable_client_upgrade",
       label: "Reliable client — consider frequency upgrade",
@@ -196,25 +209,39 @@ function evaluateOpportunities(profile: ContactProfile): Opportunity[] {
   return opps;
 }
 
-export async function getOpportunitiesForContact(contactId: string, companyId: string): Promise<Opportunity[]> {
+export async function getOpportunitiesForContact(
+  contactId: string,
+  companyId: string
+): Promise<Opportunity[]> {
   const profile = await buildContactProfile(contactId, companyId);
   if (!profile) return [];
   return evaluateOpportunities(profile);
 }
 
-export async function getGrowthOpportunities(companyId: string, limit = 10): Promise<{
-  contactId: string;
-  contactName: string;
-  topOpportunity: Opportunity;
-  totalUplift: number;
-  count: number;
-}[]> {
+export async function getGrowthOpportunities(
+  companyId: string,
+  limit = 10
+): Promise<
+  {
+    contactId: string;
+    contactName: string;
+    topOpportunity: Opportunity;
+    totalUplift: number;
+    count: number;
+  }[]
+> {
   const activeContacts = await db.query.contacts.findMany({
     where: and(eq(contacts.companyId, companyId), eq(contacts.status, "active")),
     limit: 200,
   });
 
-  const results: { contactId: string; contactName: string; topOpportunity: Opportunity; totalUplift: number; count: number }[] = [];
+  const results: {
+    contactId: string;
+    contactName: string;
+    topOpportunity: Opportunity;
+    totalUplift: number;
+    count: number;
+  }[] = [];
 
   for (const contact of activeContacts) {
     const profile = await buildContactProfile(contact.id, companyId);

@@ -7,7 +7,14 @@ const TutorialContext = createContext<TutorialContextType | null>(null);
 
 export function TutorialProvider({ children }: { children: ReactNode }) {
   const tutorials = useTutorials();
-  const { activeTutorial, currentStep, setCurrentStep, stopTutorial, completeTutorial, saveProgress } = tutorials;
+  const {
+    activeTutorial,
+    currentStep,
+    setCurrentStep,
+    stopTutorial,
+    completeTutorial,
+    saveProgress,
+  } = tutorials;
   const totalSteps = activeTutorial?.steps.length || 0;
   const prevStepRef = useRef(currentStep);
 

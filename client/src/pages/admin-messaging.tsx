@@ -2,8 +2,23 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MessageSquare, HardDrive, AlertTriangle, Trash2, Loader2, Building2, Clock, ArrowRight } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  MessageSquare,
+  HardDrive,
+  AlertTriangle,
+  Trash2,
+  Loader2,
+  Building2,
+  Clock,
+  ArrowRight,
+} from "lucide-react";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -95,7 +110,11 @@ export default function AdminMessaging() {
 
   const updateRetentionMutation = useMutation({
     mutationFn: async ({ companyId, days }: { companyId: string; days: number }) => {
-      const res = await adminRequest("PATCH", `/api/admin/companies/${companyId}/messaging-config`, { messageRetentionDays: days });
+      const res = await adminRequest(
+        "PATCH",
+        `/api/admin/companies/${companyId}/messaging-config`,
+        { messageRetentionDays: days }
+      );
       if (!res.ok) throw new Error("Update failed");
       return res.json();
     },
@@ -123,7 +142,11 @@ export default function AdminMessaging() {
 
   const resolveMutation = useMutation({
     mutationFn: async ({ exceptionId, companyId }: { exceptionId: string; companyId: string }) => {
-      const res = await adminRequest("POST", `/api/admin/message-exceptions/${exceptionId}/resolve`, { companyId });
+      const res = await adminRequest(
+        "POST",
+        `/api/admin/message-exceptions/${exceptionId}/resolve`,
+        { companyId }
+      );
       if (!res.ok) throw new Error("Resolve failed");
       return res.json();
     },
@@ -139,7 +162,7 @@ export default function AdminMessaging() {
   });
 
   const [resolveTarget, setResolveTarget] = useState<Record<string, string>>({});
-  const unresolvedExceptions = (exceptions || []).filter(e => !e.resolvedAt);
+  const unresolvedExceptions = (exceptions || []).filter((e) => !e.resolvedAt);
 
   if (isLoading) {
     return (
@@ -153,8 +176,12 @@ export default function AdminMessaging() {
     <div className="p-6 space-y-6 max-w-7xl mx-auto" data-testid="admin-messaging-page">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-messaging-title">Messaging Monitor</h1>
-          <p className="text-muted-foreground text-sm mt-1">Message volume, storage, retention, and exception queue</p>
+          <h1 className="text-2xl font-bold" data-testid="text-messaging-title">
+            Messaging Monitor
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Message volume, storage, retention, and exception queue
+          </p>
         </div>
         <Button
           variant="outline"
@@ -162,7 +189,11 @@ export default function AdminMessaging() {
           disabled={cleanupMutation.isPending}
           data-testid="button-run-cleanup"
         >
-          {cleanupMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+          {cleanupMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <Trash2 className="h-4 w-4 mr-2" />
+          )}
           Run Cleanup Now
         </Button>
       </div>
@@ -174,8 +205,12 @@ export default function AdminMessaging() {
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">Total Messages</span>
             </div>
-            <p className="text-xl font-bold" data-testid="text-total-messages">{analytics?.overview.totalMessages ?? 0}</p>
-            <p className="text-xs text-muted-foreground mt-1">Last 30d: {analytics?.overview.last30Days ?? 0}</p>
+            <p className="text-xl font-bold" data-testid="text-total-messages">
+              {analytics?.overview.totalMessages ?? 0}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Last 30d: {analytics?.overview.last30Days ?? 0}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -198,9 +233,12 @@ export default function AdminMessaging() {
               <HardDrive className="h-4 w-4 text-muted-foreground" />
               <span className="text-xs text-muted-foreground">Attachment Storage</span>
             </div>
-            <p className="text-xl font-bold" data-testid="text-storage-used">{formatBytes(analytics?.storage.totalCompressedBytes ?? 0)}</p>
+            <p className="text-xl font-bold" data-testid="text-storage-used">
+              {formatBytes(analytics?.storage.totalCompressedBytes ?? 0)}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
-              {analytics?.storage.totalAttachments ?? 0} files | Saved {analytics?.storage.compressionSavingsPct ?? 0}%
+              {analytics?.storage.totalAttachments ?? 0} files | Saved{" "}
+              {analytics?.storage.compressionSavingsPct ?? 0}%
             </p>
           </CardContent>
         </Card>
@@ -210,8 +248,12 @@ export default function AdminMessaging() {
               <AlertTriangle className="h-4 w-4 text-amber-500" />
               <span className="text-xs text-muted-foreground">Exception Queue</span>
             </div>
-            <p className="text-xl font-bold" data-testid="text-exceptions-unresolved">{analytics?.exceptions.unresolved ?? 0}</p>
-            <p className="text-xs text-muted-foreground mt-1">Total: {analytics?.exceptions.total ?? 0}</p>
+            <p className="text-xl font-bold" data-testid="text-exceptions-unresolved">
+              {analytics?.exceptions.unresolved ?? 0}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Total: {analytics?.exceptions.total ?? 0}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -228,7 +270,11 @@ export default function AdminMessaging() {
           <CardContent>
             <div className="space-y-2 max-h-64 overflow-auto">
               {unresolvedExceptions.slice(0, 20).map((exc) => (
-                <div key={exc.id} className="flex items-start justify-between gap-3 p-3 rounded-lg border bg-background" data-testid={`exception-row-${exc.id}`}>
+                <div
+                  key={exc.id}
+                  className="flex items-start justify-between gap-3 p-3 rounded-lg border bg-background"
+                  data-testid={`exception-row-${exc.id}`}
+                >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-sm">
                       <span className="font-medium truncate">{exc.fromAddress}</span>
@@ -236,28 +282,44 @@ export default function AdminMessaging() {
                       <span className="truncate">{exc.toAddress}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 truncate">{exc.reason}</p>
-                    {exc.body && <p className="text-xs text-muted-foreground mt-0.5 truncate">{exc.body.slice(0, 100)}</p>}
-                    {exc.candidateCompanyIds.length > 0 && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Candidates: {exc.candidateCompanyIds.map(id => {
-                          const tenant = analytics?.perTenant.find(t => t.companyId === id);
-                          return tenant?.companyName || id.slice(0, 8);
-                        }).join(", ")}
+                    {exc.body && (
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                        {exc.body.slice(0, 100)}
                       </p>
                     )}
-                    <p className="text-xs text-muted-foreground mt-0.5">{new Date(exc.createdAt).toLocaleString()}</p>
+                    {exc.candidateCompanyIds.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Candidates:{" "}
+                        {exc.candidateCompanyIds
+                          .map((id) => {
+                            const tenant = analytics?.perTenant.find((t) => t.companyId === id);
+                            return tenant?.companyName || id.slice(0, 8);
+                          })
+                          .join(", ")}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(exc.createdAt).toLocaleString()}
+                    </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <Select
                       value={resolveTarget[exc.id] || ""}
-                      onValueChange={(val) => setResolveTarget(prev => ({ ...prev, [exc.id]: val }))}
+                      onValueChange={(val) =>
+                        setResolveTarget((prev) => ({ ...prev, [exc.id]: val }))
+                      }
                     >
-                      <SelectTrigger className="h-7 w-[140px] text-xs" data-testid={`select-resolve-tenant-${exc.id}`}>
+                      <SelectTrigger
+                        className="h-7 w-[140px] text-xs"
+                        data-testid={`select-resolve-tenant-${exc.id}`}
+                      >
                         <SelectValue placeholder="Route to..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {(analytics?.perTenant ?? []).map(t => (
-                          <SelectItem key={t.companyId} value={t.companyId}>{t.companyName}</SelectItem>
+                        {(analytics?.perTenant ?? []).map((t) => (
+                          <SelectItem key={t.companyId} value={t.companyId}>
+                            {t.companyName}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -267,7 +329,8 @@ export default function AdminMessaging() {
                       className="h-7 px-2"
                       onClick={() => {
                         const targetId = resolveTarget[exc.id];
-                        if (targetId) resolveMutation.mutate({ exceptionId: exc.id, companyId: targetId });
+                        if (targetId)
+                          resolveMutation.mutate({ exceptionId: exc.id, companyId: targetId });
                       }}
                       disabled={!resolveTarget[exc.id] || resolveMutation.isPending}
                       data-testid={`button-resolve-${exc.id}`}
@@ -298,7 +361,9 @@ export default function AdminMessaging() {
             <Building2 className="h-4 w-4" />
             Per-Tenant Messaging
           </CardTitle>
-          <CardDescription>Message volume, storage usage, and retention settings by tenant</CardDescription>
+          <CardDescription>
+            Message volume, storage usage, and retention settings by tenant
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {(analytics?.perTenant ?? []).length === 0 ? (
@@ -308,20 +373,38 @@ export default function AdminMessaging() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Tenant</th>
-                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Messages</th>
+                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground">
+                      Tenant
+                    </th>
+                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">
+                      Messages
+                    </th>
                     <th className="text-right py-2 px-3 font-medium text-muted-foreground">SMS</th>
-                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Email</th>
-                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Attachments</th>
-                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Storage</th>
-                    <th className="text-right py-2 pl-3 font-medium text-muted-foreground">Retention</th>
+                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">
+                      Email
+                    </th>
+                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">
+                      Attachments
+                    </th>
+                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">
+                      Storage
+                    </th>
+                    <th className="text-right py-2 pl-3 font-medium text-muted-foreground">
+                      Retention
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {(analytics?.perTenant ?? []).map((t) => (
-                    <tr key={t.companyId} className="border-b last:border-0" data-testid={`tenant-row-${t.companyId}`}>
+                    <tr
+                      key={t.companyId}
+                      className="border-b last:border-0"
+                      data-testid={`tenant-row-${t.companyId}`}
+                    >
                       <td className="py-2 pr-4">
-                        <span className="font-medium truncate block max-w-[200px]">{t.companyName}</span>
+                        <span className="font-medium truncate block max-w-[200px]">
+                          {t.companyName}
+                        </span>
                       </td>
                       <td className="text-right py-2 px-3">{t.totalMessages}</td>
                       <td className="text-right py-2 px-3">{t.smsMessages}</td>

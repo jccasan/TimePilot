@@ -4,7 +4,12 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { eq, and } from "drizzle-orm";
 import { companies, invoices, stripeEvents } from "@shared/schema";
-import { getUserByEmail, createUserWithTempPassword, claimOnboardingEmailSend, resetOnboardingEmailSent } from "../services/app-auth";
+import {
+  getUserByEmail,
+  createUserWithTempPassword,
+  claimOnboardingEmailSend,
+  resetOnboardingEmailSent,
+} from "../services/app-auth";
 import { sendEmail, buildWelcomeEmailContent } from "../services/email";
 import { sendSmsForCompany, isSmsConfiguredForCompany } from "../services/sms";
 import {
@@ -22,13 +27,27 @@ import {
   createConnectLoginLink,
   ensureConnectedCustomer,
 } from "../services/stripe";
-import { seedRetellKnowledgeBase, provisionRetellNumber, registerRetellWebhook, cloneRetellAgent, getAppBaseUrl } from "../services/retell";
 import {
-  VOICE_PLAN_CONFIG,
-} from "@shared/schema";
+  seedRetellKnowledgeBase,
+  provisionRetellNumber,
+  registerRetellWebhook,
+  cloneRetellAgent,
+  getAppBaseUrl,
+} from "../services/retell";
+import { VOICE_PLAN_CONFIG } from "@shared/schema";
 
-import { isAuthenticated, getCompanyContext, requireRole, getBaseUrl, handleError, auditLog, p, notify, qboAutoSync, seedDefaultLeadSources } from "./shared";
-
+import {
+  isAuthenticated,
+  getCompanyContext,
+  requireRole,
+  getBaseUrl,
+  handleError,
+  auditLog,
+  p,
+  notify,
+  qboAutoSync,
+  seedDefaultLeadSources,
+} from "./shared";
 
 export async function registerStripeRoutes(app: Express): Promise<void> {
   // ================ Stripe Payment Routes ================
@@ -37,142 +56,194 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
     res.json({ configured: isStripeConfigured() });
   });
 
-  app.post("/api/contacts/:id/stripe-customer", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
+  app.post(
+    "/api/contacts/:id/stripe-customer",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      if (contact.stripeCustomerId) {
-        return res.json({ stripeCustomerId: contact.stripeCustomerId, alreadyExists: true });
+        if (contact.stripeCustomerId) {
+          return res.json({ stripeCustomerId: contact.stripeCustomerId, alreadyExists: true });
+        }
+
+        const company = await storage.getCompany(companyId);
+        const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+        const stripeCustomerId = await createStripeCustomer({
+          email: contact.email || undefined,
+          name: `${contact.firstName} ${contact.lastName}`.trim(),
+          phone: contact.phone || undefined,
+          metadata: { contactId: contact.id, companyId },
+          stripeAccount: connectAcct,
+        });
+
+        await storage.updateContact(p(req.params.id), companyId, { stripeCustomerId });
+        res.json({ stripeCustomerId, alreadyExists: false });
+      } catch (err) {
+        handleError(res, err);
       }
+    }
+  );
 
-      const company = await storage.getCompany(companyId);
-      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-      const stripeCustomerId = await createStripeCustomer({
-        email: contact.email || undefined,
-        name: `${contact.firstName} ${contact.lastName}`.trim(),
-        phone: contact.phone || undefined,
-        metadata: { contactId: contact.id, companyId },
-        stripeAccount: connectAcct,
-      });
+  app.post(
+    "/api/contacts/:id/send-payment-reminder",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      await storage.updateContact(p(req.params.id), companyId, { stripeCustomerId });
-      res.json({ stripeCustomerId, alreadyExists: false });
-    } catch (err) { handleError(res, err); }
-  });
+        const company = await storage.getCompany(companyId);
+        const contactInvoices = await storage.getInvoices(companyId, { contactId: contact.id });
+        const outstanding = contactInvoices.filter((inv) =>
+          ["pending", "sent"].includes(inv.status)
+        );
+        const totalOwed = outstanding.reduce((sum, inv) => sum + parseFloat(inv.total || "0"), 0);
 
-  app.post("/api/contacts/:id/send-payment-reminder", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
+        if (outstanding.length === 0) {
+          return res.status(400).json({ error: "Contact has no outstanding invoices" });
+        }
 
-      const company = await storage.getCompany(companyId);
-      const contactInvoices = await storage.getInvoices(companyId, { contactId: contact.id });
-      const outstanding = contactInvoices.filter(inv => ["pending", "sent"].includes(inv.status));
-      const totalOwed = outstanding.reduce((sum, inv) => sum + parseFloat(inv.total || "0"), 0);
+        const contactName = contact.firstName || "there";
+        const companyName = company?.name || "Your service provider";
+        const baseUrl = getBaseUrl(req);
+        const portalUrl = `${baseUrl}/portal`;
 
-      if (outstanding.length === 0) {
-        return res.status(400).json({ error: "Contact has no outstanding invoices" });
+        const emailSuppressed = !!company?.clientNotificationsSuppressed;
+        if (emailSuppressed) {
+          console.log(
+            `[send-payment-reminder] Email suppressed for contact ${p(req.params.id)} — Import Mode on; SMS still active`
+          );
+        }
+
+        let smsSent = false;
+        let emailSent = false;
+
+        if (contact.phone && (await isSmsConfiguredForCompany(companyId))) {
+          const body = `Hi ${contactName}, you have an outstanding balance of $${totalOwed.toFixed(2)} with ${companyName}. Please visit ${portalUrl} to pay online. Reply STOP to opt out.`;
+          await sendSmsForCompany({ to: contact.phone, body, companyId, contactId: contact.id });
+          smsSent = true;
+        }
+
+        if (contact.email && !smsSent && !emailSuppressed) {
+          const subject = `Payment Reminder from ${companyName}`;
+          const text = `Hi ${contactName},\n\nThis is a reminder that you have an outstanding balance of $${totalOwed.toFixed(2)} with ${companyName}.\n\nPay online at: ${portalUrl}\n\nThank you!`;
+          const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><h3>Payment Reminder</h3><p>Hi ${contactName},</p><p>This is a friendly reminder that you have an outstanding balance of <strong>$${totalOwed.toFixed(2)}</strong> with ${companyName}.</p><p><a href="${portalUrl}" style="background:#2d8a5e;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Pay Online</a></p><p>Thank you!</p></div>`;
+          await sendEmail({
+            companyId,
+            to: contact.email,
+            subject,
+            text,
+            html,
+            senderName: company?.name,
+          });
+          emailSent = true;
+        }
+
+        if (!smsSent && !emailSent && !emailSuppressed) {
+          return res
+            .status(400)
+            .json({ error: "Contact has no phone or email to send a reminder to" });
+        }
+
+        res.json({
+          success: true,
+          smsSent,
+          emailSent,
+          suppressed: emailSuppressed && !smsSent,
+          totalOwed,
+        });
+      } catch (err) {
+        handleError(res, err);
       }
+    }
+  );
 
-      const contactName = contact.firstName || "there";
-      const companyName = company?.name || "Your service provider";
-      const baseUrl = getBaseUrl(req);
-      const portalUrl = `${baseUrl}/portal`;
+  app.post(
+    "/api/contacts/:id/setup-intent",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        if (!contact.stripeCustomerId)
+          return res
+            .status(400)
+            .json({ error: "Contact has no Stripe customer. Create one first." });
 
-      const emailSuppressed = !!(company?.clientNotificationsSuppressed);
-      if (emailSuppressed) {
-        console.log(`[send-payment-reminder] Email suppressed for contact ${p(req.params.id)} — Import Mode on; SMS still active`);
+        const company = await storage.getCompany(companyId);
+        const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+        const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+        const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
+          currentCustomerId: contact.stripeCustomerId,
+          stripeAccount: connectAcct,
+          email: contact.email || undefined,
+          name: contactName,
+          metadata: { contactId: contact.id, companyId },
+        });
+        if (wasRecreated) {
+          await storage.updateContact(p(req.params.id), companyId, {
+            stripeCustomerId: resolvedCustId,
+          });
+        }
+        const result = await createSetupIntent(resolvedCustId, connectAcct);
+        res.json(result);
+      } catch (err) {
+        handleError(res, err);
       }
+    }
+  );
 
-      let smsSent = false;
-      let emailSent = false;
+  app.get(
+    "/api/contacts/:id/payment-methods",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        if (!contact.stripeCustomerId) return res.json([]);
 
-      if (contact.phone && await isSmsConfiguredForCompany(companyId)) {
-        const body = `Hi ${contactName}, you have an outstanding balance of $${totalOwed.toFixed(2)} with ${companyName}. Please visit ${portalUrl} to pay online. Reply STOP to opt out.`;
-        await sendSmsForCompany({ to: contact.phone, body, companyId, contactId: contact.id });
-        smsSent = true;
+        const company = await storage.getCompany(companyId);
+        const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+        const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+        const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
+          currentCustomerId: contact.stripeCustomerId,
+          stripeAccount: connectAcct,
+          email: contact.email || undefined,
+          name: contactName,
+          metadata: { contactId: contact.id, companyId },
+        });
+        if (wasRecreated) {
+          await storage.updateContact(p(req.params.id), companyId, {
+            stripeCustomerId: resolvedCustId,
+          });
+        }
+        const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
+        res.json(methods);
+      } catch (err) {
+        handleError(res, err);
       }
-
-      if (contact.email && !smsSent && !emailSuppressed) {
-        const subject = `Payment Reminder from ${companyName}`;
-        const text = `Hi ${contactName},\n\nThis is a reminder that you have an outstanding balance of $${totalOwed.toFixed(2)} with ${companyName}.\n\nPay online at: ${portalUrl}\n\nThank you!`;
-        const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><h3>Payment Reminder</h3><p>Hi ${contactName},</p><p>This is a friendly reminder that you have an outstanding balance of <strong>$${totalOwed.toFixed(2)}</strong> with ${companyName}.</p><p><a href="${portalUrl}" style="background:#2d8a5e;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Pay Online</a></p><p>Thank you!</p></div>`;
-        await sendEmail({ companyId, to: contact.email, subject, text, html, senderName: company?.name });
-        emailSent = true;
-      }
-
-      if (!smsSent && !emailSent && !emailSuppressed) {
-        return res.status(400).json({ error: "Contact has no phone or email to send a reminder to" });
-      }
-
-      res.json({ success: true, smsSent, emailSent, suppressed: emailSuppressed && !smsSent, totalOwed });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/contacts/:id/setup-intent", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (!contact.stripeCustomerId) return res.status(400).json({ error: "Contact has no Stripe customer. Create one first." });
-
-      const company = await storage.getCompany(companyId);
-      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
-      const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
-        currentCustomerId: contact.stripeCustomerId,
-        stripeAccount: connectAcct,
-        email: contact.email || undefined,
-        name: contactName,
-        metadata: { contactId: contact.id, companyId },
-      });
-      if (wasRecreated) {
-        await storage.updateContact(p(req.params.id), companyId, { stripeCustomerId: resolvedCustId });
-      }
-      const result = await createSetupIntent(resolvedCustId, connectAcct);
-      res.json(result);
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.get("/api/contacts/:id/payment-methods", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (!contact.stripeCustomerId) return res.json([]);
-
-      const company = await storage.getCompany(companyId);
-      const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
-      const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
-        currentCustomerId: contact.stripeCustomerId,
-        stripeAccount: connectAcct,
-        email: contact.email || undefined,
-        name: contactName,
-        metadata: { contactId: contact.id, companyId },
-      });
-      if (wasRecreated) {
-        await storage.updateContact(p(req.params.id), companyId, { stripeCustomerId: resolvedCustId });
-      }
-      const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
-      res.json(methods);
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
   app.delete("/api/payment-methods/:pmId", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const contactId = req.query.contactId as string;
-      if (!contactId) return res.status(400).json({ error: "contactId query parameter is required" });
+      if (!contactId)
+        return res.status(400).json({ error: "contactId query parameter is required" });
 
       const contact = await storage.getContact(contactId, companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      if (!contact.stripeCustomerId) return res.status(400).json({ error: "Contact has no payment methods" });
+      if (!contact.stripeCustomerId)
+        return res.status(400).json({ error: "Contact has no payment methods" });
 
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
@@ -190,11 +261,14 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
 
       const methods = await getCustomerPaymentMethods(resolvedCustId, connectAcct);
       const owns = methods.some((m) => m.id === p(req.params.pmId));
-      if (!owns) return res.status(403).json({ error: "Payment method not found for this contact" });
+      if (!owns)
+        return res.status(403).json({ error: "Payment method not found for this contact" });
 
       await detachPaymentMethod(p(req.params.pmId), connectAcct);
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/invoices/:id/charge", isAuthenticated, async (req: Request, res: Response) => {
@@ -205,7 +279,8 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
 
       const contact = await storage.getContact(invoice.contactId, companyId);
-      if (!contact?.stripeCustomerId) return res.status(400).json({ error: "Contact has no payment method on file" });
+      if (!contact?.stripeCustomerId)
+        return res.status(400).json({ error: "Contact has no payment method on file" });
 
       const company = await storage.getCompany(companyId);
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
@@ -219,7 +294,9 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         metadata: { contactId: contact.id, companyId },
       });
       if (wasRecreated) {
-        await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustomerId });
+        await storage.updateContact(contact.id, companyId, {
+          stripeCustomerId: resolvedCustomerId,
+        });
       }
 
       const result = await chargeInvoiceAutomatically({
@@ -241,25 +318,57 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         updateData.status = "paid";
         updateData.paidAt = new Date();
         updateData.stripePaymentIntentId = result.paymentIntentId;
-        notify(companyId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+        notify(
+          companyId,
+          "invoice_paid",
+          "Invoice Paid",
+          `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`,
+          `/invoices`
+        );
         qboAutoSync(companyId, invoice.id, "payment");
       } else if (result.status === "no_payment_method") {
         updateData.status = invoice.status === "draft" ? "draft" : "sent";
-        notify(companyId, "payment_failed", "No Payment Method", `No payment method on file for ${contactName} (invoice #${invoice.invoiceNumber}). Send them a payment link to collect their card.`, `/invoices`);
+        notify(
+          companyId,
+          "payment_failed",
+          "No Payment Method",
+          `No payment method on file for ${contactName} (invoice #${invoice.invoiceNumber}). Send them a payment link to collect their card.`,
+          `/invoices`
+        );
       } else {
         updateData.status = "failed";
         if (result.paymentIntentId) updateData.stripePaymentIntentId = result.paymentIntentId;
-        notify(companyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}. The card on file was declined.`, `/invoices`);
+        notify(
+          companyId,
+          "payment_failed",
+          "Payment Failed",
+          `Payment failed for invoice #${invoice.invoiceNumber}. The card on file was declined.`,
+          `/invoices`
+        );
       }
 
       const updated = await storage.updateInvoice(invoice.id, companyId, updateData);
       const { userId: chargeUserId } = await getCompanyContext(req);
-      auditLog(companyId, chargeUserId, "invoice", invoice.id, "update", {
-        old: { status: invoice.status, paymentAttempts: invoice.paymentAttempts },
-        new: { status: updated.status, paymentAttempts: updated.paymentAttempts, chargeResult: result.status },
-      }, req.ip || undefined);
+      auditLog(
+        companyId,
+        chargeUserId,
+        "invoice",
+        invoice.id,
+        "update",
+        {
+          old: { status: invoice.status, paymentAttempts: invoice.paymentAttempts },
+          new: {
+            status: updated.status,
+            paymentAttempts: updated.paymentAttempts,
+            chargeResult: result.status,
+          },
+        },
+        req.ip || undefined
+      );
       res.json({ ...updated, chargeResult: result });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/invoices/:id/checkout", isAuthenticated, async (req: Request, res: Response) => {
@@ -301,7 +410,9 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       });
 
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Stripe Connect Routes ================
@@ -330,7 +441,9 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       );
 
       res.json({ url: onboardingUrl, accountId });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/stripe-connect/status", isAuthenticated, async (req: Request, res: Response) => {
@@ -340,14 +453,21 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       if (!company) return res.status(404).json({ error: "Company not found" });
 
       if (!company.stripeConnectAccountId) {
-        return res.json({ status: "not_started", chargesEnabled: false, detailsSubmitted: false, payoutsEnabled: false });
+        return res.json({
+          status: "not_started",
+          chargesEnabled: false,
+          detailsSubmitted: false,
+          payoutsEnabled: false,
+        });
       }
 
       try {
         const accountStatus = await getConnectAccountStatus(company.stripeConnectAccountId);
 
         if (accountStatus.chargesEnabled !== company.stripeConnectOnboarded) {
-          await storage.updateCompany(companyId, { stripeConnectOnboarded: accountStatus.chargesEnabled } as any);
+          await storage.updateCompany(companyId, {
+            stripeConnectOnboarded: accountStatus.chargesEnabled,
+          } as any);
         }
 
         return res.json({
@@ -355,49 +475,72 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           ...accountStatus,
         });
       } catch (stripeErr) {
-        return res.json({ status: "error", chargesEnabled: false, detailsSubmitted: false, payoutsEnabled: false });
+        return res.json({
+          status: "error",
+          chargesEnabled: false,
+          detailsSubmitted: false,
+          payoutsEnabled: false,
+        });
       }
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.get("/api/stripe-connect/dashboard-link", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role, ["owner", "admin"]);
-      const company = await storage.getCompany(companyId);
-      if (!company) return res.status(404).json({ error: "Company not found" });
-      if (!company.stripeConnectAccountId) return res.status(400).json({ error: "No Stripe Connect account" });
-
+  app.get(
+    "/api/stripe-connect/dashboard-link",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
       try {
-        const url = await createConnectLoginLink(company.stripeConnectAccountId);
-        res.json({ url });
-      } catch (err: any) {
-        if (err.message?.includes("not a Standard account") || err.type === "StripeInvalidRequestError") {
-          const protocol = req.get("host")?.includes("localhost") ? "http" : "https";
-          const baseUrl = `${protocol}://${req.get("host")}`;
-          const onboardingUrl = await createConnectAccountLink(
-            company.stripeConnectAccountId,
-            `${baseUrl}/settings?stripe_connect=refresh`,
-            `${baseUrl}/settings?stripe_connect=return`
-          );
-          return res.json({ url: onboardingUrl, isOnboarding: true });
-        }
-        throw err;
-      }
-    } catch (err) { handleError(res, err); }
-  });
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+        const company = await storage.getCompany(companyId);
+        if (!company) return res.status(404).json({ error: "Company not found" });
+        if (!company.stripeConnectAccountId)
+          return res.status(400).json({ error: "No Stripe Connect account" });
 
-  app.post("/api/stripe-connect/disconnect", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role, ["owner", "admin"]);
-      await storage.updateCompany(companyId, {
-        stripeConnectAccountId: null,
-        stripeConnectOnboarded: false,
-      } as any);
-      res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
-  });
+        try {
+          const url = await createConnectLoginLink(company.stripeConnectAccountId);
+          res.json({ url });
+        } catch (err: any) {
+          if (
+            err.message?.includes("not a Standard account") ||
+            err.type === "StripeInvalidRequestError"
+          ) {
+            const protocol = req.get("host")?.includes("localhost") ? "http" : "https";
+            const baseUrl = `${protocol}://${req.get("host")}`;
+            const onboardingUrl = await createConnectAccountLink(
+              company.stripeConnectAccountId,
+              `${baseUrl}/settings?stripe_connect=refresh`,
+              `${baseUrl}/settings?stripe_connect=return`
+            );
+            return res.json({ url: onboardingUrl, isOnboarding: true });
+          }
+          throw err;
+        }
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/stripe-connect/disconnect",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+        await storage.updateCompany(companyId, {
+          stripeConnectAccountId: null,
+          stripeConnectOnboarded: false,
+        } as any);
+        res.json({ ok: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.post("/api/webhooks/stripe", async (req: Request, res: Response) => {
     try {
@@ -418,20 +561,27 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         try {
           event = constructWebhookEvent(rawBody, sig, secret);
           break;
-        } catch {
-        }
+        } catch {}
       }
       if (!event) {
-        console.error("Stripe webhook signature verification failed against all configured secrets");
+        console.error(
+          "Stripe webhook signature verification failed against all configured secrets"
+        );
         return res.status(400).json({ error: "Webhook signature verification failed" });
       }
 
       const connectAccountId = (event as any).account as string | undefined;
       if (connectAccountId) {
-        console.log(`[Stripe Webhook] Connect event ${event.id} (${event.type}) from account ${connectAccountId}`);
+        console.log(
+          `[Stripe Webhook] Connect event ${event.id} (${event.type}) from account ${connectAccountId}`
+        );
       }
 
-      const [alreadyProcessed] = await db.select({ id: stripeEvents.id }).from(stripeEvents).where(eq(stripeEvents.id, event.id)).limit(1);
+      const [alreadyProcessed] = await db
+        .select({ id: stripeEvents.id })
+        .from(stripeEvents)
+        .where(eq(stripeEvents.id, event.id))
+        .limit(1);
       if (alreadyProcessed) {
         console.log(`[Stripe Webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
         return res.json({ received: true });
@@ -465,19 +615,29 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               let effectiveAgentId = company.retellAgentId || null;
               if (!effectiveAgentId) {
                 try {
-                  const webhookUrl = getAppBaseUrl() ? `${getAppBaseUrl()}/api/webhooks/retell` : undefined;
+                  const webhookUrl = getAppBaseUrl()
+                    ? `${getAppBaseUrl()}/api/webhooks/retell`
+                    : undefined;
                   effectiveAgentId = await cloneRetellAgent({
                     companyName: company.name,
                     webhookUrl,
                   });
                   (companyUpdates as Record<string, unknown>).retellAgentId = effectiveAgentId;
-                  console.log(`[Retell] Cloned agent "${effectiveAgentId}" for company "${company.name}" (${company.id})`);
+                  console.log(
+                    `[Retell] Cloned agent "${effectiveAgentId}" for company "${company.name}" (${company.id})`
+                  );
                 } catch (agentErr: any) {
-                  console.warn(`[Retell] Failed to clone agent for company "${company.name}" (${company.id}): ${agentErr.message}`);
+                  console.warn(
+                    `[Retell] Failed to clone agent for company "${company.name}" (${company.id}): ${agentErr.message}`
+                  );
                   effectiveAgentId = process.env.RETELL_AGENT_ID || null;
-                  notify(tenantId, "system_warning", "Voice Agent Setup Incomplete",
+                  notify(
+                    tenantId,
+                    "system_warning",
+                    "Voice Agent Setup Incomplete",
                     `Your voice plan is active but a dedicated AI agent could not be created (${agentErr.message}). Your account is using the shared agent in the meantime. Please contact support to resolve this.`,
-                    `/settings`);
+                    `/settings`
+                  );
                 }
               }
 
@@ -492,12 +652,20 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   // Store the porting request; actual porting requires carrier paperwork
                   const numberToPort = phoneOrAreaCodeValue || "(not provided)";
                   (companyUpdates as Record<string, unknown>).portingPhoneNumber = numberToPort;
-                  console.log(`[Retell] Port request received for company "${company.name}" (${company.id}): ${maskPhone(numberToPort)}`);
-                  notify(tenantId, "system_warning", "Number Porting Request Received",
+                  console.log(
+                    `[Retell] Port request received for company "${company.name}" (${company.id}): ${maskPhone(numberToPort)}`
+                  );
+                  notify(
+                    tenantId,
+                    "system_warning",
+                    "Number Porting Request Received",
                     `We received your request to port ${numberToPort} to ScooPilot. Number porting typically takes 2–4 weeks and requires a Letter of Authorization from your current carrier. Our team will contact you within one business day to begin the process.`,
-                    `/settings`);
+                    `/settings`
+                  );
                   // Admin notification (logged; team monitors server logs for port requests)
-                  console.warn(`[Retell PORT REQUEST] Company "${company.name}" (${company.id}) wants to port ${numberToPort}. Manual porting process required.`);
+                  console.warn(
+                    `[Retell PORT REQUEST] Company "${company.name}" (${company.id}) wants to port ${numberToPort}. Manual porting process required.`
+                  );
                 } else {
                   // Provision a new number
                   const areaCode = phoneOrAreaCodeValue.replace(/\D/g, "").slice(0, 3) || "703";
@@ -507,12 +675,20 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                       agentId: effectiveAgentId ?? undefined,
                     });
                     companyUpdates.dedicatedPhoneNumber = dedicatedPhoneNumber;
-                    console.log(`[Retell] Provisioned number ${maskPhone(dedicatedPhoneNumber)} for company "${company.name}" (${company.id})`);
+                    console.log(
+                      `[Retell] Provisioned number ${maskPhone(dedicatedPhoneNumber)} for company "${company.name}" (${company.id})`
+                    );
                   } catch (phoneErr: any) {
-                    console.warn(`[Retell] Failed to provision phone number for company "${company.name}" (${company.id}): ${phoneErr.message}`);
-                    notify(tenantId, "system_warning", "Phone Number Setup Failed",
+                    console.warn(
+                      `[Retell] Failed to provision phone number for company "${company.name}" (${company.id}): ${phoneErr.message}`
+                    );
+                    notify(
+                      tenantId,
+                      "system_warning",
+                      "Phone Number Setup Failed",
                       `Your voice plan is active but we could not automatically provision a phone number (${phoneErr.message}). Please contact support to complete setup.`,
-                      `/settings`);
+                      `/settings`
+                    );
                   }
                 }
               }
@@ -529,12 +705,20 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                     agentId: effectiveAgentId,
                     websiteUrl: businessWebsite,
                   });
-                  console.log(`[Retell KB] Created knowledge base "${kbId}" for company "${company.name}" (${company.id}) from ${businessWebsite}`);
+                  console.log(
+                    `[Retell KB] Created knowledge base "${kbId}" for company "${company.name}" (${company.id}) from ${businessWebsite}`
+                  );
                 } catch (kbErr: any) {
-                  console.warn(`[Retell KB] Failed to seed knowledge base for company "${company.name}" (${company.id}): ${kbErr.message}`);
-                  notify(tenantId, "system_warning", "Knowledge Base Setup Failed",
+                  console.warn(
+                    `[Retell KB] Failed to seed knowledge base for company "${company.name}" (${company.id}): ${kbErr.message}`
+                  );
+                  notify(
+                    tenantId,
+                    "system_warning",
+                    "Knowledge Base Setup Failed",
                     `Voice plan activated but knowledge base creation from "${businessWebsite}" failed. Please set it up manually. Error: ${kbErr.message}`,
-                    `/settings`);
+                    `/settings`
+                  );
                 }
               }
 
@@ -547,18 +731,29 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 try {
                   await registerRetellWebhook(effectiveAgentId);
                 } catch (whErr: any) {
-                  console.warn(`[Retell] Failed to register webhook for agent ${effectiveAgentId}: ${whErr.message}`);
-                  notify(tenantId, "system_warning", "Call Tracking Setup Incomplete",
+                  console.warn(
+                    `[Retell] Failed to register webhook for agent ${effectiveAgentId}: ${whErr.message}`
+                  );
+                  notify(
+                    tenantId,
+                    "system_warning",
+                    "Call Tracking Setup Incomplete",
                     `Voice plan activated but the call-event webhook could not be registered (agent: ${effectiveAgentId}). Call tracking may not work until this is resolved. Please contact support or check Settings. Error: ${whErr.message}`,
-                    `/settings`);
+                    `/settings`
+                  );
                 }
               }
 
               await db.transaction(async (tx) => {
-                await tx.update(companies).set({ ...companyUpdates, updatedAt: new Date() }).where(eq(companies.id, company.id));
+                await tx
+                  .update(companies)
+                  .set({ ...companyUpdates, updatedAt: new Date() })
+                  .where(eq(companies.id, company.id));
               });
 
-              console.log(`[Stripe Voice] checkout.session.completed: activated ${voicePlan} for company "${company.name}" (${company.id})`);
+              console.log(
+                `[Stripe Voice] checkout.session.completed: activated ${voicePlan} for company "${company.name}" (${company.id})`
+              );
             }
           }
         }
@@ -572,20 +767,31 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             const invoice = await storage.getInvoice(invoiceId, tenantId);
             if (invoice && invoice.status !== "paid") {
               await db.transaction(async (tx) => {
-                await tx.update(invoices).set({
-                  status: "paid" as const,
-                  paidAt: new Date(),
-                  stripePaymentIntentId: session.payment_intent,
-                  tipAmount,
-                  updatedAt: new Date(),
-                }).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, tenantId)));
+                await tx
+                  .update(invoices)
+                  .set({
+                    status: "paid" as const,
+                    paidAt: new Date(),
+                    stripePaymentIntentId: session.payment_intent,
+                    tipAmount,
+                    updatedAt: new Date(),
+                  })
+                  .where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, tenantId)));
               });
               const tipNote = parseFloat(tipAmount) > 0 ? ` (includes $${tipAmount} tip)` : "";
-              notify(tenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
+              notify(
+                tenantId,
+                "invoice_paid",
+                "Invoice Paid",
+                `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`,
+                `/invoices`
+              );
               qboAutoSync(tenantId, invoiceId, "payment");
               resolved = true;
             } else if (invoice && invoice.status === "paid") {
-              console.log(`[Stripe Webhook] checkout.session.completed: invoice ${invoiceId} already paid — skipping (session ${session.id})`);
+              console.log(
+                `[Stripe Webhook] checkout.session.completed: invoice ${invoiceId} already paid — skipping (session ${session.id})`
+              );
               resolved = true;
             }
           }
@@ -597,28 +803,45 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               if (invoice && invoice.status !== "paid") {
                 const resolvedTenantId = connCompany.id;
                 await db.transaction(async (tx) => {
-                  await tx.update(invoices).set({
-                    status: "paid" as const,
-                    paidAt: new Date(),
-                    stripePaymentIntentId: session.payment_intent,
-                    tipAmount,
-                    updatedAt: new Date(),
-                  }).where(and(eq(invoices.id, invoiceId), eq(invoices.companyId, resolvedTenantId)));
+                  await tx
+                    .update(invoices)
+                    .set({
+                      status: "paid" as const,
+                      paidAt: new Date(),
+                      stripePaymentIntentId: session.payment_intent,
+                      tipAmount,
+                      updatedAt: new Date(),
+                    })
+                    .where(
+                      and(eq(invoices.id, invoiceId), eq(invoices.companyId, resolvedTenantId))
+                    );
                 });
                 const tipNote = parseFloat(tipAmount) > 0 ? ` (includes $${tipAmount} tip)` : "";
-                notify(resolvedTenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`, `/invoices`);
+                notify(
+                  resolvedTenantId,
+                  "invoice_paid",
+                  "Invoice Paid",
+                  `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total})${tipNote}.`,
+                  `/invoices`
+                );
                 qboAutoSync(resolvedTenantId, invoiceId, "payment");
                 resolved = true;
-                console.log(`[Stripe Webhook] checkout.session.completed: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`);
+                console.log(
+                  `[Stripe Webhook] checkout.session.completed: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`
+                );
               } else if (invoice && invoice.status === "paid") {
-                console.log(`[Stripe Webhook] checkout.session.completed: invoice ${invoiceId} already paid — skipping (session ${session.id})`);
+                console.log(
+                  `[Stripe Webhook] checkout.session.completed: invoice ${invoiceId} already paid — skipping (session ${session.id})`
+                );
                 resolved = true;
               }
             }
           }
 
           if (!resolved) {
-            console.warn(`[Stripe Webhook] checkout.session.completed: could not resolve invoice ${invoiceId} (session ${session.id}, tenant_id=${tenantId || "missing"}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`);
+            console.warn(
+              `[Stripe Webhook] checkout.session.completed: could not resolve invoice ${invoiceId} (session ${session.id}, tenant_id=${tenantId || "missing"}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`
+            );
           }
         }
 
@@ -629,15 +852,24 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             if (seatCompany) {
               const qty = (session as any).line_items?.data?.[0]?.quantity ?? 1;
               const tierConfig = (await import("@shared/schema")).TIER_CONFIG;
-              const tierMax = tierConfig[seatCompany.subscriptionTier as keyof typeof tierConfig]?.maxUsers || 1;
+              const tierMax =
+                tierConfig[seatCompany.subscriptionTier as keyof typeof tierConfig]?.maxUsers || 1;
               const currentMax = seatCompany.customMaxUsers ?? tierMax;
-              await storage.updateCompany(meta.companyId, { customMaxUsers: currentMax + qty } as any);
-              console.log(`[Stripe Seats] Added ${qty} seat(s) to company "${seatCompany.name}" (${meta.companyId}). New max: ${currentMax + qty}`);
+              await storage.updateCompany(meta.companyId, {
+                customMaxUsers: currentMax + qty,
+              } as any);
+              console.log(
+                `[Stripe Seats] Added ${qty} seat(s) to company "${seatCompany.name}" (${meta.companyId}). New max: ${currentMax + qty}`
+              );
             } else {
-              console.warn(`[Stripe Seats] seat_purchase: company ${meta.companyId} not found (session ${session.id})`);
+              console.warn(
+                `[Stripe Seats] seat_purchase: company ${meta.companyId} not found (session ${session.id})`
+              );
             }
           } catch (seatErr: any) {
-            console.error(`[Stripe Seats] Failed to process seat purchase (session ${session.id}): ${seatErr.message}`);
+            console.error(
+              `[Stripe Seats] Failed to process seat purchase (session ${session.id}): ${seatErr.message}`
+            );
           }
         }
 
@@ -648,14 +880,20 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         if (refCompanyId && !meta.invoiceId && meta.checkout_type !== "voice_addon") {
           try {
             const { default: StripeLib } = await import("stripe");
-            const stripeLib = new StripeLib(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-01-28.clover" as any });
+            const stripeLib = new StripeLib(process.env.STRIPE_SECRET_KEY!, {
+              apiVersion: "2026-01-28.clover" as any,
+            });
             const fullSession = await stripeLib.checkout.sessions.retrieve(session.id, {
               expand: ["line_items.data.price.product"],
             });
             let creditsToAdd = 0;
-            for (const item of (fullSession.line_items?.data ?? [])) {
+            for (const item of fullSession.line_items?.data ?? []) {
               const product = (item.price as any)?.product;
-              if (product && typeof product === "object" && product.metadata?.type === "route_credits") {
+              if (
+                product &&
+                typeof product === "object" &&
+                product.metadata?.type === "route_credits"
+              ) {
                 const credits = parseInt(product.metadata.credits ?? "0", 10);
                 creditsToAdd += credits * (item.quantity ?? 1);
               }
@@ -665,13 +903,19 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               if (company) {
                 const newTotal = (company.routeCredits ?? 0) + creditsToAdd;
                 await storage.updateCompany(refCompanyId, { routeCredits: newTotal } as any);
-                console.log(`[Stripe Credits] Added ${creditsToAdd} route credits to company "${company.name}" (${refCompanyId}). New total: ${newTotal}`);
+                console.log(
+                  `[Stripe Credits] Added ${creditsToAdd} route credits to company "${company.name}" (${refCompanyId}). New total: ${newTotal}`
+                );
               } else {
-                console.warn(`[Stripe Credits] checkout.session.completed: company ${refCompanyId} not found (session ${session.id})`);
+                console.warn(
+                  `[Stripe Credits] checkout.session.completed: company ${refCompanyId} not found (session ${session.id})`
+                );
               }
             }
           } catch (creditErr: any) {
-            console.error(`[Stripe Credits] Failed to process route credit purchase (session ${session.id}): ${creditErr.message}`);
+            console.error(
+              `[Stripe Credits] Failed to process route credit purchase (session ${session.id}): ${creditErr.message}`
+            );
           }
         }
       }
@@ -696,11 +940,19 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 new: { status: "paid", paymentMethod: "stripe_webhook" },
                 actor: "stripe_webhook",
               });
-              notify(piTenantId, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+              notify(
+                piTenantId,
+                "invoice_paid",
+                "Invoice Paid",
+                `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`,
+                `/invoices`
+              );
               qboAutoSync(piTenantId, invoiceId, "payment");
               resolved = true;
             } else if (invoice && invoice.status === "paid") {
-              console.log(`[Stripe Webhook] payment_intent.succeeded: invoice ${invoiceId} already paid — skipping (pi ${pi.id})`);
+              console.log(
+                `[Stripe Webhook] payment_intent.succeeded: invoice ${invoiceId} already paid — skipping (pi ${pi.id})`
+              );
               resolved = true;
             }
           }
@@ -720,19 +972,31 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   new: { status: "paid", paymentMethod: "stripe_webhook" },
                   actor: "stripe_webhook",
                 });
-                notify(connCompany.id, "invoice_paid", "Invoice Paid", `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`, `/invoices`);
+                notify(
+                  connCompany.id,
+                  "invoice_paid",
+                  "Invoice Paid",
+                  `Invoice #${invoice.invoiceNumber} has been paid ($${invoice.total}).`,
+                  `/invoices`
+                );
                 qboAutoSync(connCompany.id, invoiceId, "payment");
                 resolved = true;
-                console.log(`[Stripe Webhook] payment_intent.succeeded: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`);
+                console.log(
+                  `[Stripe Webhook] payment_intent.succeeded: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`
+                );
               } else if (invoice && invoice.status === "paid") {
-                console.log(`[Stripe Webhook] payment_intent.succeeded: invoice ${invoiceId} already paid — skipping (pi ${pi.id})`);
+                console.log(
+                  `[Stripe Webhook] payment_intent.succeeded: invoice ${invoiceId} already paid — skipping (pi ${pi.id})`
+                );
                 resolved = true;
               }
             }
           }
 
           if (!resolved) {
-            console.warn(`[Stripe Webhook] payment_intent.succeeded: could not resolve invoice ${invoiceId} (pi ${pi.id}, tenant_id=${piTenantId || "missing"}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`);
+            console.warn(
+              `[Stripe Webhook] payment_intent.succeeded: could not resolve invoice ${invoiceId} (pi ${pi.id}, tenant_id=${piTenantId || "missing"}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`
+            );
           }
         }
       }
@@ -745,8 +1009,12 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           if (company) {
             const isOnboarded = account.charges_enabled === true;
             if (isOnboarded !== company.stripeConnectOnboarded) {
-              await storage.updateCompany(company.id, { stripeConnectOnboarded: isOnboarded } as any);
-              console.log(`[Stripe Connect] Company ${company.name} (${company.id}) onboarded=${isOnboarded}`);
+              await storage.updateCompany(company.id, {
+                stripeConnectOnboarded: isOnboarded,
+              } as any);
+              console.log(
+                `[Stripe Connect] Company ${company.name} (${company.id}) onboarded=${isOnboarded}`
+              );
             }
           }
         }
@@ -754,13 +1022,22 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
 
       const eventTs = new Date(event.created * 1000);
 
-      const isStaleSubscriptionEvent = (company: { subscriptionUpdatedAt?: Date | null }): boolean => {
+      const isStaleSubscriptionEvent = (company: {
+        subscriptionUpdatedAt?: Date | null;
+      }): boolean => {
         if (!company.subscriptionUpdatedAt) return false;
         return eventTs <= company.subscriptionUpdatedAt;
       };
 
       if (event.type === "customer.subscription.created") {
-        const subscription = event.data.object as { id: string; customer: string; status: string; metadata: Record<string, string>; trial_end?: number | null; items?: { data?: Array<{ id: string }> } };
+        const subscription = event.data.object as {
+          id: string;
+          customer: string;
+          status: string;
+          metadata: Record<string, string>;
+          trial_end?: number | null;
+          items?: { data?: Array<{ id: string }> };
+        };
         const meta = subscription.metadata || {};
 
         if (meta.checkout_type === "voice_addon") {
@@ -778,10 +1055,15 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 voicePlanOverageRate: String(planConfig.overageRate),
                 stripeVoiceSubscriptionId: subscription.id,
               } as Partial<typeof companies.$inferInsert>);
-              console.log(`[Stripe Voice] Activated ${voicePlan} for company "${company.name}" (${company.id}), subscriber=${isSubscriber}`);
+              console.log(
+                `[Stripe Voice] Activated ${voicePlan} for company "${company.name}" (${company.id}), subscriber=${isSubscriber}`
+              );
             }
           }
-          await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
+          await db
+            .insert(stripeEvents)
+            .values({ id: event.id, eventType: event.type })
+            .onConflictDoNothing();
           res.json({ received: true });
           return;
         }
@@ -806,8 +1088,13 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           const company = await storage.getCompany(meta.tenant_id);
           if (company) {
             if (isStaleSubscriptionEvent(company)) {
-              console.log(`[Stripe Subscription] Skipping stale subscription.created for company "${company.name}" (event ${event.id} ts=${event.created})`);
-              await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
+              console.log(
+                `[Stripe Subscription] Skipping stale subscription.created for company "${company.name}" (event ${event.id} ts=${event.created})`
+              );
+              await db
+                .insert(stripeEvents)
+                .values({ id: event.id, eventType: event.type })
+                .onConflictDoNothing();
               res.json({ received: true });
               return;
             }
@@ -822,9 +1109,17 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             if (subscription.trial_end) {
               updateData.trialEndsAt = new Date(subscription.trial_end * 1000);
             }
-            await storage.updateCompany(company.id, updateData as Partial<typeof companies.$inferInsert>);
-            console.log(`[Stripe Subscription] Updated company "${company.name}" via tenant_id (${company.id}) status=${subStatus}`);
-            await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
+            await storage.updateCompany(
+              company.id,
+              updateData as Partial<typeof companies.$inferInsert>
+            );
+            console.log(
+              `[Stripe Subscription] Updated company "${company.name}" via tenant_id (${company.id}) status=${subStatus}`
+            );
+            await db
+              .insert(stripeEvents)
+              .values({ id: event.id, eventType: event.type })
+              .onConflictDoNothing();
             res.json({ received: true });
             return;
           }
@@ -839,7 +1134,9 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               const company = await storage.getCompany(existingCompanies[0].companyId);
               if (company) {
                 if (isStaleSubscriptionEvent(company)) {
-                  console.log(`[Stripe Subscription] Skipping stale subscription.created for existing company "${company.name}" (event ${event.id} ts=${event.created})`);
+                  console.log(
+                    `[Stripe Subscription] Skipping stale subscription.created for existing company "${company.name}" (event ${event.id} ts=${event.created})`
+                  );
                 } else {
                   const subStatus = subscription.status === "trialing" ? "trialing" : "active";
                   const updateData: Record<string, unknown> = {
@@ -852,8 +1149,13 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   if (subscription.trial_end) {
                     updateData.trialEndsAt = new Date(subscription.trial_end * 1000);
                   }
-                  await storage.updateCompany(company.id, updateData as Partial<typeof companies.$inferInsert>);
-                  console.log(`[Stripe Subscription] Updated existing company "${company.name}" (${company.id}) for subscription ${subscription.id} status=${subStatus}`);
+                  await storage.updateCompany(
+                    company.id,
+                    updateData as Partial<typeof companies.$inferInsert>
+                  );
+                  console.log(
+                    `[Stripe Subscription] Updated existing company "${company.name}" (${company.id}) for subscription ${subscription.id} status=${subStatus}`
+                  );
                 }
               }
             } else {
@@ -871,11 +1173,15 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               if (subscription.trial_end) {
                 createData.trialEndsAt = new Date(subscription.trial_end * 1000);
               }
-              const company = await storage.createCompany(createData as typeof companies.$inferInsert);
+              const company = await storage.createCompany(
+                createData as typeof companies.$inferInsert
+              );
               await storage.addUserToCompany(existingUser.id, company.id, "owner");
               await seedDefaultLeadSources(company.id);
               await storage.seedDefaultPricing(company.id);
-              console.log(`[Stripe Subscription] Created company "${companyName}" (${company.id}) for existing user ${email} status=${subStatus2}`);
+              console.log(
+                `[Stripe Subscription] Created company "${companyName}" (${company.id}) for existing user ${email} status=${subStatus2}`
+              );
             }
           } else {
             const crypto = await import("crypto");
@@ -896,20 +1202,30 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             if (subscription.trial_end) {
               createData2.trialEndsAt = new Date(subscription.trial_end * 1000);
             }
-            const company = await storage.createCompany(createData2 as typeof companies.$inferInsert);
+            const company = await storage.createCompany(
+              createData2 as typeof companies.$inferInsert
+            );
             await storage.addUserToCompany(user.id, company.id, "owner");
             await seedDefaultLeadSources(company.id);
             await storage.seedDefaultPricing(company.id);
 
             const claimed = await claimOnboardingEmailSend(user.id).catch(() => false);
             if (!claimed) {
-              console.log(`[Stripe Subscription] Onboarding email already sent for ${maskEmail(email)}, skipping.`);
+              console.log(
+                `[Stripe Subscription] Onboarding email already sent for ${maskEmail(email)}, skipping.`
+              );
             } else {
               try {
                 const protocol = req.headers["x-forwarded-proto"] || "https";
                 const host = req.headers.host || "localhost:5000";
                 const appUrl = `${protocol}://${host}`;
-                const _stripeWelcome = buildWelcomeEmailContent({ firstName, companyName, appUrl, email, tempPassword });
+                const _stripeWelcome = buildWelcomeEmailContent({
+                  firstName,
+                  companyName,
+                  appUrl,
+                  email,
+                  tempPassword,
+                });
                 await sendEmail({
                   companyId: company.id,
                   to: email,
@@ -919,20 +1235,35 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 });
                 console.log(`[Stripe Subscription] Welcome email sent to ${maskEmail(email)}`);
               } catch (emailErr) {
-                console.error(`[Stripe Subscription] Failed to send welcome email to ${maskEmail(email)}, resetting flag:`, emailErr);
+                console.error(
+                  `[Stripe Subscription] Failed to send welcome email to ${maskEmail(email)}, resetting flag:`,
+                  emailErr
+                );
                 await resetOnboardingEmailSent(user.id).catch(() => {});
               }
             }
 
-            console.log(`[Stripe Subscription] Provisioned new tenant "${companyName}" (${company.id}) for ${maskEmail(email)}, subscription ${subscription.id}`);
+            console.log(
+              `[Stripe Subscription] Provisioned new tenant "${companyName}" (${company.id}) for ${maskEmail(email)}, subscription ${subscription.id}`
+            );
           }
         } else {
-          console.warn(`[Stripe Subscription] Missing required metadata (company_name, email, first_name) on subscription ${subscription.id}`);
+          console.warn(
+            `[Stripe Subscription] Missing required metadata (company_name, email, first_name) on subscription ${subscription.id}`
+          );
         }
       }
 
       if (event.type === "customer.subscription.updated") {
-        const subscription = event.data.object as { id: string; status: string; metadata: Record<string, string>; trial_end?: number | null; cancel_at_period_end?: boolean; cancel_at?: number | null; items?: { data?: Array<{ id: string; price?: { id: string } }> } };
+        const subscription = event.data.object as {
+          id: string;
+          status: string;
+          metadata: Record<string, string>;
+          trial_end?: number | null;
+          cancel_at_period_end?: boolean;
+          cancel_at?: number | null;
+          items?: { data?: Array<{ id: string; price?: { id: string } }> };
+        };
         const stripeSubId = subscription.id;
         const meta = subscription.metadata || {};
 
@@ -941,21 +1272,30 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           for (const company of allCompanies) {
             if (company.stripeVoiceSubscriptionId === stripeSubId) {
               const statusMap: Record<string, string> = {
-                active: "active", past_due: "past_due", canceled: "cancelled", unpaid: "suspended",
+                active: "active",
+                past_due: "past_due",
+                canceled: "cancelled",
+                unpaid: "suspended",
               };
               const newVoiceStatus = statusMap[subscription.status] || subscription.status;
               const voiceUpdates: Record<string, unknown> = { voicePlanStatus: newVoiceStatus };
 
               const voicePriceEnvMap: Record<string, string> = {};
-              if (process.env.STRIPE_PRICE_VOICE_BOOTSTRAP) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_BOOTSTRAP] = "voice_bootstrap";
-              if (process.env.STRIPE_PRICE_VOICE_STARTER) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_STARTER] = "voice_starter";
-              if (process.env.STRIPE_PRICE_VOICE_PRO) voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_PRO] = "voice_pro";
+              if (process.env.STRIPE_PRICE_VOICE_BOOTSTRAP)
+                voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_BOOTSTRAP] = "voice_bootstrap";
+              if (process.env.STRIPE_PRICE_VOICE_STARTER)
+                voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_STARTER] = "voice_starter";
+              if (process.env.STRIPE_PRICE_VOICE_PRO)
+                voicePriceEnvMap[process.env.STRIPE_PRICE_VOICE_PRO] = "voice_pro";
 
               const currentPriceId = subscription.items?.data?.[0]?.price?.id;
               const derivedPlan = currentPriceId ? voicePriceEnvMap[currentPriceId] : null;
               const resolvedPlan = derivedPlan || meta.voice_plan;
 
-              if (resolvedPlan && VOICE_PLAN_CONFIG[resolvedPlan as keyof typeof VOICE_PLAN_CONFIG]) {
+              if (
+                resolvedPlan &&
+                VOICE_PLAN_CONFIG[resolvedPlan as keyof typeof VOICE_PLAN_CONFIG]
+              ) {
                 const vc = VOICE_PLAN_CONFIG[resolvedPlan as keyof typeof VOICE_PLAN_CONFIG];
                 voiceUpdates.voicePlanTier = resolvedPlan;
                 voiceUpdates.voicePlanIncludedMinutes = vc.includedMinutes;
@@ -968,8 +1308,13 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 voiceUpdates.voicePlanOverageRate = null;
                 voiceUpdates.stripeVoiceSubscriptionId = null;
               }
-              await storage.updateCompany(company.id, voiceUpdates as Partial<typeof companies.$inferInsert>);
-              console.log(`[Stripe Voice] Updated company "${company.name}" voice status=${newVoiceStatus} plan=${resolvedPlan || "unchanged"}`);
+              await storage.updateCompany(
+                company.id,
+                voiceUpdates as Partial<typeof companies.$inferInsert>
+              );
+              console.log(
+                `[Stripe Voice] Updated company "${company.name}" voice status=${newVoiceStatus} plan=${resolvedPlan || "unchanged"}`
+              );
               break;
             }
           }
@@ -978,7 +1323,9 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           for (const company of allCompanies) {
             if (company.stripeSubscriptionId === stripeSubId) {
               if (isStaleSubscriptionEvent(company)) {
-                console.log(`[Stripe Subscription] Skipping stale subscription.updated for company "${company.name}" (event ${event.id} ts=${event.created})`);
+                console.log(
+                  `[Stripe Subscription] Skipping stale subscription.updated for company "${company.name}" (event ${event.id} ts=${event.created})`
+                );
                 break;
               }
               const statusMap: Record<string, string> = {
@@ -990,10 +1337,18 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               };
               const newStatus = statusMap[subscription.status] || "active";
               const tierMap: Record<string, string> = {
-                free_trial: "free_trial", tier_starter: "tier_starter", tier_1: "tier_1", tier_1_3: "tier_1_3",
-                tier_3_5: "tier_3_5", tier_6_10: "tier_6_10", tier_10_plus: "tier_10_plus",
+                free_trial: "free_trial",
+                tier_starter: "tier_starter",
+                tier_1: "tier_1",
+                tier_1_3: "tier_1_3",
+                tier_3_5: "tier_3_5",
+                tier_6_10: "tier_6_10",
+                tier_10_plus: "tier_10_plus",
               };
-              const updates: Record<string, unknown> = { subscriptionStatus: newStatus, subscriptionUpdatedAt: eventTs };
+              const updates: Record<string, unknown> = {
+                subscriptionStatus: newStatus,
+                subscriptionUpdatedAt: eventTs,
+              };
               if (meta.plan_tier && tierMap[meta.plan_tier]) {
                 updates.subscriptionTier = tierMap[meta.plan_tier];
               }
@@ -1006,13 +1361,20 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               // Sync cancel_at_period_end state from Stripe
               if (subscription.cancel_at_period_end) {
                 updates.cancelAtPeriodEnd = true;
-                updates.cancelAt = subscription.cancel_at ? new Date(subscription.cancel_at * 1000) : null;
+                updates.cancelAt = subscription.cancel_at
+                  ? new Date(subscription.cancel_at * 1000)
+                  : null;
               } else {
                 updates.cancelAtPeriodEnd = false;
                 updates.cancelAt = null;
               }
-              await storage.updateCompany(company.id, updates as Partial<typeof companies.$inferInsert>);
-              console.log(`[Stripe Subscription] Updated company "${company.name}" status=${newStatus} cancelAtPeriodEnd=${!!subscription.cancel_at_period_end}`);
+              await storage.updateCompany(
+                company.id,
+                updates as Partial<typeof companies.$inferInsert>
+              );
+              console.log(
+                `[Stripe Subscription] Updated company "${company.name}" status=${newStatus} cancelAtPeriodEnd=${!!subscription.cancel_at_period_end}`
+              );
               break;
             }
           }
@@ -1042,11 +1404,21 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           for (const company of allCompanies) {
             if (company.stripeSubscriptionId === stripeSubId) {
               if (isStaleSubscriptionEvent(company)) {
-                console.log(`[Stripe Subscription] Skipping stale subscription.deleted for company "${company.name}" (event ${event.id} ts=${event.created})`);
+                console.log(
+                  `[Stripe Subscription] Skipping stale subscription.deleted for company "${company.name}" (event ${event.id} ts=${event.created})`
+                );
                 break;
               }
-              await storage.updateCompany(company.id, { subscriptionStatus: "cancelled", canceledAt: new Date(), subscriptionUpdatedAt: eventTs, cancelAtPeriodEnd: false, cancelAt: null } as Partial<typeof companies.$inferInsert>);
-              console.log(`[Stripe Subscription] Company "${company.name}" subscription cancelled (period end reached)`);
+              await storage.updateCompany(company.id, {
+                subscriptionStatus: "cancelled",
+                canceledAt: new Date(),
+                subscriptionUpdatedAt: eventTs,
+                cancelAtPeriodEnd: false,
+                cancelAt: null,
+              } as Partial<typeof companies.$inferInsert>);
+              console.log(
+                `[Stripe Subscription] Company "${company.name}" subscription cancelled (period end reached)`
+              );
               break;
             }
           }
@@ -1082,20 +1454,34 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             });
             console.log(`[Stripe Subscription] Trial ending email sent to ${email}`);
           } catch (e) {
-            console.error(`[Stripe Subscription] Failed to send trial ending email to ${email}:`, e);
+            console.error(
+              `[Stripe Subscription] Failed to send trial ending email to ${email}:`,
+              e
+            );
           }
         }
       }
 
       if (event.type === "invoice.payment_failed") {
-        const invoice = event.data.object as { customer: string | { id: string }; attempt_count?: number; subscription?: string | null; billing_reason?: string };
-        const stripeCustomerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+        const invoice = event.data.object as {
+          customer: string | { id: string };
+          attempt_count?: number;
+          subscription?: string | null;
+          billing_reason?: string;
+        };
+        const stripeCustomerId =
+          typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
         if (stripeCustomerId && invoice.subscription) {
           const allCompanies = await storage.listCompanies();
           for (const company of allCompanies) {
-            if (company.stripeCustomerId === stripeCustomerId && company.stripeSubscriptionId === invoice.subscription) {
+            if (
+              company.stripeCustomerId === stripeCustomerId &&
+              company.stripeSubscriptionId === invoice.subscription
+            ) {
               if (isStaleSubscriptionEvent(company)) {
-                console.log(`[Stripe Subscription] Skipping stale invoice.payment_failed for company "${company.name}" (event ${event.id} ts=${event.created})`);
+                console.log(
+                  `[Stripe Subscription] Skipping stale invoice.payment_failed for company "${company.name}" (event ${event.id} ts=${event.created})`
+                );
                 break;
               }
               await storage.updateCompany(company.id, {
@@ -1104,10 +1490,16 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 subscriptionUpdatedAt: eventTs,
               } as Partial<typeof companies.$inferInsert>);
               const attemptCount = invoice.attempt_count || 1;
-              console.log(`[Stripe Subscription] Company "${company.name}" SUSPENDED after subscription payment failure (attempt ${attemptCount})`);
-              notify(company.id, "payment_failed", "Account Suspended",
+              console.log(
+                `[Stripe Subscription] Company "${company.name}" SUSPENDED after subscription payment failure (attempt ${attemptCount})`
+              );
+              notify(
+                company.id,
+                "payment_failed",
+                "Account Suspended",
                 "Your subscription payment has failed. Please update your payment method to restore access.",
-                "/billing");
+                "/billing"
+              );
               break;
             }
           }
@@ -1115,14 +1507,26 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       }
 
       if (event.type === "invoice.payment_succeeded") {
-        const stripeInvoice = event.data.object as { customer: string | { id: string }; subscription?: string | null; billing_reason?: string };
-        const stripeCustomerId = typeof stripeInvoice.customer === "string" ? stripeInvoice.customer : stripeInvoice.customer?.id;
+        const stripeInvoice = event.data.object as {
+          customer: string | { id: string };
+          subscription?: string | null;
+          billing_reason?: string;
+        };
+        const stripeCustomerId =
+          typeof stripeInvoice.customer === "string"
+            ? stripeInvoice.customer
+            : stripeInvoice.customer?.id;
         if (stripeCustomerId && stripeInvoice.subscription) {
           const allCompanies = await storage.listCompanies();
           for (const company of allCompanies) {
-            if (company.stripeCustomerId === stripeCustomerId && company.stripeSubscriptionId === stripeInvoice.subscription) {
+            if (
+              company.stripeCustomerId === stripeCustomerId &&
+              company.stripeSubscriptionId === stripeInvoice.subscription
+            ) {
               if (isStaleSubscriptionEvent(company)) {
-                console.log(`[Stripe Subscription] Skipping stale invoice.payment_succeeded for company "${company.name}" (event ${event.id} ts=${event.created})`);
+                console.log(
+                  `[Stripe Subscription] Skipping stale invoice.payment_succeeded for company "${company.name}" (event ${event.id} ts=${event.created})`
+                );
                 break;
               }
               if (company.subscriptionStatus === "suspended" || company.frozenAt) {
@@ -1131,12 +1535,20 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   frozenAt: null,
                   subscriptionUpdatedAt: eventTs,
                 } as Partial<typeof companies.$inferInsert>);
-                console.log(`[Stripe Subscription] Company "${company.name}" REACTIVATED after successful subscription payment`);
-                notify(company.id, "general", "Payment Received",
+                console.log(
+                  `[Stripe Subscription] Company "${company.name}" REACTIVATED after successful subscription payment`
+                );
+                notify(
+                  company.id,
+                  "general",
+                  "Payment Received",
                   "Your subscription payment was successful. Your account has been reactivated.",
-                  "/billing");
+                  "/billing"
+                );
               } else {
-                console.log(`[Stripe Subscription] Company "${company.name}" subscription payment succeeded (status=${company.subscriptionStatus})`);
+                console.log(
+                  `[Stripe Subscription] Company "${company.name}" subscription payment succeeded (status=${company.subscriptionStatus})`
+                );
               }
               break;
             }
@@ -1154,7 +1566,9 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             const connCompany = await storage.getCompanyByStripeConnectAccountId(connectAccountId);
             if (connCompany) {
               resolvedCompanyId = connCompany.id;
-              console.log(`[Stripe Webhook] payment_intent.payment_failed: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`);
+              console.log(
+                `[Stripe Webhook] payment_intent.payment_failed: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`
+              );
             }
           }
 
@@ -1166,17 +1580,30 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 paymentAttempts: (invoice.paymentAttempts || 0) + 1,
                 lastPaymentAttempt: new Date(),
               });
-              notify(resolvedCompanyId, "payment_failed", "Payment Failed", `Payment failed for invoice #${invoice.invoiceNumber}.`, `/invoices`);
+              notify(
+                resolvedCompanyId,
+                "payment_failed",
+                "Payment Failed",
+                `Payment failed for invoice #${invoice.invoiceNumber}.`,
+                `/invoices`
+              );
             } else {
-              console.warn(`[Stripe Webhook] payment_intent.payment_failed: tenant ${resolvedCompanyId} resolved but invoice ${invoiceId} not found (pi ${pi.id}).`);
+              console.warn(
+                `[Stripe Webhook] payment_intent.payment_failed: tenant ${resolvedCompanyId} resolved but invoice ${invoiceId} not found (pi ${pi.id}).`
+              );
             }
           } else {
-            console.warn(`[Stripe Webhook] payment_intent.payment_failed: could not resolve tenant for invoice ${invoiceId} (pi ${pi.id}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`);
+            console.warn(
+              `[Stripe Webhook] payment_intent.payment_failed: could not resolve tenant for invoice ${invoiceId} (pi ${pi.id}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`
+            );
           }
         }
       }
 
-      await db.insert(stripeEvents).values({ id: event.id, eventType: event.type }).onConflictDoNothing();
+      await db
+        .insert(stripeEvents)
+        .values({ id: event.id, eventType: event.type })
+        .onConflictDoNothing();
 
       res.json({ received: true });
     } catch (err) {
@@ -1184,5 +1611,4 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       res.status(500).json({ error: "Webhook processing failed" });
     }
   });
-
 }

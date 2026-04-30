@@ -4,42 +4,40 @@ import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
-import { registerObjectStorageRoutes, ObjectStorageService, ObjectNotFoundError } from "../replit_integrations/object_storage";
-import type { RequestHandler } from "express";
 import {
-  validateStripeConfig,
-  fetchStripePrices,
-} from "../services/stripe";
+  registerObjectStorageRoutes,
+  ObjectStorageService,
+  ObjectNotFoundError,
+} from "../replit_integrations/object_storage";
+import type { RequestHandler } from "express";
+import { validateStripeConfig, fetchStripePrices } from "../services/stripe";
 
 import { isAuthenticated } from "./shared";
 
-import { registerBillingRoutes }        from "./billing";
-import { registerAuthRoutes }           from "./auth";
-import { registerOnboardingRoutes }     from "./onboarding";
-import { registerCompanyRoutes }        from "./company";
-import { registerContactsRoutes }       from "./contacts";
-import { registerPropertiesRoutes }     from "./properties";
-import { registerRoutePlanningRoutes }  from "./route-planning";
-import { registerServicePlansRoutes }   from "./service-plans";
-import { registerVisitsRoutes }         from "./visits";
-import { registerInvoicesRoutes }       from "./invoices";
-import { registerAutomationRoutes }     from "./automation";
-import { registerVoiceRoutes }          from "./voice";
-import { registerPricingRoutes }        from "./pricing";
-import { registerMessagesRoutes }       from "./messages";
-import { registerStripeRoutes }         from "./stripe";
-import { registerQuotesRoutes }         from "./quotes";
-import { registerPortalRoutes }         from "./portal";
-import { registerMiscRoutes }           from "./misc";
-import { registerAdminRoutes }          from "./admin";
-import { registerPublicRoutes }         from "./public-routes";
-import { registerIntegrationsRoutes }   from "./integrations";
+import { registerBillingRoutes } from "./billing";
+import { registerAuthRoutes } from "./auth";
+import { registerOnboardingRoutes } from "./onboarding";
+import { registerCompanyRoutes } from "./company";
+import { registerContactsRoutes } from "./contacts";
+import { registerPropertiesRoutes } from "./properties";
+import { registerRoutePlanningRoutes } from "./route-planning";
+import { registerServicePlansRoutes } from "./service-plans";
+import { registerVisitsRoutes } from "./visits";
+import { registerInvoicesRoutes } from "./invoices";
+import { registerAutomationRoutes } from "./automation";
+import { registerVoiceRoutes } from "./voice";
+import { registerPricingRoutes } from "./pricing";
+import { registerMessagesRoutes } from "./messages";
+import { registerStripeRoutes } from "./stripe";
+import { registerQuotesRoutes } from "./quotes";
+import { registerPortalRoutes } from "./portal";
+import { registerMiscRoutes } from "./misc";
+import { registerAdminRoutes } from "./admin";
+import { registerPublicRoutes } from "./public-routes";
+import { registerIntegrationsRoutes } from "./integrations";
 import { registerErrorReportingRoutes } from "./error-reporting";
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Object file download route — registered before registerObjectStorageRoutes so this
   // handler takes precedence and enforces ACL access control on private objects.
   const _objStorage = new ObjectStorageService();
@@ -109,18 +107,21 @@ export async function registerRoutes(
   });
 
   const GATE_EXEMPT_PREFIXES = [
-    "/api/auth/", "/api/auth/login", "/api/auth/register", "/api/auth/user",
+    "/api/auth/",
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/user",
     "/api/auth/submit-verification-url",
-    "/api/billing/", "/api/subscriptions/",
-    "/api/webhooks/", "/api/portal/",
+    "/api/billing/",
+    "/api/subscriptions/",
+    "/api/webhooks/",
+    "/api/portal/",
     "/api/password/",
     "/api/create-tenant",
     "/api/public/",
     "/api/review/",
   ];
-  const GATE_READ_EXEMPT_PREFIXES = [
-    "/api/company/stats",
-  ];
+  const GATE_READ_EXEMPT_PREFIXES = ["/api/company/stats"];
 
   function isGateExempt(path: string, method: string): boolean {
     const p = path.toLowerCase();
@@ -148,7 +149,9 @@ export async function registerRoutes(
       let resolvedUserId = sessionUserId;
       if (!resolvedUserId && hasBearerToken) {
         const token = authHeader!.substring(7);
-        const sessionRow = await db.execute(sql`SELECT sess FROM sessions WHERE sid = ${token} AND expire > NOW()`);
+        const sessionRow = await db.execute(
+          sql`SELECT sess FROM sessions WHERE sid = ${token} AND expire > NOW()`
+        );
         if (sessionRow.rows.length > 0) {
           const sess = sessionRow.rows[0].sess as { userId?: string };
           if (sess?.userId) {
@@ -183,7 +186,10 @@ export async function registerRoutes(
       }
       if (companyId) {
         const company = await storage.getCompany(companyId);
-        if (company && (company.subscriptionStatus === "suspended" || company.subscriptionStatus === "cancelled")) {
+        if (
+          company &&
+          (company.subscriptionStatus === "suspended" || company.subscriptionStatus === "cancelled")
+        ) {
           return res.status(402).json({
             error: "Account suspended",
             message: "Your subscription is inactive. Please update your billing to continue.",
@@ -205,7 +211,6 @@ export async function registerRoutes(
   };
 
   app.use("/api", subscriptionGate);
-
 
   await registerBillingRoutes(app);
   await registerAuthRoutes(app);

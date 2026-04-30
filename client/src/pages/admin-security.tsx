@@ -2,7 +2,16 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Shield, Clock, AlertTriangle, CheckCircle, Trash2, KeyRound, Monitor, User } from "lucide-react";
+import {
+  Shield,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  Trash2,
+  KeyRound,
+  Monitor,
+  User,
+} from "lucide-react";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -68,8 +77,12 @@ function timeAgo(dateStr: string): string {
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString("en-US", {
-    month: "short", day: "numeric", year: "numeric",
-    hour: "numeric", minute: "2-digit", hour12: true,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
 }
 
@@ -88,9 +101,14 @@ export default function AdminSecurity() {
     queryFn: adminFetchFn("/api/admin/security/sessions"),
   });
 
-  const { data: auditData, isLoading: auditLoading } = useQuery<{ logs: AuditLogEntry[]; total: number }>({
+  const { data: auditData, isLoading: auditLoading } = useQuery<{
+    logs: AuditLogEntry[];
+    total: number;
+  }>({
     queryKey: ["/api/admin/security/audit-log", auditPage],
-    queryFn: adminFetchFn(`/api/admin/security/audit-log?limit=${pageSize}&offset=${auditPage * pageSize}`),
+    queryFn: adminFetchFn(
+      `/api/admin/security/audit-log?limit=${pageSize}&offset=${auditPage * pageSize}`
+    ),
   });
 
   const revokeSession = useMutation({
@@ -111,8 +129,12 @@ export default function AdminSecurity() {
       <div className="flex items-center gap-3">
         <Shield className="h-6 w-6 text-muted-foreground" />
         <div>
-          <h1 className="text-2xl font-bold" data-testid="heading-security">Security</h1>
-          <p className="text-sm text-muted-foreground">Admin accounts, active sessions, and audit trail</p>
+          <h1 className="text-2xl font-bold" data-testid="heading-security">
+            Security
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Admin accounts, active sessions, and audit trail
+          </p>
         </div>
       </div>
 
@@ -125,11 +147,26 @@ export default function AdminSecurity() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between"><span>Min length</span><span className="font-medium">16 characters</span></div>
-            <div className="flex justify-between"><span>Complexity</span><span className="font-medium">Upper, lower, number, symbol</span></div>
-            <div className="flex justify-between"><span>Expiration</span><span className="font-medium">90 days</span></div>
-            <div className="flex justify-between"><span>History check</span><span className="font-medium">Last 10 passwords</span></div>
-            <div className="flex justify-between"><span>Session duration</span><span className="font-medium">8 hours</span></div>
+            <div className="flex justify-between">
+              <span>Min length</span>
+              <span className="font-medium">16 characters</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Complexity</span>
+              <span className="font-medium">Upper, lower, number, symbol</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Expiration</span>
+              <span className="font-medium">90 days</span>
+            </div>
+            <div className="flex justify-between">
+              <span>History check</span>
+              <span className="font-medium">Last 10 passwords</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Session duration</span>
+              <span className="font-medium">8 hours</span>
+            </div>
           </CardContent>
         </Card>
 
@@ -141,7 +178,9 @@ export default function AdminSecurity() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold" data-testid="text-active-session-count">{sessions?.length ?? 0}</p>
+            <p className="text-3xl font-bold" data-testid="text-active-session-count">
+              {sessions?.length ?? 0}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">Currently active admin sessions</p>
           </CardContent>
         </Card>
@@ -154,7 +193,9 @@ export default function AdminSecurity() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold" data-testid="text-audit-count">{auditData?.total ?? 0}</p>
+            <p className="text-3xl font-bold" data-testid="text-audit-count">
+              {auditData?.total ?? 0}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">Total recorded security events</p>
           </CardContent>
         </Card>
@@ -174,21 +215,34 @@ export default function AdminSecurity() {
             <p className="text-sm text-muted-foreground">No admin accounts found</p>
           ) : (
             <div className="space-y-3">
-              {adminUsersData.map(user => (
-                <div key={user.id} className="flex items-center justify-between border rounded-lg px-4 py-3" data-testid={`admin-user-${user.id}`}>
+              {adminUsersData.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center justify-between border rounded-lg px-4 py-3"
+                  data-testid={`admin-user-${user.id}`}
+                >
                   <div>
                     <p className="font-medium text-sm">{user.email}</p>
                     <p className="text-xs text-muted-foreground">
-                      Created {formatDate(user.createdAt)} -- Password changed {user.daysSincePasswordChange}d ago
+                      Created {formatDate(user.createdAt)} -- Password changed{" "}
+                      {user.daysSincePasswordChange}d ago
                     </p>
                   </div>
                   {user.passwordExpired ? (
-                    <Badge variant="destructive" className="flex items-center gap-1" data-testid={`badge-pw-expired-${user.id}`}>
+                    <Badge
+                      variant="destructive"
+                      className="flex items-center gap-1"
+                      data-testid={`badge-pw-expired-${user.id}`}
+                    >
                       <AlertTriangle className="h-3 w-3" />
                       Password Expired
                     </Badge>
                   ) : (
-                    <Badge variant="outline" className="flex items-center gap-1 text-green-700 border-green-300 dark:text-green-400 dark:border-green-700" data-testid={`badge-pw-ok-${user.id}`}>
+                    <Badge
+                      variant="outline"
+                      className="flex items-center gap-1 text-green-700 border-green-300 dark:text-green-400 dark:border-green-700"
+                      data-testid={`badge-pw-ok-${user.id}`}
+                    >
                       <CheckCircle className="h-3 w-3" />
                       Secure
                     </Badge>
@@ -214,12 +268,17 @@ export default function AdminSecurity() {
             <p className="text-sm text-muted-foreground">No active sessions</p>
           ) : (
             <div className="space-y-2">
-              {sessions.map(session => (
-                <div key={session.id} className="flex items-center justify-between border rounded-lg px-4 py-3" data-testid={`session-${session.id}`}>
+              {sessions.map((session) => (
+                <div
+                  key={session.id}
+                  className="flex items-center justify-between border rounded-lg px-4 py-3"
+                  data-testid={`session-${session.id}`}
+                >
                   <div>
                     <p className="text-sm font-medium">{session.adminEmail}</p>
                     <p className="text-xs text-muted-foreground">
-                      Started {timeAgo(session.createdAt)} -- Expires {formatDate(session.expiresAt)}
+                      Started {timeAgo(session.createdAt)} -- Expires{" "}
+                      {formatDate(session.expiresAt)}
                     </p>
                   </div>
                   <Button
@@ -255,11 +314,21 @@ export default function AdminSecurity() {
           ) : (
             <>
               <div className="space-y-2">
-                {auditData.logs.map(log => (
-                  <div key={log.id} className="flex items-start justify-between border rounded-lg px-4 py-3" data-testid={`audit-${log.id}`}>
+                {auditData.logs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="flex items-start justify-between border rounded-lg px-4 py-3"
+                    data-testid={`audit-${log.id}`}
+                  >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <Badge className={actionColors[log.action] || "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"} variant="secondary">
+                        <Badge
+                          className={
+                            actionColors[log.action] ||
+                            "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+                          }
+                          variant="secondary"
+                        >
                           {actionLabels[log.action] || log.action}
                         </Badge>
                         <span className="text-xs text-muted-foreground">{log.adminEmail}</span>
@@ -268,7 +337,10 @@ export default function AdminSecurity() {
                         <span>{formatDate(log.createdAt)}</span>
                         {log.ipAddress && <span>IP: {log.ipAddress}</span>}
                         {log.resourceType && (
-                          <span>{log.resourceType}{log.resourceId ? `: ${log.resourceId.slice(0, 8)}...` : ""}</span>
+                          <span>
+                            {log.resourceType}
+                            {log.resourceId ? `: ${log.resourceId.slice(0, 8)}...` : ""}
+                          </span>
                         )}
                       </div>
                       {log.details && (
@@ -286,7 +358,7 @@ export default function AdminSecurity() {
                     variant="outline"
                     size="sm"
                     disabled={auditPage === 0}
-                    onClick={() => setAuditPage(p => p - 1)}
+                    onClick={() => setAuditPage((p) => p - 1)}
                     data-testid="button-audit-prev"
                   >
                     Previous
@@ -298,7 +370,7 @@ export default function AdminSecurity() {
                     variant="outline"
                     size="sm"
                     disabled={auditPage >= totalAuditPages - 1}
-                    onClick={() => setAuditPage(p => p + 1)}
+                    onClick={() => setAuditPage((p) => p + 1)}
                     data-testid="button-audit-next"
                   >
                     Next

@@ -38,7 +38,11 @@ export default function VoiceSignup() {
   const urlParams = new URLSearchParams(window.location.search);
   const isSuccess = urlParams.get("success") === "1";
 
-  const { data: info, isLoading, error } = useQuery<VoiceSignupInfo>({
+  const {
+    data: info,
+    isLoading,
+    error,
+  } = useQuery<VoiceSignupInfo>({
     queryKey: ["/api/voice-signup", slug, "info"],
     queryFn: async () => {
       const res = await fetch(`/api/voice-signup/${slug}/info`);
@@ -77,7 +81,8 @@ export default function VoiceSignup() {
             <CheckCircle className="h-16 w-16 text-green-600 mx-auto" />
             <h2 className="text-2xl font-bold">Voice Plan Activated</h2>
             <p className="text-muted-foreground">
-              Your voice agent plan has been successfully activated. You can now configure your voice agent in your ScooPilot dashboard.
+              Your voice agent plan has been successfully activated. You can now configure your
+              voice agent in your ScooPilot dashboard.
             </p>
           </CardContent>
         </Card>
@@ -97,7 +102,9 @@ export default function VoiceSignup() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <Alert variant="destructive" className="max-w-md">
-          <AlertDescription>Company not found. Please check the URL and try again.</AlertDescription>
+          <AlertDescription>
+            Company not found. Please check the URL and try again.
+          </AlertDescription>
         </Alert>
       </div>
     );
@@ -111,7 +118,8 @@ export default function VoiceSignup() {
             <Mic className="h-16 w-16 text-green-600 mx-auto" />
             <h2 className="text-2xl font-bold">Voice Plan Active</h2>
             <p className="text-muted-foreground">
-              {info.companyName} already has an active voice plan. Manage it from your ScooPilot dashboard.
+              {info.companyName} already has an active voice plan. Manage it from your ScooPilot
+              dashboard.
             </p>
           </CardContent>
         </Card>
@@ -131,7 +139,8 @@ export default function VoiceSignup() {
             Voice Agent for {info.companyName}
           </h1>
           <p className="text-muted-foreground max-w-lg mx-auto">
-            Add an AI-powered voice agent to handle scheduling calls, appointment booking, and customer inquiries 24/7.
+            Add an AI-powered voice agent to handle scheduling calls, appointment booking, and
+            customer inquiries 24/7.
           </p>
         </div>
 
@@ -164,7 +173,10 @@ export default function VoiceSignup() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <p className="text-3xl font-bold" data-testid={`text-public-voice-price-${plan.key}`}>
+                  <p
+                    className="text-3xl font-bold"
+                    data-testid={`text-public-voice-price-${plan.key}`}
+                  >
                     ${plan.price}
                     <span className="text-sm font-normal text-muted-foreground">/mo</span>
                   </p>
@@ -180,8 +192,7 @@ export default function VoiceSignup() {
                     {plan.includedMinutes} minutes included/mo
                   </li>
                   <li className="flex items-center gap-2">
-                    <Phone className="h-4 w-4" />
-                    ${plan.overageRate.toFixed(2)}/min overage
+                    <Phone className="h-4 w-4" />${plan.overageRate.toFixed(2)}/min overage
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-green-600" />

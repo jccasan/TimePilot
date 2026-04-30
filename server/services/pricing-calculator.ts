@@ -52,26 +52,37 @@ export interface PriceCalculatorResult {
   };
 }
 
-export function getEffectivePricingConfig(tenantConfig: Partial<PricingConfig> | null | undefined): PricingConfig {
+export function getEffectivePricingConfig(
+  tenantConfig: Partial<PricingConfig> | null | undefined
+): PricingConfig {
   return { ...DEFAULT_PRICING_CONFIG, ...(tenantConfig || {}) };
 }
 
 function getFrequencyMultiplier(config: PricingConfig, frequency: string): number {
   switch (frequency) {
-    case "weekly": return config.weeklyMultiplier;
-    case "biweekly": return config.biweeklyMultiplier;
-    case "monthly": return config.monthlyMultiplier;
-    case "onetime": return config.oneTimeMultiplier;
-    default: return 1.0;
+    case "weekly":
+      return config.weeklyMultiplier;
+    case "biweekly":
+      return config.biweeklyMultiplier;
+    case "monthly":
+      return config.monthlyMultiplier;
+    case "onetime":
+      return config.oneTimeMultiplier;
+    default:
+      return 1.0;
   }
 }
 
 function getDifficultyMultiplier(config: PricingConfig, difficulty: string): number {
   switch (difficulty) {
-    case "flat": return config.difficultyFlat;
-    case "moderate": return config.difficultyModerate;
-    case "difficult": return config.difficultyDifficult;
-    default: return 1.0;
+    case "flat":
+      return config.difficultyFlat;
+    case "moderate":
+      return config.difficultyModerate;
+    case "difficult":
+      return config.difficultyDifficult;
+    default:
+      return 1.0;
   }
 }
 
@@ -94,7 +105,10 @@ export function calculatePrice(
 
   const serviceMinutesBase = (inputs.yardSizeAcres / 0.1) * config.baseTimePerTenthAcreMinutes;
   const extraDogMinutes = Math.max(inputs.dogCount - 1, 0) * config.extraDogMinutesAfterFirst;
-  let serviceMinutes = Math.max(config.minimumServiceMinutesFloor, serviceMinutesBase + extraDogMinutes);
+  let serviceMinutes = Math.max(
+    config.minimumServiceMinutesFloor,
+    serviceMinutesBase + extraDogMinutes
+  );
   serviceMinutes *= getFrequencyMultiplier(config, inputs.serviceFrequency);
   serviceMinutes *= getDifficultyMultiplier(config, inputs.yardDifficulty);
 
@@ -126,7 +140,8 @@ export function calculatePrice(
     travelMinutes = (inputs.distanceFromNearestStopMiles / config.driveSpeedAverageMph) * 60;
     densityMultiplier = 1.0;
     if (inputs.routeStopsPerMile && inputs.routeStopsPerMile > 0) {
-      const baselineStopsPerMile = config.estimatedMonthlyStops > 0 ? config.estimatedMonthlyStops / 30 : 3;
+      const baselineStopsPerMile =
+        config.estimatedMonthlyStops > 0 ? config.estimatedMonthlyStops / 30 : 3;
       densityMultiplier = baselineStopsPerMile / Math.max(inputs.routeStopsPerMile, SMALL_EPSILON);
       densityMultiplier = Math.max(0.6, Math.min(1.8, densityMultiplier));
     }
@@ -162,19 +177,21 @@ export function calculatePrice(
   if (overridePerVisitOverheadCents !== undefined) {
     overheadPerVisitCents = overridePerVisitOverheadCents;
   } else {
-    const monthlyOverheadCents = overrideMonthlyOverheadCents !== undefined
-      ? overrideMonthlyOverheadCents
-      : (config.advertisingCents +
-         config.payrollProviderCents +
-         config.benefitsCents +
-         config.insuranceCents +
-         config.softwareCents +
-         config.otherOverheadCents);
+    const monthlyOverheadCents =
+      overrideMonthlyOverheadCents !== undefined
+        ? overrideMonthlyOverheadCents
+        : config.advertisingCents +
+          config.payrollProviderCents +
+          config.benefitsCents +
+          config.insuranceCents +
+          config.softwareCents +
+          config.otherOverheadCents;
     const estimatedMonthlyStops = Math.max(config.estimatedMonthlyStops, 1);
     overheadPerVisitCents = monthlyOverheadCents / estimatedMonthlyStops;
   }
 
-  const totalCostPerVisitCents = laborCostCents + adjustedTravelCostCents + equipmentCostCents + overheadPerVisitCents;
+  const totalCostPerVisitCents =
+    laborCostCents + adjustedTravelCostCents + equipmentCostCents + overheadPerVisitCents;
 
   const targetMargin = getTargetMarginForMode(config) / 100;
   const minimumPriceCents = totalCostPerVisitCents;
@@ -310,7 +327,13 @@ export function parseLotSizeStringToAcres(lotSize: string | null | undefined): n
   const value = parseFloat(numMatch[1]);
   if (!isFinite(value) || value <= 0) return null;
   // Determine unit
-  if (s.includes("sqft") || s.includes("sq ft") || s.includes("sq.ft") || s.includes(" sf") || s.endsWith("sf")) {
+  if (
+    s.includes("sqft") ||
+    s.includes("sq ft") ||
+    s.includes("sq.ft") ||
+    s.includes(" sf") ||
+    s.endsWith("sf")
+  ) {
     return value / 43560;
   }
   if (s.includes("acre") || s.includes(" ac") || s.endsWith("ac")) {
@@ -318,6 +341,6 @@ export function parseLotSizeStringToAcres(lotSize: string | null | undefined): n
   }
   // If just a bare number, treat as sqft if > 2 (no property is 2 acres with bare number entry)
   // and as acres if ≤ 2 (common to enter "0.18" meaning 0.18 acres)
-  if (value <= 2) return value;       // assume acres
-  return value / 43560;               // assume sqft
+  if (value <= 2) return value; // assume acres
+  return value / 43560; // assume sqft
 }

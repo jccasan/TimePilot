@@ -50,10 +50,14 @@ function haversineDistanceMiles(lat1: number, lon1: number, lat2: number, lon2: 
 
 function frequencyLabel(freq: string): string {
   switch (freq) {
-    case "weekly": return "weekly";
-    case "biweekly": return "every other week";
-    case "monthly": return "monthly";
-    default: return freq;
+    case "weekly":
+      return "weekly";
+    case "biweekly":
+      return "every other week";
+    case "monthly":
+      return "monthly";
+    default:
+      return freq;
   }
 }
 
@@ -101,12 +105,14 @@ export async function generateProfitabilitySuggestions(
   const currentPriceCents = targetPropRow.revenuePerVisitCents;
   const currentCostCents = targetPropRow.costPerVisitCents;
   const costBreakdown = targetPropRow.costBreakdown;
-  const currentDistanceMiles =
-    costOverrides?.distanceFromNearestStopMiles ?? 1.0;
+  const currentDistanceMiles = costOverrides?.distanceFromNearestStopMiles ?? 1.0;
 
   const currentFrequency = targetPlan.frequency as "weekly" | "biweekly" | "monthly" | "onetime";
   const dogCount = targetProperty.numberOfDogs ?? 1;
-  const yardDifficulty = (targetProperty.yardDifficulty ?? "flat") as "flat" | "moderate" | "difficult";
+  const yardDifficulty = (targetProperty.yardDifficulty ?? "flat") as
+    | "flat"
+    | "moderate"
+    | "difficult";
 
   let yardSizeAcres: number;
   if (targetProperty.measuredYardSqft) {
@@ -137,10 +143,16 @@ export async function generateProfitabilitySuggestions(
         ...baseInputs,
         yardSizeAcres: measuredAcres,
       };
-      const correctedResult = calculatePrice(correctedInputs, pricingConfig, overrideOverhead, costOverrides?.overheadAllocationCents);
+      const correctedResult = calculatePrice(
+        correctedInputs,
+        pricingConfig,
+        overrideOverhead,
+        costOverrides?.overheadAllocationCents
+      );
       const correctedCostCents = correctedResult.minimumPriceCents;
       const correctedProfitCents = currentPriceCents - correctedCostCents;
-      const correctedMarginPct = currentPriceCents > 0 ? (correctedProfitCents / currentPriceCents) * 100 : 0;
+      const correctedMarginPct =
+        currentPriceCents > 0 ? (correctedProfitCents / currentPriceCents) * 100 : 0;
       const impactCents = correctedCostCents - currentCostCents;
       opportunities.yardSizeMismatch = {
         mismatchPct: Math.round(mismatchPct),
@@ -189,7 +201,9 @@ export async function generateProfitabilitySuggestions(
         )
       );
 
-    const routeDayMap = new Map<string, string>(companyRoutes.map((r) => [r.routeId, r.dayOfWeek ?? ""]));
+    const routeDayMap = new Map<string, string>(
+      companyRoutes.map((r) => [r.routeId, r.dayOfWeek ?? ""])
+    );
     const byDay: Record<string, { count: number; minDist: number }> = {};
 
     for (const prop of allCompanyProps) {
@@ -210,11 +224,20 @@ export async function generateProfitabilitySuggestions(
 
     if (bestDay) {
       const [day, { count, minDist }] = bestDay;
-      const improvedInputs: PriceCalculatorInputs = { ...baseInputs, distanceFromNearestStopMiles: minDist };
-      const improvedResult = calculatePrice(improvedInputs, pricingConfig, overrideOverhead, costOverrides?.overheadAllocationCents);
+      const improvedInputs: PriceCalculatorInputs = {
+        ...baseInputs,
+        distanceFromNearestStopMiles: minDist,
+      };
+      const improvedResult = calculatePrice(
+        improvedInputs,
+        pricingConfig,
+        overrideOverhead,
+        costOverrides?.overheadAllocationCents
+      );
       const improvedCostCents = improvedResult.minimumPriceCents;
       const improvedProfitCents = currentPriceCents - improvedCostCents;
-      const improvedMarginPct = currentPriceCents > 0 ? (improvedProfitCents / currentPriceCents) * 100 : 0;
+      const improvedMarginPct =
+        currentPriceCents > 0 ? (improvedProfitCents / currentPriceCents) * 100 : 0;
       const savingsPerVisitCents = currentCostCents - improvedCostCents;
 
       if (savingsPerVisitCents > 50) {
@@ -235,11 +258,13 @@ export async function generateProfitabilitySuggestions(
   // ─── Opportunity 3: Price increase ───────────────────────────────────────
   const recommendedPriceCents = targetPropRow.recommendedPriceCents;
   const increaseAmountCents = recommendedPriceCents - currentPriceCents;
-  const increasePercent = currentPriceCents > 0 ? (increaseAmountCents / currentPriceCents) * 100 : 0;
+  const increasePercent =
+    currentPriceCents > 0 ? (increaseAmountCents / currentPriceCents) * 100 : 0;
 
   if (increaseAmountCents > 0 && increasePercent <= 40) {
     const projectedProfitCents = recommendedPriceCents - currentCostCents;
-    const projectedMarginPct = recommendedPriceCents > 0 ? (projectedProfitCents / recommendedPriceCents) * 100 : 0;
+    const projectedMarginPct =
+      recommendedPriceCents > 0 ? (projectedProfitCents / recommendedPriceCents) * 100 : 0;
     opportunities.priceIncrease = {
       currentPriceCents,
       recommendedPriceCents,
@@ -256,13 +281,22 @@ export async function generateProfitabilitySuggestions(
       ...baseInputs,
       serviceFrequency: upgradeFreq as "weekly" | "biweekly" | "monthly",
     };
-    const upgradeResult = calculatePrice(upgradeInputs, pricingConfig, overrideOverhead, costOverrides?.overheadAllocationCents);
+    const upgradeResult = calculatePrice(
+      upgradeInputs,
+      pricingConfig,
+      overrideOverhead,
+      costOverrides?.overheadAllocationCents
+    );
     const upgradeCostCents = upgradeResult.minimumPriceCents;
     const upgradeRecommendedCents = upgradeResult.recommendedPriceCents;
-    const upgradeIncreasePct = currentPriceCents > 0 ? ((upgradeRecommendedCents - currentPriceCents) / currentPriceCents) * 100 : 0;
+    const upgradeIncreasePct =
+      currentPriceCents > 0
+        ? ((upgradeRecommendedCents - currentPriceCents) / currentPriceCents) * 100
+        : 0;
 
     const upgradeProfitCents = upgradeRecommendedCents - upgradeCostCents;
-    const upgradeMarginPct = upgradeRecommendedCents > 0 ? (upgradeProfitCents / upgradeRecommendedCents) * 100 : 0;
+    const upgradeMarginPct =
+      upgradeRecommendedCents > 0 ? (upgradeProfitCents / upgradeRecommendedCents) * 100 : 0;
 
     if (upgradeMarginPct > currentMarginPct + 5 && upgradeIncreasePct <= 50) {
       opportunities.frequencyUpgrade = {
@@ -280,27 +314,25 @@ export async function generateProfitabilitySuggestions(
 
   // ─── Opportunity 5: Add nearby customers ─────────────────────────────────
   if (targetLat !== null && targetLon !== null && currentMarginPct < 15) {
-    const breakEvenMarginalInputs: PriceCalculatorInputs = { ...baseInputs, distanceFromNearestStopMiles: 0.25 };
-    const breakEvenResult = calculatePrice(breakEvenMarginalInputs, pricingConfig, overrideOverhead, costOverrides?.overheadAllocationCents);
+    const breakEvenMarginalInputs: PriceCalculatorInputs = {
+      ...baseInputs,
+      distanceFromNearestStopMiles: 0.25,
+    };
+    const breakEvenResult = calculatePrice(
+      breakEvenMarginalInputs,
+      pricingConfig,
+      overrideOverhead,
+      costOverrides?.overheadAllocationCents
+    );
     const breakEvenCostCents = breakEvenResult.minimumPriceCents;
-    const breakEvenMargin = currentPriceCents > 0 ? ((currentPriceCents - breakEvenCostCents) / currentPriceCents) * 100 : 0;
+    const breakEvenMargin =
+      currentPriceCents > 0
+        ? ((currentPriceCents - breakEvenCostCents) / currentPriceCents) * 100
+        : 0;
 
-    const withinHalfMile = !opportunities.routeDayMove ? await db
-      .select({ count: sql<number>`count(*)` })
-      .from(properties)
-      .innerJoin(servicePlansTable, eq(servicePlansTable.propertyId, properties.id))
-      .where(
-        and(
-          eq(properties.companyId, companyId),
-          isNotNull(properties.latitude),
-          isNotNull(properties.longitude),
-          eq(servicePlansTable.isActive, true),
-          ne(properties.contactId, contactId)
-        )
-      )
-      .then(async (_rows) => {
-        const allNearby = await db
-          .select({ latitude: properties.latitude, longitude: properties.longitude })
+    const withinHalfMile = !opportunities.routeDayMove
+      ? await db
+          .select({ count: sql<number>`count(*)` })
           .from(properties)
           .innerJoin(servicePlansTable, eq(servicePlansTable.propertyId, properties.id))
           .where(
@@ -311,12 +343,34 @@ export async function generateProfitabilitySuggestions(
               eq(servicePlansTable.isActive, true),
               ne(properties.contactId, contactId)
             )
-          );
-        return allNearby.filter((p) => {
-          if (!p.latitude || !p.longitude) return false;
-          return haversineDistanceMiles(targetLat, targetLon, parseFloat(p.latitude), parseFloat(p.longitude)) <= 0.5;
-        }).length;
-      }) : 0;
+          )
+          .then(async (_rows) => {
+            const allNearby = await db
+              .select({ latitude: properties.latitude, longitude: properties.longitude })
+              .from(properties)
+              .innerJoin(servicePlansTable, eq(servicePlansTable.propertyId, properties.id))
+              .where(
+                and(
+                  eq(properties.companyId, companyId),
+                  isNotNull(properties.latitude),
+                  isNotNull(properties.longitude),
+                  eq(servicePlansTable.isActive, true),
+                  ne(properties.contactId, contactId)
+                )
+              );
+            return allNearby.filter((p) => {
+              if (!p.latitude || !p.longitude) return false;
+              return (
+                haversineDistanceMiles(
+                  targetLat,
+                  targetLon,
+                  parseFloat(p.latitude),
+                  parseFloat(p.longitude)
+                ) <= 0.5
+              );
+            }).length;
+          })
+      : 0;
 
     if (breakEvenMargin >= 15) {
       opportunities.addNearbyCustomers = {
@@ -330,7 +384,8 @@ export async function generateProfitabilitySuggestions(
 
   if (Object.keys(opportunities).length === 0) {
     opportunities.noPath = {
-      reason: "No routing, pricing, frequency, or density change modeled would bring this customer above a 15% margin without an unrealistic price increase.",
+      reason:
+        "No routing, pricing, frequency, or density change modeled would bring this customer above a 15% margin without an unrealistic price increase.",
       currentMarginPct: Math.round(currentMarginPct * 10) / 10,
       costCents: currentCostCents,
       revenueCents: currentPriceCents,
@@ -460,7 +515,8 @@ Rules:
     suggestions.push({
       type: "no_path_to_profitability",
       title: "Unable to generate suggestions",
-      explanation: "Not enough data or no viable path found. Review yard size, route assignment, and pricing manually.",
+      explanation:
+        "Not enough data or no viable path found. Review yard size, route assignment, and pricing manually.",
       impactCents: 0,
     });
   }

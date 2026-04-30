@@ -1,9 +1,11 @@
 # Scoopilot - Pet Waste Removal SaaS
 
 ## Overview
+
 Scoopilot is a production-ready vertical SaaS application for pet waste removal businesses. It offers a comprehensive operational solution encompassing CRM, recurring service scheduling with route optimization, a mobile interface for field technicians, invoicing, and a client portal. The platform integrates event-driven automation and a REST API with webhooks for AI agent integrations, aiming to significantly enhance efficiency and streamline customer management in the industry.
 
 ## User Preferences
+
 - Green/earth tone color palette for pet waste business branding
 - Mobile-first responsive design
 - No emojis in UI
@@ -17,9 +19,11 @@ Scoopilot is a production-ready vertical SaaS application for pet waste removal 
 ## System Architecture
 
 ### Core Design Principles
+
 Scoopilot is a full-stack, multi-tenant SaaS application built on role-based access control, event-driven automation, and a modular design, ensuring scalability and a clear separation of concerns.
 
 ### Backend
+
 - **Framework**: Express.js with TypeScript
 - **Database**: PostgreSQL (Neon-backed) with Drizzle ORM
 - **Authentication**: Custom email/password with session cookies and Bearer token.
@@ -30,6 +34,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Routes Structure**: Backend routes are split into domain-specific modules under `server/routes/`. Each module exports a `registerXxxRoutes(app)` function. Shared middleware and helpers live in `server/routes/shared.ts`. `server/routes/index.ts` orchestrates all registrations. `server/routes.ts` is a thin re-export of `registerRoutes` from the index.
 
 ### Frontend
+
 - **Framework**: React with TypeScript
 - **State Management**: TanStack Query v5
 - **UI Components**: Shadcn/ui with Tailwind CSS, utilizing a green/earth tone theme.
@@ -41,6 +46,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Draggable Grid Layouts**: Dashboard and settings page use `react-grid-layout` for drag-and-drop reordering and resizing of blocks/widgets, with layouts persisted to the `companies` table.
 
 ### Key Features
+
 - **Quick Create**: Sidebar dropdown for rapidly creating contacts, quotes, invoices, and jobs.
 - **Data Management**: CRM for contacts and properties, CSV import with AI-assisted mapping, activity logs, and global search.
 - **Jobs & Scheduling (Unified)**: Job management directly from the Scheduling page. Auto-visit generation on job creation. Supports individual visit editing, client filtering, and toggling hidden statuses.
@@ -62,9 +68,11 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Client Notifications (Import Mode + Onboarding Complete)**: Settings block with two controls. (1) **Import Mode** — a persistent toggle (`clientNotificationsSuppressed` column on companies) that suppresses ALL outbound client emails (portal invites, invoices, payment reminders) while tenants are entering their existing client base. Gates are in `provisionPortalAccess`, `sendInvoiceEmail`, and the payment-reminder route. (2) **Onboarding Complete** — a one-time button that previews then batch-sends each active client a consolidated welcome email containing portal credentials, service day, frequency, price per visit, and next scheduled visit; then sets `clientNotificationsSuppressed=false` and stamps `onboardingCompleteSentAt`. Idempotency guard prevents re-sending. New columns: `client_notifications_suppressed BOOLEAN NOT NULL DEFAULT true` (new tenants start in Import Mode), `onboarding_complete_sent_at TIMESTAMP`.
 
 ### Data Model
+
 The scheduling data model is refactored into three layers: `agreements` (billing), `jobs` (work/routing), and `visits` (instance). Dual-write strategy ensures backward compatibility during migration.
 
 ### UI Component Rules
+
 **Never nest a Radix `<Popover>` inside a Radix `<Sheet>` or `<Drawer>`.** Radix UI's focus-trap on Sheet/Drawer conflicts with Popover's own focus management, causing focus to be stolen and the picker to close immediately on Android and some desktop browsers.
 
 - Comboboxes/pickers that appear inside a Sheet or Drawer **must** use the Dialog-based picker pattern instead (see `client/src/pages/scheduling.tsx` `ScheduleJobForm`, lines 377–401 for the reference implementation).
@@ -93,7 +101,19 @@ A `lint` validation step is registered and runs `npx eslint .` against all `.ts`
 
 Rules producing errors are kept to a strict subset; pre-existing patterns (implicit `any`, require imports, namespace usage) are downgraded to warnings since the `typecheck` gate already enforces those. New code introducing ESLint errors will fail the gate and block merges.
 
+### Prettier (`format`)
+
+A `format` validation step is registered and runs `npx prettier --check .` against all project files. It uses the configuration in `.prettierrc` and respects exclusions in `.prettierignore` (node_modules, dist, build, wizard, .local, .config, etc.). Prettier formatting failures **block merges** — the check must pass before any PR is accepted.
+
+- **Run command**: `npx prettier --check .`
+- **Config**: `.prettierrc`
+- **Ignore**: `.prettierignore`
+- **Registered as**: validation command `format`
+
+Keep all code Prettier-formatted. If you add or edit files, run `npx prettier --write <file>` before committing. Key style settings: `semi: true`, `singleQuote: false`, `tabWidth: 2`, `trailingComma: "es5"`, `printWidth: 100`.
+
 ## External Dependencies
+
 - **PostgreSQL**: Primary database.
 - **Object Storage**: For file uploads.
 - **SendGrid**: Email sending.

@@ -99,7 +99,13 @@ const profileSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
 
-function StepIndicator({ currentStep, completedSteps }: { currentStep: number; completedSteps: number[] }) {
+function StepIndicator({
+  currentStep,
+  completedSteps,
+}: {
+  currentStep: number;
+  completedSteps: number[];
+}) {
   return (
     <div className="flex items-center gap-1 w-full mb-8" data-testid="stepper-indicator">
       {STEPS.map((step, idx) => {
@@ -114,19 +120,23 @@ function StepIndicator({ currentStep, completedSteps }: { currentStep: number; c
                   isActive
                     ? "bg-primary text-primary-foreground ring-4 ring-primary/20"
                     : isCompleted
-                    ? "bg-green-500 text-white"
-                    : "bg-muted text-muted-foreground"
+                      ? "bg-green-500 text-white"
+                      : "bg-muted text-muted-foreground"
                 }`}
                 data-testid={`step-indicator-${idx}`}
               >
                 {isCompleted ? <CheckCircle2 className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
               </div>
-              <span className={`text-xs mt-1.5 text-center leading-tight ${isActive ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+              <span
+                className={`text-xs mt-1.5 text-center leading-tight ${isActive ? "font-semibold text-foreground" : "text-muted-foreground"}`}
+              >
                 {step.label}
               </span>
             </div>
             {idx < STEPS.length - 1 && (
-              <div className={`h-0.5 w-full mx-1 mt-[-1.25rem] ${isCompleted ? "bg-green-500" : "bg-muted"}`} />
+              <div
+                className={`h-0.5 w-full mx-1 mt-[-1.25rem] ${isCompleted ? "bg-green-500" : "bg-muted"}`}
+              />
             )}
           </div>
         );
@@ -156,7 +166,11 @@ function CompanyProfileStep({
       toast({ title: "Logo uploaded", description: "Your company logo has been saved." });
     },
     onError: () => {
-      toast({ title: "Upload failed", description: "Could not upload logo. Please try again.", variant: "destructive" });
+      toast({
+        title: "Upload failed",
+        description: "Could not upload logo. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -164,11 +178,19 @@ function CompanyProfileStep({
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast({ title: "Invalid file", description: "Please select an image file (PNG or JPG).", variant: "destructive" });
+      toast({
+        title: "Invalid file",
+        description: "Please select an image file (PNG or JPG).",
+        variant: "destructive",
+      });
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Logo must be under 2 MB.", variant: "destructive" });
+      toast({
+        title: "File too large",
+        description: "Logo must be under 2 MB.",
+        variant: "destructive",
+      });
       return;
     }
     const reader = new FileReader();
@@ -192,21 +214,42 @@ function CompanyProfileStep({
   return (
     <div className="max-w-xl mx-auto">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold" data-testid="text-step-title">Tell us about your business</h2>
-        <p className="text-muted-foreground mt-1">This information will appear on invoices, quotes, and customer communications.</p>
+        <h2 className="text-2xl font-bold" data-testid="text-step-title">
+          Tell us about your business
+        </h2>
+        <p className="text-muted-foreground mt-1">
+          This information will appear on invoices, quotes, and customer communications.
+        </p>
       </div>
 
       <div className="flex items-center gap-4 mb-6 p-4 rounded-lg border bg-muted/30">
         <div className="w-16 h-16 rounded-lg border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden bg-muted/50 shrink-0">
           {logoPreview ? (
-            <img src={logoPreview} alt="Company logo" className="w-full h-full object-cover rounded-lg" data-testid="img-onboarding-logo" />
+            <img
+              src={logoPreview}
+              alt="Company logo"
+              className="w-full h-full object-cover rounded-lg"
+              data-testid="img-onboarding-logo"
+            />
           ) : (
             <Image className="h-6 w-6 text-muted-foreground/50" />
           )}
         </div>
         <div>
-          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isUploading} data-testid="button-upload-logo">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleLogoUpload}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            data-testid="button-upload-logo"
+          >
             <Upload className="mr-1 h-4 w-4" />
             {isUploading ? "Uploading..." : logoPreview ? "Change Logo" : "Upload Logo"}
           </Button>
@@ -215,65 +258,126 @@ function CompanyProfileStep({
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit((data) => onNext({ ...data, logoUrl: logoPreview || undefined }))} className="space-y-4">
-          <FormField control={form.control} name="name" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Company Name *</FormLabel>
-              <FormControl><Input placeholder="e.g. Clean Paws Pet Waste Removal" {...field} data-testid="input-company-name" /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
+        <form
+          onSubmit={form.handleSubmit((data) =>
+            onNext({ ...data, logoUrl: logoPreview || undefined })
+          )}
+          className="space-y-4"
+        >
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Company Name *</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="e.g. Clean Paws Pet Waste Removal"
+                    {...field}
+                    data-testid="input-company-name"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-          <FormField control={form.control} name="email" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Business Email *</FormLabel>
-              <FormControl><Input type="email" placeholder="you@yourcompany.com" {...field} data-testid="input-company-email" /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Business Email *</FormLabel>
+                <FormControl>
+                  <Input
+                    type="email"
+                    placeholder="you@yourcompany.com"
+                    {...field}
+                    data-testid="input-company-email"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-          <FormField control={form.control} name="phone" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Business Phone</FormLabel>
-              <FormControl><Input placeholder="(555) 123-4567" {...field} data-testid="input-company-phone" /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
+          <FormField
+            control={form.control}
+            name="phone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Business Phone</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="(555) 123-4567"
+                    {...field}
+                    data-testid="input-company-phone"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-          <FormField control={form.control} name="address" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Business Address</FormLabel>
-              <FormControl>
-                <AddressAutocomplete
-                  value={field.value || ""}
-                  onChange={field.onChange}
-                  onSelect={(parsed) => {
-                    form.setValue("address", `${parsed.streetAddress}, ${parsed.city}, ${parsed.state} ${parsed.zipCode}`);
-                  }}
-                  placeholder="Start typing your business address..."
-                  data-testid="input-company-address"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
+          <FormField
+            control={form.control}
+            name="address"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Business Address</FormLabel>
+                <FormControl>
+                  <AddressAutocomplete
+                    value={field.value || ""}
+                    onChange={field.onChange}
+                    onSelect={(parsed) => {
+                      form.setValue(
+                        "address",
+                        `${parsed.streetAddress}, ${parsed.city}, ${parsed.state} ${parsed.zipCode}`
+                      );
+                    }}
+                    placeholder="Start typing your business address..."
+                    data-testid="input-company-address"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-          <FormField control={form.control} name="websiteUrl" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Website URL</FormLabel>
-              <FormControl><Input placeholder="https://yourcompany.com" {...field} data-testid="input-company-website" /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )} />
+          <FormField
+            control={form.control}
+            name="websiteUrl"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Website URL</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="https://yourcompany.com"
+                    {...field}
+                    data-testid="input-company-website"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-          <FormField control={form.control} name="timezone" render={({ field }) => (
-            <FormItem>
-              <FormLabel>Timezone</FormLabel>
-              <FormControl><Input {...field} data-testid="input-company-timezone" /></FormControl>
-              <p className="text-xs text-muted-foreground mt-1">Auto-detected from your browser. Used for scheduling and notifications.</p>
-              <FormMessage />
-            </FormItem>
-          )} />
+          <FormField
+            control={form.control}
+            name="timezone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Timezone</FormLabel>
+                <FormControl>
+                  <Input {...field} data-testid="input-company-timezone" />
+                </FormControl>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Auto-detected from your browser. Used for scheduling and notifications.
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <div className="flex justify-end pt-4">
             <Button type="submit" disabled={isPending} data-testid="button-next-step">
@@ -303,7 +407,9 @@ function BusinessIntelligenceStep({
 }) {
   const { toast } = useToast();
   const [insights, setInsights] = useState<WebsiteInsights | null>(null);
-  const [businessDescription, setBusinessDescription] = useState(companyData.businessDescription || "");
+  const [businessDescription, setBusinessDescription] = useState(
+    companyData.businessDescription || ""
+  );
   const [serviceArea, setServiceArea] = useState(companyData.serviceAreaDescription || "");
   const [serviceAreaMode, setServiceAreaMode] = useState<"zip" | "radius">("zip");
   const [radiusMiles, setRadiusMiles] = useState(15);
@@ -321,9 +427,16 @@ function BusinessIntelligenceStep({
         if (data.insights.serviceArea && !serviceArea) {
           setServiceArea(data.insights.serviceArea);
         }
-        toast({ title: "Website analyzed", description: "We found some useful information about your business." });
+        toast({
+          title: "Website analyzed",
+          description: "We found some useful information about your business.",
+        });
       } else {
-        toast({ title: "Analysis issue", description: data.error || "Could not analyze website.", variant: "destructive" });
+        toast({
+          title: "Analysis issue",
+          description: data.error || "Could not analyze website.",
+          variant: "destructive",
+        });
       }
     },
     onError: () => {
@@ -334,8 +447,12 @@ function BusinessIntelligenceStep({
   return (
     <div className="max-w-2xl mx-auto">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold" data-testid="text-step-title">Business Intelligence</h2>
-        <p className="text-muted-foreground mt-1">Let us learn about your business to provide better recommendations.</p>
+        <h2 className="text-2xl font-bold" data-testid="text-step-title">
+          Business Intelligence
+        </h2>
+        <p className="text-muted-foreground mt-1">
+          Let us learn about your business to provide better recommendations.
+        </p>
       </div>
 
       <div className="space-y-6">
@@ -346,11 +463,16 @@ function BusinessIntelligenceStep({
                 <Sparkles className="h-4 w-4 text-amber-500" />
                 AI Website Analysis
               </CardTitle>
-              <CardDescription>We can scan your website to auto-fill business details and find competitive pricing data.</CardDescription>
+              <CardDescription>
+                We can scan your website to auto-fill business details and find competitive pricing
+                data.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
-                <div className="flex-1 text-sm text-muted-foreground truncate">{companyData.websiteUrl}</div>
+                <div className="flex-1 text-sm text-muted-foreground truncate">
+                  {companyData.websiteUrl}
+                </div>
                 <Button
                   onClick={() => scrapeMutation.mutate(companyData.websiteUrl!)}
                   disabled={scrapeMutation.isPending}
@@ -358,7 +480,11 @@ function BusinessIntelligenceStep({
                   size="sm"
                   data-testid="button-analyze-website"
                 >
-                  {scrapeMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Sparkles className="h-4 w-4 mr-1" />}
+                  {scrapeMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 mr-1" />
+                  )}
                   Analyze
                 </Button>
               </div>
@@ -367,16 +493,21 @@ function BusinessIntelligenceStep({
                   {insights.servicesOffered?.length > 0 && (
                     <div>
                       <span className="font-medium">Services found:</span>{" "}
-                      <span className="text-muted-foreground">{insights.servicesOffered.join(", ")}</span>
+                      <span className="text-muted-foreground">
+                        {insights.servicesOffered.join(", ")}
+                      </span>
                     </div>
                   )}
                   {insights.pricingInfo && Object.keys(insights.pricingInfo).length > 0 && (
                     <div>
                       <span className="font-medium">Pricing found:</span>{" "}
                       <span className="text-muted-foreground">
-                        {insights.pricingInfo.weeklyPrice && `Weekly: $${insights.pricingInfo.weeklyPrice}`}
-                        {insights.pricingInfo.biweeklyPrice && ` | Bi-weekly: $${insights.pricingInfo.biweeklyPrice}`}
-                        {insights.pricingInfo.monthlyPrice && ` | Monthly: $${insights.pricingInfo.monthlyPrice}`}
+                        {insights.pricingInfo.weeklyPrice &&
+                          `Weekly: $${insights.pricingInfo.weeklyPrice}`}
+                        {insights.pricingInfo.biweeklyPrice &&
+                          ` | Bi-weekly: $${insights.pricingInfo.biweeklyPrice}`}
+                        {insights.pricingInfo.monthlyPrice &&
+                          ` | Monthly: $${insights.pricingInfo.monthlyPrice}`}
                       </span>
                     </div>
                   )}
@@ -389,7 +520,9 @@ function BusinessIntelligenceStep({
                   {insights.suggestedPricingMode && (
                     <div className="flex items-center gap-1">
                       <span className="font-medium">Suggested strategy:</span>
-                      <Badge variant="secondary" className="capitalize">{insights.suggestedPricingMode}</Badge>
+                      <Badge variant="secondary" className="capitalize">
+                        {insights.suggestedPricingMode}
+                      </Badge>
                     </div>
                   )}
                 </div>
@@ -463,10 +596,7 @@ function BusinessIntelligenceStep({
                   />
                   <span className="text-sm font-medium w-16 shrink-0">{radiusMiles} mi</span>
                 </div>
-                <RadiusMapSelector
-                  radiusMiles={radiusMiles}
-                  addressHint={companyData.address}
-                />
+                <RadiusMapSelector radiusMiles={radiusMiles} addressHint={companyData.address} />
               </div>
             )}
           </div>
@@ -533,7 +663,11 @@ function PricingSetupStep({
   isPending: boolean;
 }) {
   const { toast } = useToast();
-  const [csvSummary, setCsvSummary] = useState<{ totalRows: number; priceColumns: string[]; frequencyColumns: string[] } | null>(null);
+  const [csvSummary, setCsvSummary] = useState<{
+    totalRows: number;
+    priceColumns: string[];
+    frequencyColumns: string[];
+  } | null>(null);
 
   const csvMutation = useMutation({
     mutationFn: async (csvText: string) => {
@@ -543,9 +677,16 @@ function PricingSetupStep({
     onSuccess: (data) => {
       if (data.success) {
         setCsvSummary(data.summary);
-        toast({ title: "CSV parsed", description: `Found ${data.summary.totalRows} rows of pricing data.` });
+        toast({
+          title: "CSV parsed",
+          description: `Found ${data.summary.totalRows} rows of pricing data.`,
+        });
       } else {
-        toast({ title: "Error", description: data.error || "Could not parse CSV.", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: data.error || "Could not parse CSV.",
+          variant: "destructive",
+        });
       }
     },
     onError: () => {
@@ -574,10 +715,14 @@ function PricingSetupStep({
   const [qfBase, setQfBase] = useState<Record<FreqKey, string>>({
     weekly: existingRules.basePrices.weekly ? String(existingRules.basePrices.weekly) : "",
     biWeekly: existingRules.basePrices.biWeekly ? String(existingRules.basePrices.biWeekly) : "",
-    twiceWeekly: existingRules.basePrices.twiceWeekly ? String(existingRules.basePrices.twiceWeekly) : "",
+    twiceWeekly: existingRules.basePrices.twiceWeekly
+      ? String(existingRules.basePrices.twiceWeekly)
+      : "",
     monthly: existingRules.basePrices.monthly ? String(existingRules.basePrices.monthly) : "",
   });
-  const [surcharge, setSurcharge] = useState(String(existingRules.perDogRule.surchargeAmount || "5"));
+  const [surcharge, setSurcharge] = useState(
+    String(existingRules.perDogRule.surchargeAmount || "5")
+  );
   const [increment, setIncrement] = useState(String(existingRules.perDogRule.incrementDogs || "1"));
 
   const buildGrid = (bases: Record<FreqKey, string>, sur: string, inc: string) => {
@@ -596,8 +741,8 @@ function PricingSetupStep({
     return grid;
   };
 
-  const [grid, setGrid] = useState<Record<FreqKey, Record<DogCol, string>>>(
-    () => buildGrid(qfBase, surcharge, increment)
+  const [grid, setGrid] = useState<Record<FreqKey, Record<DogCol, string>>>(() =>
+    buildGrid(qfBase, surcharge, increment)
   );
 
   const applyQuickFill = () => setGrid(buildGrid(qfBase, surcharge, increment));
@@ -606,7 +751,8 @@ function PricingSetupStep({
     const config: Partial<PricingConfig> = {
       ...DEFAULT_PRICING_CONFIG,
       pricingMode,
-      targetProfitMarginPct: pricingMode === "aggressive" ? 20 : pricingMode === "premium" ? 40 : 30,
+      targetProfitMarginPct:
+        pricingMode === "aggressive" ? 20 : pricingMode === "premium" ? 40 : 30,
       premiumMarginPct: pricingMode === "aggressive" ? 30 : pricingMode === "premium" ? 55 : 40,
       pricingRules: {
         basePrices: {
@@ -629,8 +775,12 @@ function PricingSetupStep({
   return (
     <div className="max-w-2xl mx-auto">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold" data-testid="text-step-title">Set Your Pricing</h2>
-        <p className="text-muted-foreground mt-1">Enter your rates for each service frequency and dog count.</p>
+        <h2 className="text-2xl font-bold" data-testid="text-step-title">
+          Set Your Pricing
+        </h2>
+        <p className="text-muted-foreground mt-1">
+          Enter your rates for each service frequency and dog count.
+        </p>
       </div>
 
       <div className="space-y-6">
@@ -640,7 +790,9 @@ function PricingSetupStep({
               <Upload className="h-4 w-4" />
               Import Pricing CSV
             </CardTitle>
-            <CardDescription>Upload a CSV with your current pricing data to help set up your rate card.</CardDescription>
+            <CardDescription>
+              Upload a CSV with your current pricing data to help set up your rate card.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Input
@@ -656,12 +808,24 @@ function PricingSetupStep({
             )}
             {csvSummary && (
               <div className="mt-3 p-3 bg-muted/50 rounded-lg text-sm space-y-1">
-                <p><span className="font-medium">{csvSummary.totalRows}</span> rows found</p>
+                <p>
+                  <span className="font-medium">{csvSummary.totalRows}</span> rows found
+                </p>
                 {csvSummary.priceColumns.length > 0 && (
-                  <p>Price columns: <span className="text-muted-foreground">{csvSummary.priceColumns.join(", ")}</span></p>
+                  <p>
+                    Price columns:{" "}
+                    <span className="text-muted-foreground">
+                      {csvSummary.priceColumns.join(", ")}
+                    </span>
+                  </p>
                 )}
                 {csvSummary.frequencyColumns.length > 0 && (
-                  <p>Frequency columns: <span className="text-muted-foreground">{csvSummary.frequencyColumns.join(", ")}</span></p>
+                  <p>
+                    Frequency columns:{" "}
+                    <span className="text-muted-foreground">
+                      {csvSummary.frequencyColumns.join(", ")}
+                    </span>
+                  </p>
                 )}
               </div>
             )}
@@ -672,16 +836,36 @@ function PricingSetupStep({
           <label className="text-sm font-medium mb-3 block">Pricing Strategy</label>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { mode: "aggressive" as const, label: "Growth", desc: "Lower prices, grow fast", icon: Zap, color: "text-blue-500" },
-              { mode: "standard" as const, label: "Standard", desc: "Balanced market rate", icon: Shield, color: "text-green-500" },
-              { mode: "premium" as const, label: "Premium", desc: "Higher prices, premium feel", icon: Crown, color: "text-amber-500" },
+              {
+                mode: "aggressive" as const,
+                label: "Growth",
+                desc: "Lower prices, grow fast",
+                icon: Zap,
+                color: "text-blue-500",
+              },
+              {
+                mode: "standard" as const,
+                label: "Standard",
+                desc: "Balanced market rate",
+                icon: Shield,
+                color: "text-green-500",
+              },
+              {
+                mode: "premium" as const,
+                label: "Premium",
+                desc: "Higher prices, premium feel",
+                icon: Crown,
+                color: "text-amber-500",
+              },
             ].map(({ mode, label, desc, icon: Icon, color }) => (
               <button
                 key={mode}
                 type="button"
                 onClick={() => setPricingMode(mode)}
                 className={`p-3 rounded-lg border-2 transition-all text-left ${
-                  pricingMode === mode ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"
+                  pricingMode === mode
+                    ? "border-primary bg-primary/5"
+                    : "border-muted hover:border-muted-foreground/30"
                 }`}
                 data-testid={`button-pricing-${mode}`}
               >
@@ -715,10 +899,18 @@ function PricingSetupStep({
             <table className="text-sm w-full">
               <thead>
                 <tr>
-                  <th className="text-left pr-4 pb-1 text-xs font-medium text-muted-foreground">Frequency</th>
-                  <th className="px-2 pb-1 text-xs font-medium text-muted-foreground">Base / 1 dog ($)</th>
-                  <th className="px-2 pb-1 text-xs font-medium text-muted-foreground">Surcharge / step ($)</th>
-                  <th className="px-2 pb-1 text-xs font-medium text-muted-foreground">Dogs / step</th>
+                  <th className="text-left pr-4 pb-1 text-xs font-medium text-muted-foreground">
+                    Frequency
+                  </th>
+                  <th className="px-2 pb-1 text-xs font-medium text-muted-foreground">
+                    Base / 1 dog ($)
+                  </th>
+                  <th className="px-2 pb-1 text-xs font-medium text-muted-foreground">
+                    Surcharge / step ($)
+                  </th>
+                  <th className="px-2 pb-1 text-xs font-medium text-muted-foreground">
+                    Dogs / step
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -732,7 +924,7 @@ function PricingSetupStep({
                         min="0"
                         className="h-7 w-24 text-sm"
                         value={qfBase[key]}
-                        onChange={(e) => setQfBase(prev => ({ ...prev, [key]: e.target.value }))}
+                        onChange={(e) => setQfBase((prev) => ({ ...prev, [key]: e.target.value }))}
                         placeholder="e.g. 25"
                         data-testid={`input-qf-base-${key}`}
                       />
@@ -782,9 +974,16 @@ function PricingSetupStep({
             <table className="text-sm w-full">
               <thead>
                 <tr className="bg-muted/50">
-                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Frequency</th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">
+                    Frequency
+                  </th>
                   {DOG_COLS.map(({ key, label }) => (
-                    <th key={key} className="px-2 py-2 text-xs font-medium text-muted-foreground text-center">{label}</th>
+                    <th
+                      key={key}
+                      className="px-2 py-2 text-xs font-medium text-muted-foreground text-center"
+                    >
+                      {label}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -801,7 +1000,7 @@ function PricingSetupStep({
                           className="h-7 w-20 text-sm text-center mx-auto"
                           value={grid[freq]?.[col] ?? ""}
                           onChange={(e) =>
-                            setGrid(prev => ({
+                            setGrid((prev) => ({
                               ...prev,
                               [freq]: { ...prev[freq], [col]: e.target.value },
                             }))
@@ -874,7 +1073,11 @@ function PaymentProcessingStep({
       window.location.href = data.url;
     },
     onError: (err: Error) => {
-      toast({ title: "Error", description: err.message || "Failed to start Stripe onboarding.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: err.message || "Failed to start Stripe onboarding.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -894,8 +1097,12 @@ function PaymentProcessingStep({
   return (
     <div className="max-w-xl mx-auto">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold" data-testid="text-step-title">Payment Processing</h2>
-        <p className="text-muted-foreground mt-1">Connect Stripe to accept credit card payments from your customers.</p>
+        <h2 className="text-2xl font-bold" data-testid="text-step-title">
+          Payment Processing
+        </h2>
+        <p className="text-muted-foreground mt-1">
+          Connect Stripe to accept credit card payments from your customers.
+        </p>
       </div>
 
       <Card>
@@ -906,20 +1113,28 @@ function PaymentProcessingStep({
             <div className="text-center py-4">
               <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
               <h3 className="font-semibold text-lg">Stripe Connected</h3>
-              <p className="text-muted-foreground text-sm mt-1">Your Stripe account is set up and ready to accept payments.</p>
+              <p className="text-muted-foreground text-sm mt-1">
+                Your Stripe account is set up and ready to accept payments.
+              </p>
             </div>
           ) : status === "pending" ? (
             <div className="text-center py-4">
               <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-3" />
               <h3 className="font-semibold text-lg">Setup In Progress</h3>
-              <p className="text-muted-foreground text-sm mt-1">Your Stripe account needs additional information.</p>
+              <p className="text-muted-foreground text-sm mt-1">
+                Your Stripe account needs additional information.
+              </p>
               <Button
                 onClick={() => onboardMutation.mutate()}
                 disabled={onboardMutation.isPending}
                 className="mt-4"
                 data-testid="button-continue-stripe"
               >
-                {onboardMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ExternalLink className="h-4 w-4 mr-2" />}
+                {onboardMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                )}
                 Continue Setup
               </Button>
             </div>
@@ -928,7 +1143,8 @@ function PaymentProcessingStep({
               <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
               <h3 className="font-semibold text-lg">Connect Stripe</h3>
               <p className="text-muted-foreground text-sm mt-1 max-w-sm mx-auto">
-                Connect your Stripe account to accept credit card payments. You can also do this later from Settings.
+                Connect your Stripe account to accept credit card payments. You can also do this
+                later from Settings.
               </p>
               <Button
                 onClick={() => onboardMutation.mutate()}
@@ -936,7 +1152,11 @@ function PaymentProcessingStep({
                 className="mt-4"
                 data-testid="button-connect-stripe"
               >
-                {onboardMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CreditCard className="h-4 w-4 mr-2" />}
+                {onboardMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <CreditCard className="h-4 w-4 mr-2" />
+                )}
                 Connect Stripe Account
               </Button>
             </div>
@@ -984,13 +1204,15 @@ function ReviewLaunchStep({
     { label: "Payment processing", done: companyData.stripeConnectOnboarded, icon: CreditCard },
   ];
 
-  const doneCount = checkItems.filter(c => c.done).length;
+  const doneCount = checkItems.filter((c) => c.done).length;
 
   return (
     <div className="max-w-xl mx-auto">
       <div className="text-center mb-6">
         <PartyPopper className="h-12 w-12 text-amber-500 mx-auto mb-3" />
-        <h2 className="text-2xl font-bold" data-testid="text-step-title">You're All Set!</h2>
+        <h2 className="text-2xl font-bold" data-testid="text-step-title">
+          You're All Set!
+        </h2>
         <p className="text-muted-foreground mt-1">Review your setup and launch your dashboard.</p>
       </div>
 
@@ -1032,7 +1254,11 @@ function ReviewLaunchStep({
           Back
         </Button>
         <Button onClick={onComplete} disabled={isPending} size="lg" data-testid="button-launch">
-          {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Rocket className="h-4 w-4 mr-2" />}
+          {isPending ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Rocket className="h-4 w-4 mr-2" />
+          )}
           Launch Dashboard
         </Button>
       </div>
@@ -1040,7 +1266,13 @@ function ReviewLaunchStep({
   );
 }
 
-export default function BusinessOnboarding({ onComplete, onDismiss }: { onComplete: () => void; onDismiss?: () => void }) {
+export default function BusinessOnboarding({
+  onComplete,
+  onDismiss,
+}: {
+  onComplete: () => void;
+  onDismiss?: () => void;
+}) {
   const { toast } = useToast();
   const { data: status, isLoading } = useQuery<BusinessOnboardingStatus>({
     queryKey: ["/api/onboarding/business-status"],
@@ -1063,7 +1295,7 @@ export default function BusinessOnboarding({ onComplete, onDismiss }: { onComple
       return res.json();
     },
     onSuccess: (data) => {
-      setCompletedSteps(prev => [...new Set([...prev, currentStep])]);
+      setCompletedSteps((prev) => [...new Set([...prev, currentStep])]);
       setCurrentStep(data.nextStep);
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding/business-status"] });
     },

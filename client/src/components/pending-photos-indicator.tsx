@@ -12,21 +12,28 @@ export function PendingPhotosIndicator({ visitId, refreshTrigger }: PendingPhoto
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
 
   useEffect(() => {
-    getPendingPhotosForVisit(visitId).then(photos => {
-      setPendingPhotos(photos.filter(p => p.status === "pending" || p.status === "failed"));
-    }).catch(() => {});
+    getPendingPhotosForVisit(visitId)
+      .then((photos) => {
+        setPendingPhotos(photos.filter((p) => p.status === "pending" || p.status === "failed"));
+      })
+      .catch(() => {});
   }, [visitId, refreshTrigger]);
 
   if (pendingPhotos.length === 0) return null;
 
-  const failedCount = pendingPhotos.filter(p => p.status === "failed").length;
-  const typeLabels = pendingPhotos.map(p => {
+  const failedCount = pendingPhotos.filter((p) => p.status === "failed").length;
+  const typeLabels = pendingPhotos.map((p) => {
     switch (p.photoType) {
-      case "before": return "Before";
-      case "after": return "After";
-      case "gate": return "Proof";
-      case "extra": return "Extra";
-      default: return "Photo";
+      case "before":
+        return "Before";
+      case "after":
+        return "After";
+      case "gate":
+        return "Proof";
+      case "extra":
+        return "Extra";
+      default:
+        return "Photo";
     }
   });
 
@@ -52,9 +59,7 @@ export function PendingPhotosIndicator({ visitId, refreshTrigger }: PendingPhoto
         </Badge>
       ))}
       {failedCount > 0 && (
-        <span className="text-xs text-red-600 dark:text-red-400">
-          Will retry on next sync
-        </span>
+        <span className="text-xs text-red-600 dark:text-red-400">Will retry on next sync</span>
       )}
     </div>
   );

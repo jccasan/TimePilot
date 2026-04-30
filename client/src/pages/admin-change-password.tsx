@@ -32,10 +32,22 @@ export default function AdminChangePassword() {
       setError("Password must be at least 16 characters");
       return;
     }
-    if (!/[a-z]/.test(newPassword)) { setError("Password must contain a lowercase letter"); return; }
-    if (!/[A-Z]/.test(newPassword)) { setError("Password must contain an uppercase letter"); return; }
-    if (!/[0-9]/.test(newPassword)) { setError("Password must contain a number"); return; }
-    if (!/[^a-zA-Z0-9]/.test(newPassword)) { setError("Password must contain a symbol"); return; }
+    if (!/[a-z]/.test(newPassword)) {
+      setError("Password must contain a lowercase letter");
+      return;
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      setError("Password must contain an uppercase letter");
+      return;
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      setError("Password must contain a number");
+      return;
+    }
+    if (!/[^a-zA-Z0-9]/.test(newPassword)) {
+      setError("Password must contain a symbol");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -64,8 +76,12 @@ export default function AdminChangePassword() {
               <AlertTriangle className="h-6 w-6 text-destructive" />
             </div>
           </div>
-          <CardTitle className="text-xl" data-testid="text-change-password-title">Password Expired</CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">Your password must be changed every 90 days</p>
+          <CardTitle className="text-xl" data-testid="text-change-password-title">
+            Password Expired
+          </CardTitle>
+          <p className="text-sm text-muted-foreground mt-1">
+            Your password must be changed every 90 days
+          </p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -135,9 +151,15 @@ export default function AdminChangePassword() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              16+ characters, uppercase, lowercase, number, and symbol required. No repeated passwords.
+              16+ characters, uppercase, lowercase, number, and symbol required. No repeated
+              passwords.
             </p>
-            <Button type="submit" className="w-full" disabled={loading} data-testid="button-change-password">
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading}
+              data-testid="button-change-password"
+            >
               {loading ? "Changing..." : "Change Password"}
             </Button>
           </form>

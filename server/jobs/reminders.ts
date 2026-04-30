@@ -1,6 +1,17 @@
 import { db } from "../db";
 import { eq, and, lte, sql } from "drizzle-orm";
-import { contacts, visits, invoices, jobs, agreements, properties, routes, reminderLogs, type ReminderRule, type InvoiceReminderSettings } from "@shared/schema";
+import {
+  contacts,
+  visits,
+  invoices,
+  jobs,
+  agreements,
+  properties,
+  routes,
+  reminderLogs,
+  type ReminderRule,
+  type InvoiceReminderSettings,
+} from "@shared/schema";
 import { storage } from "../storage";
 import { sendEmail } from "../services/email";
 import { sendSmsForCompany, isSmsConfiguredForCompany } from "../services/sms";
@@ -13,12 +24,14 @@ const DEFAULT_REMINDER_RULES: ReminderRule[] = [
     id: "default_24h",
     timing: "24h_before",
     channel: "sms",
-    template: "Hi {firstName}, your service with {companyName} is scheduled for tomorrow at {propertyAddress}. Thank you!",
+    template:
+      "Hi {firstName}, your service with {companyName} is scheduled for tomorrow at {propertyAddress}. Thank you!",
     isActive: true,
   },
 ];
 
-const DEFAULT_TEMPLATE = "Hi {firstName}, your service with {companyName} is scheduled for tomorrow at {propertyAddress}. Thank you!";
+const DEFAULT_TEMPLATE =
+  "Hi {firstName}, your service with {companyName} is scheduled for tomorrow at {propertyAddress}. Thank you!";
 
 const DEFAULT_INVOICE_SETTINGS: InvoiceReminderSettings = {
   preDueDays: [7, 2, 1, 0],
@@ -28,18 +41,27 @@ const DEFAULT_INVOICE_SETTINGS: InvoiceReminderSettings = {
 
 function isQuietHours(timezone: string): boolean {
   const now = new Date();
-  const timeStr = now.toLocaleTimeString("en-US", { timeZone: timezone, hour12: false, hour: "2-digit" });
+  const timeStr = now.toLocaleTimeString("en-US", {
+    timeZone: timezone,
+    hour12: false,
+    hour: "2-digit",
+  });
   const hour = parseInt(timeStr, 10);
   return hour < 8 || hour >= 20;
 }
 
 function getTimingHours(rule: ReminderRule): number {
   switch (rule.timing) {
-    case "24h_before": return 24;
-    case "2h_before": return 2;
-    case "morning_of": return 0;
-    case "custom": return rule.customHours ?? 24;
-    default: return 24;
+    case "24h_before":
+      return 24;
+    case "2h_before":
+      return 2;
+    case "morning_of":
+      return 0;
+    case "custom":
+      return rule.customHours ?? 24;
+    default:
+      return 24;
   }
 }
 
@@ -51,7 +73,11 @@ function applyTemplate(template: string, fields: Record<string, string>): string
   return result;
 }
 
-function getServiceDatetime(scheduledDate: string, startTime: string | null, timezone: string): Date {
+function getServiceDatetime(
+  scheduledDate: string,
+  startTime: string | null,
+  timezone: string
+): Date {
   const timeStr = startTime || "08:00";
   const dateTimeStr = `${scheduledDate}T${timeStr}:00`;
   const utcDate = new Date(dateTimeStr);
@@ -65,7 +91,12 @@ function getTimezoneOffsetMs(timezone: string, date: Date): number {
   return new Date(utcStr).getTime() - new Date(tzStr).getTime();
 }
 
-function isVisitInRuleWindow(rule: ReminderRule, scheduledDate: string, startTime: string | null, timezone: string): boolean {
+function isVisitInRuleWindow(
+  rule: ReminderRule,
+  scheduledDate: string,
+  startTime: string | null,
+  timezone: string
+): boolean {
   const hours = getTimingHours(rule);
   const now = new Date();
 
@@ -84,7 +115,11 @@ function isVisitInRuleWindow(rule: ReminderRule, scheduledDate: string, startTim
     const serviceDt = getServiceDatetime(scheduledDate, startTime, timezone);
     const hoursUntil = (serviceDt.getTime() - now.getTime()) / (1000 * 60 * 60);
     const tolerance = 0.25;
-    return hoursUntil > 0 && hoursUntil <= hours + tolerance && hoursUntil >= Math.max(0, hours - tolerance);
+    return (
+      hoursUntil > 0 &&
+      hoursUntil <= hours + tolerance &&
+      hoursUntil >= Math.max(0, hours - tolerance)
+    );
   }
 
   return false;
@@ -104,17 +139,27 @@ export async function runReminders() {
 
     const suppressEmail = !!company.clientNotificationsSuppressed;
     if (suppressEmail) {
-      console.log(`[reminders] Email suppressed for company ${company.id} (Import Mode on) — SMS reminders still active`);
+      console.log(
+        `[reminders] Email suppressed for company ${company.id} (Import Mode on) — SMS reminders still active`
+      );
     }
 
     try {
       const tz = company.timezone || "America/New_York";
       const rules: ReminderRule[] = company.reminderSettings || DEFAULT_REMINDER_RULES;
-      const activeRules = rules.filter(r => r.isActive);
-      const coveredTimings = new Set(activeRules.map(r => r.timing));
+      const activeRules = rules.filter((r) => r.isActive);
+      const coveredTimings = new Set(activeRules.map((r) => r.timing));
 
       for (const rule of activeRules) {
-        const count = await sendServiceRemindersForRule(company.id, company.name, company.email, tz, rule, false, suppressEmail);
+        const count = await sendServiceRemindersForRule(
+          company.id,
+          company.name,
+          company.email,
+          tz,
+          rule,
+          false,
+          suppressEmail
+        );
         totalServiceReminders += count;
       }
 
@@ -130,12 +175,28 @@ export async function runReminders() {
         if (timing === "custom") {
           fallbackRule.customHours = 4;
         }
-        const count = await sendServiceRemindersForRule(company.id, company.name, company.email, tz, fallbackRule, true, suppressEmail);
+        const count = await sendServiceRemindersForRule(
+          company.id,
+          company.name,
+          company.email,
+          tz,
+          fallbackRule,
+          true,
+          suppressEmail
+        );
         totalServiceReminders += count;
       }
 
-      const invoiceSettings: InvoiceReminderSettings = company.invoiceReminderSettings || DEFAULT_INVOICE_SETTINGS;
-      const invoiceCount = await sendInvoiceReminders(company.id, company.name, company.email, tz, invoiceSettings, suppressEmail);
+      const invoiceSettings: InvoiceReminderSettings =
+        company.invoiceReminderSettings || DEFAULT_INVOICE_SETTINGS;
+      const invoiceCount = await sendInvoiceReminders(
+        company.id,
+        company.name,
+        company.email,
+        tz,
+        invoiceSettings,
+        suppressEmail
+      );
       totalInvoiceReminders += invoiceCount;
     } catch (err) {
       errors++;
@@ -179,13 +240,20 @@ async function getVisitTechInfo(
 ): Promise<{ techName: string; arrivalWindow: string }> {
   if (!isMorningOf || !cv.visit.routeId) return { techName: "", arrivalWindow: "" };
   try {
-    const routeData = await db.select().from(routes).where(eq(routes.id, cv.visit.routeId)).limit(1);
+    const routeData = await db
+      .select()
+      .from(routes)
+      .where(eq(routes.id, cv.visit.routeId))
+      .limit(1);
     if (routeData.length === 0) return { techName: "", arrivalWindow: "" };
     const route = routeData[0];
     let techName = "";
     if (route.technicianId) {
-      const techData = await db.select({ firstName: users.firstName, lastName: users.lastName })
-        .from(users).where(eq(users.id, route.technicianId)).limit(1);
+      const techData = await db
+        .select({ firstName: users.firstName, lastName: users.lastName })
+        .from(users)
+        .where(eq(users.id, route.technicianId))
+        .limit(1);
       if (techData.length > 0) {
         techName = `${techData[0].firstName} ${techData[0].lastName}`.trim();
       }
@@ -193,7 +261,7 @@ async function getVisitTechInfo(
     let arrivalWindow = "";
     const routeJobs = await storage.getJobs(companyId, { routeId: route.id, jobStatus: "active" });
     const sortedJobs = routeJobs.sort((a, b) => (a.stopOrder || 0) - (b.stopOrder || 0));
-    const stopIndex = sortedJobs.findIndex(j => j.id === cv.job.id);
+    const stopIndex = sortedJobs.findIndex((j) => j.id === cv.job.id);
     if (stopIndex >= 0) {
       const avgMinutesPerStop = 15;
       const startHour = 8;
@@ -215,9 +283,14 @@ async function getVisitTechInfo(
   }
 }
 
-async function getContactTimingOverrides(companyId: string, coveredTimings: Set<string>): Promise<string[]> {
-  const companyContacts = await db.select({ reminderPreferences: contacts.reminderPreferences })
-    .from(contacts).where(eq(contacts.companyId, companyId));
+async function getContactTimingOverrides(
+  companyId: string,
+  coveredTimings: Set<string>
+): Promise<string[]> {
+  const companyContacts = await db
+    .select({ reminderPreferences: contacts.reminderPreferences })
+    .from(contacts)
+    .where(eq(contacts.companyId, companyId));
   const timings = new Set<string>();
   for (const c of companyContacts) {
     const prefs = c.reminderPreferences as Record<string, unknown> | null;
@@ -266,7 +339,7 @@ async function sendServiceRemindersForRule(
       )
     );
 
-  const inWindow = candidateVisits.filter(row =>
+  const inWindow = candidateVisits.filter((row) =>
     isVisitInRuleWindow(rule, row.visit.scheduledDate, row.job.startTime ?? null, timezone)
   );
 
@@ -274,13 +347,26 @@ async function sendServiceRemindersForRule(
 
   const deferredVisits: typeof candidateVisits = [];
   if (!smsQuiet) {
-    const outOfWindow = candidateVisits.filter(row =>
-      !isVisitInRuleWindow(rule, row.visit.scheduledDate, row.job.startTime ?? null, timezone)
+    const outOfWindow = candidateVisits.filter(
+      (row) =>
+        !isVisitInRuleWindow(rule, row.visit.scheduledDate, row.job.startTime ?? null, timezone)
     );
     for (const row of outOfWindow) {
-      const hasEmailLog = await hasChannelLog(companyId, row.contact.id, rule.id, row.visit.id, "email");
+      const hasEmailLog = await hasChannelLog(
+        companyId,
+        row.contact.id,
+        rule.id,
+        row.visit.id,
+        "email"
+      );
       if (!hasEmailLog) continue;
-      const hasSmsLog = await hasChannelLog(companyId, row.contact.id, rule.id, row.visit.id, "sms");
+      const hasSmsLog = await hasChannelLog(
+        companyId,
+        row.contact.id,
+        rule.id,
+        row.visit.id,
+        "sms"
+      );
       if (!hasSmsLog) {
         deferredVisits.push(row);
       }
@@ -291,8 +377,13 @@ async function sendServiceRemindersForRule(
   let sent = 0;
 
   type ContactGroup = {
-    contact: typeof eligibleVisits[0]["contact"];
-    visits: { visitId: string; address: string; job: typeof eligibleVisits[0]["job"]; visit: typeof eligibleVisits[0]["visit"] }[];
+    contact: (typeof eligibleVisits)[0]["contact"];
+    visits: {
+      visitId: string;
+      address: string;
+      job: (typeof eligibleVisits)[0]["job"];
+      visit: (typeof eligibleVisits)[0]["visit"];
+    }[];
   };
   const contactGroups = new Map<string, ContactGroup>();
 
@@ -300,7 +391,12 @@ async function sendServiceRemindersForRule(
     const addr = `${row.property.streetAddress}, ${row.property.city}`;
     const existing = contactGroups.get(row.contact.id);
     if (existing) {
-      existing.visits.push({ visitId: row.visit.id, address: addr, job: row.job, visit: row.visit });
+      existing.visits.push({
+        visitId: row.visit.id,
+        address: addr,
+        job: row.job,
+        visit: row.visit,
+      });
     } else {
       contactGroups.set(row.contact.id, {
         contact: row.contact,
@@ -323,14 +419,20 @@ async function sendServiceRemindersForRule(
     const contactChannel = prefs.preferredChannel || null;
     const effectiveChannel = contactChannel || rule.channel;
 
-    const wantsEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
-    const wantsSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && await isSmsConfiguredForCompany(companyId);
+    const wantsEmail =
+      (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
+    const wantsSms =
+      (effectiveChannel === "sms" || effectiveChannel === "both") &&
+      !!contact.phone &&
+      (await isSmsConfiguredForCompany(companyId));
 
     if (!wantsEmail && !wantsSms) continue;
 
     for (const cv of contactVisits) {
-      const emailAlreadySent = wantsEmail && await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "email");
-      const smsAlreadySent = wantsSms && await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "sms");
+      const emailAlreadySent =
+        wantsEmail && (await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "email"));
+      const smsAlreadySent =
+        wantsSms && (await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "sms"));
 
       const needEmail = wantsEmail && !emailAlreadySent && !suppressEmail;
       const needSms = wantsSms && !smsAlreadySent && !smsQuiet;
@@ -381,22 +483,43 @@ async function sendServiceRemindersForRule(
             to: contact.email!,
             subject: `Service Reminder - ${companyName}`,
             text: message,
-            html: generateServiceReminderHtml(companyName, `${contact.firstName} ${contact.lastName}`, addresses, cv.visit.scheduledDate, techInfo.techName, techInfo.arrivalWindow),
+            html: generateServiceReminderHtml(
+              companyName,
+              `${contact.firstName} ${contact.lastName}`,
+              addresses,
+              cv.visit.scheduledDate,
+              techInfo.techName,
+              techInfo.arrivalWindow
+            ),
             senderName: companyName,
             replyTo: companyEmail || undefined,
           });
           emailOk = emailRes.success;
-          if (!emailOk) console.error(`[reminders] Email delivery failed for ${maskEmail(contact.email ?? '')}: ${emailRes.error}`);
+          if (!emailOk)
+            console.error(
+              `[reminders] Email delivery failed for ${maskEmail(contact.email ?? "")}: ${emailRes.error}`
+            );
         } catch (err) {
-          console.error(`[reminders] Failed to send email to ${maskEmail(contact.email ?? '')}:`, err);
+          console.error(
+            `[reminders] Failed to send email to ${maskEmail(contact.email ?? "")}:`,
+            err
+          );
         }
       }
 
       if (needSms) {
         try {
-          const smsRes = await sendSmsForCompany({ to: contact.phone!, body: message, companyId, contactId: contact.id });
+          const smsRes = await sendSmsForCompany({
+            to: contact.phone!,
+            body: message,
+            companyId,
+            contactId: contact.id,
+          });
           smsOk = smsRes.success;
-          if (!smsOk) console.error(`[reminders] SMS delivery failed for ${maskPhone(contact.phone!)}: ${smsRes.error}`);
+          if (!smsOk)
+            console.error(
+              `[reminders] SMS delivery failed for ${maskPhone(contact.phone!)}: ${smsRes.error}`
+            );
         } catch (err) {
           console.error(`[reminders] Failed to send SMS to ${maskPhone(contact.phone!)}:`, err);
         }
@@ -404,16 +527,26 @@ async function sendServiceRemindersForRule(
 
       if (emailOk) {
         await db.insert(reminderLogs).values({
-          companyId, contactId: contact.id, visitId: cv.visitId, ruleId: rule.id,
-          reminderType: `service_${rule.timing}`, channel: "email",
-          messagePreview: message.substring(0, 200), deliveryStatus: "sent",
+          companyId,
+          contactId: contact.id,
+          visitId: cv.visitId,
+          ruleId: rule.id,
+          reminderType: `service_${rule.timing}`,
+          channel: "email",
+          messagePreview: message.substring(0, 200),
+          deliveryStatus: "sent",
         });
       }
       if (smsOk) {
         await db.insert(reminderLogs).values({
-          companyId, contactId: contact.id, visitId: cv.visitId, ruleId: rule.id,
-          reminderType: `service_${rule.timing}`, channel: "sms",
-          messagePreview: message.substring(0, 200), deliveryStatus: "sent",
+          companyId,
+          contactId: contact.id,
+          visitId: cv.visitId,
+          ruleId: rule.id,
+          reminderType: `service_${rule.timing}`,
+          channel: "sms",
+          messagePreview: message.substring(0, 200),
+          deliveryStatus: "sent",
         });
       }
       if ((needEmail && !emailOk) || (needSms && !smsOk)) {
@@ -421,15 +554,21 @@ async function sendServiceRemindersForRule(
         if (needEmail && !emailOk) failedCh.push("email");
         if (needSms && !smsOk) failedCh.push("sms");
         await db.insert(reminderLogs).values({
-          companyId, contactId: contact.id, visitId: cv.visitId, ruleId: rule.id,
-          reminderType: `service_${rule.timing}`, channel: failedCh.join(","),
-          messagePreview: message.substring(0, 200), deliveryStatus: "failed",
+          companyId,
+          contactId: contact.id,
+          visitId: cv.visitId,
+          ruleId: rule.id,
+          reminderType: `service_${rule.timing}`,
+          channel: failedCh.join(","),
+          messagePreview: message.substring(0, 200),
+          deliveryStatus: "failed",
         });
       }
 
       if (emailOk || smsOk) {
         sent++;
-        await db.update(visits)
+        await db
+          .update(visits)
           .set({ serviceReminderSentAt: new Date() })
           .where(eq(visits.id, cv.visitId));
       }
@@ -509,7 +648,16 @@ async function sendInvoiceReminders(
 
     if (invoice.excludeFromReminders) continue;
 
-    if (!shouldSendInvoiceReminder(invoice.dueDate, invoice.lastReminderSentAt, todayStr, invoice.reminderCount || 0, settings)) continue;
+    if (
+      !shouldSendInvoiceReminder(
+        invoice.dueDate,
+        invoice.lastReminderSentAt,
+        todayStr,
+        invoice.reminderCount || 0,
+        settings
+      )
+    )
+      continue;
 
     const prefs = contact.reminderPreferences ?? { email: true, sms: false };
     if (prefs.reminderOptOut) continue;
@@ -518,8 +666,12 @@ async function sendInvoiceReminders(
     const contactChannel = prefs.preferredChannel || null;
     const effectiveChannel = contactChannel || "email";
 
-    const canEmail = (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
-    const canSms = (effectiveChannel === "sms" || effectiveChannel === "both") && !!contact.phone && await isSmsConfiguredForCompany(companyId);
+    const canEmail =
+      (effectiveChannel === "email" || effectiveChannel === "both") && !!contact.email;
+    const canSms =
+      (effectiveChannel === "sms" || effectiveChannel === "both") &&
+      !!contact.phone &&
+      (await isSmsConfiguredForCompany(companyId));
 
     if (!canEmail && canSms && smsQuiet) continue;
 
@@ -536,27 +688,43 @@ async function sendInvoiceReminders(
       : `Hi ${contact.firstName}, invoice #${invoice.invoiceNumber} for $${total} from ${companyName} is due on ${invoice.dueDate}. This is a friendly reminder.`;
 
     const todayStart = todayStr + "T00:00:00Z";
-    const emailAlreadyLogged = canEmail && (await db.select({ id: reminderLogs.id }).from(reminderLogs).where(
-      and(
-        eq(reminderLogs.companyId, companyId),
-        eq(reminderLogs.contactId, contact.id),
-        eq(reminderLogs.invoiceId, invoice.id),
-        eq(reminderLogs.channel, "email"),
-        eq(reminderLogs.deliveryStatus, "sent"),
-        sql`${reminderLogs.sentAt} >= ${todayStart}`
-      )
-    ).limit(1)).length > 0;
+    const emailAlreadyLogged =
+      canEmail &&
+      (
+        await db
+          .select({ id: reminderLogs.id })
+          .from(reminderLogs)
+          .where(
+            and(
+              eq(reminderLogs.companyId, companyId),
+              eq(reminderLogs.contactId, contact.id),
+              eq(reminderLogs.invoiceId, invoice.id),
+              eq(reminderLogs.channel, "email"),
+              eq(reminderLogs.deliveryStatus, "sent"),
+              sql`${reminderLogs.sentAt} >= ${todayStart}`
+            )
+          )
+          .limit(1)
+      ).length > 0;
 
-    const smsAlreadyLogged = canSms && (await db.select({ id: reminderLogs.id }).from(reminderLogs).where(
-      and(
-        eq(reminderLogs.companyId, companyId),
-        eq(reminderLogs.contactId, contact.id),
-        eq(reminderLogs.invoiceId, invoice.id),
-        eq(reminderLogs.channel, "sms"),
-        eq(reminderLogs.deliveryStatus, "sent"),
-        sql`${reminderLogs.sentAt} >= ${todayStart}`
-      )
-    ).limit(1)).length > 0;
+    const smsAlreadyLogged =
+      canSms &&
+      (
+        await db
+          .select({ id: reminderLogs.id })
+          .from(reminderLogs)
+          .where(
+            and(
+              eq(reminderLogs.companyId, companyId),
+              eq(reminderLogs.contactId, contact.id),
+              eq(reminderLogs.invoiceId, invoice.id),
+              eq(reminderLogs.channel, "sms"),
+              eq(reminderLogs.deliveryStatus, "sent"),
+              sql`${reminderLogs.sentAt} >= ${todayStart}`
+            )
+          )
+          .limit(1)
+      ).length > 0;
 
     const needEmail = canEmail && !emailAlreadyLogged && !suppressEmail;
     const needSms = canSms && !smsAlreadyLogged && !smsQuiet;
@@ -573,30 +741,52 @@ async function sendInvoiceReminders(
           to: contact.email!,
           subject,
           text: message,
-          html: generateInvoiceReminderHtml(companyName, contactName, invoice.invoiceNumber, invoice.dueDate, String(total), isOverdue),
+          html: generateInvoiceReminderHtml(
+            companyName,
+            contactName,
+            invoice.invoiceNumber,
+            invoice.dueDate,
+            String(total),
+            isOverdue
+          ),
           senderName: companyName,
           replyTo: companyEmail || undefined,
         });
         if (emailRes.success) {
           emailOk = true;
         } else {
-          console.error(`[reminders] Invoice email delivery failed for ${maskEmail(contact.email ?? '')}: ${emailRes.error}`);
+          console.error(
+            `[reminders] Invoice email delivery failed for ${maskEmail(contact.email ?? "")}: ${emailRes.error}`
+          );
         }
       } catch (err) {
-        console.error(`[reminders] Failed to send invoice email to ${maskEmail(contact.email ?? '')}:`, err);
+        console.error(
+          `[reminders] Failed to send invoice email to ${maskEmail(contact.email ?? "")}:`,
+          err
+        );
       }
     }
 
     if (needSms) {
       try {
-        const smsRes = await sendSmsForCompany({ to: contact.phone!, body: message, companyId, contactId: contact.id });
+        const smsRes = await sendSmsForCompany({
+          to: contact.phone!,
+          body: message,
+          companyId,
+          contactId: contact.id,
+        });
         if (smsRes.success) {
           smsOk = true;
         } else {
-          console.error(`[reminders] Invoice SMS delivery failed for ${maskPhone(contact.phone!)}: ${smsRes.error}`);
+          console.error(
+            `[reminders] Invoice SMS delivery failed for ${maskPhone(contact.phone!)}: ${smsRes.error}`
+          );
         }
       } catch (err) {
-        console.error(`[reminders] Failed to send invoice SMS to ${maskPhone(contact.phone!)}:`, err);
+        console.error(
+          `[reminders] Failed to send invoice SMS to ${maskPhone(contact.phone!)}:`,
+          err
+        );
       }
     }
 
@@ -604,16 +794,26 @@ async function sendInvoiceReminders(
 
     if (emailOk) {
       await db.insert(reminderLogs).values({
-        companyId, contactId: contact.id, invoiceId: invoice.id,
-        ruleId: "invoice_reminder", reminderType, channel: "email",
-        messagePreview: message.substring(0, 200), deliveryStatus: "sent",
+        companyId,
+        contactId: contact.id,
+        invoiceId: invoice.id,
+        ruleId: "invoice_reminder",
+        reminderType,
+        channel: "email",
+        messagePreview: message.substring(0, 200),
+        deliveryStatus: "sent",
       });
     }
     if (smsOk) {
       await db.insert(reminderLogs).values({
-        companyId, contactId: contact.id, invoiceId: invoice.id,
-        ruleId: "invoice_reminder", reminderType, channel: "sms",
-        messagePreview: message.substring(0, 200), deliveryStatus: "sent",
+        companyId,
+        contactId: contact.id,
+        invoiceId: invoice.id,
+        ruleId: "invoice_reminder",
+        reminderType,
+        channel: "sms",
+        messagePreview: message.substring(0, 200),
+        deliveryStatus: "sent",
       });
     }
     if ((needEmail && !emailOk) || (needSms && !smsOk)) {
@@ -621,15 +821,21 @@ async function sendInvoiceReminders(
       if (needEmail && !emailOk) failedChannels.push("email");
       if (needSms && !smsOk) failedChannels.push("sms");
       await db.insert(reminderLogs).values({
-        companyId, contactId: contact.id, invoiceId: invoice.id,
-        ruleId: "invoice_reminder", reminderType, channel: failedChannels.join(","),
-        messagePreview: message.substring(0, 200), deliveryStatus: "failed",
+        companyId,
+        contactId: contact.id,
+        invoiceId: invoice.id,
+        ruleId: "invoice_reminder",
+        reminderType,
+        channel: failedChannels.join(","),
+        messagePreview: message.substring(0, 200),
+        deliveryStatus: "failed",
       });
     }
 
     if (emailOk || smsOk) {
       sent++;
-      await db.update(invoices)
+      await db
+        .update(invoices)
         .set({
           lastReminderSentAt: new Date(),
           reminderCount: (invoice.reminderCount || 0) + 1,
@@ -650,7 +856,9 @@ function generateServiceReminderHtml(
   arrivalWindow?: string
 ): string {
   const techLine = techName ? `<p><strong>Technician:</strong> ${techName}</p>` : "";
-  const arrivalLine = arrivalWindow ? `<p><strong>Estimated Arrival:</strong> ${arrivalWindow}</p>` : "";
+  const arrivalLine = arrivalWindow
+    ? `<p><strong>Estimated Arrival:</strong> ${arrivalWindow}</p>`
+    : "";
 
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

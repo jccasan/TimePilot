@@ -84,7 +84,12 @@ export function NotificationBell() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" data-testid="button-notification-bell">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          data-testid="button-notification-bell"
+        >
           <Bell className="h-4 w-4" />
           {(clientRequestCount > 0 || unreadCount > 0) && (
             <span
@@ -92,8 +97,12 @@ export function NotificationBell() {
               data-testid="badge-notification-count"
             >
               {clientRequestCount > 0
-                ? (clientRequestCount > 9 ? "9+" : clientRequestCount)
-                : (unreadCount > 9 ? "9+" : unreadCount)}
+                ? clientRequestCount > 9
+                  ? "9+"
+                  : clientRequestCount
+                : unreadCount > 9
+                  ? "9+"
+                  : unreadCount}
             </span>
           )}
         </Button>
@@ -106,7 +115,10 @@ export function NotificationBell() {
               variant="ghost"
               size="sm"
               className="h-auto py-1 px-2 text-xs"
-              onClick={(e) => { e.stopPropagation(); markAllReadMutation.mutate(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                markAllReadMutation.mutate();
+              }}
               disabled={markAllReadMutation.isPending}
               data-testid="button-mark-all-read"
             >
@@ -123,13 +135,18 @@ export function NotificationBell() {
               data-testid="link-client-requests"
             >
               <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
-              <span className="font-medium">{clientRequestCount} client request{clientRequestCount !== 1 ? "s" : ""} pending</span>
+              <span className="font-medium">
+                {clientRequestCount} client request{clientRequestCount !== 1 ? "s" : ""} pending
+              </span>
             </DropdownMenuItem>
           </>
         )}
         <DropdownMenuSeparator />
         {recentNotifications.length === 0 ? (
-          <div className="p-4 text-center text-sm text-muted-foreground" data-testid="text-no-notifications">
+          <div
+            className="p-4 text-center text-sm text-muted-foreground"
+            data-testid="text-no-notifications"
+          >
             No notifications yet
           </div>
         ) : (

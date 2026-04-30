@@ -1,592 +1,584 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Invoice {{invoice.number}}</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Invoice {{invoice.number}}</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      font-family: {{theme.fontFamily}};
-      color: {{theme.textColor}};
-      background: {{theme.backgroundColor}};
-      line-height: 1.5;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
+      body {
+        font-family: {{theme.fontFamily}};
+        color: {{theme.textColor}};
+        background: {{theme.backgroundColor}};
+        line-height: 1.5;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
 
-    .invoice-container {
-      max-width: 680px;
-      margin: 0 auto;
-      padding: 20px;
-    }
+      .invoice-container {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 20px;
+      }
 
-    .card {
-      background: {{theme.cardColor}};
-      border: 1px solid {{theme.borderColor}};
-      border-radius: {{theme.borderRadius}}px;
-      padding: 24px;
-      margin-bottom: 16px;
-    }
+      .card {
+        background: {{theme.cardColor}};
+        border: 1px solid {{theme.borderColor}};
+        border-radius: {{theme.borderRadius}}px;
+        padding: 24px;
+        margin-bottom: 16px;
+      }
 
-    /* ---- Header ---- */
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 20px;
-    }
-    .header-logo img {
-      width: {{theme.logoSize}}px;
-      height: auto;
-      border-radius: 6px;
-    }
-    .header-logo-center {
-      text-align: center;
-      margin-bottom: 14px;
-    }
-    .header-logo-center img {
-      width: {{theme.logoSize}}px;
-      height: auto;
-      border-radius: 6px;
-    }
-    .header-biz {
-      flex: 1;
-      min-width: 0;
-    }
-    .header-biz h1 {
-      font-size: 1.15rem;
-      color: {{theme.primaryColor}};
-      margin-bottom: 1px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .header-biz p {
-      font-size: 0.78rem;
-      color: {{theme.mutedColor}};
-      line-height: 1.35;
-    }
-    .header-right {
-      text-align: right;
-      flex-shrink: 0;
-    }
-    .header-right .inv-label {
-      font-size: 0.65rem;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      font-weight: 700;
-      color: {{theme.primaryColor}};
-    }
-    .header-right .inv-number {
-      font-size: 1rem;
-      font-weight: 700;
-      color: {{theme.textColor}};
-    }
-    .header-logo-right {
-      flex-shrink: 0;
-    }
-    .header-logo-right img {
-      width: {{theme.logoSize}}px;
-      height: auto;
-      border-radius: 6px;
-    }
+      /* ---- Header ---- */
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 20px;
+      }
+      .header-logo img {
+        width: {{theme.logoSize}}px;
+        height: auto;
+        border-radius: 6px;
+      }
+      .header-logo-center {
+        text-align: center;
+        margin-bottom: 14px;
+      }
+      .header-logo-center img {
+        width: {{theme.logoSize}}px;
+        height: auto;
+        border-radius: 6px;
+      }
+      .header-biz {
+        flex: 1;
+        min-width: 0;
+      }
+      .header-biz h1 {
+        font-size: 1.15rem;
+        color: {{theme.primaryColor}};
+        margin-bottom: 1px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .header-biz p {
+        font-size: 0.78rem;
+        color: {{theme.mutedColor}};
+        line-height: 1.35;
+      }
+      .header-right {
+        text-align: right;
+        flex-shrink: 0;
+      }
+      .header-right .inv-label {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 700;
+        color: {{theme.primaryColor}};
+      }
+      .header-right .inv-number {
+        font-size: 1rem;
+        font-weight: 700;
+        color: {{theme.textColor}};
+      }
+      .header-logo-right {
+        flex-shrink: 0;
+      }
+      .header-logo-right img {
+        width: {{theme.logoSize}}px;
+        height: auto;
+        border-radius: 6px;
+      }
 
-    /* ---- Status badge ---- */
-    .status-badge {
-      display: inline-block;
-      padding: 2px 10px;
-      border-radius: 999px;
-      font-size: 0.68rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      margin-top: 4px;
-    }
-    .status-draft      { background: #e2e8f0; color: #475569; }
-    .status-sent        { background: #dbeafe; color: #1e40af; }
-    .status-pending     { background: #fef3c7; color: #92400e; }
-    .status-paid        { background: #d1fae5; color: #065f46; }
-    .status-past-due    { background: #fee2e2; color: #991b1b; }
-    .status-failed      { background: #fee2e2; color: #991b1b; }
-    .status-refunded    { background: #f3e8ff; color: #6b21a8; }
+      /* ---- Status badge ---- */
+      .status-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-top: 4px;
+      }
+      .status-draft      { background: #e2e8f0; color: #475569; }
+      .status-sent        { background: #dbeafe; color: #1e40af; }
+      .status-pending     { background: #fef3c7; color: #92400e; }
+      .status-paid        { background: #d1fae5; color: #065f46; }
+      .status-past-due    { background: #fee2e2; color: #991b1b; }
+      .status-failed      { background: #fee2e2; color: #991b1b; }
+      .status-refunded    { background: #f3e8ff; color: #6b21a8; }
 
-    /* ---- Compact meta row ---- */
-    .meta-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px 20px;
-      padding: 10px 14px;
-      background: {{theme.backgroundColor}};
-      border-radius: 6px;
-      margin-bottom: 18px;
-      font-size: 0.82rem;
-    }
-    .meta-row .meta-item {
-      display: flex;
-      gap: 5px;
-      align-items: baseline;
-    }
-    .meta-row .meta-label {
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: {{theme.mutedColor}};
-      font-weight: 600;
-    }
-    .meta-row .meta-value {
-      font-weight: 500;
-    }
+      /* ---- Compact meta row ---- */
+      .meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 20px;
+        padding: 10px 14px;
+        background: {{theme.backgroundColor}};
+        border-radius: 6px;
+        margin-bottom: 18px;
+        font-size: 0.82rem;
+      }
+      .meta-row .meta-item {
+        display: flex;
+        gap: 5px;
+        align-items: baseline;
+      }
+      .meta-row .meta-label {
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: {{theme.mutedColor}};
+        font-weight: 600;
+      }
+      .meta-row .meta-value {
+        font-weight: 500;
+      }
 
-    /* ---- Addresses ---- */
-    .addresses {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-    .address-block {
-      flex: 1;
-      min-width: 180px;
-    }
-    .address-block h3 {
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: 0.7px;
-      color: {{theme.mutedColor}};
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    .address-block .addr-name {
-      font-weight: 600;
-      font-size: 0.9rem;
-      margin-bottom: 2px;
-    }
-    .address-block p {
-      font-size: 0.82rem;
-      line-height: 1.45;
-      color: {{theme.textColor}};
-    }
+      /* ---- Addresses ---- */
+      .addresses {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      .address-block {
+        flex: 1;
+        min-width: 180px;
+      }
+      .address-block h3 {
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.7px;
+        color: {{theme.mutedColor}};
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .address-block .addr-name {
+        font-weight: 600;
+        font-size: 0.9rem;
+        margin-bottom: 2px;
+      }
+      .address-block p {
+        font-size: 0.82rem;
+        line-height: 1.45;
+        color: {{theme.textColor}};
+      }
 
-    /* ---- Table ---- */
-    .line-items-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.85rem;
-      margin-bottom: 16px;
-    }
-    .line-items-table thead th {
-      background: {{theme.primaryColor}};
-      color: #ffffff;
-      text-align: left;
-      padding: 8px 10px;
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 600;
-    }
-    .line-items-table thead th:first-child {
-      border-radius: {{theme.borderRadius}}px 0 0 0;
-    }
-    .line-items-table thead th:last-child {
-      border-radius: 0 {{theme.borderRadius}}px 0 0;
-      text-align: right;
-    }
-    .line-items-table thead th.text-center { text-align: center; }
-    .line-items-table thead th.text-right  { text-align: right; }
-    .line-items-table tbody td {
-      padding: 8px 10px;
-      border-bottom: 1px solid {{theme.borderColor}};
-      vertical-align: top;
-    }
-    .line-items-table tbody tr:last-child td { border-bottom: none; }
-    .line-items-table .desc-cell .main { font-weight: 500; }
-    .line-items-table .desc-cell .detail {
-      font-size: 0.75rem;
-      color: {{theme.mutedColor}};
-      margin-top: 1px;
-    }
-    .line-items-table .text-center { text-align: center; }
-    .line-items-table .text-right  { text-align: right; }
+      /* ---- Table ---- */
+      .line-items-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+        margin-bottom: 16px;
+      }
+      .line-items-table thead th {
+        background: {{theme.primaryColor}};
+        color: #ffffff;
+        text-align: left;
+        padding: 8px 10px;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+      }
+      .line-items-table thead th:first-child {
+        border-radius: {{theme.borderRadius}}px 0 0 0;
+      }
+      .line-items-table thead th:last-child {
+        border-radius: 0 {{theme.borderRadius}}px 0 0;
+        text-align: right;
+      }
+      .line-items-table thead th.text-center { text-align: center; }
+      .line-items-table thead th.text-right  { text-align: right; }
+      .line-items-table tbody td {
+        padding: 8px 10px;
+        border-bottom: 1px solid {{theme.borderColor}};
+        vertical-align: top;
+      }
+      .line-items-table tbody tr:last-child td { border-bottom: none; }
+      .line-items-table .desc-cell .main { font-weight: 500; }
+      .line-items-table .desc-cell .detail {
+        font-size: 0.75rem;
+        color: {{theme.mutedColor}};
+        margin-top: 1px;
+      }
+      .line-items-table .text-center { text-align: center; }
+      .line-items-table .text-right  { text-align: right; }
 
-    /* ---- Visits ---- */
-    .visits-section h3 {
-      font-size: 0.82rem;
-      font-weight: 600;
-      margin-bottom: 8px;
-      color: {{theme.primaryColor}};
-    }
-    .visits-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-    .visit-chip {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
-      background: {{theme.backgroundColor}};
-      border: 1px solid {{theme.borderColor}};
-      border-radius: {{theme.borderRadius}}px;
-      font-size: 0.76rem;
-    }
-    .visit-chip .dot {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .dot-completed  { background: #10b981; }
-    .dot-scheduled  { background: #3b82f6; }
-    .dot-in_progress { background: #f59e0b; }
-    .dot-skipped    { background: #94a3b8; }
-    .dot-cancelled  { background: #ef4444; }
+      /* ---- Visits ---- */
+      .visits-section h3 {
+        font-size: 0.82rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: {{theme.primaryColor}};
+      }
+      .visits-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .visit-chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: {{theme.backgroundColor}};
+        border: 1px solid {{theme.borderColor}};
+        border-radius: {{theme.borderRadius}}px;
+        font-size: 0.76rem;
+      }
+      .visit-chip .dot {
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .dot-completed  { background: #10b981; }
+      .dot-scheduled  { background: #3b82f6; }
+      .dot-in_progress { background: #f59e0b; }
+      .dot-skipped    { background: #94a3b8; }
+      .dot-cancelled  { background: #ef4444; }
 
-    /* ---- Totals ---- */
-    .totals-section {
-      display: flex;
-      justify-content: flex-end;
-    }
-    .totals-table {
-      width: 220px;
-      font-size: 0.85rem;
-    }
-    .totals-table tr td {
-      padding: 4px 0;
-    }
-    .totals-table tr td:last-child {
-      text-align: right;
-      font-weight: 500;
-    }
-    .totals-table .row-divider td {
-      border-top: 1px solid {{theme.borderColor}};
-      padding-top: 6px;
-    }
-    .totals-table .row-total td {
-      border-top: 2px solid {{theme.primaryColor}};
-      padding-top: 8px;
-      font-size: 1rem;
-      font-weight: 700;
-      color: {{theme.primaryColor}};
-    }
-    .totals-table .row-balance td {
-      font-weight: 700;
-      font-size: 0.95rem;
-    }
+      /* ---- Totals ---- */
+      .totals-section {
+        display: flex;
+        justify-content: flex-end;
+      }
+      .totals-table {
+        width: 220px;
+        font-size: 0.85rem;
+      }
+      .totals-table tr td {
+        padding: 4px 0;
+      }
+      .totals-table tr td:last-child {
+        text-align: right;
+        font-weight: 500;
+      }
+      .totals-table .row-divider td {
+        border-top: 1px solid {{theme.borderColor}};
+        padding-top: 6px;
+      }
+      .totals-table .row-total td {
+        border-top: 2px solid {{theme.primaryColor}};
+        padding-top: 8px;
+        font-size: 1rem;
+        font-weight: 700;
+        color: {{theme.primaryColor}};
+      }
+      .totals-table .row-balance td {
+        font-weight: 700;
+        font-size: 0.95rem;
+      }
 
-    /* ---- Footer ---- */
-    .footer-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-    .footer-block {
-      flex: 1;
-      min-width: 180px;
-    }
-    .footer-block h4 {
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: {{theme.mutedColor}};
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    .footer-block p {
-      font-size: 0.82rem;
-      line-height: 1.5;
-      color: {{theme.textColor}};
-    }
-    .thank-you {
-      text-align: center;
-      padding: 12px 0 0;
-      font-size: 0.85rem;
-      color: {{theme.mutedColor}};
-      font-style: italic;
-    }
+      /* ---- Footer ---- */
+      .footer-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      .footer-block {
+        flex: 1;
+        min-width: 180px;
+      }
+      .footer-block h4 {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: {{theme.mutedColor}};
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .footer-block p {
+        font-size: 0.82rem;
+        line-height: 1.5;
+        color: {{theme.textColor}};
+      }
+      .thank-you {
+        text-align: center;
+        padding: 12px 0 0;
+        font-size: 0.85rem;
+        color: {{theme.mutedColor}};
+        font-style: italic;
+      }
 
-    /* ---- Pay Now CTA ---- */
-    .pay-now-section {
-      text-align: center;
-      padding: 24px 20px;
-      background-color: #f0fdf4;
-      border: 2px solid #22c55e;
-      border-radius: 10px;
-    }
-    .pay-now-label {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #16a34a;
-      margin-bottom: 10px;
-    }
-    .pay-now-btn {
-      display: inline-block;
-      background-color: #16a34a;
-      color: #ffffff;
-      text-decoration: none;
-      padding: 14px 48px;
-      border-radius: 8px;
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: 0.4px;
-      box-shadow: 0 3px 10px rgba(22, 163, 74, 0.3);
-    }
-    .pay-now-hint {
-      margin-top: 10px;
-      font-size: 12px;
-      color: #4b5563;
-    }
-    .venmo-info {
-      margin-top: 10px;
-      font-size: 13px;
-      font-weight: 600;
-      color: #1a7a4c;
-    }
-    .venmo-handle {
-      display: inline-block;
-      background-color: #3D95CE;
-      color: #ffffff;
-      border-radius: 4px;
-      padding: 2px 8px;
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.3px;
-    }
+      /* ---- Pay Now CTA ---- */
+      .pay-now-section {
+        text-align: center;
+        padding: 24px 20px;
+        background-color: #f0fdf4;
+        border: 2px solid #22c55e;
+        border-radius: 10px;
+      }
+      .pay-now-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #16a34a;
+        margin-bottom: 10px;
+      }
+      .pay-now-btn {
+        display: inline-block;
+        background-color: #16a34a;
+        color: #ffffff;
+        text-decoration: none;
+        padding: 14px 48px;
+        border-radius: 8px;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        box-shadow: 0 3px 10px rgba(22, 163, 74, 0.3);
+      }
+      .pay-now-hint {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #4b5563;
+      }
+      .venmo-info {
+        margin-top: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #1a7a4c;
+      }
+      .venmo-handle {
+        display: inline-block;
+        background-color: #3D95CE;
+        color: #ffffff;
+        border-radius: 4px;
+        padding: 2px 8px;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+      }
 
-    /* ---- Print ---- */
-    @media print {
-      body { background: #fff; }
-      .invoice-container { padding: 0; max-width: 100%; }
-      .card { border: none; box-shadow: none; padding: 12px 0; }
-    }
+      /* ---- Print ---- */
+      @media print {
+        body { background: #fff; }
+        .invoice-container { padding: 0; max-width: 100%; }
+        .card { border: none; box-shadow: none; padding: 12px 0; }
+      }
 
-    /* ---- Mobile ---- */
-    @media (max-width: 600px) {
-      .invoice-container { padding: 10px; }
-      .card { padding: 14px; }
-      .header { flex-wrap: wrap; gap: 10px; }
-      .header-biz h1 { font-size: 1rem; }
-      .meta-row { padding: 8px 10px; gap: 4px 14px; font-size: 0.78rem; }
-      .addresses { flex-direction: column; gap: 12px; }
-      .line-items-table { font-size: 0.78rem; }
-      .line-items-table thead th,
-      .line-items-table tbody td { padding: 6px 6px; }
-      .totals-table { width: 100%; }
-      .footer-grid { flex-direction: column; gap: 12px; }
-      .pay-now-btn { padding: 12px 32px; font-size: 16px; }
-    }
-  </style>
-</head>
-<body>
-  <div class="invoice-container">
-
-    <!-- HEADER -->
-    <div class="card">
-      {{#logoCenter}}
-      {{#business.logo}}
-      <div class="header-logo-center">
-        <img src="{{business.logo}}" alt="{{business.name}} logo" />
-      </div>
-      {{/business.logo}}
-      {{/logoCenter}}
-      <div class="header">
-        {{#logoLeft}}
-        {{#business.logo}}
-        <div class="header-logo">
+      /* ---- Mobile ---- */
+      @media (max-width: 600px) {
+        .invoice-container { padding: 10px; }
+        .card { padding: 14px; }
+        .header { flex-wrap: wrap; gap: 10px; }
+        .header-biz h1 { font-size: 1rem; }
+        .meta-row { padding: 8px 10px; gap: 4px 14px; font-size: 0.78rem; }
+        .addresses { flex-direction: column; gap: 12px; }
+        .line-items-table { font-size: 0.78rem; }
+        .line-items-table thead th,
+        .line-items-table tbody td { padding: 6px 6px; }
+        .totals-table { width: 100%; }
+        .footer-grid { flex-direction: column; gap: 12px; }
+        .pay-now-btn { padding: 12px 32px; font-size: 16px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="invoice-container">
+      <!-- HEADER -->
+      <div class="card">
+        {{#logoCenter}} {{#business.logo}}
+        <div class="header-logo-center">
           <img src="{{business.logo}}" alt="{{business.name}} logo" />
         </div>
-        {{/business.logo}}
-        {{/logoLeft}}
-        <div class="header-biz">
-          <h1>{{business.name}}</h1>
-          <p>
-            {{business.address}}
-            {{#business.phone}}<br />{{business.phone}}{{/business.phone}}
-          </p>
+        {{/business.logo}} {{/logoCenter}}
+        <div class="header">
+          {{#logoLeft}} {{#business.logo}}
+          <div class="header-logo">
+            <img src="{{business.logo}}" alt="{{business.name}} logo" />
+          </div>
+          {{/business.logo}} {{/logoLeft}}
+          <div class="header-biz">
+            <h1>{{business.name}}</h1>
+            <p>
+              {{business.address}} {{#business.phone}}<br />{{business.phone}}{{/business.phone}}
+            </p>
+          </div>
+          {{#logoRight}} {{#business.logo}}
+          <div class="header-logo-right">
+            <img src="{{business.logo}}" alt="{{business.name}} logo" />
+          </div>
+          {{/business.logo}} {{/logoRight}}
+          <div class="header-right">
+            <div class="inv-label">Invoice</div>
+            <div class="inv-number">{{invoice.number}}</div>
+            <span class="status-badge status-{{invoice.status_class}}">{{invoice.status}}</span>
+          </div>
         </div>
-        {{#logoRight}}
-        {{#business.logo}}
-        <div class="header-logo-right">
-          <img src="{{business.logo}}" alt="{{business.name}} logo" />
+
+        <!-- META -->
+        <div class="meta-row">
+          <div class="meta-item">
+            <span class="meta-label">Issued</span>
+            <span class="meta-value">{{invoice.issue_date}}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Due</span>
+            <span class="meta-value">{{invoice.due_date}}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Terms</span>
+            <span class="meta-value">{{invoice.terms}}</span>
+          </div>
+          {{#invoice.service_period}}
+          <div class="meta-item">
+            <span class="meta-label">Period</span>
+            <span class="meta-value">{{invoice.service_period}}</span>
+          </div>
+          {{/invoice.service_period}}
         </div>
-        {{/business.logo}}
-        {{/logoRight}}
-        <div class="header-right">
-          <div class="inv-label">Invoice</div>
-          <div class="inv-number">{{invoice.number}}</div>
-          <span class="status-badge status-{{invoice.status_class}}">{{invoice.status}}</span>
+
+        <!-- ADDRESSES -->
+        <div class="addresses">
+          <div class="address-block">
+            <h3>Bill To</h3>
+            <div class="addr-name">{{customer.name}}</div>
+            {{#billing_address}}
+            <p>
+              {{billing_address.line1}} {{#billing_address.line2}}<br />{{billing_address.line2}}{{/billing_address.line2}}
+              <br />{{billing_address.city}}{{#billing_address.state}},
+              {{billing_address.state}}{{/billing_address.state}} {{billing_address.zip}}
+            </p>
+            {{/billing_address}}
+          </div>
+          {{#show_service_address}}
+          <div class="address-block">
+            <h3>Service Address</h3>
+            <p>
+              {{service_address.line1}} {{#service_address.line2}}<br />{{service_address.line2}}{{/service_address.line2}}
+              <br />{{service_address.city}}{{#service_address.state}},
+              {{service_address.state}}{{/service_address.state}} {{service_address.zip}}
+            </p>
+          </div>
+          {{/show_service_address}}
         </div>
       </div>
 
-      <!-- META -->
-      <div class="meta-row">
-        <div class="meta-item">
-          <span class="meta-label">Issued</span>
-          <span class="meta-value">{{invoice.issue_date}}</span>
-        </div>
-        <div class="meta-item">
-          <span class="meta-label">Due</span>
-          <span class="meta-value">{{invoice.due_date}}</span>
-        </div>
-        <div class="meta-item">
-          <span class="meta-label">Terms</span>
-          <span class="meta-value">{{invoice.terms}}</span>
-        </div>
-        {{#invoice.service_period}}
-        <div class="meta-item">
-          <span class="meta-label">Period</span>
-          <span class="meta-value">{{invoice.service_period}}</span>
-        </div>
-        {{/invoice.service_period}}
-      </div>
-
-      <!-- ADDRESSES -->
-      <div class="addresses">
-        <div class="address-block">
-          <h3>Bill To</h3>
-          <div class="addr-name">{{customer.name}}</div>
-          {{#billing_address}}
-          <p>
-            {{billing_address.line1}}
-            {{#billing_address.line2}}<br />{{billing_address.line2}}{{/billing_address.line2}}
-            <br />{{billing_address.city}}{{#billing_address.state}}, {{billing_address.state}}{{/billing_address.state}} {{billing_address.zip}}
-          </p>
-          {{/billing_address}}
-        </div>
-        {{#show_service_address}}
-        <div class="address-block">
-          <h3>Service Address</h3>
-          <p>
-            {{service_address.line1}}
-            {{#service_address.line2}}<br />{{service_address.line2}}{{/service_address.line2}}
-            <br />{{service_address.city}}{{#service_address.state}}, {{service_address.state}}{{/service_address.state}} {{service_address.zip}}
-          </p>
-        </div>
-        {{/show_service_address}}
-      </div>
-    </div>
-
-    <!-- LINE ITEMS + TOTALS -->
-    <div class="card">
-      <table class="line-items-table">
-        <thead>
-          <tr>
-            <th>Description</th>
-            <th class="text-center">Qty</th>
-            <th class="text-right">Unit Price</th>
-            <th class="text-right">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{#line_items}}
-          <tr>
-            <td class="desc-cell">
-              <div class="main">{{description}}</div>
-              {{#details}}<div class="detail">{{details}}</div>{{/details}}
-            </td>
-            <td class="text-center">{{qty}}</td>
-            <td class="text-right">{{unit_price}}</td>
-            <td class="text-right">{{line_total}}</td>
-          </tr>
-          {{/line_items}}
-        </tbody>
-      </table>
-
-      <!-- TOTALS -->
-      <div class="totals-section">
-        <table class="totals-table">
-          <tr>
-            <td>Subtotal</td>
-            <td>{{totals.subtotal}}</td>
-          </tr>
-          {{#totals.has_discount}}
-          <tr>
-            <td>Discount</td>
-            <td>-{{totals.discount}}</td>
-          </tr>
-          {{/totals.has_discount}}
-          {{#totals.has_tax}}
-          <tr>
-            <td>Tax ({{totals.tax_rate_display}})</td>
-            <td>{{totals.tax}}</td>
-          </tr>
-          {{/totals.has_tax}}
-          <tr class="row-total">
-            <td>Total</td>
-            <td>{{totals.total}}</td>
-          </tr>
-          {{#totals.has_paid}}
-          <tr>
-            <td>Paid</td>
-            <td>-{{totals.paid}}</td>
-          </tr>
-          <tr class="row-balance">
-            <td>Balance Due</td>
-            <td>{{totals.balance}}</td>
-          </tr>
-          {{/totals.has_paid}}
+      <!-- LINE ITEMS + TOTALS -->
+      <div class="card">
+        <table class="line-items-table">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th class="text-center">Qty</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#line_items}}
+            <tr>
+              <td class="desc-cell">
+                <div class="main">{{description}}</div>
+                {{#details}}
+                <div class="detail">{{details}}</div>
+                {{/details}}
+              </td>
+              <td class="text-center">{{qty}}</td>
+              <td class="text-right">{{unit_price}}</td>
+              <td class="text-right">{{line_total}}</td>
+            </tr>
+            {{/line_items}}
+          </tbody>
         </table>
-      </div>
-    </div>
 
-    <!-- PAY NOW -->
-    {{#paymentUrl}}
-    <div class="card pay-now-section">
-      <p class="pay-now-label">Payment Due</p>
-      <a href="{{paymentUrl}}" class="pay-now-btn">Pay Now — {{totals.total}}</a>
-      <p class="pay-now-hint">Pay securely online with credit card or bank transfer</p>
-      {{#venmoHandle}}
-      <p class="venmo-info">Or pay via Venmo: <span class="venmo-handle">@{{venmoHandle}}</span></p>
-      {{/venmoHandle}}
-    </div>
-    {{/paymentUrl}}
-    {{#venmoHandleOnly}}
-    <div class="card pay-now-section">
-      <p class="pay-now-label">How to Pay</p>
-      <p class="venmo-info">Pay via Venmo: <span class="venmo-handle">@{{venmoHandle}}</span></p>
-    </div>
-    {{/venmoHandleOnly}}
-
-    <!-- VISITS -->
-    {{#visits}}
-    <div class="card visits-section">
-      <h3>Service Visits</h3>
-      <div class="visits-list">
-        {{#visits}}
-        <div class="visit-chip">
-          <span class="dot dot-{{status}}"></span>
-          <span>{{date}}{{#time}} at {{time}}{{/time}} &mdash; {{status_label}}</span>
+        <!-- TOTALS -->
+        <div class="totals-section">
+          <table class="totals-table">
+            <tr>
+              <td>Subtotal</td>
+              <td>{{totals.subtotal}}</td>
+            </tr>
+            {{#totals.has_discount}}
+            <tr>
+              <td>Discount</td>
+              <td>-{{totals.discount}}</td>
+            </tr>
+            {{/totals.has_discount}} {{#totals.has_tax}}
+            <tr>
+              <td>Tax ({{totals.tax_rate_display}})</td>
+              <td>{{totals.tax}}</td>
+            </tr>
+            {{/totals.has_tax}}
+            <tr class="row-total">
+              <td>Total</td>
+              <td>{{totals.total}}</td>
+            </tr>
+            {{#totals.has_paid}}
+            <tr>
+              <td>Paid</td>
+              <td>-{{totals.paid}}</td>
+            </tr>
+            <tr class="row-balance">
+              <td>Balance Due</td>
+              <td>{{totals.balance}}</td>
+            </tr>
+            {{/totals.has_paid}}
+          </table>
         </div>
-        {{/visits}}
       </div>
-    </div>
-    {{/visits}}
 
-    <!-- FOOTER -->
-    {{#hasFooter}}
-    <div class="card">
-      <div class="footer-grid">
-        {{#notes}}
-        <div class="footer-block">
-          <h4>Notes</h4>
-          <p>{{notes}}</p>
-        </div>
-        {{/notes}}
-        {{#payment_instructions}}
-        <div class="footer-block">
-          <h4>Payment Instructions</h4>
-          <p>{{payment_instructions}}</p>
-        </div>
-        {{/payment_instructions}}
+      <!-- PAY NOW -->
+      {{#paymentUrl}}
+      <div class="card pay-now-section">
+        <p class="pay-now-label">Payment Due</p>
+        <a href="{{paymentUrl}}" class="pay-now-btn">Pay Now — {{totals.total}}</a>
+        <p class="pay-now-hint">Pay securely online with credit card or bank transfer</p>
+        {{#venmoHandle}}
+        <p class="venmo-info">
+          Or pay via Venmo: <span class="venmo-handle">@{{venmoHandle}}</span>
+        </p>
+        {{/venmoHandle}}
       </div>
-      {{#thank_you}}
-      <p class="thank-you">{{thank_you}}</p>
-      {{/thank_you}}
-    </div>
-    {{/hasFooter}}
+      {{/paymentUrl}} {{#venmoHandleOnly}}
+      <div class="card pay-now-section">
+        <p class="pay-now-label">How to Pay</p>
+        <p class="venmo-info">Pay via Venmo: <span class="venmo-handle">@{{venmoHandle}}</span></p>
+      </div>
+      {{/venmoHandleOnly}}
 
-  </div>
-</body>
+      <!-- VISITS -->
+      {{#visits}}
+      <div class="card visits-section">
+        <h3>Service Visits</h3>
+        <div class="visits-list">
+          {{#visits}}
+          <div class="visit-chip">
+            <span class="dot dot-{{status}}"></span>
+            <span>{{date}}{{#time}} at {{time}}{{/time}} &mdash; {{status_label}}</span>
+          </div>
+          {{/visits}}
+        </div>
+      </div>
+      {{/visits}}
+
+      <!-- FOOTER -->
+      {{#hasFooter}}
+      <div class="card">
+        <div class="footer-grid">
+          {{#notes}}
+          <div class="footer-block">
+            <h4>Notes</h4>
+            <p>{{notes}}</p>
+          </div>
+          {{/notes}} {{#payment_instructions}}
+          <div class="footer-block">
+            <h4>Payment Instructions</h4>
+            <p>{{payment_instructions}}</p>
+          </div>
+          {{/payment_instructions}}
+        </div>
+        {{#thank_you}}
+        <p class="thank-you">{{thank_you}}</p>
+        {{/thank_you}}
+      </div>
+      {{/hasFooter}}
+    </div>
+  </body>
 </html>

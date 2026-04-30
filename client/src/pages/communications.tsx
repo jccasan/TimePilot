@@ -35,10 +35,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mail, MessageSquare, Send, ArrowUpRight, ArrowDownLeft, AlertCircle, ArrowLeft, User, Loader2, Paperclip, X } from "lucide-react";
+import {
+  Mail,
+  MessageSquare,
+  Send,
+  ArrowUpRight,
+  ArrowDownLeft,
+  AlertCircle,
+  ArrowLeft,
+  User,
+  Loader2,
+  Paperclip,
+  X,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useLocation } from "wouter";
-import { compressMessageAttachment, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/compress-image";
+import {
+  compressMessageAttachment,
+  ALLOWED_IMAGE_TYPES,
+  MAX_ATTACHMENT_SIZE,
+} from "@/lib/compress-image";
 
 const emailFormSchema = z.object({
   contactId: z.string().optional(),
@@ -69,9 +85,9 @@ type Conversation = {
   subject: string;
 };
 
-
 function DirectionIcon({ direction }: { direction: string }) {
-  if (direction === "outbound") return <ArrowUpRight className="h-4 w-4 text-blue-500 dark:text-blue-400" />;
+  if (direction === "outbound")
+    return <ArrowUpRight className="h-4 w-4 text-blue-500 dark:text-blue-400" />;
   return <ArrowDownLeft className="h-4 w-4 text-green-500 dark:text-green-400" />;
 }
 
@@ -128,7 +144,11 @@ function ConversationThread({
   });
 
   useEffect(() => {
-    if (!markReadMutation.isPending && threadMessages && threadMessages.some(m => m.direction === "inbound" && !m.isRead)) {
+    if (
+      !markReadMutation.isPending &&
+      threadMessages &&
+      threadMessages.some((m) => m.direction === "inbound" && !m.isRead)
+    ) {
       markReadMutation.mutate();
     }
   }, [threadKey, threadMessages]);
@@ -145,51 +165,74 @@ function ConversationThread({
     };
   }, []);
 
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = e.target.files;
-    if (!selectedFiles || selectedFiles.length === 0) return;
-    if (e.target) e.target.value = "";
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selectedFiles = e.target.files;
+      if (!selectedFiles || selectedFiles.length === 0) return;
+      if (e.target) e.target.value = "";
 
-    const maxAttach = 5;
-    if (attachedFiles.length >= maxAttach) {
-      toast({ title: "Limit reached", description: `Maximum ${maxAttach} images per message.`, variant: "destructive" });
-      return;
-    }
-
-    setIsCompressing(true);
-    try {
-      const newFiles: File[] = [];
-      const newPreviews: string[] = [];
-      const newOrigSizes: number[] = [];
-
-      for (let i = 0; i < selectedFiles.length && (attachedFiles.length + newFiles.length) < maxAttach; i++) {
-        const file = selectedFiles[i];
-        if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-          toast({ title: "Unsupported file type", description: `${file.name}: Only JPG, PNG, and WebP images are allowed.`, variant: "destructive" });
-          continue;
-        }
-        if (file.size > MAX_ATTACHMENT_SIZE) {
-          toast({ title: "File too large", description: `${file.name}: Maximum size is ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB.`, variant: "destructive" });
-          continue;
-        }
-        const preCompressSize = file.size;
-        const compressed = await compressMessageAttachment(file);
-        newFiles.push(compressed);
-        newPreviews.push(URL.createObjectURL(compressed));
-        newOrigSizes.push(preCompressSize);
+      const maxAttach = 5;
+      if (attachedFiles.length >= maxAttach) {
+        toast({
+          title: "Limit reached",
+          description: `Maximum ${maxAttach} images per message.`,
+          variant: "destructive",
+        });
+        return;
       }
 
-      if (newFiles.length > 0) {
-        setAttachedFiles((prev) => [...prev, ...newFiles]);
-        setAttachedPreviews((prev) => [...prev, ...newPreviews]);
-        setOriginalFileSizes((prev) => [...prev, ...newOrigSizes]);
+      setIsCompressing(true);
+      try {
+        const newFiles: File[] = [];
+        const newPreviews: string[] = [];
+        const newOrigSizes: number[] = [];
+
+        for (
+          let i = 0;
+          i < selectedFiles.length && attachedFiles.length + newFiles.length < maxAttach;
+          i++
+        ) {
+          const file = selectedFiles[i];
+          if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+            toast({
+              title: "Unsupported file type",
+              description: `${file.name}: Only JPG, PNG, and WebP images are allowed.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+          if (file.size > MAX_ATTACHMENT_SIZE) {
+            toast({
+              title: "File too large",
+              description: `${file.name}: Maximum size is ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+          const preCompressSize = file.size;
+          const compressed = await compressMessageAttachment(file);
+          newFiles.push(compressed);
+          newPreviews.push(URL.createObjectURL(compressed));
+          newOrigSizes.push(preCompressSize);
+        }
+
+        if (newFiles.length > 0) {
+          setAttachedFiles((prev) => [...prev, ...newFiles]);
+          setAttachedPreviews((prev) => [...prev, ...newPreviews]);
+          setOriginalFileSizes((prev) => [...prev, ...newOrigSizes]);
+        }
+      } catch {
+        toast({
+          title: "Compression failed",
+          description: "Could not process the image.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsCompressing(false);
       }
-    } catch {
-      toast({ title: "Compression failed", description: "Could not process the image.", variant: "destructive" });
-    } finally {
-      setIsCompressing(false);
-    }
-  }, [toast, attachedFiles.length]);
+    },
+    [toast, attachedFiles.length]
+  );
 
   const removeAttachment = useCallback((index: number) => {
     setAttachedPreviews((prev) => {
@@ -208,7 +251,15 @@ function ConversationThread({
   }, [attachedPreviews]);
 
   const sendReplyMutation = useMutation({
-    mutationFn: async ({ body, files, origSizes }: { body: string; files: File[]; origSizes: number[] }) => {
+    mutationFn: async ({
+      body,
+      files,
+      origSizes,
+    }: {
+      body: string;
+      files: File[];
+      origSizes: number[];
+    }) => {
       if (files.length > 0) {
         const formData = new FormData();
         files.forEach((f) => formData.append("media", f));
@@ -289,13 +340,21 @@ function ConversationThread({
   }, [replyText, attachedFiles, originalFileSizes, sendReplyMutation]);
 
   const sortedMessages = threadMessages
-    ? [...threadMessages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    ? [...threadMessages].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      )
     : [];
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 p-3 border-b shrink-0">
-        <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden" data-testid="button-thread-back">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onBack}
+          className="md:hidden"
+          data-testid="button-thread-back"
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex items-center gap-2 min-w-0">
@@ -303,8 +362,12 @@ function ConversationThread({
             <User className="h-4 w-4 text-primary" />
           </div>
           <div className="min-w-0">
-            <p className="font-medium truncate" data-testid="text-thread-contact-name">{contactName}</p>
-            <p className="text-xs text-muted-foreground" data-testid="text-thread-phone">{phone}</p>
+            <p className="font-medium truncate" data-testid="text-thread-contact-name">
+              {contactName}
+            </p>
+            <p className="text-xs text-muted-foreground" data-testid="text-thread-phone">
+              {phone}
+            </p>
           </div>
         </div>
       </div>
@@ -315,7 +378,10 @@ function ConversationThread({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : sortedMessages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm" data-testid="text-no-thread-messages">
+          <div
+            className="flex items-center justify-center h-full text-muted-foreground text-sm"
+            data-testid="text-no-thread-messages"
+          >
             No messages yet. Send a text to start the conversation.
           </div>
         ) : (
@@ -327,15 +393,19 @@ function ConversationThread({
             >
               <div
                 className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                  msg.direction === "outbound"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
+                  msg.direction === "outbound" ? "bg-primary text-primary-foreground" : "bg-muted"
                 }`}
               >
                 {msg.mediaUrls && msg.mediaUrls.length > 0 && (
                   <div className="mb-1.5 space-y-1">
                     {msg.mediaUrls.map((url, idx) => (
-                      <a key={idx} href={url} target="_blank" rel="noopener noreferrer" data-testid={`media-link-${msg.id}-${idx}`}>
+                      <a
+                        key={idx}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid={`media-link-${msg.id}-${idx}`}
+                      >
                         <img
                           src={url}
                           alt="Attached image"
@@ -348,13 +418,18 @@ function ConversationThread({
                   </div>
                 )}
                 {msg.body && <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>}
-                <div className={`flex items-center gap-1.5 mt-1 ${msg.direction === "outbound" ? "justify-end" : ""}`}>
-                  <span className={`text-[10px] ${msg.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                <div
+                  className={`flex items-center gap-1.5 mt-1 ${msg.direction === "outbound" ? "justify-end" : ""}`}
+                >
+                  <span
+                    className={`text-[10px] ${msg.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                  >
+                    {new Date(msg.createdAt).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
                   </span>
-                  {msg.status === "failed" && (
-                    <AlertCircle className="h-3 w-3 text-destructive" />
-                  )}
+                  {msg.status === "failed" && <AlertCircle className="h-3 w-3 text-destructive" />}
                 </div>
               </div>
             </div>
@@ -367,7 +442,12 @@ function ConversationThread({
           <div className="flex gap-2 flex-wrap" data-testid="mms-preview-container">
             {attachedPreviews.map((preview, idx) => (
               <div key={idx} className="relative inline-block">
-                <img src={preview} alt={`Attached ${idx + 1}`} className="h-16 w-16 object-cover rounded border" data-testid={`mms-preview-img-${idx}`} />
+                <img
+                  src={preview}
+                  alt={`Attached ${idx + 1}`}
+                  className="h-16 w-16 object-cover rounded border"
+                  data-testid={`mms-preview-img-${idx}`}
+                />
                 <button
                   onClick={() => removeAttachment(idx)}
                   className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-xs"
@@ -420,7 +500,9 @@ function ConversationThread({
           />
           <Button
             onClick={handleSendReply}
-            disabled={(!replyText.trim() && attachedFiles.length === 0) || sendReplyMutation.isPending}
+            disabled={
+              (!replyText.trim() && attachedFiles.length === 0) || sendReplyMutation.isPending
+            }
             size="icon"
             data-testid="button-send-reply"
           >
@@ -478,7 +560,11 @@ function EmailThread({
   });
 
   useEffect(() => {
-    if (!markReadMutation.isPending && threadMessages && threadMessages.some(m => m.direction === "inbound" && !m.isRead)) {
+    if (
+      !markReadMutation.isPending &&
+      threadMessages &&
+      threadMessages.some((m) => m.direction === "inbound" && !m.isRead)
+    ) {
       markReadMutation.mutate();
     }
   }, [emailThreadId, threadMessages]);
@@ -553,13 +639,21 @@ function EmailThread({
   }, [replyText, sendReplyMutation]);
 
   const sortedMessages = threadMessages
-    ? [...threadMessages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    ? [...threadMessages].sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      )
     : [];
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 p-3 border-b shrink-0">
-        <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden" data-testid="button-email-thread-back">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onBack}
+          className="md:hidden"
+          data-testid="button-email-thread-back"
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex items-center gap-2 min-w-0">
@@ -567,8 +661,15 @@ function EmailThread({
             <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
           </div>
           <div className="min-w-0">
-            <p className="font-medium truncate" data-testid="text-email-thread-contact">{contactName}</p>
-            <p className="text-xs text-muted-foreground truncate" data-testid="text-email-thread-subject">{subject}</p>
+            <p className="font-medium truncate" data-testid="text-email-thread-contact">
+              {contactName}
+            </p>
+            <p
+              className="text-xs text-muted-foreground truncate"
+              data-testid="text-email-thread-subject"
+            >
+              {subject}
+            </p>
           </div>
         </div>
       </div>
@@ -579,7 +680,10 @@ function EmailThread({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : sortedMessages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm" data-testid="text-no-email-messages">
+          <div
+            className="flex items-center justify-center h-full text-muted-foreground text-sm"
+            data-testid="text-no-email-messages"
+          >
             No messages in this thread.
           </div>
         ) : (
@@ -596,10 +700,19 @@ function EmailThread({
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <DirectionIcon direction={msg.direction} />
-                  <span>{msg.direction === "outbound" ? `To: ${msg.toAddress}` : `From: ${msg.fromAddress}`}</span>
+                  <span>
+                    {msg.direction === "outbound"
+                      ? `To: ${msg.toAddress}`
+                      : `From: ${msg.fromAddress}`}
+                  </span>
                 </div>
                 <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                  {new Date(msg.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  {new Date(msg.createdAt).toLocaleString([], {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
                 </span>
               </div>
               {msg.subject && msg.subject !== subject && (
@@ -608,7 +721,13 @@ function EmailThread({
               {msg.mediaUrls && msg.mediaUrls.length > 0 && (
                 <div className="mb-2 flex gap-2 flex-wrap">
                   {msg.mediaUrls.map((url, idx) => (
-                    <a key={idx} href={url} target="_blank" rel="noopener noreferrer" data-testid={`email-media-link-${msg.id}-${idx}`}>
+                    <a
+                      key={idx}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid={`email-media-link-${msg.id}-${idx}`}
+                    >
                       <img
                         src={url}
                         alt="Attachment"
@@ -679,14 +798,19 @@ function ConversationList({
   if (isLoading) {
     return (
       <div className="space-y-2 p-3">
-        {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-16 w-full" />
+        ))}
       </div>
     );
   }
 
   if (conversations.length === 0) {
     return (
-      <div className="p-6 text-center text-muted-foreground text-sm" data-testid="text-no-conversations">
+      <div
+        className="p-6 text-center text-muted-foreground text-sm"
+        data-testid="text-no-conversations"
+      >
         No conversations yet
       </div>
     );
@@ -695,9 +819,10 @@ function ConversationList({
   return (
     <div className="overflow-auto h-full">
       {conversations.map((conv) => {
-        const convKey = conv.channel === "email"
-          ? `email:${conv.emailThreadId}`
-          : `sms:${conv.contactId || conv.phone}`;
+        const convKey =
+          conv.channel === "email"
+            ? `email:${conv.emailThreadId}`
+            : `sms:${conv.contactId || conv.phone}`;
 
         return (
           <button
@@ -708,9 +833,11 @@ function ConversationList({
             }`}
             data-testid={`conversation-item-${conv.channel}-${conv.contactId || conv.emailThreadId || "unknown"}`}
           >
-            <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-              conv.channel === "email" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-primary/10"
-            }`}>
+            <div
+              className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                conv.channel === "email" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-primary/10"
+              }`}
+            >
               {conv.channel === "email" ? (
                 <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               ) : (
@@ -719,7 +846,9 @@ function ConversationList({
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
-                <span className={`text-sm truncate ${conv.unreadCount > 0 ? "font-semibold" : "font-medium"}`}>
+                <span
+                  className={`text-sm truncate ${conv.unreadCount > 0 ? "font-semibold" : "font-medium"}`}
+                >
                   {conv.contactName}
                 </span>
                 <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">
@@ -730,12 +859,18 @@ function ConversationList({
                 <p className="text-xs text-muted-foreground truncate">{conv.subject}</p>
               )}
               <div className="flex items-center justify-between gap-2 mt-0.5">
-                <p className={`text-xs truncate ${conv.unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                <p
+                  className={`text-xs truncate ${conv.unreadCount > 0 ? "text-foreground font-medium" : "text-muted-foreground"}`}
+                >
                   {conv.lastMessage.direction === "outbound" ? "You: " : ""}
                   {conv.lastMessage.body}
                 </p>
                 {conv.unreadCount > 0 && (
-                  <Badge variant="default" className="h-5 min-w-[20px] px-1.5 text-[10px] shrink-0" data-testid={`badge-unread-${convKey}`}>
+                  <Badge
+                    variant="default"
+                    className="h-5 min-w-[20px] px-1.5 text-[10px] shrink-0"
+                    data-testid={`badge-unread-${convKey}`}
+                  >
                     {conv.unreadCount}
                   </Badge>
                 )}
@@ -783,7 +918,7 @@ function UnifiedInbox({ channelFilter }: { channelFilter?: string }) {
     const contactId = params.get("contactId");
     if (!contactId || contactId === handledContactId) return;
 
-    const conv = conversations.find(c => c.contactId === contactId && c.channel === "sms");
+    const conv = conversations.find((c) => c.contactId === contactId && c.channel === "sms");
     if (conv) {
       setSelectedConversation(conv);
       setHandledContactId(contactId);
@@ -791,7 +926,7 @@ function UnifiedInbox({ channelFilter }: { channelFilter?: string }) {
     }
 
     if (!isLoading && contacts) {
-      const contact = contacts.find(c => c.id === contactId);
+      const contact = contacts.find((c) => c.id === contactId);
       if (contact && contact.phone) {
         setSelectedConversation({
           contactId: contact.id,
@@ -831,7 +966,10 @@ function UnifiedInbox({ channelFilter }: { channelFilter?: string }) {
   const renderThread = () => {
     if (!selectedConversation) {
       return (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground" data-testid="text-select-conversation">
+        <div
+          className="flex-1 flex items-center justify-center text-muted-foreground"
+          data-testid="text-select-conversation"
+        >
           <div className="text-center">
             <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-30" />
             <p>Select a conversation to view messages</p>
@@ -867,7 +1005,9 @@ function UnifiedInbox({ channelFilter }: { channelFilter?: string }) {
     return (
       <Card className="flex-1 overflow-hidden">
         <div className="h-[calc(100vh-220px)]">
-          {selectedConversation ? renderThread() : (
+          {selectedConversation ? (
+            renderThread()
+          ) : (
             <ConversationList
               conversations={conversations}
               isLoading={isLoading}
@@ -894,9 +1034,7 @@ function UnifiedInbox({ channelFilter }: { channelFilter?: string }) {
             onSelect={handleSelect}
           />
         </div>
-        <div className="flex-1 flex flex-col">
-          {renderThread()}
-        </div>
+        <div className="flex-1 flex flex-col">{renderThread()}</div>
       </div>
     </Card>
   );
@@ -919,7 +1057,10 @@ export default function Communications() {
     queryKey: ["/api/contacts"],
   });
 
-  const { data: config } = useQuery<{ email: { configured: boolean }; sms: { configured: boolean; phoneNumber: string } }>({
+  const { data: config } = useQuery<{
+    email: { configured: boolean };
+    sms: { configured: boolean; phoneNumber: string };
+  }>({
     queryKey: ["/api/messages/config"],
   });
 
@@ -968,20 +1109,22 @@ export default function Communications() {
 
   const handleContactSelectEmail = (contactId: string) => {
     emailForm.setValue("contactId", contactId);
-    const contact = contacts?.find(c => c.id === contactId);
+    const contact = contacts?.find((c) => c.id === contactId);
     if (contact?.email) emailForm.setValue("to", contact.email);
   };
 
   const handleContactSelectSms = (contactId: string) => {
     smsForm.setValue("contactId", contactId);
-    const contact = contacts?.find(c => c.id === contactId);
+    const contact = contacts?.find((c) => c.id === contactId);
     if (contact?.phone) smsForm.setValue("to", contact.phone);
   };
 
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold" data-testid="text-communications-heading">Messages</h1>
+        <h1 className="text-2xl font-bold" data-testid="text-communications-heading">
+          Messages
+        </h1>
         <div className="flex items-center gap-2">
           <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
             <DialogTrigger asChild>
@@ -999,42 +1142,85 @@ export default function Communications() {
                 </div>
               )}
               <Form {...emailForm}>
-                <form onSubmit={emailForm.handleSubmit((v) => sendEmailMutation.mutate(v))} className="space-y-4">
-                  <FormField control={emailForm.control} name="contactId" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contact (optional)</FormLabel>
-                      <Select onValueChange={(v) => { field.onChange(v); handleContactSelectEmail(v); }} value={field.value || ""}>
-                        <FormControl><SelectTrigger data-testid="select-email-contact"><SelectValue placeholder="Select a contact" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          {contacts?.filter(c => c.email).map(c => (
-                            <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} - {c.email}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )} />
-                  <FormField control={emailForm.control} name="to" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>To</FormLabel>
-                      <FormControl><Input {...field} type="email" data-testid="input-email-to" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={emailForm.control} name="subject" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Subject</FormLabel>
-                      <FormControl><Input {...field} data-testid="input-email-subject" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={emailForm.control} name="body" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Message</FormLabel>
-                      <FormControl><Textarea {...field} rows={5} data-testid="textarea-email-body" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <Button type="submit" disabled={sendEmailMutation.isPending} data-testid="button-send-email">
+                <form
+                  onSubmit={emailForm.handleSubmit((v) => sendEmailMutation.mutate(v))}
+                  className="space-y-4"
+                >
+                  <FormField
+                    control={emailForm.control}
+                    name="contactId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contact (optional)</FormLabel>
+                        <Select
+                          onValueChange={(v) => {
+                            field.onChange(v);
+                            handleContactSelectEmail(v);
+                          }}
+                          value={field.value || ""}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-email-contact">
+                              <SelectValue placeholder="Select a contact" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {contacts
+                              ?.filter((c) => c.email)
+                              .map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.firstName} {c.lastName} - {c.email}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={emailForm.control}
+                    name="to"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>To</FormLabel>
+                        <FormControl>
+                          <Input {...field} type="email" data-testid="input-email-to" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={emailForm.control}
+                    name="subject"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Subject</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-email-subject" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={emailForm.control}
+                    name="body"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Message</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} rows={5} data-testid="textarea-email-body" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button
+                    type="submit"
+                    disabled={sendEmailMutation.isPending}
+                    data-testid="button-send-email"
+                  >
                     <Send className="mr-1 h-4 w-4" />
                     {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
                   </Button>
@@ -1062,35 +1248,72 @@ export default function Communications() {
                 <p className="text-sm text-muted-foreground">From: {config.sms.phoneNumber}</p>
               )}
               <Form {...smsForm}>
-                <form onSubmit={smsForm.handleSubmit((v) => sendSmsMutation.mutate(v))} className="space-y-4">
-                  <FormField control={smsForm.control} name="contactId" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contact (optional)</FormLabel>
-                      <Select onValueChange={(v) => { field.onChange(v); handleContactSelectSms(v); }} value={field.value || ""}>
-                        <FormControl><SelectTrigger data-testid="select-sms-contact"><SelectValue placeholder="Select a contact" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          {contacts?.filter(c => c.phone).map(c => (
-                            <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} - {c.phone}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )} />
-                  <FormField control={smsForm.control} name="to" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>To</FormLabel>
-                      <FormControl><Input {...field} data-testid="input-sms-to" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={smsForm.control} name="body" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Message</FormLabel>
-                      <FormControl><Textarea {...field} rows={3} data-testid="textarea-sms-body" /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <Button type="submit" disabled={sendSmsMutation.isPending} data-testid="button-send-sms">
+                <form
+                  onSubmit={smsForm.handleSubmit((v) => sendSmsMutation.mutate(v))}
+                  className="space-y-4"
+                >
+                  <FormField
+                    control={smsForm.control}
+                    name="contactId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contact (optional)</FormLabel>
+                        <Select
+                          onValueChange={(v) => {
+                            field.onChange(v);
+                            handleContactSelectSms(v);
+                          }}
+                          value={field.value || ""}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-sms-contact">
+                              <SelectValue placeholder="Select a contact" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {contacts
+                              ?.filter((c) => c.phone)
+                              .map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.firstName} {c.lastName} - {c.phone}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={smsForm.control}
+                    name="to"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>To</FormLabel>
+                        <FormControl>
+                          <Input {...field} data-testid="input-sms-to" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={smsForm.control}
+                    name="body"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Message</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} rows={3} data-testid="textarea-sms-body" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button
+                    type="submit"
+                    disabled={sendSmsMutation.isPending}
+                    data-testid="button-send-sms"
+                  >
                     <Send className="mr-1 h-4 w-4" />
                     {sendSmsMutation.isPending ? "Sending..." : "Send SMS"}
                   </Button>
@@ -1103,9 +1326,15 @@ export default function Communications() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTrigger value="all" data-testid="tab-all-messages">All</TabsTrigger>
-          <TabsTrigger value="sms" data-testid="tab-sms-inbox">SMS</TabsTrigger>
-          <TabsTrigger value="email" data-testid="tab-email-messages">Email</TabsTrigger>
+          <TabsTrigger value="all" data-testid="tab-all-messages">
+            All
+          </TabsTrigger>
+          <TabsTrigger value="sms" data-testid="tab-sms-inbox">
+            SMS
+          </TabsTrigger>
+          <TabsTrigger value="email" data-testid="tab-email-messages">
+            Email
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="mt-4">

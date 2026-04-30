@@ -108,15 +108,32 @@ function toLocalDateString(d: Date) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
-    scheduled:   { label: "Scheduled",   className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-    in_progress: { label: "In Progress", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-    completed:   { label: "Completed",   className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" },
-    skipped:     { label: "Skipped",     className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
-    cancelled:   { label: "Cancelled",   className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+    scheduled: {
+      label: "Scheduled",
+      className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    },
+    in_progress: {
+      label: "In Progress",
+      className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    },
+    completed: {
+      label: "Completed",
+      className: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+    },
+    skipped: {
+      label: "Skipped",
+      className: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    },
+    cancelled: {
+      label: "Cancelled",
+      className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+    },
   };
   const s = map[status] ?? { label: status, className: "bg-gray-100 text-gray-600" };
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.className}`}>
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${s.className}`}
+    >
       {status === "in_progress" && (
         <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
       )}
@@ -177,7 +194,9 @@ function TechLegend({ visits }: { visits: CommandCenterVisit[] }) {
         <div key={name} className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Users className="h-3.5 w-3.5" />
           <span className="font-medium text-foreground">{name}</span>
-          <span>· {count} stop{count !== 1 ? "s" : ""}</span>
+          <span>
+            · {count} stop{count !== 1 ? "s" : ""}
+          </span>
         </div>
       ))}
     </div>
@@ -192,7 +211,7 @@ interface TechGroup {
 
 function buildTechGroups(visits: CommandCenterVisit[]): TechGroup[] {
   const map = new Map<string, CommandCenterVisit[]>();
-  visits.forEach(v => {
+  visits.forEach((v) => {
     const key = v.techName ?? "Unassigned";
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(v);
@@ -203,7 +222,10 @@ function buildTechGroups(visits: CommandCenterVisit[]): TechGroup[] {
       groups.push({
         techName,
         visits: techVisits,
-        totalRevenue: techVisits.reduce((sum: number, v: CommandCenterVisit) => sum + parseFloat(v.pricePerVisit || "0"), 0),
+        totalRevenue: techVisits.reduce(
+          (sum: number, v: CommandCenterVisit) => sum + parseFloat(v.pricePerVisit || "0"),
+          0
+        ),
       });
     }
   });
@@ -213,7 +235,10 @@ function buildTechGroups(visits: CommandCenterVisit[]): TechGroup[] {
     groups.push({
       techName: "Unassigned",
       visits: uVisits,
-      totalRevenue: uVisits.reduce((sum: number, v: CommandCenterVisit) => sum + parseFloat(v.pricePerVisit || "0"), 0),
+      totalRevenue: uVisits.reduce(
+        (sum: number, v: CommandCenterVisit) => sum + parseFloat(v.pricePerVisit || "0"),
+        0
+      ),
     });
   }
   return groups;
@@ -238,8 +263,7 @@ export default function CommandCenter() {
         const parsed = new Date(saved + "T12:00:00");
         if (!isNaN(parsed.getTime())) return parsed;
       }
-    } catch {
-    }
+    } catch {}
     return todayDate;
   });
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -252,8 +276,7 @@ export default function CommandCenter() {
       } else {
         sessionStorage.setItem("commandCenter.lastDate", dateStr);
       }
-    } catch {
-    }
+    } catch {}
     const params = new URLSearchParams(window.location.search);
     if (dateStr === todayString) {
       params.delete("date");
@@ -272,7 +295,9 @@ export default function CommandCenter() {
   const { data, isLoading } = useQuery<CommandCenterStats>({
     queryKey: ["/api/admin/command-center-stats", selectedDateString],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/command-center-stats?date=${selectedDateString}`, { credentials: "include" });
+      const res = await fetch(`/api/admin/command-center-stats?date=${selectedDateString}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
@@ -285,29 +310,37 @@ export default function CommandCenter() {
 
   // Build Mapbox stops from visits with valid coordinates
   const validVisitsForMap = useMemo(
-    () => visits.filter(v => v.property?.latitude && v.property?.longitude),
+    () => visits.filter((v) => v.property?.latitude && v.property?.longitude),
     [visits]
   );
   const mapStops = useMemo(
-    () => validVisitsForMap.map((v, idx) => ({
-      stopNumber: idx + 1,
-      contactName: `${v.contact?.firstName ?? ""} ${v.contact?.lastName ?? ""}`.trim() || "—",
-      streetAddress: v.property?.streetAddress || "Unknown",
-      latitude: v.property!.latitude!,
-      longitude: v.property!.longitude!,
-    })),
+    () =>
+      validVisitsForMap.map((v, idx) => ({
+        stopNumber: idx + 1,
+        contactName: `${v.contact?.firstName ?? ""} ${v.contact?.lastName ?? ""}`.trim() || "—",
+        streetAddress: v.property?.streetAddress || "Unknown",
+        latitude: v.property!.latitude!,
+        longitude: v.property!.longitude!,
+      })),
     [validVisitsForMap]
   );
 
   const [showLivePlayback, setShowLivePlayback] = useState(false);
 
-  const { data: demoStatus } = useQuery<{ isDemo: boolean; settings?: { livePlaybackEnabled?: boolean } }>({
+  const { data: demoStatus } = useQuery<{
+    isDemo: boolean;
+    settings?: { livePlaybackEnabled?: boolean };
+  }>({
     queryKey: ["/api/demo/status"],
   });
   const isLivePlaybackEnabled = !!(demoStatus?.isDemo && demoStatus?.settings?.livePlaybackEnabled);
 
   const [activeTab, setActiveTab] = useState(() => {
-    try { return localStorage.getItem("scoopilot_cc_active_tab") ?? "overview"; } catch { return "overview"; }
+    try {
+      return localStorage.getItem("scoopilot_cc_active_tab") ?? "overview";
+    } catch {
+      return "overview";
+    }
   });
   const [groupByTech, setGroupByTech] = useState<boolean>(() => {
     try {
@@ -319,11 +352,15 @@ export default function CommandCenter() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    try { localStorage.setItem("scoopilot_cc_active_tab", activeTab); } catch {}
+    try {
+      localStorage.setItem("scoopilot_cc_active_tab", activeTab);
+    } catch {}
   }, [activeTab]);
 
   useEffect(() => {
-    try { localStorage.setItem("commandCenter.groupByTech", String(groupByTech)); } catch {}
+    try {
+      localStorage.setItem("commandCenter.groupByTech", String(groupByTech));
+    } catch {}
   }, [groupByTech]);
 
   const [filterTech, setFilterTech] = useState<string>("all");
@@ -341,14 +378,17 @@ export default function CommandCenter() {
   }, [visits]);
 
   const filteredVisits = useMemo(
-    () => filterTech === "all" ? visits : visits.filter(v => (v.techName ?? "Unassigned") === filterTech),
+    () =>
+      filterTech === "all"
+        ? visits
+        : visits.filter((v) => (v.techName ?? "Unassigned") === filterTech),
     [visits, filterTech]
   );
 
   const techGroups = useMemo(() => buildTechGroups(filteredVisits), [filteredVisits]);
 
   function toggleGroup(techName: string) {
-    setCollapsedGroups(prev => {
+    setCollapsedGroups((prev) => {
       const next = new Set(prev);
       if (next.has(techName)) next.delete(techName);
       else next.add(techName);
@@ -357,14 +397,16 @@ export default function CommandCenter() {
   }
 
   const upcomingVisits = useMemo(
-    () => visits.filter(v => v.status === "scheduled").slice(0, 3),
+    () => visits.filter((v) => v.status === "scheduled").slice(0, 3),
     [visits]
   );
 
   const googleMapsUrl = useMemo(() => {
     const addrs = visits
-      .filter(v => v.property?.streetAddress)
-      .map(v => [v.property!.streetAddress, v.property!.city, v.property!.state].filter(Boolean).join(", "));
+      .filter((v) => v.property?.streetAddress)
+      .map((v) =>
+        [v.property!.streetAddress, v.property!.city, v.property!.state].filter(Boolean).join(", ")
+      );
     if (addrs.length === 0) return null;
     const dest = encodeURIComponent(addrs[addrs.length - 1]);
     const waypoints = addrs.slice(0, -1).map(encodeURIComponent).join("|");
@@ -379,9 +421,7 @@ export default function CommandCenter() {
           <h1 className="text-2xl font-bold tracking-tight" data-testid="heading-command-center">
             Command Center
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Company-wide view for {dateLabel}
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">Company-wide view for {dateLabel}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Date Picker */}
@@ -490,9 +530,15 @@ export default function CommandCenter() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList data-testid="tabs-command-center">
-          <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-          <TabsTrigger value="map" data-testid="tab-map">Route Map</TabsTrigger>
-          <TabsTrigger value="live-map" data-testid="tab-live-map">Live Field Map</TabsTrigger>
+          <TabsTrigger value="overview" data-testid="tab-overview">
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="map" data-testid="tab-map">
+            Route Map
+          </TabsTrigger>
+          <TabsTrigger value="live-map" data-testid="tab-live-map">
+            Live Field Map
+          </TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -512,37 +558,42 @@ export default function CommandCenter() {
                       )}
                     </CardTitle>
                     <div className="flex items-center gap-2 flex-wrap">
-                    {techNames.length > 0 && (
-                      <Select value={filterTech} onValueChange={setFilterTech}>
-                        <SelectTrigger className="h-8 text-xs w-44" data-testid="select-filter-technician">
-                          <SelectValue placeholder="All technicians" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All technicians</SelectItem>
-                          {techNames.map(name => (
-                            <SelectItem key={name} value={name}>{name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                    <div className="flex items-center rounded-md border overflow-hidden text-xs font-medium">
-                      <button
-                        className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${!groupByTech ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"}`}
-                        onClick={() => setGroupByTech(false)}
-                        data-testid="toggle-flat-list"
-                      >
-                        <List className="h-3.5 w-3.5" />
-                        Flat list
-                      </button>
-                      <button
-                        className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${groupByTech ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"}`}
-                        onClick={() => setGroupByTech(true)}
-                        data-testid="toggle-by-technician"
-                      >
-                        <Users className="h-3.5 w-3.5" />
-                        By technician
-                      </button>
-                    </div>
+                      {techNames.length > 0 && (
+                        <Select value={filterTech} onValueChange={setFilterTech}>
+                          <SelectTrigger
+                            className="h-8 text-xs w-44"
+                            data-testid="select-filter-technician"
+                          >
+                            <SelectValue placeholder="All technicians" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All technicians</SelectItem>
+                            {techNames.map((name) => (
+                              <SelectItem key={name} value={name}>
+                                {name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <div className="flex items-center rounded-md border overflow-hidden text-xs font-medium">
+                        <button
+                          className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${!groupByTech ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"}`}
+                          onClick={() => setGroupByTech(false)}
+                          data-testid="toggle-flat-list"
+                        >
+                          <List className="h-3.5 w-3.5" />
+                          Flat list
+                        </button>
+                        <button
+                          className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${groupByTech ? "bg-primary text-primary-foreground" : "hover:bg-muted text-muted-foreground"}`}
+                          onClick={() => setGroupByTech(true)}
+                          data-testid="toggle-by-technician"
+                        >
+                          <Users className="h-3.5 w-3.5" />
+                          By technician
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -555,7 +606,7 @@ export default function CommandCenter() {
                     </div>
                   ) : filteredVisits.length === 0 ? (
                     <div className="py-12 text-center text-muted-foreground text-sm">
-                      {filterTech === "all" 
+                      {filterTech === "all"
                         ? `No appointments scheduled for ${isToday ? "today" : format(selectedDate, "MMM d")}`
                         : `No appointments for ${filterTech} on ${isToday ? "today" : format(selectedDate, "MMM d")}`}
                     </div>
@@ -571,112 +622,126 @@ export default function CommandCenter() {
                               <TableHead className="hidden md:table-cell">Technician</TableHead>
                             )}
                             <TableHead>Status</TableHead>
-                            <TableHead className="hidden sm:table-cell text-right">Amount</TableHead>
+                            <TableHead className="hidden sm:table-cell text-right">
+                              Amount
+                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {groupByTech ? (
-                            techGroups.map(group => {
-                              const isCollapsed = collapsedGroups.has(group.techName);
-                              return (
-                                <>
-                                  <TableRow
-                                    key={`group-${group.techName}`}
-                                    className="bg-muted/60 dark:bg-muted/30 hover:bg-muted/80 dark:hover:bg-muted/50 cursor-pointer select-none"
-                                    onClick={() => toggleGroup(group.techName)}
-                                    data-testid={`group-header-${group.techName.toLowerCase().replace(/\s+/g, "-")}`}
-                                  >
-                                    <TableCell colSpan={5} className="py-2.5 font-semibold text-sm">
-                                      <div className="flex items-center gap-2">
-                                        {isCollapsed
-                                          ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                                          : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                                        }
-                                        <span>{group.techName}</span>
-                                        <span className="font-normal text-muted-foreground text-xs">
-                                          · {group.visits.length} stop{group.visits.length !== 1 ? "s" : ""}
-                                          {" · "}
-                                          {formatCurrency(group.totalRevenue)}
-                                        </span>
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                  {!isCollapsed && group.visits.map(v => (
+                          {groupByTech
+                            ? techGroups.map((group) => {
+                                const isCollapsed = collapsedGroups.has(group.techName);
+                                return (
+                                  <>
                                     <TableRow
-                                      key={v.id}
-                                      data-testid={`row-visit-${v.id}`}
-                                      className={`cursor-pointer hover:bg-muted/50 transition-colors${v.status === "completed" ? " opacity-60" : ""}`}
-                                      onClick={() => navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`)}
+                                      key={`group-${group.techName}`}
+                                      className="bg-muted/60 dark:bg-muted/30 hover:bg-muted/80 dark:hover:bg-muted/50 cursor-pointer select-none"
+                                      onClick={() => toggleGroup(group.techName)}
+                                      data-testid={`group-header-${group.techName.toLowerCase().replace(/\s+/g, "-")}`}
                                     >
-                                      <TableCell className="text-sm font-medium whitespace-nowrap">
-                                        {formatTime(v.scheduledTime)}
-                                      </TableCell>
-                                      <TableCell>
-                                        <div className="font-medium text-sm leading-tight">
-                                          {v.contact
-                                            ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() || "—"
-                                            : "—"}
+                                      <TableCell
+                                        colSpan={5}
+                                        className="py-2.5 font-semibold text-sm"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          {isCollapsed ? (
+                                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                                          ) : (
+                                            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                                          )}
+                                          <span>{group.techName}</span>
+                                          <span className="font-normal text-muted-foreground text-xs">
+                                            · {group.visits.length} stop
+                                            {group.visits.length !== 1 ? "s" : ""}
+                                            {" · "}
+                                            {formatCurrency(group.totalRevenue)}
+                                          </span>
                                         </div>
-                                        {v.property?.streetAddress && (
-                                          <div className="text-xs text-muted-foreground truncate max-w-[180px]">
-                                            {v.property.streetAddress}
-                                            {v.property.city ? `, ${v.property.city}` : ""}
-                                          </div>
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                                        {v.servicePlanName ?? "—"}
-                                      </TableCell>
-                                      <TableCell>
-                                        <StatusBadge status={v.status} />
-                                      </TableCell>
-                                      <TableCell className="hidden sm:table-cell text-right text-sm font-medium">
-                                        {formatCurrency(parseFloat(v.pricePerVisit || "0"))}
                                       </TableCell>
                                     </TableRow>
-                                  ))}
-                                </>
-                              );
-                            })
-                          ) : (
-                            filteredVisits.map(v => (
-                              <TableRow
-                                key={v.id}
-                                data-testid={`row-visit-${v.id}`}
-                                className={`cursor-pointer hover:bg-muted/50 transition-colors${v.status === "completed" ? " opacity-60" : ""}`}
-                                onClick={() => navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`)}
-                              >
-                                <TableCell className="text-sm font-medium whitespace-nowrap">
-                                  {formatTime(v.scheduledTime)}
-                                </TableCell>
-                                <TableCell>
-                                  <div className="font-medium text-sm leading-tight">
-                                    {v.contact
-                                      ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() || "—"
-                                      : "—"}
-                                  </div>
-                                  {v.property?.streetAddress && (
-                                    <div className="text-xs text-muted-foreground truncate max-w-[180px]">
-                                      {v.property.streetAddress}
-                                      {v.property.city ? `, ${v.property.city}` : ""}
+                                    {!isCollapsed &&
+                                      group.visits.map((v) => (
+                                        <TableRow
+                                          key={v.id}
+                                          data-testid={`row-visit-${v.id}`}
+                                          className={`cursor-pointer hover:bg-muted/50 transition-colors${v.status === "completed" ? " opacity-60" : ""}`}
+                                          onClick={() =>
+                                            navigate(
+                                              `/scheduling?date=${v.scheduledDate}&visitId=${v.id}`
+                                            )
+                                          }
+                                        >
+                                          <TableCell className="text-sm font-medium whitespace-nowrap">
+                                            {formatTime(v.scheduledTime)}
+                                          </TableCell>
+                                          <TableCell>
+                                            <div className="font-medium text-sm leading-tight">
+                                              {v.contact
+                                                ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() ||
+                                                  "—"
+                                                : "—"}
+                                            </div>
+                                            {v.property?.streetAddress && (
+                                              <div className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                                {v.property.streetAddress}
+                                                {v.property.city ? `, ${v.property.city}` : ""}
+                                              </div>
+                                            )}
+                                          </TableCell>
+                                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                                            {v.servicePlanName ?? "—"}
+                                          </TableCell>
+                                          <TableCell>
+                                            <StatusBadge status={v.status} />
+                                          </TableCell>
+                                          <TableCell className="hidden sm:table-cell text-right text-sm font-medium">
+                                            {formatCurrency(parseFloat(v.pricePerVisit || "0"))}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                  </>
+                                );
+                              })
+                            : filteredVisits.map((v) => (
+                                <TableRow
+                                  key={v.id}
+                                  data-testid={`row-visit-${v.id}`}
+                                  className={`cursor-pointer hover:bg-muted/50 transition-colors${v.status === "completed" ? " opacity-60" : ""}`}
+                                  onClick={() =>
+                                    navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`)
+                                  }
+                                >
+                                  <TableCell className="text-sm font-medium whitespace-nowrap">
+                                    {formatTime(v.scheduledTime)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="font-medium text-sm leading-tight">
+                                      {v.contact
+                                        ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() ||
+                                          "—"
+                                        : "—"}
                                     </div>
-                                  )}
-                                </TableCell>
-                                <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                                  {v.servicePlanName ?? "—"}
-                                </TableCell>
-                                <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                                  {v.techName ?? <span className="italic">Unassigned</span>}
-                                </TableCell>
-                                <TableCell>
-                                  <StatusBadge status={v.status} />
-                                </TableCell>
-                                <TableCell className="hidden sm:table-cell text-right text-sm font-medium">
-                                  {formatCurrency(parseFloat(v.pricePerVisit || "0"))}
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          )}
+                                    {v.property?.streetAddress && (
+                                      <div className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                        {v.property.streetAddress}
+                                        {v.property.city ? `, ${v.property.city}` : ""}
+                                      </div>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                                    {v.servicePlanName ?? "—"}
+                                  </TableCell>
+                                  <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                                    {v.techName ?? <span className="italic">Unassigned</span>}
+                                  </TableCell>
+                                  <TableCell>
+                                    <StatusBadge status={v.status} />
+                                  </TableCell>
+                                  <TableCell className="hidden sm:table-cell text-right text-sm font-medium">
+                                    {formatCurrency(parseFloat(v.pricePerVisit || "0"))}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
                         </TableBody>
                       </Table>
                     </div>
@@ -711,13 +776,19 @@ export default function CommandCenter() {
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">Completed</span>
-                        <span className="text-sm font-medium text-green-600 dark:text-green-400" data-testid="text-completed-revenue">
+                        <span
+                          className="text-sm font-medium text-green-600 dark:text-green-400"
+                          data-testid="text-completed-revenue"
+                        >
                           {formatCurrency(billing?.completedRevenue ?? 0)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-muted-foreground">In Progress / Pending</span>
-                        <span className="text-sm font-medium text-amber-600 dark:text-amber-400" data-testid="text-pending-revenue">
+                        <span
+                          className="text-sm font-medium text-amber-600 dark:text-amber-400"
+                          data-testid="text-pending-revenue"
+                        >
                           {formatCurrency(billing?.pendingRevenue ?? 0)}
                         </span>
                       </div>
@@ -739,7 +810,10 @@ export default function CommandCenter() {
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Paid</span>
-                          <span className="text-sm font-medium text-green-600 dark:text-green-400" data-testid="text-total-paid">
+                          <span
+                            className="text-sm font-medium text-green-600 dark:text-green-400"
+                            data-testid="text-total-paid"
+                          >
                             {formatCurrency(billing?.totalPaid ?? 0)}
                           </span>
                         </div>
@@ -767,12 +841,17 @@ export default function CommandCenter() {
                     </div>
                   ) : (
                     <div className="divide-y">
-                      {upcomingVisits.map(v => (
-                        <div key={v.id} className="flex items-center justify-between gap-3 px-4 py-3" data-testid={`up-next-visit-${v.id}`}>
+                      {upcomingVisits.map((v) => (
+                        <div
+                          key={v.id}
+                          className="flex items-center justify-between gap-3 px-4 py-3"
+                          data-testid={`up-next-visit-${v.id}`}
+                        >
                           <div className="min-w-0">
                             <div className="font-medium text-sm truncate">
                               {v.contact
-                                ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() || "—"
+                                ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() ||
+                                  "—"
                                 : "—"}
                             </div>
                             <div className="text-xs text-muted-foreground">
@@ -788,7 +867,10 @@ export default function CommandCenter() {
                 </CardContent>
                 <CardFooter className="pt-0 pb-3 px-4">
                   <Link href="/scheduling">
-                    <a className="text-xs text-primary hover:underline font-medium" data-testid="link-view-all-schedule">
+                    <a
+                      className="text-xs text-primary hover:underline font-medium"
+                      data-testid="link-view-all-schedule"
+                    >
                       View all →
                     </a>
                   </Link>
@@ -808,9 +890,7 @@ export default function CommandCenter() {
               </CardTitle>
               <div className="flex items-center gap-2">
                 {isToday && (
-                  <span className="text-xs text-muted-foreground">
-                    Auto-refreshes every minute
-                  </span>
+                  <span className="text-xs text-muted-foreground">Auto-refreshes every minute</span>
                 )}
                 {googleMapsUrl && (
                   <Button
@@ -831,11 +911,16 @@ export default function CommandCenter() {
             <CardContent className="p-4 pt-0">
               {visits.length === 0 && !isLoading ? (
                 <div className="py-16 text-center text-muted-foreground text-sm">
-                  No stops to show on the map {isToday ? "today" : `for ${format(selectedDate, "MMM d")}`}
+                  No stops to show on the map{" "}
+                  {isToday ? "today" : `for ${format(selectedDate, "MMM d")}`}
                 </div>
               ) : (
                 <>
-                  <div className="rounded-lg overflow-hidden border bg-muted" style={{ height: 400 }} data-testid="container-daily-map">
+                  <div
+                    className="rounded-lg overflow-hidden border bg-muted"
+                    style={{ height: 400 }}
+                    data-testid="container-daily-map"
+                  >
                     <Suspense fallback={<Skeleton className="h-full w-full" />}>
                       <RouteMapView
                         stops={mapStops}
@@ -849,17 +934,19 @@ export default function CommandCenter() {
                   </div>
                   <TechLegend visits={visits} />
                   {/* Clickable stop list — labels match the numbered markers on the map */}
-                  {visits.filter(v => v.property?.streetAddress).length > 0 && (
+                  {visits.filter((v) => v.property?.streetAddress).length > 0 && (
                     <div className="mt-4 space-y-1">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                         Stops — click to open details
                       </p>
                       {visits
-                        .filter(v => v.property?.streetAddress)
+                        .filter((v) => v.property?.streetAddress)
                         .map((v, idx) => {
-                          const label = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[idx] ?? String(idx + 1);
+                          const label =
+                            "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[idx] ?? String(idx + 1);
                           const customerName = v.contact
-                            ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() || "—"
+                            ? `${v.contact.firstName ?? ""} ${v.contact.lastName ?? ""}`.trim() ||
+                              "—"
                             : "—";
                           const address = [v.property?.streetAddress, v.property?.city]
                             .filter(Boolean)
@@ -868,7 +955,9 @@ export default function CommandCenter() {
                             <button
                               key={v.id}
                               data-testid={`map-stop-${v.id}`}
-                              onClick={() => navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`)}
+                              onClick={() =>
+                                navigate(`/scheduling?date=${v.scheduledDate}&visitId=${v.id}`)
+                              }
                               className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-left hover:bg-muted/60 transition-colors group"
                             >
                               <span className="flex-shrink-0 inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
@@ -879,13 +968,17 @@ export default function CommandCenter() {
                                   {customerName}
                                 </span>
                                 {address && (
-                                  <span className="text-xs text-muted-foreground ml-2">{address}</span>
+                                  <span className="text-xs text-muted-foreground ml-2">
+                                    {address}
+                                  </span>
                                 )}
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <StatusBadge status={v.status} />
                                 {v.scheduledTime && (
-                                  <span className="text-xs text-muted-foreground">{formatTime(v.scheduledTime)}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatTime(v.scheduledTime)}
+                                  </span>
                                 )}
                                 <ExternalLink className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                               </div>
@@ -902,8 +995,18 @@ export default function CommandCenter() {
 
         {/* Live Field Map Tab */}
         <TabsContent value="live-map" className="mt-4">
-          <div className="rounded-lg overflow-hidden border" style={{ height: 680 }} data-testid="container-live-field-map">
-            <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading map...</div>}>
+          <div
+            className="rounded-lg overflow-hidden border"
+            style={{ height: 680 }}
+            data-testid="container-live-field-map"
+          >
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                  Loading map...
+                </div>
+              }
+            >
               <FieldView />
             </Suspense>
           </div>

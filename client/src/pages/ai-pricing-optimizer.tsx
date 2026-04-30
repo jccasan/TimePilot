@@ -149,12 +149,25 @@ function marginColor(pct: number): string {
 
 function positionBadge(position: string) {
   const map: Record<string, { label: string; className: string }> = {
-    below_market: { label: "Below Market", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-    at_market: { label: "At Market", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-    above_market: { label: "Above Market", className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+    below_market: {
+      label: "Below Market",
+      className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    },
+    at_market: {
+      label: "At Market",
+      className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    },
+    above_market: {
+      label: "Above Market",
+      className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+    },
   };
   const info = map[position] || map.at_market;
-  return <Badge variant="outline" className={`text-xs ${info.className}`}>{info.label}</Badge>;
+  return (
+    <Badge variant="outline" className={`text-xs ${info.className}`}>
+      {info.label}
+    </Badge>
+  );
 }
 
 export default function AIPricingOptimizer() {
@@ -171,7 +184,9 @@ export default function AIPricingOptimizer() {
   const [elasticityResult, setElasticityResult] = useState<ElasticityResult | null>(null);
 
   const [compZipFilter, setCompZipFilter] = useState<string>("all");
-  const [compAnalysisResult, setCompAnalysisResult] = useState<CompetitorAnalysisResult | null>(null);
+  const [compAnalysisResult, setCompAnalysisResult] = useState<CompetitorAnalysisResult | null>(
+    null
+  );
   const [addCompDialogOpen, setAddCompDialogOpen] = useState(false);
   const [newCompName, setNewCompName] = useState("");
   const [newCompPrice, setNewCompPrice] = useState("");
@@ -200,7 +215,10 @@ export default function AIPricingOptimizer() {
     },
     onSuccess: (data) => {
       setSimulationResult(data);
-      toast({ title: "Simulation complete", description: `Analyzed ${data.properties.length} properties.` });
+      toast({
+        title: "Simulation complete",
+        description: `Analyzed ${data.properties.length} properties.`,
+      });
     },
     onError: () => {
       toast({ title: "Simulation failed", variant: "destructive" });
@@ -210,7 +228,8 @@ export default function AIPricingOptimizer() {
   const elasticityMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/pricing-simulator/elasticity", {
-        propertyId: elasticityPropertyId && elasticityPropertyId !== "all" ? elasticityPropertyId : undefined,
+        propertyId:
+          elasticityPropertyId && elasticityPropertyId !== "all" ? elasticityPropertyId : undefined,
       });
       return res.json();
     },
@@ -280,14 +299,18 @@ export default function AIPricingOptimizer() {
   const allProperties = simulationResult?.properties ?? [];
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 h-full overflow-y-auto" data-testid="page-ai-pricing-optimizer">
+    <div
+      className="p-4 sm:p-6 space-y-6 h-full overflow-y-auto"
+      data-testid="page-ai-pricing-optimizer"
+    >
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
           <SlidersHorizontal className="h-6 w-6 text-primary" />
           Pricing Simulator
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Adjust variables, simulate pricing scenarios, analyze price elasticity, and compare against competitors.
+          Adjust variables, simulate pricing scenarios, analyze price elasticity, and compare
+          against competitors.
         </p>
       </div>
 
@@ -318,7 +341,9 @@ export default function AIPricingOptimizer() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <Label className="text-sm">Target Profit Margin</Label>
-                    <span className="text-sm font-medium" data-testid="text-slider-margin">{targetMarginPct}%</span>
+                    <span className="text-sm font-medium" data-testid="text-slider-margin">
+                      {targetMarginPct}%
+                    </span>
                   </div>
                   <Slider
                     value={[targetMarginPct]}
@@ -328,13 +353,18 @@ export default function AIPricingOptimizer() {
                     step={1}
                     data-testid="slider-target-margin"
                   />
-                  <p className="text-xs text-muted-foreground">Min price margin target for each property</p>
+                  <p className="text-xs text-muted-foreground">
+                    Min price margin target for each property
+                  </p>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <Label className="text-sm">Overhead Adjustment</Label>
-                    <span className="text-sm font-medium" data-testid="text-slider-overhead">{overheadAdjustmentPct > 0 ? "+" : ""}{overheadAdjustmentPct}%</span>
+                    <span className="text-sm font-medium" data-testid="text-slider-overhead">
+                      {overheadAdjustmentPct > 0 ? "+" : ""}
+                      {overheadAdjustmentPct}%
+                    </span>
                   </div>
                   <Slider
                     value={[overheadAdjustmentPct]}
@@ -344,13 +374,18 @@ export default function AIPricingOptimizer() {
                     step={1}
                     data-testid="slider-overhead"
                   />
-                  <p className="text-xs text-muted-foreground">Simulate changes in monthly overhead costs</p>
+                  <p className="text-xs text-muted-foreground">
+                    Simulate changes in monthly overhead costs
+                  </p>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <Label className="text-sm">Labor Rate Adjustment</Label>
-                    <span className="text-sm font-medium" data-testid="text-slider-labor">{laborRateAdjustmentPct > 0 ? "+" : ""}{laborRateAdjustmentPct}%</span>
+                    <span className="text-sm font-medium" data-testid="text-slider-labor">
+                      {laborRateAdjustmentPct > 0 ? "+" : ""}
+                      {laborRateAdjustmentPct}%
+                    </span>
                   </div>
                   <Slider
                     value={[laborRateAdjustmentPct]}
@@ -360,13 +395,17 @@ export default function AIPricingOptimizer() {
                     step={1}
                     data-testid="slider-labor"
                   />
-                  <p className="text-xs text-muted-foreground">Simulate wage increases or efficiency gains</p>
+                  <p className="text-xs text-muted-foreground">
+                    Simulate wage increases or efficiency gains
+                  </p>
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <Label className="text-sm">Travel Cost Factor</Label>
-                    <span className="text-sm font-medium" data-testid="text-slider-travel">{travelCostFactor.toFixed(1)}x</span>
+                    <span className="text-sm font-medium" data-testid="text-slider-travel">
+                      {travelCostFactor.toFixed(1)}x
+                    </span>
                   </div>
                   <Slider
                     value={[travelCostFactor * 10]}
@@ -376,7 +415,9 @@ export default function AIPricingOptimizer() {
                     step={1}
                     data-testid="slider-travel"
                   />
-                  <p className="text-xs text-muted-foreground">Multiply travel costs (gas, wear, etc.)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Multiply travel costs (gas, wear, etc.)
+                  </p>
                 </div>
               </div>
 
@@ -387,9 +428,13 @@ export default function AIPricingOptimizer() {
                 data-testid="button-run-simulation"
               >
                 {simulateMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Running...</>
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Running...
+                  </>
                 ) : (
-                  <><Play className="h-4 w-4" /> Run Simulation</>
+                  <>
+                    <Play className="h-4 w-4" /> Run Simulation
+                  </>
                 )}
               </Button>
             </CardContent>
@@ -400,9 +445,15 @@ export default function AIPricingOptimizer() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card data-testid="card-sim-kpi-revenue">
                   <CardContent className="p-4">
-                    <p className="text-xs font-medium text-muted-foreground">Monthly Revenue Change</p>
-                    <p className={`text-2xl font-bold mt-1 ${simulationResult.summary.monthlyRevenueDeltaCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`} data-testid="text-sim-revenue-delta">
-                      {simulationResult.summary.monthlyRevenueDeltaCents >= 0 ? "+" : ""}{formatDollars(simulationResult.summary.monthlyRevenueDeltaCents)}
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Monthly Revenue Change
+                    </p>
+                    <p
+                      className={`text-2xl font-bold mt-1 ${simulationResult.summary.monthlyRevenueDeltaCents >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+                      data-testid="text-sim-revenue-delta"
+                    >
+                      {simulationResult.summary.monthlyRevenueDeltaCents >= 0 ? "+" : ""}
+                      {formatDollars(simulationResult.summary.monthlyRevenueDeltaCents)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">per month</p>
                   </CardContent>
@@ -412,7 +463,9 @@ export default function AIPricingOptimizer() {
                   <CardContent className="p-4">
                     <p className="text-xs font-medium text-muted-foreground">Avg Margin Change</p>
                     <p className="text-2xl font-bold mt-1" data-testid="text-sim-margin-change">
-                      {simulationResult.summary.averageCurrentMarginPct.toFixed(1)}% <ArrowUpRight className="inline h-4 w-4" /> {simulationResult.summary.averageSimulatedMarginPct.toFixed(1)}%
+                      {simulationResult.summary.averageCurrentMarginPct.toFixed(1)}%{" "}
+                      <ArrowUpRight className="inline h-4 w-4" />{" "}
+                      {simulationResult.summary.averageSimulatedMarginPct.toFixed(1)}%
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">current to simulated</p>
                   </CardContent>
@@ -421,7 +474,9 @@ export default function AIPricingOptimizer() {
                 <Card data-testid="card-sim-kpi-increase">
                   <CardContent className="p-4">
                     <p className="text-xs font-medium text-muted-foreground">Need Price Increase</p>
-                    <p className="text-2xl font-bold mt-1" data-testid="text-sim-increases">{simulationResult.summary.propertiesNeedingIncrease}</p>
+                    <p className="text-2xl font-bold mt-1" data-testid="text-sim-increases">
+                      {simulationResult.summary.propertiesNeedingIncrease}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-0.5">properties</p>
                   </CardContent>
                 </Card>
@@ -429,7 +484,9 @@ export default function AIPricingOptimizer() {
                 <Card data-testid="card-sim-kpi-decrease">
                   <CardContent className="p-4">
                     <p className="text-xs font-medium text-muted-foreground">Could Decrease</p>
-                    <p className="text-2xl font-bold mt-1" data-testid="text-sim-decreases">{simulationResult.summary.propertiesNeedingDecrease}</p>
+                    <p className="text-2xl font-bold mt-1" data-testid="text-sim-decreases">
+                      {simulationResult.summary.propertiesNeedingDecrease}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-0.5">properties</p>
                   </CardContent>
                 </Card>
@@ -437,7 +494,9 @@ export default function AIPricingOptimizer() {
 
               <Card data-testid="card-sim-results">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Simulation Results ({allProperties.length} properties)</CardTitle>
+                  <CardTitle className="text-base">
+                    Simulation Results ({allProperties.length} properties)
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
@@ -455,43 +514,74 @@ export default function AIPricingOptimizer() {
                       <TableBody>
                         {allProperties.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                            <TableCell
+                              colSpan={6}
+                              className="text-center text-muted-foreground py-8"
+                            >
                               No properties to simulate. Add customers with active jobs first.
                             </TableCell>
                           </TableRow>
                         ) : (
                           allProperties.map((p) => {
-                            const changeColor = p.changeCents > 50
-                              ? "text-green-600 dark:text-green-400"
-                              : p.changeCents < -50
-                                ? "text-red-600 dark:text-red-400"
-                                : "text-muted-foreground";
+                            const changeColor =
+                              p.changeCents > 50
+                                ? "text-green-600 dark:text-green-400"
+                                : p.changeCents < -50
+                                  ? "text-red-600 dark:text-red-400"
+                                  : "text-muted-foreground";
                             return (
                               <TableRow key={p.propertyId} data-testid={`row-sim-${p.propertyId}`}>
                                 <TableCell>
                                   <div>
-                                    <span className="font-medium text-sm" data-testid={`text-sim-customer-${p.propertyId}`}>{p.contactName}</span>
-                                    <p className="text-xs text-muted-foreground truncate max-w-52">{p.propertyAddress}</p>
+                                    <span
+                                      className="font-medium text-sm"
+                                      data-testid={`text-sim-customer-${p.propertyId}`}
+                                    >
+                                      {p.contactName}
+                                    </span>
+                                    <p className="text-xs text-muted-foreground truncate max-w-52">
+                                      {p.propertyAddress}
+                                    </p>
                                   </div>
                                 </TableCell>
-                                <TableCell className="text-right font-medium" data-testid={`text-sim-current-${p.propertyId}`}>
+                                <TableCell
+                                  className="text-right font-medium"
+                                  data-testid={`text-sim-current-${p.propertyId}`}
+                                >
                                   {formatDollars(p.currentPriceCents)}
                                 </TableCell>
-                                <TableCell className="text-right font-medium" data-testid={`text-sim-simulated-${p.propertyId}`}>
+                                <TableCell
+                                  className="text-right font-medium"
+                                  data-testid={`text-sim-simulated-${p.propertyId}`}
+                                >
                                   {formatDollars(p.simulatedPriceCents)}
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <span className={`flex items-center justify-end gap-0.5 text-sm ${changeColor}`} data-testid={`text-sim-change-${p.propertyId}`}>
+                                  <span
+                                    className={`flex items-center justify-end gap-0.5 text-sm ${changeColor}`}
+                                    data-testid={`text-sim-change-${p.propertyId}`}
+                                  >
                                     {p.changeCents > 50 && <ArrowUpRight className="h-3.5 w-3.5" />}
-                                    {p.changeCents < -50 && <ArrowDownRight className="h-3.5 w-3.5" />}
-                                    {Math.abs(p.changeCents) <= 50 && <Minus className="h-3.5 w-3.5" />}
-                                    {formatDollars(p.changeCents)} ({p.changePct > 0 ? "+" : ""}{p.changePct.toFixed(1)}%)
+                                    {p.changeCents < -50 && (
+                                      <ArrowDownRight className="h-3.5 w-3.5" />
+                                    )}
+                                    {Math.abs(p.changeCents) <= 50 && (
+                                      <Minus className="h-3.5 w-3.5" />
+                                    )}
+                                    {formatDollars(p.changeCents)} ({p.changePct > 0 ? "+" : ""}
+                                    {p.changePct.toFixed(1)}%)
                                   </span>
                                 </TableCell>
-                                <TableCell className={`text-right ${marginColor(p.currentMarginPct)}`} data-testid={`text-sim-cur-margin-${p.propertyId}`}>
+                                <TableCell
+                                  className={`text-right ${marginColor(p.currentMarginPct)}`}
+                                  data-testid={`text-sim-cur-margin-${p.propertyId}`}
+                                >
                                   {p.currentMarginPct.toFixed(1)}%
                                 </TableCell>
-                                <TableCell className={`text-right ${marginColor(p.projectedMarginPct)}`} data-testid={`text-sim-proj-margin-${p.propertyId}`}>
+                                <TableCell
+                                  className={`text-right ${marginColor(p.projectedMarginPct)}`}
+                                  data-testid={`text-sim-proj-margin-${p.propertyId}`}
+                                >
                                   {p.projectedMarginPct.toFixed(1)}%
                                 </TableCell>
                               </TableRow>
@@ -510,7 +600,10 @@ export default function AIPricingOptimizer() {
             <Card>
               <CardContent className="py-12 text-center">
                 <SlidersHorizontal className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">Adjust the sliders above and click "Run Simulation" to see how pricing changes affect your portfolio.</p>
+                <p className="text-muted-foreground">
+                  Adjust the sliders above and click "Run Simulation" to see how pricing changes
+                  affect your portfolio.
+                </p>
               </CardContent>
             </Card>
           )}
@@ -524,7 +617,8 @@ export default function AIPricingOptimizer() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                See how different price changes affect customer retention and net revenue. The model estimates churn based on price sensitivity curves.
+                See how different price changes affect customer retention and net revenue. The model
+                estimates churn based on price sensitivity curves.
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Select value={elasticityPropertyId} onValueChange={setElasticityPropertyId}>
@@ -547,9 +641,13 @@ export default function AIPricingOptimizer() {
                   data-testid="button-run-elasticity"
                 >
                   {elasticityMutation.isPending ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> Analyzing...</>
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Analyzing...
+                    </>
                   ) : (
-                    <><BarChart3 className="h-4 w-4" /> Run Elasticity Analysis</>
+                    <>
+                      <BarChart3 className="h-4 w-4" /> Run Elasticity Analysis
+                    </>
                   )}
                 </Button>
               </div>
@@ -561,7 +659,9 @@ export default function AIPricingOptimizer() {
               <Card data-testid="card-elasticity-label">
                 <CardContent className="p-4">
                   <p className="text-sm font-medium">{elasticityResult.propertyLabel}</p>
-                  <p className="text-xs text-muted-foreground">{elasticityResult.points[0]?.totalCustomers ?? 0} properties analyzed</p>
+                  <p className="text-xs text-muted-foreground">
+                    {elasticityResult.points[0]?.totalCustomers ?? 0} properties analyzed
+                  </p>
                 </CardContent>
               </Card>
 
@@ -594,30 +694,65 @@ export default function AIPricingOptimizer() {
                             >
                               <TableCell>
                                 <div className="flex items-center gap-2">
-                                  <span className={`font-medium ${pt.priceChangePct > 0 ? "text-green-600 dark:text-green-400" : pt.priceChangePct < 0 ? "text-red-600 dark:text-red-400" : ""}`}>
-                                    {pt.priceChangePct > 0 ? "+" : ""}{pt.priceChangePct}%
+                                  <span
+                                    className={`font-medium ${pt.priceChangePct > 0 ? "text-green-600 dark:text-green-400" : pt.priceChangePct < 0 ? "text-red-600 dark:text-red-400" : ""}`}
+                                  >
+                                    {pt.priceChangePct > 0 ? "+" : ""}
+                                    {pt.priceChangePct}%
                                   </span>
-                                  {isSweetSpot && <Badge variant="outline" className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"><Star className="h-3 w-3 mr-0.5 inline" />Best</Badge>}
-                                  {isBaseline && <Badge variant="outline" className="text-xs">Current</Badge>}
+                                  {isSweetSpot && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                                    >
+                                      <Star className="h-3 w-3 mr-0.5 inline" />
+                                      Best
+                                    </Badge>
+                                  )}
+                                  {isBaseline && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Current
+                                    </Badge>
+                                  )}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-right" data-testid={`text-el-avg-price-${pt.priceChangePct}`}>
+                              <TableCell
+                                className="text-right"
+                                data-testid={`text-el-avg-price-${pt.priceChangePct}`}
+                              >
                                 {formatDollars(pt.avgNewPriceCents)}
                               </TableCell>
-                              <TableCell className="text-right" data-testid={`text-el-churn-${pt.priceChangePct}`}>
-                                <span className={pt.estimatedChurnPct > 5 ? "text-red-600 dark:text-red-400" : ""}>
+                              <TableCell
+                                className="text-right"
+                                data-testid={`text-el-churn-${pt.priceChangePct}`}
+                              >
+                                <span
+                                  className={
+                                    pt.estimatedChurnPct > 5 ? "text-red-600 dark:text-red-400" : ""
+                                  }
+                                >
                                   {pt.estimatedChurnPct.toFixed(1)}%
                                 </span>
                               </TableCell>
-                              <TableCell className="text-right" data-testid={`text-el-retained-${pt.priceChangePct}`}>
+                              <TableCell
+                                className="text-right"
+                                data-testid={`text-el-retained-${pt.priceChangePct}`}
+                              >
                                 {pt.retainedCustomers} / {pt.totalCustomers}
                               </TableCell>
-                              <TableCell className="text-right font-medium" data-testid={`text-el-revenue-${pt.priceChangePct}`}>
+                              <TableCell
+                                className="text-right font-medium"
+                                data-testid={`text-el-revenue-${pt.priceChangePct}`}
+                              >
                                 {formatDollars(pt.adjustedMonthlyRevenueCents)}
                               </TableCell>
                               <TableCell className="text-right">
-                                <span className={`font-medium ${pt.netRevenueDeltaCents > 0 ? "text-green-600 dark:text-green-400" : pt.netRevenueDeltaCents < 0 ? "text-red-600 dark:text-red-400" : ""}`} data-testid={`text-el-delta-${pt.priceChangePct}`}>
-                                  {pt.netRevenueDeltaCents > 0 ? "+" : ""}{formatDollars(pt.netRevenueDeltaCents)}
+                                <span
+                                  className={`font-medium ${pt.netRevenueDeltaCents > 0 ? "text-green-600 dark:text-green-400" : pt.netRevenueDeltaCents < 0 ? "text-red-600 dark:text-red-400" : ""}`}
+                                  data-testid={`text-el-delta-${pt.priceChangePct}`}
+                                >
+                                  {pt.netRevenueDeltaCents > 0 ? "+" : ""}
+                                  {formatDollars(pt.netRevenueDeltaCents)}
                                 </span>
                               </TableCell>
                             </TableRow>
@@ -635,7 +770,10 @@ export default function AIPricingOptimizer() {
             <Card>
               <CardContent className="py-12 text-center">
                 <BarChart3 className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">Select a property (or all) and click "Run Elasticity Analysis" to see how price changes affect retention and revenue.</p>
+                <p className="text-muted-foreground">
+                  Select a property (or all) and click "Run Elasticity Analysis" to see how price
+                  changes affect retention and revenue.
+                </p>
               </CardContent>
             </Card>
           )}
@@ -731,11 +869,18 @@ export default function AIPricingOptimizer() {
                     </div>
                     <Button
                       onClick={() => addCompetitorMutation.mutate()}
-                      disabled={addCompetitorMutation.isPending || !newCompName || !newCompPrice || !newCompZip}
+                      disabled={
+                        addCompetitorMutation.isPending ||
+                        !newCompName ||
+                        !newCompPrice ||
+                        !newCompZip
+                      }
                       className="w-full"
                       data-testid="button-save-competitor"
                     >
-                      {addCompetitorMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      {addCompetitorMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : null}
                       Save Competitor
                     </Button>
                   </div>
@@ -759,13 +904,25 @@ export default function AIPricingOptimizer() {
                     <TableBody>
                       {competitors.map((c) => (
                         <TableRow key={c.id} data-testid={`row-competitor-${c.id}`}>
-                          <TableCell className="font-medium" data-testid={`text-comp-name-${c.id}`}>{c.competitorName}</TableCell>
-                          <TableCell data-testid={`text-comp-zip-${c.id}`}>
-                            <span className="flex items-center gap-1"><MapPin className="h-3 w-3 text-muted-foreground" />{c.zipCode}</span>
+                          <TableCell className="font-medium" data-testid={`text-comp-name-${c.id}`}>
+                            {c.competitorName}
                           </TableCell>
-                          <TableCell className="text-right font-medium" data-testid={`text-comp-price-${c.id}`}>{formatDollars(c.priceCents)}</TableCell>
+                          <TableCell data-testid={`text-comp-zip-${c.id}`}>
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-muted-foreground" />
+                              {c.zipCode}
+                            </span>
+                          </TableCell>
+                          <TableCell
+                            className="text-right font-medium"
+                            data-testid={`text-comp-price-${c.id}`}
+                          >
+                            {formatDollars(c.priceCents)}
+                          </TableCell>
                           <TableCell className="capitalize">{c.frequency}</TableCell>
-                          <TableCell>{c.yardSizeCategory} / {c.dogCountRange} dogs</TableCell>
+                          <TableCell>
+                            {c.yardSizeCategory} / {c.dogCountRange} dogs
+                          </TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
@@ -784,7 +941,8 @@ export default function AIPricingOptimizer() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground py-4 text-center">
-                  No competitor pricing data yet. Click "Add Competitor" to enter local competitor rates.
+                  No competitor pricing data yet. Click "Add Competitor" to enter local competitor
+                  rates.
                 </p>
               )}
             </CardContent>
@@ -801,13 +959,17 @@ export default function AIPricingOptimizer() {
                   <SelectContent>
                     <SelectItem value="all">All Zip Codes</SelectItem>
                     {(zipCodes ?? []).map((z) => (
-                      <SelectItem key={z} value={z}>{z}</SelectItem>
+                      <SelectItem key={z} value={z}>
+                        {z}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <Button
                   onClick={() => competitorAnalysisMutation.mutate()}
-                  disabled={competitorAnalysisMutation.isPending || (competitors?.length ?? 0) === 0}
+                  disabled={
+                    competitorAnalysisMutation.isPending || (competitors?.length ?? 0) === 0
+                  }
                   className="gap-1.5"
                   data-testid="button-run-comp-analysis"
                 >
@@ -830,12 +992,16 @@ export default function AIPricingOptimizer() {
                     </div>
                     <div className="text-sm">
                       <span className="text-muted-foreground">Your avg: </span>
-                      <span className="font-medium" data-testid="text-overall-your-avg">{formatDollars(compAnalysisResult.overallYourAvgCents)}</span>
+                      <span className="font-medium" data-testid="text-overall-your-avg">
+                        {formatDollars(compAnalysisResult.overallYourAvgCents)}
+                      </span>
                       <span className="text-muted-foreground"> / wk</span>
                     </div>
                     <div className="text-sm">
                       <span className="text-muted-foreground">Market avg: </span>
-                      <span className="font-medium" data-testid="text-overall-market-avg">{formatDollars(compAnalysisResult.overallMarketAvgCents)}</span>
+                      <span className="font-medium" data-testid="text-overall-market-avg">
+                        {formatDollars(compAnalysisResult.overallMarketAvgCents)}
+                      </span>
                       <span className="text-muted-foreground"> / wk</span>
                     </div>
                   </div>
@@ -856,14 +1022,30 @@ export default function AIPricingOptimizer() {
                         <TableBody>
                           {compAnalysisResult.zipCodes.map((z) => (
                             <TableRow key={z.zipCode} data-testid={`row-comp-zip-${z.zipCode}`}>
-                              <TableCell className="font-medium" data-testid={`text-comp-analysis-zip-${z.zipCode}`}>
-                                <span className="flex items-center gap-1"><MapPin className="h-3 w-3 text-muted-foreground" />{z.zipCode}</span>
+                              <TableCell
+                                className="font-medium"
+                                data-testid={`text-comp-analysis-zip-${z.zipCode}`}
+                              >
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="h-3 w-3 text-muted-foreground" />
+                                  {z.zipCode}
+                                </span>
                               </TableCell>
-                              <TableCell className="text-right font-medium" data-testid={`text-comp-your-avg-${z.zipCode}`}>
-                                {z.yourAvgPriceCents > 0 ? formatDollars(z.yourAvgPriceCents) : "--"}
+                              <TableCell
+                                className="text-right font-medium"
+                                data-testid={`text-comp-your-avg-${z.zipCode}`}
+                              >
+                                {z.yourAvgPriceCents > 0
+                                  ? formatDollars(z.yourAvgPriceCents)
+                                  : "--"}
                               </TableCell>
-                              <TableCell className="text-right" data-testid={`text-comp-market-avg-${z.zipCode}`}>
-                                {z.marketAvgPriceCents > 0 ? formatDollars(z.marketAvgPriceCents) : "--"}
+                              <TableCell
+                                className="text-right"
+                                data-testid={`text-comp-market-avg-${z.zipCode}`}
+                              >
+                                {z.marketAvgPriceCents > 0
+                                  ? formatDollars(z.marketAvgPriceCents)
+                                  : "--"}
                               </TableCell>
                               <TableCell className="text-right">{z.yourPropertyCount}</TableCell>
                               <TableCell className="text-right">{z.competitorCount}</TableCell>
@@ -881,7 +1063,7 @@ export default function AIPricingOptimizer() {
                   <p className="text-muted-foreground text-sm">
                     {(competitors?.length ?? 0) === 0
                       ? "Add competitor pricing data above, then run the analysis to see how your pricing compares to the local market."
-                      : "Click \"Analyze\" to compare your pricing against competitors in your service areas."}
+                      : 'Click "Analyze" to compare your pricing against competitors in your service areas.'}
                   </p>
                 </div>
               )}

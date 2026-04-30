@@ -28,14 +28,16 @@ export async function runAutoVisits() {
       companiesProcessed++;
 
       if (created > 0) {
-        storage.createNotification({
-          companyId: company.id,
-          type: "general",
-          title: "Visits Auto-Generated",
-          message: `${created} visit${created !== 1 ? "s" : ""} created for the next 6 months (${startStr} to ${endStr}).`,
-          isRead: false,
-          linkUrl: "/scheduling",
-        }).catch(console.error);
+        storage
+          .createNotification({
+            companyId: company.id,
+            type: "general",
+            title: "Visits Auto-Generated",
+            message: `${created} visit${created !== 1 ? "s" : ""} created for the next 6 months (${startStr} to ${endStr}).`,
+            isRead: false,
+            linkUrl: "/scheduling",
+          })
+          .catch(console.error);
       }
     } catch (err) {
       errors++;
@@ -43,24 +45,39 @@ export async function runAutoVisits() {
     }
   }
 
-  console.log(`[auto-visits] Completed: ${companiesProcessed} companies, ${totalCreated} visits created, ${errors} errors`);
+  console.log(
+    `[auto-visits] Completed: ${companiesProcessed} companies, ${totalCreated} visits created, ${errors} errors`
+  );
   return { companiesProcessed, totalCreated, errors };
 }
 
-export async function generateVisitsForPlans(companyId: string, planIds: string[], startDate: string, endDate: string): Promise<number> {
+export async function generateVisitsForPlans(
+  companyId: string,
+  planIds: string[],
+  startDate: string,
+  endDate: string
+): Promise<number> {
   const plans = await storage.getServicePlans(companyId, { isActive: true });
-  const matching = plans.filter(p => planIds.includes(p.id) && !p.pausedAt);
+  const matching = plans.filter((p) => planIds.includes(p.id) && !p.pausedAt);
   if (matching.length === 0) return 0;
   return generateVisitsFromPlans(companyId, matching, startDate, endDate, true);
 }
 
-export async function generateVisitsForCompany(companyId: string, startDate: string, endDate: string): Promise<number> {
+export async function generateVisitsForCompany(
+  companyId: string,
+  startDate: string,
+  endDate: string
+): Promise<number> {
   const plans = await storage.getServicePlans(companyId, { isActive: true });
-  const activePlans = plans.filter(p => !p.pausedAt);
+  const activePlans = plans.filter((p) => !p.pausedAt);
   return generateVisitsFromPlans(companyId, activePlans, startDate, endDate, false);
 }
 
-function isDateInVacationHold(dateStr: string, holdKey: string, holdsByKey: Map<string, VacationHold[]>): boolean {
+function isDateInVacationHold(
+  dateStr: string,
+  holdKey: string,
+  holdsByKey: Map<string, VacationHold[]>
+): boolean {
   const holds = holdsByKey.get(holdKey);
   if (!holds || holds.length === 0) return false;
   for (const hold of holds) {
@@ -69,7 +86,13 @@ function isDateInVacationHold(dateStr: string, holdKey: string, holdsByKey: Map<
   return false;
 }
 
-async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], startDate: string, endDate: string, ignoreCancelled: boolean): Promise<number> {
+async function generateVisitsFromPlans(
+  companyId: string,
+  plans: ServicePlan[],
+  startDate: string,
+  endDate: string,
+  ignoreCancelled: boolean
+): Promise<number> {
   const existingVisits = await storage.getVisitsForDateRange(companyId, startDate, endDate);
   const existingKeys = new Set(
     existingVisits
@@ -77,10 +100,8 @@ async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], 
       .map((v) => `${v.servicePlanId}_${v.scheduledDate}`)
   );
 
-  const planIds = plans.map(p => p.id);
-  const allHolds = planIds.length > 0
-    ? await storage.getVacationHoldsForPlans(planIds)
-    : [];
+  const planIds = plans.map((p) => p.id);
+  const allHolds = planIds.length > 0 ? await storage.getVacationHoldsForPlans(planIds) : [];
   const holdsByPlan = new Map<string, VacationHold[]>();
   for (const hold of allHolds) {
     const existing = holdsByPlan.get(hold.servicePlanId) || [];
@@ -89,8 +110,13 @@ async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], 
   }
 
   const dayMap: Record<string, number> = {
-    monday: 1, tuesday: 2, wednesday: 3, thursday: 4,
-    friday: 5, saturday: 6, sunday: 0,
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6,
+    sunday: 0,
   };
 
   let created = 0;
@@ -111,10 +137,18 @@ async function generateVisitsFromPlans(companyId: string, plans: ServicePlan[], 
     if (!computedEndDate && plan.endsAfterCount && plan.endsAfterUnit && plan.startDate) {
       const base = new Date(plan.startDate + "T00:00:00Z");
       switch (plan.endsAfterUnit) {
-        case "days": base.setUTCDate(base.getUTCDate() + plan.endsAfterCount); break;
-        case "weeks": base.setUTCDate(base.getUTCDate() + plan.endsAfterCount * 7); break;
-        case "months": base.setUTCMonth(base.getUTCMonth() + plan.endsAfterCount); break;
-        case "years": base.setUTCFullYear(base.getUTCFullYear() + plan.endsAfterCount); break;
+        case "days":
+          base.setUTCDate(base.getUTCDate() + plan.endsAfterCount);
+          break;
+        case "weeks":
+          base.setUTCDate(base.getUTCDate() + plan.endsAfterCount * 7);
+          break;
+        case "months":
+          base.setUTCMonth(base.getUTCMonth() + plan.endsAfterCount);
+          break;
+        case "years":
+          base.setUTCFullYear(base.getUTCFullYear() + plan.endsAfterCount);
+          break;
       }
       computedEndDate = base;
     }

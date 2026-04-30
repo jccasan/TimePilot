@@ -5,50 +5,280 @@ const TIMEZONE = "America/Los_Angeles";
 const TOTAL_CONTACTS = 250;
 
 const FIRST_NAMES = [
-  "James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda",
-  "William", "Barbara", "David", "Elizabeth", "Richard", "Susan", "Joseph", "Jessica",
-  "Thomas", "Sarah", "Charles", "Karen", "Christopher", "Lisa", "Daniel", "Nancy",
-  "Matthew", "Betty", "Anthony", "Margaret", "Mark", "Sandra", "Donald", "Ashley",
-  "Steven", "Dorothy", "Paul", "Kimberly", "Andrew", "Emily", "Joshua", "Donna",
-  "Kenneth", "Michelle", "Kevin", "Carol", "Brian", "Amanda", "George", "Melissa",
-  "Timothy", "Deborah", "Ronald", "Stephanie", "Edward", "Rebecca", "Jason", "Sharon",
-  "Jeffrey", "Laura", "Ryan", "Cynthia", "Jacob", "Kathleen", "Gary", "Amy",
-  "Nicholas", "Angela", "Eric", "Shirley", "Jonathan", "Anna", "Stephen", "Brenda",
-  "Larry", "Pamela", "Justin", "Emma", "Scott", "Nicole", "Brandon", "Helen",
-  "Benjamin", "Samantha", "Samuel", "Katherine", "Raymond", "Christine", "Gregory", "Debra",
-  "Frank", "Rachel", "Alexander", "Carolyn", "Patrick", "Janet", "Jack", "Catherine",
-  "Dennis", "Maria", "Jerry", "Heather", "Tyler", "Diane", "Aaron", "Julie",
+  "James",
+  "Mary",
+  "John",
+  "Patricia",
+  "Robert",
+  "Jennifer",
+  "Michael",
+  "Linda",
+  "William",
+  "Barbara",
+  "David",
+  "Elizabeth",
+  "Richard",
+  "Susan",
+  "Joseph",
+  "Jessica",
+  "Thomas",
+  "Sarah",
+  "Charles",
+  "Karen",
+  "Christopher",
+  "Lisa",
+  "Daniel",
+  "Nancy",
+  "Matthew",
+  "Betty",
+  "Anthony",
+  "Margaret",
+  "Mark",
+  "Sandra",
+  "Donald",
+  "Ashley",
+  "Steven",
+  "Dorothy",
+  "Paul",
+  "Kimberly",
+  "Andrew",
+  "Emily",
+  "Joshua",
+  "Donna",
+  "Kenneth",
+  "Michelle",
+  "Kevin",
+  "Carol",
+  "Brian",
+  "Amanda",
+  "George",
+  "Melissa",
+  "Timothy",
+  "Deborah",
+  "Ronald",
+  "Stephanie",
+  "Edward",
+  "Rebecca",
+  "Jason",
+  "Sharon",
+  "Jeffrey",
+  "Laura",
+  "Ryan",
+  "Cynthia",
+  "Jacob",
+  "Kathleen",
+  "Gary",
+  "Amy",
+  "Nicholas",
+  "Angela",
+  "Eric",
+  "Shirley",
+  "Jonathan",
+  "Anna",
+  "Stephen",
+  "Brenda",
+  "Larry",
+  "Pamela",
+  "Justin",
+  "Emma",
+  "Scott",
+  "Nicole",
+  "Brandon",
+  "Helen",
+  "Benjamin",
+  "Samantha",
+  "Samuel",
+  "Katherine",
+  "Raymond",
+  "Christine",
+  "Gregory",
+  "Debra",
+  "Frank",
+  "Rachel",
+  "Alexander",
+  "Carolyn",
+  "Patrick",
+  "Janet",
+  "Jack",
+  "Catherine",
+  "Dennis",
+  "Maria",
+  "Jerry",
+  "Heather",
+  "Tyler",
+  "Diane",
+  "Aaron",
+  "Julie",
 ];
 
 const LAST_NAMES = [
-  "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis",
-  "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas",
-  "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson", "White",
-  "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson", "Walker", "Young",
-  "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores",
-  "Green", "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell",
-  "Carter", "Roberts", "Gomez", "Phillips", "Evans", "Turner", "Diaz", "Parker",
-  "Cruz", "Edwards", "Collins", "Reyes", "Stewart", "Morris", "Morales", "Murphy",
-  "Cook", "Rogers", "Gutierrez", "Ortiz", "Morgan", "Cooper", "Peterson", "Bailey",
-  "Reed", "Kelly", "Howard", "Ramos", "Kim", "Cox", "Ward", "Richardson",
-  "Watson", "Brooks", "Chavez", "Wood", "James", "Bennett", "Gray", "Mendoza",
-  "Ruiz", "Hughes", "Price", "Alvarez", "Castillo", "Sanders", "Patel", "Myers",
-  "Long", "Ross", "Foster", "Jimenez", "Powell", "Jenkins", "Perry", "Russell",
+  "Smith",
+  "Johnson",
+  "Williams",
+  "Brown",
+  "Jones",
+  "Garcia",
+  "Miller",
+  "Davis",
+  "Rodriguez",
+  "Martinez",
+  "Hernandez",
+  "Lopez",
+  "Gonzalez",
+  "Wilson",
+  "Anderson",
+  "Thomas",
+  "Taylor",
+  "Moore",
+  "Jackson",
+  "Martin",
+  "Lee",
+  "Perez",
+  "Thompson",
+  "White",
+  "Harris",
+  "Sanchez",
+  "Clark",
+  "Ramirez",
+  "Lewis",
+  "Robinson",
+  "Walker",
+  "Young",
+  "Allen",
+  "King",
+  "Wright",
+  "Scott",
+  "Torres",
+  "Nguyen",
+  "Hill",
+  "Flores",
+  "Green",
+  "Adams",
+  "Nelson",
+  "Baker",
+  "Hall",
+  "Rivera",
+  "Campbell",
+  "Mitchell",
+  "Carter",
+  "Roberts",
+  "Gomez",
+  "Phillips",
+  "Evans",
+  "Turner",
+  "Diaz",
+  "Parker",
+  "Cruz",
+  "Edwards",
+  "Collins",
+  "Reyes",
+  "Stewart",
+  "Morris",
+  "Morales",
+  "Murphy",
+  "Cook",
+  "Rogers",
+  "Gutierrez",
+  "Ortiz",
+  "Morgan",
+  "Cooper",
+  "Peterson",
+  "Bailey",
+  "Reed",
+  "Kelly",
+  "Howard",
+  "Ramos",
+  "Kim",
+  "Cox",
+  "Ward",
+  "Richardson",
+  "Watson",
+  "Brooks",
+  "Chavez",
+  "Wood",
+  "James",
+  "Bennett",
+  "Gray",
+  "Mendoza",
+  "Ruiz",
+  "Hughes",
+  "Price",
+  "Alvarez",
+  "Castillo",
+  "Sanders",
+  "Patel",
+  "Myers",
+  "Long",
+  "Ross",
+  "Foster",
+  "Jimenez",
+  "Powell",
+  "Jenkins",
+  "Perry",
+  "Russell",
 ];
 
 const BELLINGHAM_STREETS = [
-  "Meridian St", "Lakeway Dr", "Alabama St", "King St", "Cornwall Ave",
-  "Railroad Ave", "Ellis St", "Holly St", "Magnolia Ave", "Douglas Ave",
-  "Sunset Dr", "Lincoln St", "Grant St", "Monroe St", "State St",
-  "Bay St", "Maple St", "Oak St", "Cedar St", "Pine St",
-  "Birch St", "Elm St", "Walnut Ave", "Chestnut Ave", "Alder St",
-  "Iowa St", "Kentucky St", "Virginia St", "Michigan St", "Indiana St",
-  "Ohio St", "Wisconsin St", "Missouri St", "Illinois St", "Texas St",
-  "Cable St", "Bill McDonald Pkwy", "James St", "Champion St", "Stuart Rd",
-  "Donovan Ave", "Connelly Ave", "Yew St", "Fir St", "Spruce St",
-  "Garden St", "Forest St", "Valley Dr", "Ridge Dr", "Hill Dr",
-  "Park Ave", "Lake Dr", "Shore Dr", "Bay Dr", "Crest Dr",
-  "View Dr", "Summit Dr", "Meadow Ln", "Woodland Dr", "Hillcrest Dr",
+  "Meridian St",
+  "Lakeway Dr",
+  "Alabama St",
+  "King St",
+  "Cornwall Ave",
+  "Railroad Ave",
+  "Ellis St",
+  "Holly St",
+  "Magnolia Ave",
+  "Douglas Ave",
+  "Sunset Dr",
+  "Lincoln St",
+  "Grant St",
+  "Monroe St",
+  "State St",
+  "Bay St",
+  "Maple St",
+  "Oak St",
+  "Cedar St",
+  "Pine St",
+  "Birch St",
+  "Elm St",
+  "Walnut Ave",
+  "Chestnut Ave",
+  "Alder St",
+  "Iowa St",
+  "Kentucky St",
+  "Virginia St",
+  "Michigan St",
+  "Indiana St",
+  "Ohio St",
+  "Wisconsin St",
+  "Missouri St",
+  "Illinois St",
+  "Texas St",
+  "Cable St",
+  "Bill McDonald Pkwy",
+  "James St",
+  "Champion St",
+  "Stuart Rd",
+  "Donovan Ave",
+  "Connelly Ave",
+  "Yew St",
+  "Fir St",
+  "Spruce St",
+  "Garden St",
+  "Forest St",
+  "Valley Dr",
+  "Ridge Dr",
+  "Hill Dr",
+  "Park Ave",
+  "Lake Dr",
+  "Shore Dr",
+  "Bay Dr",
+  "Crest Dr",
+  "View Dr",
+  "Summit Dr",
+  "Meadow Ln",
+  "Woodland Dr",
+  "Hillcrest Dr",
 ];
 
 const ZIP_CODES = ["98225", "98226", "98229"];
@@ -56,9 +286,16 @@ const ZIP_WEIGHTS = [0.4, 0.35, 0.25];
 const YARD_SIZES = ["small", "medium", "large"];
 const YARD_DIFFICULTIES = ["flat", "moderate", "difficult"];
 const FREQUENCIES = ["weekly", "biweekly", "monthly"];
-const FREQ_WEIGHTS = [0.50, 0.35, 0.15];
+const FREQ_WEIGHTS = [0.5, 0.35, 0.15];
 const DAYS_OF_WEEK = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-const EMAIL_DOMAINS = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com", "comcast.net"];
+const EMAIL_DOMAINS = [
+  "gmail.com",
+  "yahoo.com",
+  "hotmail.com",
+  "outlook.com",
+  "icloud.com",
+  "comcast.net",
+];
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -97,8 +334,8 @@ function randomEmail(firstName: string, lastName: string, index: number): string
 
 function randomContactStatus(): string {
   const r = Math.random();
-  if (r < 0.80) return "active";
-  if (r < 0.90) return "paused";
+  if (r < 0.8) return "active";
+  if (r < 0.9) return "paused";
   return "cancelled";
 }
 
@@ -132,10 +369,9 @@ async function main() {
   console.log("Starting Poop Scoop seed script...");
 
   // Find or create the company
-  let companyRes = await pool.query(
-    `SELECT id, timezone FROM companies WHERE name = $1 LIMIT 1`,
-    [COMPANY_NAME]
-  );
+  let companyRes = await pool.query(`SELECT id, timezone FROM companies WHERE name = $1 LIMIT 1`, [
+    COMPANY_NAME,
+  ]);
 
   let companyId: string;
 
@@ -153,19 +389,15 @@ async function main() {
     companyId = companyRes.rows[0].id;
     console.log(`Found existing company with id: ${companyId}`);
     if (companyRes.rows[0].timezone !== TIMEZONE) {
-      await pool.query(
-        `UPDATE companies SET timezone = $1 WHERE id = $2`,
-        [TIMEZONE, companyId]
-      );
+      await pool.query(`UPDATE companies SET timezone = $1 WHERE id = $2`, [TIMEZONE, companyId]);
       console.log("Updated company timezone to America/Los_Angeles");
     }
   }
 
   // Idempotency check
-  const countRes = await pool.query(
-    `SELECT COUNT(*) AS cnt FROM contacts WHERE company_id = $1`,
-    [companyId]
-  );
+  const countRes = await pool.query(`SELECT COUNT(*) AS cnt FROM contacts WHERE company_id = $1`, [
+    companyId,
+  ]);
   const existingCount = parseInt(countRes.rows[0].cnt, 10);
 
   if (existingCount > 10) {
@@ -200,9 +432,20 @@ async function main() {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING id`,
       [
-        companyId, firstName, lastName, email, phone, streetAddress,
-        "Bellingham", "WA", zipCode,
-        numberOfDogs, yardSize, frequency, dayOfWeek, status,
+        companyId,
+        firstName,
+        lastName,
+        email,
+        phone,
+        streetAddress,
+        "Bellingham",
+        "WA",
+        zipCode,
+        numberOfDogs,
+        yardSize,
+        frequency,
+        dayOfWeek,
+        status,
       ]
     );
     const contactId = contactRes.rows[0].id;
@@ -215,9 +458,15 @@ async function main() {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        RETURNING id`,
       [
-        companyId, contactId, streetAddress,
-        "Bellingham", "WA", zipCode,
-        numberOfDogs, yardSize, yardDifficulty,
+        companyId,
+        contactId,
+        streetAddress,
+        "Bellingham",
+        "WA",
+        zipCode,
+        numberOfDogs,
+        yardSize,
+        yardDifficulty,
       ]
     );
     const propertyId = propertyRes.rows[0].id;
@@ -229,8 +478,16 @@ async function main() {
           is_active, job_status, start_date, job_type)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [
-        companyId, contactId, propertyId, frequency, dayOfWeek, pricePerVisit,
-        true, "active", startDate, "recurring",
+        companyId,
+        contactId,
+        propertyId,
+        frequency,
+        dayOfWeek,
+        pricePerVisit,
+        true,
+        "active",
+        startDate,
+        "recurring",
       ]
     );
 
@@ -252,7 +509,9 @@ async function main() {
     [companyId]
   );
   const counts = finalCounts.rows[0];
-  console.log(`Verification — contacts: ${counts.contacts}, properties: ${counts.properties}, service_plans: ${counts.service_plans}`);
+  console.log(
+    `Verification — contacts: ${counts.contacts}, properties: ${counts.properties}, service_plans: ${counts.service_plans}`
+  );
 
   await pool.end();
   process.exit(0);

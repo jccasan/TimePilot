@@ -30,11 +30,7 @@ const MSG_MAX_FILE_SIZE = 600 * 1024;
  * - Always exports as JPEG at `quality` (default 0.82)
  * - Returns the original file if any step fails (never throws)
  */
-export async function compressImage(
-  file: File,
-  maxPx = 1920,
-  quality = 0.82,
-): Promise<File> {
+export async function compressImage(file: File, maxPx = 1920, quality = 0.82): Promise<File> {
   if (!file.type.startsWith("image/")) return file;
 
   return new Promise<File>((resolve) => {
@@ -56,18 +52,24 @@ export async function compressImage(
       canvas.height = height;
 
       const ctx = canvas.getContext("2d");
-      if (!ctx) { resolve(file); return; }
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
 
       ctx.drawImage(img, 0, 0, width, height);
 
       canvas.toBlob(
         (blob) => {
-          if (!blob) { resolve(file); return; }
+          if (!blob) {
+            resolve(file);
+            return;
+          }
           const baseName = file.name.replace(/\.[^.]+$/, "");
           resolve(new File([blob], `${baseName}.jpg`, { type: "image/jpeg" }));
         },
         "image/jpeg",
-        quality,
+        quality
       );
     };
 
@@ -99,7 +101,10 @@ export async function compressMessageAttachment(file: File): Promise<File> {
     const url = URL.createObjectURL(file);
     const el = new Image();
     el.onload = () => resolve(el);
-    el.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Failed to load image")); };
+    el.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Failed to load image"));
+    };
     el.src = url;
   });
 
@@ -126,7 +131,7 @@ export async function compressMessageAttachment(file: File): Promise<File> {
     canvas.toBlob(
       (b) => (b ? resolve(b) : reject(new Error("Compression failed"))),
       outputType,
-      quality,
+      quality
     );
   });
 

@@ -7,7 +7,12 @@ const EMPTY_QUERY_KEYS: unknown[][] = [];
 
 type PlaybackSpeed = "slow" | "normal" | "fast" | "turbo";
 const SPEED_MS: Record<PlaybackSpeed, number> = { slow: 3000, normal: 1500, fast: 600, turbo: 150 };
-const SPEED_LABELS: Record<PlaybackSpeed, string> = { slow: "1×", normal: "2×", fast: "5×", turbo: "10×" };
+const SPEED_LABELS: Record<PlaybackSpeed, string> = {
+  slow: "1×",
+  normal: "2×",
+  fast: "5×",
+  turbo: "10×",
+};
 
 export interface PlaybackVisit {
   id: string;
@@ -25,7 +30,7 @@ export function LiveRoutePlayback({
   extraQueryKeys?: unknown[][];
 }) {
   const scheduledVisits = useMemo(
-    () => visits.filter(v => v.status === "scheduled" || v.status === "in_progress"),
+    () => visits.filter((v) => v.status === "scheduled" || v.status === "in_progress"),
     [visits]
   );
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -41,27 +46,30 @@ export function LiveRoutePlayback({
     }
   };
 
-  const advanceStop = useCallback(async (idx: number) => {
-    const visit = scheduledVisits[idx];
-    if (!visit) return;
-    try {
-      await apiRequest("PATCH", `/api/visits/${visit.id}`, {
-        status: "completed",
-        completedAt: new Date().toISOString(),
-        startedAt: visit.startedAt ?? new Date().toISOString(),
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/visits/range"] });
-      for (const key of extraQueryKeys) {
-        queryClient.invalidateQueries({ queryKey: key });
-      }
-    } catch (_) {}
-  }, [scheduledVisits, extraQueryKeys]);
+  const advanceStop = useCallback(
+    async (idx: number) => {
+      const visit = scheduledVisits[idx];
+      if (!visit) return;
+      try {
+        await apiRequest("PATCH", `/api/visits/${visit.id}`, {
+          status: "completed",
+          completedAt: new Date().toISOString(),
+          startedAt: visit.startedAt ?? new Date().toISOString(),
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/visits/range"] });
+        for (const key of extraQueryKeys) {
+          queryClient.invalidateQueries({ queryKey: key });
+        }
+      } catch (_) {}
+    },
+    [scheduledVisits, extraQueryKeys]
+  );
 
   useEffect(() => {
     if (!isPlaying || done) return;
     stopInterval();
     intervalRef.current = setInterval(async () => {
-      setCurrentIdx(prev => {
+      setCurrentIdx((prev) => {
         const next = prev;
         advanceStop(next).then(() => {});
         if (next + 1 >= scheduledVisits.length) {
@@ -100,7 +108,11 @@ export function LiveRoutePlayback({
           <Play className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Live Route Playback</span>
         </div>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" data-testid="button-close-playback">
+        <button
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="button-close-playback"
+        >
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -108,7 +120,9 @@ export function LiveRoutePlayback({
         <div className="space-y-1.5">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Progress</span>
-            <span data-testid="text-playback-progress">{completed} / {total} stops</span>
+            <span data-testid="text-playback-progress">
+              {completed} / {total} stops
+            </span>
           </div>
           <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
             <div
@@ -123,7 +137,7 @@ export function LiveRoutePlayback({
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground whitespace-nowrap">Speed:</span>
           <div className="flex gap-1 flex-1">
-            {(["slow", "normal", "fast", "turbo"] as PlaybackSpeed[]).map(s => (
+            {(["slow", "normal", "fast", "turbo"] as PlaybackSpeed[]).map((s) => (
               <button
                 key={s}
                 onClick={() => setSpeed(s)}
@@ -141,14 +155,20 @@ export function LiveRoutePlayback({
             size="sm"
             className="flex-1"
             variant={isPlaying ? "outline" : "default"}
-            onClick={() => setIsPlaying(p => !p)}
+            onClick={() => setIsPlaying((p) => !p)}
             disabled={done || total === 0}
             data-testid="button-playback-playpause"
           >
             {isPlaying ? (
-              <><span className="inline-block w-3 h-3 border-2 border-current mr-1.5 rounded-sm" />Pause</>
+              <>
+                <span className="inline-block w-3 h-3 border-2 border-current mr-1.5 rounded-sm" />
+                Pause
+              </>
             ) : (
-              <><Play className="h-3.5 w-3.5 mr-1.5" />{done ? "Done" : "Play"}</>
+              <>
+                <Play className="h-3.5 w-3.5 mr-1.5" />
+                {done ? "Done" : "Play"}
+              </>
             )}
           </Button>
           <Button

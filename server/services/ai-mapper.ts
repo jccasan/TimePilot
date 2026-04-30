@@ -3,19 +3,76 @@ import crypto from "crypto";
 
 const KNOWN_ALIASES: Record<string, string[]> = {
   firstName: ["first name", "first_name", "firstname", "fname", "given name", "given_name"],
-  lastName: ["last name", "last_name", "lastname", "lname", "surname", "family name", "family_name"],
-  fullName: ["full name", "full_name", "fullname", "name", "customer name", "client name", "customer", "client"],
+  lastName: [
+    "last name",
+    "last_name",
+    "lastname",
+    "lname",
+    "surname",
+    "family name",
+    "family_name",
+  ],
+  fullName: [
+    "full name",
+    "full_name",
+    "fullname",
+    "name",
+    "customer name",
+    "client name",
+    "customer",
+    "client",
+  ],
   email: ["email", "e-mail", "email address", "e-mail address", "emailaddress"],
-  phone: ["phone", "phone number", "telephone", "tel", "cell", "cell phone", "mobile", "mobile phone", "phone_number"],
-  streetAddress: ["street address", "street_address", "address", "address1", "address 1", "street", "service address"],
+  phone: [
+    "phone",
+    "phone number",
+    "telephone",
+    "tel",
+    "cell",
+    "cell phone",
+    "mobile",
+    "mobile phone",
+    "phone_number",
+  ],
+  streetAddress: [
+    "street address",
+    "street_address",
+    "address",
+    "address1",
+    "address 1",
+    "street",
+    "service address",
+  ],
   address2: ["address 2", "address2", "address_2", "apt", "suite", "unit"],
   city: ["city", "town"],
   state: ["state", "st", "province"],
   zipCode: ["zip", "zip code", "zip_code", "zipcode", "postal code", "postal_code", "postalcode"],
-  numberOfDogs: ["number of dogs", "dogs", "num_dogs", "number_of_dogs", "pet count", "pets", "# of dogs", "dog count"],
+  numberOfDogs: [
+    "number of dogs",
+    "dogs",
+    "num_dogs",
+    "number_of_dogs",
+    "pet count",
+    "pets",
+    "# of dogs",
+    "dog count",
+  ],
   yardSize: ["yard size", "yard_size", "lot size", "lot_size", "property size"],
-  serviceFrequency: ["frequency", "service frequency", "service_frequency", "schedule", "service schedule"],
-  leadSource: ["lead source", "lead_source", "referral source", "referral_source", "source", "how did you hear about us"],
+  serviceFrequency: [
+    "frequency",
+    "service frequency",
+    "service_frequency",
+    "schedule",
+    "service schedule",
+  ],
+  leadSource: [
+    "lead source",
+    "lead_source",
+    "referral source",
+    "referral_source",
+    "source",
+    "how did you hear about us",
+  ],
   status: ["status", "lead status", "lead_status", "customer status"],
   notes: ["notes", "note", "comments", "comment", "special instructions"],
   gateCode: ["gate code", "gate_code", "gatecode", "access code", "access_code"],
@@ -48,7 +105,14 @@ export interface FieldMapping {
 
 export interface TransformSuggestion {
   field: string;
-  type: "split_name" | "normalize_phone" | "parse_date" | "parse_currency" | "trim" | "infer_frequency" | "map_status";
+  type:
+    | "split_name"
+    | "normalize_phone"
+    | "parse_date"
+    | "parse_currency"
+    | "trim"
+    | "infer_frequency"
+    | "map_status";
   params?: Record<string, any>;
 }
 
@@ -111,7 +175,16 @@ function deterministicMap(headers: string[], targetFields: string[]): MappingRes
       if (["invoiceDate", "dueDate", "paidDate"].includes(bestMatch.field)) {
         transformations.push({ field: bestMatch.field, type: "parse_date" });
       }
-      if (["invoiceTotal", "unitPrice", "lineTotal", "taxAmount", "discountAmount", "paymentAmount"].includes(bestMatch.field)) {
+      if (
+        [
+          "invoiceTotal",
+          "unitPrice",
+          "lineTotal",
+          "taxAmount",
+          "discountAmount",
+          "paymentAmount",
+        ].includes(bestMatch.field)
+      ) {
         transformations.push({ field: bestMatch.field, type: "parse_currency" });
       }
       if (bestMatch.field === "serviceFrequency") {
@@ -138,7 +211,10 @@ export async function aiMapColumns(
   targetSchema: string,
   targetFields: string[]
 ): Promise<MappingResult> {
-  const cacheKey = crypto.createHash("sha256").update(JSON.stringify({ headers, targetSchema })).digest("hex");
+  const cacheKey = crypto
+    .createHash("sha256")
+    .update(JSON.stringify({ headers, targetSchema }))
+    .digest("hex");
   const cached = mappingCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.result;
@@ -157,7 +233,10 @@ Available internal fields: ${targetFields.join(", ")}
 
 CSV Headers: ${JSON.stringify(headers)}
 Sample rows (first ${sampleRows.length}):
-${sampleRows.slice(0, 5).map((r, i) => `Row ${i + 1}: ${JSON.stringify(r)}`).join("\n")}
+${sampleRows
+  .slice(0, 5)
+  .map((r, i) => `Row ${i + 1}: ${JSON.stringify(r)}`)
+  .join("\n")}
 
 For each CSV column, provide:
 1. The best matching internal field (or "unmapped" if no match)
@@ -189,7 +268,11 @@ Respond with ONLY valid JSON in this exact format:
 
     if (!Array.isArray(parsed.mappings)) throw new Error("Invalid mappings format");
     for (const m of parsed.mappings) {
-      if (typeof m.csvColumn !== "string" || typeof m.internalField !== "string" || typeof m.confidence !== "number") {
+      if (
+        typeof m.csvColumn !== "string" ||
+        typeof m.internalField !== "string" ||
+        typeof m.confidence !== "number"
+      ) {
         throw new Error("Invalid mapping entry format");
       }
       m.confidence = Math.min(1, Math.max(0, m.confidence));
@@ -197,7 +280,7 @@ Respond with ONLY valid JSON in this exact format:
     if (!Array.isArray(parsed.transformations)) parsed.transformations = [];
     if (!Array.isArray(parsed.warnings)) parsed.warnings = [];
 
-    parsed.mappings = parsed.mappings.filter(m => m.internalField !== "unmapped");
+    parsed.mappings = parsed.mappings.filter((m) => m.internalField !== "unmapped");
 
     mappingCache.set(cacheKey, { result: parsed, timestamp: Date.now() });
     return parsed;
@@ -215,21 +298,57 @@ export function getDeterministicMapping(headers: string[], targetFields: string[
 }
 
 export const CONTACT_FIELDS = [
-  "firstName", "lastName", "fullName", "email", "phone",
-  "streetAddress", "address2", "city", "state", "zipCode",
-  "numberOfDogs", "yardSize", "serviceFrequency", "leadSource",
-  "status", "notes", "gateCode", "serviceDay",
+  "firstName",
+  "lastName",
+  "fullName",
+  "email",
+  "phone",
+  "streetAddress",
+  "address2",
+  "city",
+  "state",
+  "zipCode",
+  "numberOfDogs",
+  "yardSize",
+  "serviceFrequency",
+  "leadSource",
+  "status",
+  "notes",
+  "gateCode",
+  "serviceDay",
 ];
 
 export const INVOICE_FIELDS = [
-  "invoiceNumber", "invoiceDate", "dueDate", "paidDate",
-  "invoiceTotal", "invoiceStatus", "description", "quantity",
-  "unitPrice", "lineTotal", "taxAmount", "taxRate",
-  "discountAmount", "paymentAmount", "paymentMethod", "paymentReference",
-  "firstName", "lastName", "fullName", "email",
+  "invoiceNumber",
+  "invoiceDate",
+  "dueDate",
+  "paidDate",
+  "invoiceTotal",
+  "invoiceStatus",
+  "description",
+  "quantity",
+  "unitPrice",
+  "lineTotal",
+  "taxAmount",
+  "taxRate",
+  "discountAmount",
+  "paymentAmount",
+  "paymentMethod",
+  "paymentReference",
+  "firstName",
+  "lastName",
+  "fullName",
+  "email",
 ];
 
 export const ROUTE_FIELDS = [
-  "routeName", "firstName", "lastName", "fullName", "email",
-  "streetAddress", "city", "state", "zipCode",
+  "routeName",
+  "firstName",
+  "lastName",
+  "fullName",
+  "email",
+  "streetAddress",
+  "city",
+  "state",
+  "zipCode",
 ];

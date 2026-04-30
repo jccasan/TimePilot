@@ -851,7 +851,9 @@ describe("migrateCustomerToConnectedAccount()", () => {
         .mockResolvedValueOnce({ data: [{ id: "pm_cloned_good" }] });
       mockPaymentMethodsCreate
         .mockResolvedValueOnce({ id: "pm_cloned_good" })
-        .mockRejectedValueOnce(Object.assign(new Error("Cannot clone"), { message: "Cannot clone" }));
+        .mockRejectedValueOnce(
+          Object.assign(new Error("Cannot clone"), { message: "Cannot clone" })
+        );
       mockPaymentMethodsAttach.mockResolvedValue({});
     });
 

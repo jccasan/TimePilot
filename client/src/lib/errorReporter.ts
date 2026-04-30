@@ -11,7 +11,10 @@ function getUserContext(): { userId?: string; companyId?: string } {
 
 export function setUserContext(userId: string, companyId?: string | null) {
   try {
-    sessionStorage.setItem("scoopilot_user_ctx", JSON.stringify({ userId, companyId: companyId ?? null }));
+    sessionStorage.setItem(
+      "scoopilot_user_ctx",
+      JSON.stringify({ userId, companyId: companyId ?? null })
+    );
   } catch (_) {}
 }
 

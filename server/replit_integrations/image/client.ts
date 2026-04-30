@@ -56,4 +56,3 @@ export async function editImages(
 
   return imageBytes;
 }
-

@@ -15,8 +15,9 @@ export function PwaInstallPrompt() {
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    const standalone = window.matchMedia("(display-mode: standalone)").matches
-      || (navigator as any).standalone === true;
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as any).standalone === true;
     setIsStandalone(standalone);
 
     if (standalone) return;
@@ -63,7 +64,10 @@ export function PwaInstallPrompt() {
   if (isStandalone || !showPrompt) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 flex justify-center" data-testid="container-pwa-install">
+    <div
+      className="fixed bottom-4 left-4 right-4 z-50 flex justify-center"
+      data-testid="container-pwa-install"
+    >
       <Card className="w-full max-w-md shadow-lg border">
         <CardContent className="p-3">
           <div className="flex items-start gap-3">
@@ -75,7 +79,8 @@ export function PwaInstallPrompt() {
                 <>
                   <p className="text-sm font-medium">Install ScooPilot</p>
                   <p className="text-xs text-muted-foreground">
-                    Tap the <Share className="inline h-3 w-3 -mt-0.5" /> Share button in Safari, then scroll down and tap "Add to Home Screen"
+                    Tap the <Share className="inline h-3 w-3 -mt-0.5" /> Share button in Safari,
+                    then scroll down and tap "Add to Home Screen"
                   </p>
                 </>
               ) : (
@@ -84,11 +89,7 @@ export function PwaInstallPrompt() {
                   <p className="text-xs text-muted-foreground">
                     Add ScooPilot to your home screen for quick access
                   </p>
-                  <Button
-                    size="sm"
-                    onClick={handleInstall}
-                    data-testid="button-pwa-install"
-                  >
+                  <Button size="sm" onClick={handleInstall} data-testid="button-pwa-install">
                     <Download className="h-3.5 w-3.5 mr-1.5" />
                     Install App
                   </Button>

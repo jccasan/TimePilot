@@ -127,7 +127,9 @@ function useSectionCollapse() {
   const toggle = (key: string) => {
     setCollapsed((prev) => {
       const next = { ...prev, [key]: !prev[key] };
-      try { localStorage.setItem("scoopilot_sidebar_collapsed", JSON.stringify(next)); } catch {}
+      try {
+        localStorage.setItem("scoopilot_sidebar_collapsed", JSON.stringify(next));
+      } catch {}
       return next;
     });
   };
@@ -135,7 +137,17 @@ function useSectionCollapse() {
   return { collapsed, toggle };
 }
 
-export function AppSidebar({ onStartTour, logout, isLoggingOut, onOpenRover }: { onStartTour?: (tourId: string) => void; logout?: () => void; isLoggingOut?: boolean; onOpenRover?: () => void }) {
+export function AppSidebar({
+  onStartTour,
+  logout,
+  isLoggingOut,
+  onOpenRover,
+}: {
+  onStartTour?: (tourId: string) => void;
+  logout?: () => void;
+  isLoggingOut?: boolean;
+  onOpenRover?: () => void;
+}) {
   const [location, navigate] = useLocation();
   const [addContactOpen, setAddContactOpen] = useState(false);
   const [generateInvoiceOpen, setGenerateInvoiceOpen] = useState(false);
@@ -168,20 +180,39 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut, onOpenRover }: {
   return (
     <Sidebar>
       <SidebarHeader>
-        <Link href="/" className="flex items-center gap-2 px-2 py-3 cursor-pointer hover:bg-muted/50 rounded-lg transition-colors" data-testid="link-sidebar-logo" onClick={handleNavClick}>
+        <Link
+          href="/"
+          className="flex items-center gap-2 px-2 py-3 cursor-pointer hover:bg-muted/50 rounded-lg transition-colors"
+          data-testid="link-sidebar-logo"
+          onClick={handleNavClick}
+        >
           {company?.logoUrl ? (
-            <img src={company.logoUrl} alt={company.name || "Company"} className="h-9 w-9 rounded-md object-cover" data-testid="img-tenant-logo" />
+            <img
+              src={company.logoUrl}
+              alt={company.name || "Company"}
+              className="h-9 w-9 rounded-md object-cover"
+              data-testid="img-tenant-logo"
+            />
           ) : (
-            <div className="h-9 w-9 rounded-md bg-muted flex items-center justify-center" data-testid="img-tenant-placeholder">
+            <div
+              className="h-9 w-9 rounded-md bg-muted flex items-center justify-center"
+              data-testid="img-tenant-placeholder"
+            >
               <Building2 className="h-5 w-5 text-muted-foreground" />
             </div>
           )}
-          <span className="text-lg font-bold truncate" data-testid="text-company-name">{company?.name || "My Company"}</span>
+          <span className="text-lg font-bold truncate" data-testid="text-company-name">
+            {company?.name || "My Company"}
+          </span>
         </Link>
         <div className="px-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button className="w-full justify-start gap-2" size="sm" data-testid="button-quick-create">
+              <Button
+                className="w-full justify-start gap-2"
+                size="sm"
+                data-testid="button-quick-create"
+              >
                 <Plus className="h-4 w-4" />
                 Create
               </Button>
@@ -189,19 +220,37 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut, onOpenRover }: {
             <DropdownMenuContent align="start" className="w-48">
               <DropdownMenuLabel>Quick Create</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setAddContactOpen(true)} data-testid="quick-create-contact">
+              <DropdownMenuItem
+                onClick={() => setAddContactOpen(true)}
+                data-testid="quick-create-contact"
+              >
                 <UserPlus className="h-4 w-4 mr-2" />
                 New Customer
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { navigate("/quotes?create=true"); handleNavClick(); }} data-testid="quick-create-quote">
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/quotes?create=true");
+                  handleNavClick();
+                }}
+                data-testid="quick-create-quote"
+              >
                 <ClipboardCheck className="h-4 w-4 mr-2" />
                 New Quote
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setGenerateInvoiceOpen(true)} data-testid="quick-create-invoice">
+              <DropdownMenuItem
+                onClick={() => setGenerateInvoiceOpen(true)}
+                data-testid="quick-create-invoice"
+              >
                 <Receipt className="h-4 w-4 mr-2" />
                 New Invoice
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { navigate("/scheduling?addJob=1"); handleNavClick(); }} data-testid="quick-create-job">
+              <DropdownMenuItem
+                onClick={() => {
+                  navigate("/scheduling?addJob=1");
+                  handleNavClick();
+                }}
+                data-testid="quick-create-job"
+              >
                 <Briefcase className="h-4 w-4 mr-2" />
                 New Job
               </DropdownMenuItem>
@@ -209,7 +258,11 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut, onOpenRover }: {
           </DropdownMenu>
         </div>
         <AddContactDialog open={addContactOpen} onOpenChange={setAddContactOpen} />
-        <GenerateInvoiceDialog open={generateInvoiceOpen} onOpenChange={setGenerateInvoiceOpen} showContactPicker />
+        <GenerateInvoiceDialog
+          open={generateInvoiceOpen}
+          onOpenChange={setGenerateInvoiceOpen}
+          showContactPicker
+        />
       </SidebarHeader>
 
       <SidebarContent>
@@ -221,11 +274,7 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut, onOpenRover }: {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  data-active={location === "/"}
-                  tooltip="Dashboard"
-                >
+                <SidebarMenuButton asChild data-active={location === "/"} tooltip="Dashboard">
                   <Link href="/" data-testid="link-dashboard" onClick={handleNavClick}>
                     <LayoutDashboard />
                     <span>Dashboard</span>
@@ -259,40 +308,49 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut, onOpenRover }: {
               {!isCollapsed && (
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {section.items.filter(item => !(item as any).adminOnly || isAdmin).map((item) => {
-                      const isActive = item.url === "/"
-                        ? location === "/"
-                        : location === item.url || location.startsWith(item.url + "/") || location.startsWith(item.url + "?");
+                    {section.items
+                      .filter((item) => !(item as any).adminOnly || isAdmin)
+                      .map((item) => {
+                        const isActive =
+                          item.url === "/"
+                            ? location === "/"
+                            : location === item.url ||
+                              location.startsWith(item.url + "/") ||
+                              location.startsWith(item.url + "?");
 
-                      return (
-                        <SidebarMenuItem key={item.title}>
-                          <SidebarMenuButton
-                            asChild
-                            data-active={isActive}
-                            tooltip={item.title}
-                          >
-                            <Link
-                              href={item.url}
-                              data-testid={`link-${item.title.toLowerCase().replace(/[\s/&]/g, "-")}`}
-                              onClick={handleNavClick}
-                            >
-                              <item.icon />
-                              <span>{item.title}</span>
-                              {item.title === "Messages" && unreadSmsCount > 0 && (
-                                <Badge variant="default" className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px]" data-testid="badge-sidebar-unread-sms">
-                                  {unreadSmsCount > 99 ? "99+" : unreadSmsCount}
-                                </Badge>
-                              )}
-                              {item.title === "Invoices" && uninvoicedCount > 0 && (
-                                <Badge variant="secondary" className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300" data-testid="badge-sidebar-uninvoiced">
-                                  {uninvoicedCount > 99 ? "99+" : uninvoicedCount}
-                                </Badge>
-                              )}
-                            </Link>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      );
-                    })}
+                        return (
+                          <SidebarMenuItem key={item.title}>
+                            <SidebarMenuButton asChild data-active={isActive} tooltip={item.title}>
+                              <Link
+                                href={item.url}
+                                data-testid={`link-${item.title.toLowerCase().replace(/[\s/&]/g, "-")}`}
+                                onClick={handleNavClick}
+                              >
+                                <item.icon />
+                                <span>{item.title}</span>
+                                {item.title === "Messages" && unreadSmsCount > 0 && (
+                                  <Badge
+                                    variant="default"
+                                    className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px]"
+                                    data-testid="badge-sidebar-unread-sms"
+                                  >
+                                    {unreadSmsCount > 99 ? "99+" : unreadSmsCount}
+                                  </Badge>
+                                )}
+                                {item.title === "Invoices" && uninvoicedCount > 0 && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"
+                                    data-testid="badge-sidebar-uninvoiced"
+                                  >
+                                    {uninvoicedCount > 99 ? "99+" : uninvoicedCount}
+                                  </Badge>
+                                )}
+                              </Link>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      })}
                   </SidebarMenu>
                 </SidebarGroupContent>
               )}
@@ -314,7 +372,10 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut, onOpenRover }: {
               <DropdownMenuContent side="top" align="start" className="w-64">
                 {onOpenRover && (
                   <>
-                    <DropdownMenuItem onClick={() => onOpenRover()} data-testid="button-help-ask-rover">
+                    <DropdownMenuItem
+                      onClick={() => onOpenRover()}
+                      data-testid="button-help-ask-rover"
+                    >
                       <MessageCircle className="h-4 w-4 mr-2" />
                       Ask Rover
                     </DropdownMenuItem>
@@ -325,16 +386,25 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut, onOpenRover }: {
                   <>
                     <DropdownMenuLabel>Guided Tours</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => onStartTour("welcome")} data-testid="button-tour-welcome">
+                    <DropdownMenuItem
+                      onClick={() => onStartTour("welcome")}
+                      data-testid="button-tour-welcome"
+                    >
                       <Compass className="h-4 w-4 mr-2" />
                       Welcome Tour
                     </DropdownMenuItem>
-                    {tours.filter(t => t.id !== "welcome").map((tour) => (
-                      <DropdownMenuItem key={tour.id} onClick={() => onStartTour(tour.id)} data-testid={`button-tour-${tour.id}`}>
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        {tour.title}
-                      </DropdownMenuItem>
-                    ))}
+                    {tours
+                      .filter((t) => t.id !== "welcome")
+                      .map((tour) => (
+                        <DropdownMenuItem
+                          key={tour.id}
+                          onClick={() => onStartTour(tour.id)}
+                          data-testid={`button-tour-${tour.id}`}
+                        >
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          {tour.title}
+                        </DropdownMenuItem>
+                      ))}
                   </>
                 )}
                 <DropdownMenuSeparator />
@@ -353,7 +423,11 @@ export function AppSidebar({ onStartTour, logout, isLoggingOut, onOpenRover }: {
                 {logout && (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => logout()} disabled={isLoggingOut} data-testid="button-sidebar-logout">
+                    <DropdownMenuItem
+                      onClick={() => logout()}
+                      disabled={isLoggingOut}
+                      data-testid="button-sidebar-logout"
+                    >
                       <LogOut className="h-4 w-4 mr-2" />
                       Sign Out
                     </DropdownMenuItem>

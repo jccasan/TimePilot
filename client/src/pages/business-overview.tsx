@@ -6,13 +6,35 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  DollarSign, Users, TrendingUp, CheckCircle,
-  Sparkles, Loader2, AlertTriangle, Minus, LayoutDashboard, ArrowUp, ArrowDown, Printer,
+  DollarSign,
+  Users,
+  TrendingUp,
+  CheckCircle,
+  Sparkles,
+  Loader2,
+  AlertTriangle,
+  Minus,
+  LayoutDashboard,
+  ArrowUp,
+  ArrowDown,
+  Printer,
 } from "lucide-react";
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line,
-  PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
 } from "recharts";
 
 type BusinessOverviewData = {
@@ -59,7 +81,11 @@ function fmtFull(n: number): string {
 }
 
 function KpiCard({
-  title, value, subtitle, icon: Icon, colorClass,
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  colorClass,
 }: {
   title: string;
   value: string;
@@ -73,7 +99,10 @@ function KpiCard({
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1">
             <p className="text-xs font-medium text-muted-foreground">{title}</p>
-            <p className={`text-2xl font-bold ${colorClass ?? ""}`} data-testid={`text-kpi-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+            <p
+              className={`text-2xl font-bold ${colorClass ?? ""}`}
+              data-testid={`text-kpi-${title.toLowerCase().replace(/\s+/g, "-")}`}
+            >
               {value}
             </p>
             {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
@@ -95,7 +124,10 @@ function ChartTooltipContent({ active, payload, label, prefix }: any) {
       {payload.map((entry: any, i: number) => (
         <div key={i} className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-1">
-            <span className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: entry.color }} />
+            <span
+              className="h-2 w-2 rounded-full inline-block"
+              style={{ backgroundColor: entry.color }}
+            />
             {entry.name}
           </span>
           <span className="font-medium">{prefix === "$" ? fmtFull(entry.value) : entry.value}</span>
@@ -106,14 +138,17 @@ function ChartTooltipContent({ active, payload, label, prefix }: any) {
 }
 
 function ratingColor(rating: string) {
-  if (rating === "Healthy") return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-  if (rating === "Caution") return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+  if (rating === "Healthy")
+    return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+  if (rating === "Caution")
+    return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
   return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
 }
 
 function priorityColor(priority: string) {
   if (priority === "High") return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
-  if (priority === "Medium") return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+  if (priority === "Medium")
+    return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
   return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
 }
 
@@ -122,18 +157,36 @@ function HealthScoreRing({ score }: { score: number }) {
   const circumference = 2 * Math.PI * 40;
   const dash = (score / 100) * circumference;
   return (
-    <div className="relative inline-flex items-center justify-center" data-testid="health-score-ring">
+    <div
+      className="relative inline-flex items-center justify-center"
+      data-testid="health-score-ring"
+    >
       <svg width="100" height="100" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="8" className="text-muted/20" />
         <circle
-          cx="50" cy="50" r="40" fill="none" stroke={color} strokeWidth="8"
+          cx="50"
+          cy="50"
+          r="40"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="8"
+          className="text-muted/20"
+        />
+        <circle
+          cx="50"
+          cy="50"
+          r="40"
+          fill="none"
+          stroke={color}
+          strokeWidth="8"
           strokeDasharray={`${dash} ${circumference}`}
           strokeLinecap="round"
           transform="rotate(-90 50 50)"
         />
       </svg>
       <div className="absolute text-center">
-        <span className="text-2xl font-bold" style={{ color }} data-testid="text-health-score">{score}</span>
+        <span className="text-2xl font-bold" style={{ color }} data-testid="text-health-score">
+          {score}
+        </span>
         <span className="block text-[10px] text-muted-foreground">/ 100</span>
       </div>
     </div>
@@ -182,10 +235,14 @@ export default function BusinessOverview() {
           <p className="text-muted-foreground">Loading business data...</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-24" />)}
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-64" />)}
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-64" />
+          ))}
         </div>
       </div>
     );
@@ -194,27 +251,31 @@ export default function BusinessOverview() {
   if (!data) return null;
 
   const { kpis, monthlyRevenue, customerAcquisition, profitabilityMix, weeklyCompletion } = data;
-  const mrrDisplay = kpis.mrrCents >= 100000
-    ? `$${((kpis.mrrCents / 100) / 1000).toFixed(1)}k`
-    : `$${(kpis.mrrCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const mrrDisplay =
+    kpis.mrrCents >= 100000
+      ? `$${(kpis.mrrCents / 100 / 1000).toFixed(1)}k`
+      : `$${(kpis.mrrCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 
-  const marginColor = kpis.avgProfitMarginPct >= 20
-    ? "text-green-600 dark:text-green-400"
-    : kpis.avgProfitMarginPct >= 10
-      ? "text-yellow-600 dark:text-yellow-400"
-      : "text-red-600 dark:text-red-400";
+  const marginColor =
+    kpis.avgProfitMarginPct >= 20
+      ? "text-green-600 dark:text-green-400"
+      : kpis.avgProfitMarginPct >= 10
+        ? "text-yellow-600 dark:text-yellow-400"
+        : "text-red-600 dark:text-red-400";
 
-  const completionColor = kpis.visitCompletionRate >= 90
-    ? "text-green-600 dark:text-green-400"
-    : kpis.visitCompletionRate >= 70
-      ? "text-yellow-600 dark:text-yellow-400"
-      : "text-red-600 dark:text-red-400";
+  const completionColor =
+    kpis.visitCompletionRate >= 90
+      ? "text-green-600 dark:text-green-400"
+      : kpis.visitCompletionRate >= 70
+        ? "text-yellow-600 dark:text-yellow-400"
+        : "text-red-600 dark:text-red-400";
 
-  const collectionColor = kpis.collectionRate >= 90
-    ? "text-green-600 dark:text-green-400"
-    : kpis.collectionRate >= 75
-      ? "text-yellow-600 dark:text-yellow-400"
-      : "text-red-600 dark:text-red-400";
+  const collectionColor =
+    kpis.collectionRate >= 90
+      ? "text-green-600 dark:text-green-400"
+      : kpis.collectionRate >= 75
+        ? "text-yellow-600 dark:text-yellow-400"
+        : "text-red-600 dark:text-red-400";
 
   function handlePrint() {
     window.print();
@@ -224,11 +285,16 @@ export default function BusinessOverview() {
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full business-overview-print-area">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-business-overview-heading">
+          <h1
+            className="text-2xl font-bold flex items-center gap-2"
+            data-testid="text-business-overview-heading"
+          >
             <LayoutDashboard className="h-6 w-6 text-primary" />
             Business Overview
           </h1>
-          <p className="text-muted-foreground">Key metrics and AI-powered health assessment for your business</p>
+          <p className="text-muted-foreground">
+            Key metrics and AI-powered health assessment for your business
+          </p>
         </div>
         <Button
           variant="outline"
@@ -241,9 +307,19 @@ export default function BusinessOverview() {
           Print Report
         </Button>
       </div>
-      <div className="print-report-meta text-xs text-muted-foreground pb-2 border-b" style={{ display: "none" }}>
+      <div
+        className="print-report-meta text-xs text-muted-foreground pb-2 border-b"
+        style={{ display: "none" }}
+      >
         <span>ScooPilot — Business Overview Report</span>
-        <span className="ml-4">Generated: {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</span>
+        <span className="ml-4">
+          Generated:{" "}
+          {new Date().toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
+        </span>
       </div>
 
       {/* KPI Scorecard */}
@@ -254,11 +330,7 @@ export default function BusinessOverview() {
           subtitle="Active service plans"
           icon={DollarSign}
         />
-        <KpiCard
-          title="Active Customers"
-          value={String(kpis.activeCustomers)}
-          icon={Users}
-        />
+        <KpiCard title="Active Customers" value={String(kpis.activeCustomers)} icon={Users} />
         <KpiCard
           title="Avg Profit Margin"
           value={`${kpis.avgProfitMarginPct.toFixed(1)}%`}
@@ -300,7 +372,7 @@ export default function BusinessOverview() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={v => fmt(v)} tick={{ fontSize: 11 }} width={48} />
+                <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} width={48} />
                 <Tooltip content={<ChartTooltipContent prefix="$" />} />
                 <Area
                   type="monotone"
@@ -377,7 +449,11 @@ export default function BusinessOverview() {
             </ResponsiveContainer>
             <div className="space-y-2 text-sm">
               {profitabilityMix.map((entry, i) => (
-                <div key={i} className="flex items-center gap-2" data-testid={`legend-${entry.name.toLowerCase()}`}>
+                <div
+                  key={i}
+                  className="flex items-center gap-2"
+                  data-testid={`legend-${entry.name.toLowerCase()}`}
+                >
                   <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: entry.color }} />
                   <span className="text-muted-foreground">{entry.name}</span>
                   <span className="font-semibold ml-auto">{entry.value}</span>
@@ -401,7 +477,12 @@ export default function BusinessOverview() {
               <BarChart data={weeklyCompletion}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="week" tick={{ fontSize: 10 }} />
-                <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} tick={{ fontSize: 11 }} width={40} />
+                <YAxis
+                  domain={[0, 100]}
+                  tickFormatter={(v) => `${v}%`}
+                  tick={{ fontSize: 11 }}
+                  width={40}
+                />
                 <Tooltip
                   formatter={(val: number) => [`${val}%`, "Completion Rate"]}
                   content={({ active, payload, label }) => {
@@ -410,12 +491,19 @@ export default function BusinessOverview() {
                     return (
                       <div className="rounded-md border bg-background p-2 shadow-md text-xs">
                         <p className="font-medium mb-1">{label}</p>
-                        <p>{d?.completed} / {d?.total} visits — <strong>{d?.completionRate}%</strong></p>
+                        <p>
+                          {d?.completed} / {d?.total} visits — <strong>{d?.completionRate}%</strong>
+                        </p>
                       </div>
                     );
                   }}
                 />
-                <Bar dataKey="completionRate" name="Completion Rate" fill="hsl(var(--chart-3))" radius={[3, 3, 0, 0]} />
+                <Bar
+                  dataKey="completionRate"
+                  name="Completion Rate"
+                  fill="hsl(var(--chart-3))"
+                  radius={[3, 3, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -431,7 +519,9 @@ export default function BusinessOverview() {
                 <Sparkles className="h-4 w-4 text-primary" />
                 AI Business Assessment
               </CardTitle>
-              <CardDescription>CFO + COO dual-perspective health check powered by AI</CardDescription>
+              <CardDescription>
+                CFO + COO dual-perspective health check powered by AI
+              </CardDescription>
             </div>
             <Button
               variant="outline"
@@ -440,7 +530,7 @@ export default function BusinessOverview() {
                 if (!hasRequestedAssessment) {
                   setHasRequestedAssessment(true);
                 } else {
-                  setAssessmentKey(k => k + 1);
+                  setAssessmentKey((k) => k + 1);
                 }
               }}
               disabled={isAssessmentLoading}
@@ -448,21 +538,31 @@ export default function BusinessOverview() {
               className="print:hidden"
             >
               {isAssessmentLoading ? (
-                <><Loader2 className="mr-1 h-4 w-4 animate-spin" /> Analyzing...</>
+                <>
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Analyzing...
+                </>
               ) : hasRequestedAssessment && assessment ? (
-                <><Sparkles className="mr-1 h-4 w-4" /> Refresh Assessment</>
+                <>
+                  <Sparkles className="mr-1 h-4 w-4" /> Refresh Assessment
+                </>
               ) : (
-                <><Sparkles className="mr-1 h-4 w-4" /> Run AI Assessment</>
+                <>
+                  <Sparkles className="mr-1 h-4 w-4" /> Run AI Assessment
+                </>
               )}
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           {!hasRequestedAssessment && (
-            <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground gap-3" data-testid="assessment-idle">
+            <div
+              className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground gap-3"
+              data-testid="assessment-idle"
+            >
               <Sparkles className="h-8 w-8 text-primary/40" />
               <p className="text-sm max-w-sm">
-                Click <strong>Run AI Assessment</strong> to get a detailed health score, CFO and COO findings, and prioritized recommendations for your business.
+                Click <strong>Run AI Assessment</strong> to get a detailed health score, CFO and COO
+                findings, and prioritized recommendations for your business.
               </p>
             </div>
           )}
@@ -480,7 +580,10 @@ export default function BusinessOverview() {
           )}
 
           {isAssessmentError && !isAssessmentLoading && (
-            <div className="flex items-center gap-2 text-destructive text-sm py-4" data-testid="assessment-error">
+            <div
+              className="flex items-center gap-2 text-destructive text-sm py-4"
+              data-testid="assessment-error"
+            >
               <AlertTriangle className="h-4 w-4" />
               Failed to load assessment. The AI service may be temporarily unavailable.
             </div>
@@ -498,8 +601,8 @@ export default function BusinessOverview() {
                         assessment.scoreDelta > 0
                           ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                           : assessment.scoreDelta < 0
-                          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                          : "bg-muted text-muted-foreground"
+                            ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            : "bg-muted text-muted-foreground"
                       }`}
                       data-testid="text-score-delta"
                     >
@@ -510,22 +613,33 @@ export default function BusinessOverview() {
                       ) : (
                         <Minus className="h-3 w-3" />
                       )}
-                      {assessment.scoreDelta > 0 ? "+" : ""}{assessment.scoreDelta} pts from last month
+                      {assessment.scoreDelta > 0 ? "+" : ""}
+                      {assessment.scoreDelta} pts from last month
                     </div>
                   )}
                 </div>
                 <div className="flex-1 min-w-0 space-y-3">
-                  <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-verdict">
+                  <p
+                    className="text-sm text-muted-foreground leading-relaxed"
+                    data-testid="text-verdict"
+                  >
                     {assessment.verdict}
                   </p>
                   {assessmentHistory && assessmentHistory.length > 1 && (
                     <div data-testid="chart-score-history">
-                      <p className="text-xs text-muted-foreground mb-1 font-medium">Score History</p>
+                      <p className="text-xs text-muted-foreground mb-1 font-medium">
+                        Score History
+                      </p>
                       <ResponsiveContainer width="100%" height={60}>
-                        <LineChart data={[...assessmentHistory].reverse().map(h => ({
-                          date: new Date(h.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-                          score: h.score,
-                        }))}>
+                        <LineChart
+                          data={[...assessmentHistory].reverse().map((h) => ({
+                            date: new Date(h.createdAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            }),
+                            score: h.score,
+                          }))}
+                        >
                           <YAxis domain={[0, 100]} hide />
                           <Tooltip
                             content={({ active, payload, label }) => {
@@ -533,7 +647,9 @@ export default function BusinessOverview() {
                               return (
                                 <div className="rounded-md border bg-background p-1.5 shadow-md text-xs">
                                   <p className="font-medium">{label}</p>
-                                  <p>Score: <span className="font-bold">{payload[0].value}</span></p>
+                                  <p>
+                                    Score: <span className="font-bold">{payload[0].value}</span>
+                                  </p>
                                 </div>
                               );
                             }}
@@ -564,7 +680,11 @@ export default function BusinessOverview() {
                   </div>
                   <ul className="space-y-1.5">
                     {assessment.cfo.findings.map((f, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground" data-testid={`cfo-finding-${i}`}>
+                      <li
+                        key={i}
+                        className="flex items-start gap-2 text-xs text-muted-foreground"
+                        data-testid={`cfo-finding-${i}`}
+                      >
                         <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
                         {f}
                       </li>
@@ -581,7 +701,11 @@ export default function BusinessOverview() {
                   </div>
                   <ul className="space-y-1.5">
                     {assessment.coo.findings.map((f, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground" data-testid={`coo-finding-${i}`}>
+                      <li
+                        key={i}
+                        className="flex items-start gap-2 text-xs text-muted-foreground"
+                        data-testid={`coo-finding-${i}`}
+                      >
                         <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
                         {f}
                       </li>
@@ -596,8 +720,15 @@ export default function BusinessOverview() {
                   <h3 className="text-sm font-semibold">Prioritized Recommendations</h3>
                   <div className="space-y-2">
                     {assessment.recommendations.map((rec, i) => (
-                      <div key={i} className="rounded-lg border p-3 flex items-start gap-3" data-testid={`recommendation-${i}`}>
-                        <Badge variant="outline" className={`${priorityColor(rec.priority)} text-[10px] mt-0.5 flex-shrink-0`}>
+                      <div
+                        key={i}
+                        className="rounded-lg border p-3 flex items-start gap-3"
+                        data-testid={`recommendation-${i}`}
+                      >
+                        <Badge
+                          variant="outline"
+                          className={`${priorityColor(rec.priority)} text-[10px] mt-0.5 flex-shrink-0`}
+                        >
                           {rec.priority}
                         </Badge>
                         <div>

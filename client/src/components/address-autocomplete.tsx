@@ -141,7 +141,9 @@ export function AddressAutocomplete({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => { if (suggestions.length > 0) setIsOpen(true); }}
+          onFocus={() => {
+            if (suggestions.length > 0) setIsOpen(true);
+          }}
           placeholder={placeholder}
           className="pl-10"
           data-testid={testId}
@@ -152,7 +154,10 @@ export function AddressAutocomplete({
         )}
       </div>
       {isOpen && suggestions.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto" data-testid="address-suggestions-list">
+        <div
+          className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto"
+          data-testid="address-suggestions-list"
+        >
           {suggestions.map((s, i) => (
             <button
               key={s.id}

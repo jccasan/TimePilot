@@ -27,7 +27,10 @@ export default function PendingApproval() {
     },
     onSuccess: () => {
       setSubmitted(true);
-      toast({ title: "Profile submitted", description: "We'll review your information and follow up by email." });
+      toast({
+        title: "Profile submitted",
+        description: "We'll review your information and follow up by email.",
+      });
     },
     onError: (err: Error) => {
       toast({ title: "Submission failed", description: err.message, variant: "destructive" });
@@ -44,7 +47,12 @@ export default function PendingApproval() {
     <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-4">
         <div className="flex flex-col items-center gap-2 mb-6">
-          <img src={logoSquare} alt="ScooPilot" className="h-12 w-12 rounded-xl object-cover" data-testid="img-pending-logo" />
+          <img
+            src={logoSquare}
+            alt="ScooPilot"
+            className="h-12 w-12 rounded-xl object-cover"
+            data-testid="img-pending-logo"
+          />
           <h1 className="text-xl font-bold">ScooPilot</h1>
         </div>
 
@@ -55,24 +63,35 @@ export default function PendingApproval() {
                 <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <CardTitle className="text-lg" data-testid="text-pending-title">Account Under Review</CardTitle>
-                <CardDescription className="text-xs">Usually approved within 1 business day</CardDescription>
+                <CardTitle className="text-lg" data-testid="text-pending-title">
+                  Account Under Review
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Usually approved within 1 business day
+                </CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Because your account is registering from outside the United States or Canada, our team does a brief review before activating access. You'll receive an email with your login credentials once approved.
+              Because your account is registering from outside the United States or Canada, our team
+              does a brief review before activating access. You'll receive an email with your login
+              credentials once approved.
             </p>
 
             {!submitted ? (
-              <form onSubmit={handleSubmit} className="space-y-3" data-testid="form-verification-url">
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-3"
+                data-testid="form-verification-url"
+              >
                 <div className="space-y-1.5">
                   <Label htmlFor="verificationUrl" className="text-sm font-medium">
                     Speed up your approval
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Share your LinkedIn profile or business website so our team can verify your account faster.
+                    Share your LinkedIn profile or business website so our team can verify your
+                    account faster.
                   </p>
                   <div className="flex gap-2 items-center">
                     <div className="flex gap-1 text-muted-foreground">
@@ -100,12 +119,18 @@ export default function PendingApproval() {
                 </Button>
               </form>
             ) : (
-              <div className="flex items-start gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3" data-testid="status-url-submitted">
+              <div
+                className="flex items-start gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3"
+                data-testid="status-url-submitted"
+              >
                 <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-green-800 dark:text-green-200">Profile submitted!</p>
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                    Profile submitted!
+                  </p>
                   <p className="text-xs text-green-700 dark:text-green-300 mt-0.5">
-                    Our team will review your information and send you an email once your account is approved.
+                    Our team will review your information and send you an email once your account is
+                    approved.
                   </p>
                   {url && (
                     <a

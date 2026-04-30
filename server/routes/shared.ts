@@ -9,9 +9,12 @@ import type { RequestHandler } from "express";
 import { sendEmail } from "../services/email";
 import { geocodeAddress } from "../services/geocode";
 
-
 // ─── Shared helpers used across all route modules ───────────────────────
-export const CHANGE_PASSWORD_EXEMPT_PATHS = ["/api/auth/change-password", "/api/auth/user", "/api/auth/logout"];
+export const CHANGE_PASSWORD_EXEMPT_PATHS = [
+  "/api/auth/change-password",
+  "/api/auth/user",
+  "/api/auth/logout",
+];
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   let userId = (req.session as any)?.userId;
@@ -20,7 +23,9 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.slice(7);
-      const sessionRow = await db.execute(sql`SELECT sess FROM sessions WHERE sid = ${token} AND expire > NOW()`);
+      const sessionRow = await db.execute(
+        sql`SELECT sess FROM sessions WHERE sid = ${token} AND expire > NOW()`
+      );
       if (sessionRow.rows.length > 0) {
         const sess = sessionRow.rows[0].sess as any;
         if (sess?.userId) {
@@ -31,11 +36,13 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
           // admin inactive-users dashboard reflects real activity even for users who
           // stay logged in via a long-lived session and never re-enter their password.
           const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-          db.execute(sql`
+          db.execute(
+            sql`
             UPDATE users SET last_login_at = NOW()
             WHERE id = ${userId}
               AND (last_login_at IS NULL OR last_login_at < ${oneDayAgo})
-          `).catch(() => {});
+          `
+          ).catch(() => {});
         }
       } else {
         authMethod = "bearer-token-invalid";
@@ -59,10 +66,16 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
           return res.status(401).json({ message: "API key has expired" });
         }
         const companyUsers_ = await storage.getCompanyUsers(apiKey.companyId);
-        const ownerOrAdmin = companyUsers_.find(cu => cu.role === "owner" && cu.isActive !== false) || companyUsers_.find(cu => cu.role === "admin" && cu.isActive !== false);
+        const ownerOrAdmin =
+          companyUsers_.find((cu) => cu.role === "owner" && cu.isActive !== false) ||
+          companyUsers_.find((cu) => cu.role === "admin" && cu.isActive !== false);
         if (ownerOrAdmin) {
           userId = ownerOrAdmin.userId;
-          (req as any)._apiKeyAuth = { userId: ownerOrAdmin.userId, companyId: apiKey.companyId, role: ownerOrAdmin.role };
+          (req as any)._apiKeyAuth = {
+            userId: ownerOrAdmin.userId,
+            companyId: apiKey.companyId,
+            role: ownerOrAdmin.role,
+          };
           authMethod = "api-key";
           storage.updateApiKeyLastUsed(apiKey.id).catch(console.error);
         }
@@ -84,7 +97,9 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 };
 
 export async function getCompanyContext(req: Request) {
-  const apiKeyAuth = (req as any)._apiKeyAuth as { userId: string; companyId: string; role: string } | undefined;
+  const apiKeyAuth = (req as any)._apiKeyAuth as
+    | { userId: string; companyId: string; role: string }
+    | undefined;
   if (apiKeyAuth) {
     return { userId: apiKeyAuth.userId, companyId: apiKeyAuth.companyId, role: apiKeyAuth.role };
   }
@@ -130,44 +145,102 @@ export function sanitizeDecimal(value: any): string {
   return isNaN(n) ? "0.00" : n.toFixed(2);
 }
 
-export function auditLog(companyId: string, userId: string | null, entityType: string, entityId: string, action: string, changes?: any, ipAddress?: string) {
-  storage.createAuditEntry({ companyId, userId: userId || null, entityType, entityId, action: action as "create" | "update" | "delete" | "void", changes: changes || {}, ipAddress: ipAddress || null }).catch(console.error);
+export function auditLog(
+  companyId: string,
+  userId: string | null,
+  entityType: string,
+  entityId: string,
+  action: string,
+  changes?: any,
+  ipAddress?: string
+) {
+  storage
+    .createAuditEntry({
+      companyId,
+      userId: userId || null,
+      entityType,
+      entityId,
+      action: action as "create" | "update" | "delete" | "void",
+      changes: changes || {},
+      ipAddress: ipAddress || null,
+    })
+    .catch(console.error);
 }
 
-export function p(v: string | string[]): string { return Array.isArray(v) ? v[0] : v; }
+export function p(v: string | string[]): string {
+  return Array.isArray(v) ? v[0] : v;
+}
 
 export function computeStopHash(stopIds: string[]): string {
   const sorted = [...stopIds].sort().join(",");
   return crypto.createHash("sha256").update(sorted).digest("hex").substring(0, 64);
 }
 
-export async function clearRouteOptimizationState(routeId: string, companyId: string): Promise<void> {
+export async function clearRouteOptimizationState(
+  routeId: string,
+  companyId: string
+): Promise<void> {
   try {
-    await db.update(routes).set({ lastOptimizedAt: null, optimizedStopHash: null, updatedAt: new Date() }).where(and(eq(routes.id, routeId), eq(routes.companyId, companyId)));
+    await db
+      .update(routes)
+      .set({ lastOptimizedAt: null, optimizedStopHash: null, updatedAt: new Date() })
+      .where(and(eq(routes.id, routeId), eq(routes.companyId, companyId)));
   } catch (err) {
     console.error("[route-opt] Failed to clear optimization state for route", routeId, err);
   }
 }
 
 export const EMAIL_NOTIFY_TYPES = new Set([
-  "portal_message", "new_message", "service_paused", "service_resumed",
-  "payment_failed", "invoice_paid", "new_lead", "general",
+  "portal_message",
+  "new_message",
+  "service_paused",
+  "service_resumed",
+  "payment_failed",
+  "invoice_paid",
+  "new_lead",
+  "general",
 ]);
 
 export function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-export function notify(companyId: string, type: string, title: string, message: string, linkUrl?: string) {
-  storage.createNotification({ companyId, type: type as any, title, message, isRead: false, linkUrl: linkUrl || null }).catch(console.error);
+export function notify(
+  companyId: string,
+  type: string,
+  title: string,
+  message: string,
+  linkUrl?: string
+) {
+  storage
+    .createNotification({
+      companyId,
+      type: type as any,
+      title,
+      message,
+      isRead: false,
+      linkUrl: linkUrl || null,
+    })
+    .catch(console.error);
 
   if (EMAIL_NOTIFY_TYPES.has(type)) {
     (async () => {
       try {
-        const ownerRows = await db.select({ email: users.email, firstName: users.firstName })
+        const ownerRows = await db
+          .select({ email: users.email, firstName: users.firstName })
           .from(companyUsers)
           .innerJoin(users, eq(companyUsers.userId, users.id))
-          .where(and(eq(companyUsers.companyId, companyId), or(eq(companyUsers.role, "owner"), eq(companyUsers.role, "admin")), eq(companyUsers.isActive, true)));
+          .where(
+            and(
+              eq(companyUsers.companyId, companyId),
+              or(eq(companyUsers.role, "owner"), eq(companyUsers.role, "admin")),
+              eq(companyUsers.isActive, true)
+            )
+          );
         const company = await storage.getCompany(companyId);
         const companyName = company?.name || "ScooPilot";
         const baseUrl = process.env.REPLIT_DEPLOYMENT_URL
@@ -181,19 +254,20 @@ export function notify(companyId: string, type: string, title: string, message: 
         const safeMessage = escapeHtml(message);
         const seen = new Set<string>();
         const sends = ownerRows
-          .filter(r => {
+          .filter((r) => {
             if (!r.email) return false;
             const key = r.email.toLowerCase();
             if (seen.has(key)) return false;
             seen.add(key);
             return true;
           })
-          .map(row => sendEmail({
-            companyId: companyId,
-            to: row.email!,
-            subject: `${companyName} - ${title}`,
-            text: `${message}${fullLink ? `\n\nView details: ${fullLink}` : ""}`,
-            html: `
+          .map((row) =>
+            sendEmail({
+              companyId: companyId,
+              to: row.email!,
+              subject: `${companyName} - ${title}`,
+              text: `${message}${fullLink ? `\n\nView details: ${fullLink}` : ""}`,
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background-color: #2d8a5e; padding: 16px 20px;">
                   <h2 style="color: white; margin: 0; font-size: 18px;">${safeCompany}</h2>
@@ -204,9 +278,10 @@ export function notify(companyId: string, type: string, title: string, message: 
                   ${fullLink ? `<a href="${escapeHtml(fullLink)}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: bold;">View Details</a>` : ""}
                 </div>
               </div>`,
-            senderName: company?.name || undefined,
-            replyTo: company?.email || undefined,
-          }));
+              senderName: company?.name || undefined,
+              replyTo: company?.email || undefined,
+            })
+          );
         const results = await Promise.allSettled(sends);
         for (const r of results) {
           if (r.status === "rejected") console.error("Notification email send failed:", r.reason);
@@ -228,32 +303,42 @@ export function notify(companyId: string, type: string, title: string, message: 
   const webhookEvent = eventMap[type];
   if (webhookEvent) {
     import("../services/webhook-dispatcher").then(({ dispatchWebhooksForEvent }) => {
-      dispatchWebhooksForEvent(companyId, webhookEvent, { type, title, message, linkUrl }).catch(console.error);
+      dispatchWebhooksForEvent(companyId, webhookEvent, { type, title, message, linkUrl }).catch(
+        console.error
+      );
     });
   }
 }
 
-export function qboAutoSync(companyId: string, entityId: string, type: "invoice" | "payment" | "contact") {
-  import("../services/quickbooks").then(async ({ isQboConfigured, syncInvoiceToQbo, syncPaymentToQbo, syncContactToQbo }) => {
-    if (!isQboConfigured()) return;
-    const company = await storage.getCompany(companyId);
-    if (!company?.qboRealmId || !company?.qboAccessToken) return;
-    try {
-      if (type === "invoice") await syncInvoiceToQbo(companyId, entityId);
-      else if (type === "payment") await syncPaymentToQbo(companyId, entityId);
-      else if (type === "contact") await syncContactToQbo(companyId, entityId);
-    } catch (err: any) {
-      console.error(`[QBO auto-sync] ${type} ${entityId} failed:`, err);
-      db.insert(qboSyncLogs).values({
-        companyId,
-        entityType: type,
-        entityId,
-        action: "auto_sync",
-        status: "error",
-        errorMessage: err?.message || String(err),
-      }).catch(console.error);
-    }
-  }).catch(console.error);
+export function qboAutoSync(
+  companyId: string,
+  entityId: string,
+  type: "invoice" | "payment" | "contact"
+) {
+  import("../services/quickbooks")
+    .then(async ({ isQboConfigured, syncInvoiceToQbo, syncPaymentToQbo, syncContactToQbo }) => {
+      if (!isQboConfigured()) return;
+      const company = await storage.getCompany(companyId);
+      if (!company?.qboRealmId || !company?.qboAccessToken) return;
+      try {
+        if (type === "invoice") await syncInvoiceToQbo(companyId, entityId);
+        else if (type === "payment") await syncPaymentToQbo(companyId, entityId);
+        else if (type === "contact") await syncContactToQbo(companyId, entityId);
+      } catch (err: any) {
+        console.error(`[QBO auto-sync] ${type} ${entityId} failed:`, err);
+        db.insert(qboSyncLogs)
+          .values({
+            companyId,
+            entityType: type,
+            entityId,
+            action: "auto_sync",
+            status: "error",
+            errorMessage: err?.message || String(err),
+          })
+          .catch(console.error);
+      }
+    })
+    .catch(console.error);
 }
 
 export async function resolveCoordinatesForAddress(
@@ -262,16 +347,25 @@ export async function resolveCoordinatesForAddress(
   city?: string | null,
   state?: string | null,
   zipCode?: string | null,
-  existingProperties?: { streetAddress?: string | null; city?: string | null; state?: string | null; zipCode?: string | null; latitude?: string | null; longitude?: string | null }[]
+  existingProperties?: {
+    streetAddress?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zipCode?: string | null;
+    latitude?: string | null;
+    longitude?: string | null;
+  }[]
 ): Promise<{ latitude: string; longitude: string } | null> {
-  const properties = existingProperties ?? await storage.getProperties(companyId);
+  const properties = existingProperties ?? (await storage.getProperties(companyId));
   const normalizedStreet = streetAddress.trim().toLowerCase();
-  const match = properties.find(p =>
-    p.streetAddress?.trim().toLowerCase() === normalizedStreet &&
-    (p.city?.trim().toLowerCase() ?? "") === (city?.trim().toLowerCase() ?? "") &&
-    (p.state?.trim().toLowerCase() ?? "") === (state?.trim().toLowerCase() ?? "") &&
-    (p.zipCode?.trim() ?? "") === (zipCode?.trim() ?? "") &&
-    p.latitude && p.longitude
+  const match = properties.find(
+    (p) =>
+      p.streetAddress?.trim().toLowerCase() === normalizedStreet &&
+      (p.city?.trim().toLowerCase() ?? "") === (city?.trim().toLowerCase() ?? "") &&
+      (p.state?.trim().toLowerCase() ?? "") === (state?.trim().toLowerCase() ?? "") &&
+      (p.zipCode?.trim() ?? "") === (zipCode?.trim() ?? "") &&
+      p.latitude &&
+      p.longitude
   );
   if (match) {
     return { latitude: match.latitude!, longitude: match.longitude! };
@@ -280,14 +374,27 @@ export async function resolveCoordinatesForAddress(
 }
 
 export async function createPropertyWithGeocode(data: {
-  companyId: string; contactId: string; streetAddress: string;
-  city?: string | null; state?: string | null; zipCode?: string | null;
-  numberOfDogs?: number | null; yardSize?: string | null;
-  latitude?: string | null; longitude?: string | null;
-  gateCode?: string | null; specialInstructions?: string | null;
+  companyId: string;
+  contactId: string;
+  streetAddress: string;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+  numberOfDogs?: number | null;
+  yardSize?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
+  gateCode?: string | null;
+  specialInstructions?: string | null;
 }) {
   if (!data.latitude && !data.longitude && data.streetAddress) {
-    const coords = await resolveCoordinatesForAddress(data.companyId, data.streetAddress, data.city, data.state, data.zipCode);
+    const coords = await resolveCoordinatesForAddress(
+      data.companyId,
+      data.streetAddress,
+      data.city,
+      data.state,
+      data.zipCode
+    );
     if (coords) {
       data.latitude = coords.latitude;
       data.longitude = coords.longitude;
@@ -296,7 +403,9 @@ export async function createPropertyWithGeocode(data: {
   return storage.createProperty(data as any);
 }
 
-export function getStopOnlyOnlyContactIds(activePlans: { contactId: string; isStopOnly: boolean }[]): Set<string> {
+export function getStopOnlyOnlyContactIds(
+  activePlans: { contactId: string; isStopOnly: boolean }[]
+): Set<string> {
   const contactHasReal = new Set<string>();
   const contactHasStopOnly = new Set<string>();
   for (const p of activePlans) {
@@ -313,7 +422,6 @@ export function getStopOnlyOnlyContactIds(activePlans: { contactId: string; isSt
   return result;
 }
 
-
 // isAdmin middleware (platform-level admin auth)
 export async function isAdmin(req: Request, res: Response, next: Function) {
   const token = req.headers["x-admin-token"] as string;
@@ -325,20 +433,28 @@ export async function isAdmin(req: Request, res: Response, next: Function) {
   next();
 }
 
-
 // ─── Cross-domain helper functions ───────────────────────────────────────────
 // Defined here so they can be imported by any domain module that needs them.
 
-export async function ensureCompanySetup(userId: string, companyName?: string): Promise<{ companyId: string; alreadySetup: boolean }> {
+export async function ensureCompanySetup(
+  userId: string,
+  companyName?: string
+): Promise<{ companyId: string; alreadySetup: boolean }> {
   const existing = await storage.getCompaniesForUser(userId);
   if (existing.length > 0) {
     return { companyId: existing[0].companyId, alreadySetup: true };
   }
   const user = await getUserById(userId);
-  const username = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User" : "User";
+  const username = user
+    ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User"
+    : "User";
   const resolvedName = companyName?.trim() || `${username}'s Company`;
 
-  const baseSlug = resolvedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
+  const baseSlug =
+    resolvedName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "company";
   let slug = baseSlug;
   let slugSuffix = 1;
   while (true) {
@@ -365,7 +481,18 @@ export async function ensureCompanySetup(userId: string, companyName?: string): 
 }
 
 export async function seedDefaultLeadSources(companyId: string): Promise<void> {
-  const defaultLeadSources = ["Referral", "Nextdoor", "Facebook", "Yelp", "Instagram", "Google Ad", "Organic Search", "Bing", "Yard Sign", "Local Advertising"];
+  const defaultLeadSources = [
+    "Referral",
+    "Nextdoor",
+    "Facebook",
+    "Yelp",
+    "Instagram",
+    "Google Ad",
+    "Organic Search",
+    "Bing",
+    "Yard Sign",
+    "Local Advertising",
+  ];
   for (const name of defaultLeadSources) {
     await storage.createLeadSource({ companyId, name });
   }
@@ -378,10 +505,21 @@ export async function getDemoCompanyId(): Promise<string | null> {
 
 export async function buildVisitLineItemsWithAddOns(
   visits: { id: string; scheduledDate: string; servicePlanId: string }[],
-  planMap: Map<string, { pricePerVisit: string; name?: string | null; serviceName?: string | null; id: string }>,
-): Promise<{ visitId: string; description: string; quantity: number; unitPrice: string; total: string }[]> {
+  planMap: Map<
+    string,
+    { pricePerVisit: string; name?: string | null; serviceName?: string | null; id: string }
+  >
+): Promise<
+  { visitId: string; description: string; quantity: number; unitPrice: string; total: string }[]
+> {
   const planAddOnsCache = new Map<string, { name: string; price: string }[]>();
-  const lineItems: { visitId: string; description: string; quantity: number; unitPrice: string; total: string }[] = [];
+  const lineItems: {
+    visitId: string;
+    description: string;
+    quantity: number;
+    unitPrice: string;
+    total: string;
+  }[] = [];
   for (const visit of visits) {
     const plan = planMap.get(visit.servicePlanId);
     const unitPrice = plan ? plan.pricePerVisit : "0";
@@ -396,7 +534,10 @@ export async function buildVisitLineItemsWithAddOns(
     if (plan) {
       if (!planAddOnsCache.has(plan.id)) {
         const addOns = await storage.getServicePlanAddOns(plan.id);
-        planAddOnsCache.set(plan.id, addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })));
+        planAddOnsCache.set(
+          plan.id,
+          addOns.filter((a) => a.isActive).map((a) => ({ name: a.name, price: a.price }))
+        );
       }
       const addOns = planAddOnsCache.get(plan.id) || [];
       for (const addon of addOns) {
@@ -413,7 +554,6 @@ export async function buildVisitLineItemsWithAddOns(
   return lineItems;
 }
 
-
 export async function validateAndResolveAddOns(addOns: any[], companyId: string) {
   if (!Array.isArray(addOns)) return [];
   const pricingItems = await storage.getServicePricing(companyId);
@@ -421,7 +561,9 @@ export async function validateAndResolveAddOns(addOns: any[], companyId: string)
   const seen = new Set<string>();
   for (const addon of addOns) {
     if (!addon.servicePricingId || seen.has(addon.servicePricingId)) continue;
-    const item = pricingItems.find(p => p.id === addon.servicePricingId && p.category === "add_on" && p.isActive);
+    const item = pricingItems.find(
+      (p) => p.id === addon.servicePricingId && p.category === "add_on" && p.isActive
+    );
     if (!item) continue;
     seen.add(addon.servicePricingId);
     validAddOns.push({
@@ -435,11 +577,11 @@ export async function validateAndResolveAddOns(addOns: any[], companyId: string)
 
 export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -449,12 +591,12 @@ export async function suggestServiceDay(
   lng: number
 ): Promise<{ day: string; routeName: string; distanceKm: number } | null> {
   const routes = await storage.getRoutes(companyId);
-  const recurringRoutes = routes.filter(r => r.dayOfWeek && !r.date);
+  const recurringRoutes = routes.filter((r) => r.dayOfWeek && !r.date);
   if (!recurringRoutes.length) return null;
 
   const plans = await storage.getServicePlans(companyId, { isActive: true });
   const properties = await storage.getProperties(companyId);
-  const propMap = new Map(properties.map(p => [p.id, p]));
+  const propMap = new Map(properties.map((p) => [p.id, p]));
 
   // For each recurring route, find the distance to the nearest stop
   type DayBest = { day: string; routeName: string; distanceKm: number };
@@ -462,7 +604,7 @@ export async function suggestServiceDay(
 
   for (const route of recurringRoutes) {
     if (!route.dayOfWeek) continue;
-    const routePlans = plans.filter(sp => sp.routeId === route.id);
+    const routePlans = plans.filter((sp) => sp.routeId === route.id);
     for (const sp of routePlans) {
       if (!sp.propertyId) continue;
       const prop = propMap.get(sp.propertyId);
@@ -470,7 +612,11 @@ export async function suggestServiceDay(
       const km = haversineKm(lat, lng, Number(prop.latitude), Number(prop.longitude));
       const existing = dayBest.get(route.dayOfWeek);
       if (!existing || km < existing.distanceKm) {
-        dayBest.set(route.dayOfWeek, { day: route.dayOfWeek, routeName: route.name || route.dayOfWeek, distanceKm: km });
+        dayBest.set(route.dayOfWeek, {
+          day: route.dayOfWeek,
+          routeName: route.name || route.dayOfWeek,
+          distanceKm: km,
+        });
       }
     }
   }
@@ -480,23 +626,31 @@ export async function suggestServiceDay(
     const dayCounts = new Map<string, number>();
     for (const route of recurringRoutes) {
       if (!route.dayOfWeek) continue;
-      const count = plans.filter(sp => sp.routeId === route.id).length;
+      const count = plans.filter((sp) => sp.routeId === route.id).length;
       dayCounts.set(route.dayOfWeek, (dayCounts.get(route.dayOfWeek) || 0) + count);
     }
     if (!dayCounts.size) return null;
     const bestDay = [...dayCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-    const route = recurringRoutes.find(r => r.dayOfWeek === bestDay);
+    const route = recurringRoutes.find((r) => r.dayOfWeek === bestDay);
     return { day: bestDay, routeName: route?.name || bestDay, distanceKm: -1 };
   }
 
   return [...dayBest.values()].sort((a, b) => a.distanceKm - b.distanceKm)[0];
 }
 
-
-export async function provisionPortalAccess(  contactId: string,
+export async function provisionPortalAccess(
+  contactId: string,
   companyId: string,
   portalBaseUrl: string,
-  opts?: { sendEmail?: boolean; serviceDetails?: { dayOfWeek?: string; frequency?: string; pricePerVisit?: string; nextVisitDate?: string } }
+  opts?: {
+    sendEmail?: boolean;
+    serviceDetails?: {
+      dayOfWeek?: string;
+      frequency?: string;
+      pricePerVisit?: string;
+      nextVisitDate?: string;
+    };
+  }
 ): Promise<{ tempPassword: string; emailSent: boolean }> {
   const contact = await storage.getContact(contactId, companyId);
   if (!contact || !contact.email) return { tempPassword: "", emailSent: false };
@@ -511,9 +665,17 @@ export async function provisionPortalAccess(  contactId: string,
   });
 
   try {
-    await storage.updateContact(contactId, companyId, { hasPortalAccess: true, portalPasswordHash });
+    await storage.updateContact(contactId, companyId, {
+      hasPortalAccess: true,
+      portalPasswordHash,
+    });
   } catch (dbErr: any) {
-    console.error("[provisionPortalAccess] Failed to update contact:", { contactId, companyId, message: dbErr?.message, stack: dbErr?.stack });
+    console.error("[provisionPortalAccess] Failed to update contact:", {
+      contactId,
+      companyId,
+      message: dbErr?.message,
+      stack: dbErr?.stack,
+    });
     throw new Error(`Failed to save portal credentials: ${dbErr?.message || String(dbErr)}`);
   }
 
@@ -523,34 +685,43 @@ export async function provisionPortalAccess(  contactId: string,
   // sendEmail: true → force send (bypasses suppression, used by batch onboarding send)
   // sendEmail: false → never send
   // sendEmail: undefined → respect suppression flag
-  const shouldSend = opts?.sendEmail === true
-    ? true
-    : opts?.sendEmail === false
-      ? false
-      : !(company?.clientNotificationsSuppressed);
+  const shouldSend =
+    opts?.sendEmail === true
+      ? true
+      : opts?.sendEmail === false
+        ? false
+        : !company?.clientNotificationsSuppressed;
   if (!shouldSend) {
-    console.log(`[provisionPortalAccess] Email suppressed (clientNotificationsSuppressed=true) for contact ${contactId}`);
+    console.log(
+      `[provisionPortalAccess] Email suppressed (clientNotificationsSuppressed=true) for contact ${contactId}`
+    );
     return { tempPassword, emailSent: false };
   }
 
   const portalUrl = `${portalBaseUrl}/portal/login`;
   const serviceDetails = opts?.serviceDetails;
 
-  const serviceSection = serviceDetails ? `
+  const serviceSection = serviceDetails
+    ? `
         <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; margin: 16px 0;">
           <p style="margin: 0 0 10px 0; font-weight: bold; color: #166534;">Your Service Details:</p>
           ${serviceDetails.dayOfWeek ? `<p style="margin: 4px 0;">📅 <strong>Service Day:</strong> ${serviceDetails.dayOfWeek}</p>` : ""}
           ${serviceDetails.frequency ? `<p style="margin: 4px 0;">🔄 <strong>Frequency:</strong> ${serviceDetails.frequency}</p>` : ""}
           ${serviceDetails.pricePerVisit ? `<p style="margin: 4px 0;">💵 <strong>Price per Visit:</strong> $${serviceDetails.pricePerVisit}</p>` : ""}
           ${serviceDetails.nextVisitDate ? `<p style="margin: 4px 0;">📆 <strong>Next Visit:</strong> ${serviceDetails.nextVisitDate}</p>` : ""}
-        </div>` : "";
+        </div>`
+    : "";
 
-  const serviceText = serviceDetails ? [
-    serviceDetails.dayOfWeek ? `Service Day: ${serviceDetails.dayOfWeek}` : "",
-    serviceDetails.frequency ? `Frequency: ${serviceDetails.frequency}` : "",
-    serviceDetails.pricePerVisit ? `Price per Visit: $${serviceDetails.pricePerVisit}` : "",
-    serviceDetails.nextVisitDate ? `Next Visit: ${serviceDetails.nextVisitDate}` : "",
-  ].filter(Boolean).join("\n") : "";
+  const serviceText = serviceDetails
+    ? [
+        serviceDetails.dayOfWeek ? `Service Day: ${serviceDetails.dayOfWeek}` : "",
+        serviceDetails.frequency ? `Frequency: ${serviceDetails.frequency}` : "",
+        serviceDetails.pricePerVisit ? `Price per Visit: $${serviceDetails.pricePerVisit}` : "",
+        serviceDetails.nextVisitDate ? `Next Visit: ${serviceDetails.nextVisitDate}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "";
 
   const sendResult = await sendEmail({
     companyId: companyId,
@@ -589,7 +760,9 @@ export async function provisionPortalAccess(  contactId: string,
   return { tempPassword, emailSent: sendResult.success && !sendResult.suppressed };
 }
 
-export function normalizeQuoteFrequency(freq: string | null | undefined): "weekly" | "biweekly" | "monthly" | "onetime" {
+export function normalizeQuoteFrequency(
+  freq: string | null | undefined
+): "weekly" | "biweekly" | "monthly" | "onetime" {
   switch (freq) {
     case "weekly":
     case "1x_weekly":

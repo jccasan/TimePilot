@@ -58,13 +58,20 @@ export default function PortalVerifyEmail() {
             <div className="flex justify-center mb-4">
               <CheckCircle2 className="h-12 w-12 text-green-600" />
             </div>
-            <CardTitle className="text-2xl" data-testid="text-verify-success-title">Email Verified</CardTitle>
+            <CardTitle className="text-2xl" data-testid="text-verify-success-title">
+              Email Verified
+            </CardTitle>
             <CardDescription>
-              Your email has been updated to <strong>{newEmail}</strong>. You can now use this email to sign in.
+              Your email has been updated to <strong>{newEmail}</strong>. You can now use this email
+              to sign in.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="w-full" onClick={() => navigate("/portal/login")} data-testid="button-verify-to-login">
+            <Button
+              className="w-full"
+              onClick={() => navigate("/portal/login")}
+              data-testid="button-verify-to-login"
+            >
               Go to Sign In
             </Button>
           </CardContent>
@@ -80,11 +87,17 @@ export default function PortalVerifyEmail() {
           <div className="flex justify-center mb-4">
             <XCircle className="h-12 w-12 text-destructive" />
           </div>
-          <CardTitle className="text-2xl" data-testid="text-verify-error-title">Verification Failed</CardTitle>
+          <CardTitle className="text-2xl" data-testid="text-verify-error-title">
+            Verification Failed
+          </CardTitle>
           <CardDescription>{errorMessage}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button className="w-full" onClick={() => navigate("/portal/login")} data-testid="button-verify-error-to-login">
+          <Button
+            className="w-full"
+            onClick={() => navigate("/portal/login")}
+            data-testid="button-verify-error-to-login"
+          >
             Go to Sign In
           </Button>
         </CardContent>

@@ -94,4 +94,3 @@ export function registerObjectStorageRoutes(app: Express, authMiddleware?: Reque
     }
   });
 }
-

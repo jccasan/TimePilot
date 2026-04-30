@@ -7,7 +7,12 @@ import { sql, eq, and } from "drizzle-orm";
 import { companies, contacts, quoteFormEvents } from "@shared/schema";
 import { calculatePrice, type PriceCalculatorInputs } from "../services/pricing-calculator";
 import { z } from "zod";
-import { getUserByEmail, createUserWithTempPassword, claimOnboardingEmailSend, resetOnboardingEmailSent } from "../services/app-auth";
+import {
+  getUserByEmail,
+  createUserWithTempPassword,
+  claimOnboardingEmailSend,
+  resetOnboardingEmailSent,
+} from "../services/app-auth";
 import { sendEmail, sendAdminSignupNotification, logEmailSent } from "../services/email";
 import { sendSmsForCompany, isSmsConfiguredForCompany } from "../services/sms";
 import {
@@ -18,8 +23,17 @@ import {
 import { checkIpRisk, getClientIp, getCountryCode } from "../services/ip-risk";
 import { calculateQuotePricing, type ResidentialQuoteInput } from "../services/quote-pricing";
 
-import { isAuthenticated, getCompanyContext, getBaseUrl, handleError, p, notify, createPropertyWithGeocode, escapeHtml, seedDefaultLeadSources } from "./shared";
-
+import {
+  isAuthenticated,
+  getCompanyContext,
+  getBaseUrl,
+  handleError,
+  p,
+  notify,
+  createPropertyWithGeocode,
+  escapeHtml,
+  seedDefaultLeadSources,
+} from "./shared";
 
 export async function registerPublicRoutes(app: Express): Promise<void> {
   // ================ Public Signup Routes (no auth required) ================
@@ -53,14 +67,24 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       ]);
 
       if (ipRisk.isVpn || ipRisk.isProxy) {
-        console.warn(`[Signup] Blocked VPN/proxy signup from ${clientIp} (type: ${ipRisk.isVpn ? "VPN" : "proxy"}, country: ${countryCode ?? "unknown"}, email: ${email})`);
-        return res.status(403).json({ error: "Signups from VPN or proxy connections are not allowed. Please disable your VPN and try again." });
+        console.warn(
+          `[Signup] Blocked VPN/proxy signup from ${clientIp} (type: ${ipRisk.isVpn ? "VPN" : "proxy"}, country: ${countryCode ?? "unknown"}, email: ${email})`
+        );
+        return res.status(403).json({
+          error:
+            "Signups from VPN or proxy connections are not allowed. Please disable your VPN and try again.",
+        });
       }
 
       const detectedCountry = countryCode ?? ipRisk.countryCode;
-      const blockedCountries = (process.env.BLOCKED_SIGNUP_COUNTRIES || "").split(",").map(c => c.trim().toUpperCase()).filter(Boolean);
+      const blockedCountries = (process.env.BLOCKED_SIGNUP_COUNTRIES || "")
+        .split(",")
+        .map((c) => c.trim().toUpperCase())
+        .filter(Boolean);
       if (detectedCountry && blockedCountries.includes(detectedCountry)) {
-        console.warn(`[Signup] Blocked signup from country ${detectedCountry}, IP ${clientIp}, email: ${email}`);
+        console.warn(
+          `[Signup] Blocked signup from country ${detectedCountry}, IP ${clientIp}, email: ${email}`
+        );
         return res.status(403).json({ error: "Signups are not available in your region." });
       }
 
@@ -71,15 +95,21 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
       const { emailVerificationTokens } = await import("@shared/models/auth");
       const { eq, and, gt } = await import("drizzle-orm");
-      const pending = await db.select().from(emailVerificationTokens).where(
-        and(
-          eq(emailVerificationTokens.email, email.toLowerCase()),
-          eq(emailVerificationTokens.used, false),
-          gt(emailVerificationTokens.expiresAt, new Date())
-        )
-      );
+      const pending = await db
+        .select()
+        .from(emailVerificationTokens)
+        .where(
+          and(
+            eq(emailVerificationTokens.email, email.toLowerCase()),
+            eq(emailVerificationTokens.used, false),
+            gt(emailVerificationTokens.expiresAt, new Date())
+          )
+        );
       if (pending.length > 0) {
-        return res.json({ success: true, message: "A verification email was already sent. Please check your inbox." });
+        return res.json({
+          success: true,
+          message: "A verification email was already sent. Please check your inbox.",
+        });
       }
 
       const token = crypto.randomBytes(32).toString("hex");
@@ -123,11 +153,15 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         });
       } catch (emailErr) {
         console.error("[Signup] Failed to send verification email:", emailErr);
-        return res.status(500).json({ error: "Failed to send verification email. Please try again." });
+        return res
+          .status(500)
+          .json({ error: "Failed to send verification email. Please try again." });
       }
 
       res.json({ success: true, message: "Verification email sent. Please check your inbox." });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/public/verify-email", async (req: Request, res: Response) => {
@@ -141,49 +175,79 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       const { emailVerificationTokens } = await import("@shared/models/auth");
       const { eq, and, gt } = await import("drizzle-orm");
 
-      const [record] = await db.select().from(emailVerificationTokens).where(
-        and(
-          eq(emailVerificationTokens.tokenHash, tokenHash),
-          eq(emailVerificationTokens.used, false),
-          gt(emailVerificationTokens.expiresAt, new Date())
-        )
-      );
+      const [record] = await db
+        .select()
+        .from(emailVerificationTokens)
+        .where(
+          and(
+            eq(emailVerificationTokens.tokenHash, tokenHash),
+            eq(emailVerificationTokens.used, false),
+            gt(emailVerificationTokens.expiresAt, new Date())
+          )
+        );
 
       if (!record) {
-        return res.send(verificationResultPage(false, "This verification link is invalid or has expired. Please sign up again."));
+        return res.send(
+          verificationResultPage(
+            false,
+            "This verification link is invalid or has expired. Please sign up again."
+          )
+        );
       }
 
       const existingUser = await getUserByEmail(record.email);
       if (existingUser) {
-        await db.update(emailVerificationTokens)
+        await db
+          .update(emailVerificationTokens)
           .set({ used: true })
           .where(eq(emailVerificationTokens.id, record.id));
-        return res.send(verificationResultPage(false, "An account with this email already exists. Please log in instead."));
+        return res.send(
+          verificationResultPage(
+            false,
+            "An account with this email already exists. Please log in instead."
+          )
+        );
       }
 
       const tempPassword = crypto.randomBytes(6).toString("base64url");
 
       // --- GeoIP + VPN detection ---
       const verifyClientIp = getClientIp(req as any);
-      const verifyCfCountry = (req.headers["cf-ipcountry"] as string | undefined)?.trim().toUpperCase();
-      let verifyIpRisk: Awaited<ReturnType<typeof checkIpRisk>> = { ip: verifyClientIp, isVpn: false, isProxy: false, skipped: true };
+      const verifyCfCountry = (req.headers["cf-ipcountry"] as string | undefined)
+        ?.trim()
+        .toUpperCase();
+      let verifyIpRisk: Awaited<ReturnType<typeof checkIpRisk>> = {
+        ip: verifyClientIp,
+        isVpn: false,
+        isProxy: false,
+        skipped: true,
+      };
       let verifyCountryCode: string | null = null;
       try {
         [verifyIpRisk, verifyCountryCode] = await Promise.all([
           checkIpRisk(verifyClientIp),
           getCountryCode(verifyClientIp, verifyCfCountry),
         ]);
-      } catch { /* fail open */ }
+      } catch {
+        /* fail open */
+      }
 
       if (verifyIpRisk.isVpn || verifyIpRisk.isProxy) {
-        console.warn(`[Signup] Blocked VPN/proxy email verify from ${verifyClientIp} (country: ${verifyCountryCode ?? "unknown"}, email: ${record.email})`);
+        console.warn(
+          `[Signup] Blocked VPN/proxy email verify from ${verifyClientIp} (country: ${verifyCountryCode ?? "unknown"}, email: ${record.email})`
+        );
         return res.redirect(`/signup?error=vpn`);
       }
 
-      const blockedCountriesVerify = (process.env.BLOCKED_SIGNUP_COUNTRIES || "").split(",").map(c => c.trim().toUpperCase()).filter(Boolean);
+      const blockedCountriesVerify = (process.env.BLOCKED_SIGNUP_COUNTRIES || "")
+        .split(",")
+        .map((c) => c.trim().toUpperCase())
+        .filter(Boolean);
       const detectedCountryVerify = verifyCountryCode ?? verifyIpRisk.countryCode;
       if (detectedCountryVerify && blockedCountriesVerify.includes(detectedCountryVerify)) {
-        console.warn(`[Signup] Blocked email verify from country ${detectedCountryVerify}, IP ${verifyClientIp}, email: ${record.email}`);
+        console.warn(
+          `[Signup] Blocked email verify from country ${detectedCountryVerify}, IP ${verifyClientIp}, email: ${record.email}`
+        );
         return res.redirect(`/signup?error=region`);
       }
 
@@ -192,9 +256,18 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       const newStatus = isDomestic ? "trialing" : "pending_approval";
 
       const { user: verifiedUser, company } = await db.transaction(async (tx) => {
-        const txUser = await createUserWithTempPassword(record.email, record.firstName, record.lastName || "", tempPassword);
+        const txUser = await createUserWithTempPassword(
+          record.email,
+          record.firstName,
+          record.lastName || "",
+          tempPassword
+        );
 
-        const baseSlug = (record.companyName || "company").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
+        const baseSlug =
+          (record.companyName || "company")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "") || "company";
         let slug = baseSlug;
         let slugSuffix = 1;
         while (true) {
@@ -203,15 +276,18 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
           slug = `${baseSlug}-${slugSuffix++}`;
         }
 
-        const [txCompany] = await tx.insert((await import("@shared/schema")).companies).values({
-          name: record.companyName,
-          email: record.email,
-          slug,
-          subscriptionTier: "free_trial",
-          subscriptionStatus: newStatus,
-          trialEndsAt: isDomestic ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) : null,
-          signupCountry,
-        }).returning();
+        const [txCompany] = await tx
+          .insert((await import("@shared/schema")).companies)
+          .values({
+            name: record.companyName,
+            email: record.email,
+            slug,
+            subscriptionTier: "free_trial",
+            subscriptionStatus: newStatus,
+            trialEndsAt: isDomestic ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) : null,
+            signupCountry,
+          })
+          .returning();
 
         await tx.insert((await import("@shared/schema")).companyUsers).values({
           userId: txUser.id,
@@ -219,7 +295,8 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
           role: "owner",
         });
 
-        await tx.update(emailVerificationTokens)
+        await tx
+          .update(emailVerificationTokens)
           .set({ used: true })
           .where(eq(emailVerificationTokens.id, record.id));
 
@@ -236,7 +313,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       if (isDomestic) {
         const verifyClaimed = await claimOnboardingEmailSend(verifiedUser.id).catch(() => false);
         if (!verifyClaimed) {
-          console.log(`[Verify Email] Onboarding email already sent for ${maskEmail(record.email)}, skipping.`);
+          console.log(
+            `[Verify Email] Onboarding email already sent for ${maskEmail(record.email)}, skipping.`
+          );
         } else {
           try {
             await sendEmail({
@@ -267,7 +346,10 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
             });
             console.log(`[Verify Email] Welcome email sent to ${maskEmail(record.email)}`);
           } catch (emailErr) {
-            console.error(`[Signup] Failed to send welcome email to ${maskEmail(record.email)}, resetting flag:`, emailErr);
+            console.error(
+              `[Signup] Failed to send welcome email to ${maskEmail(record.email)}, resetting flag:`,
+              emailErr
+            );
             await resetOnboardingEmailSent(verifiedUser.id).catch(() => {});
           }
         }
@@ -294,11 +376,17 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       }
     } catch (err) {
       console.error("[Signup] Verification error:", err);
-      res.send(verificationResultPage(false, "Something went wrong. Please try again or contact support."));
+      res.send(
+        verificationResultPage(false, "Something went wrong. Please try again or contact support.")
+      );
     }
   });
 
-  function verificationResultPage(success: boolean, errorMessage?: string | null, loginUrl?: string): string {
+  function verificationResultPage(
+    success: boolean,
+    errorMessage?: string | null,
+    loginUrl?: string
+  ): string {
     const title = success ? "Email Verified!" : "Verification Failed";
     const body = success
       ? `<h2 style="color: #2d8a5e; margin-top: 0;">Your account has been created!</h2>
@@ -337,27 +425,40 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
   app.post("/api/public/submit-verification-url", async (req: Request, res: Response) => {
     try {
       const { email, url } = req.body;
-      if (!email || typeof email !== "string") return res.status(400).json({ error: "Email is required" });
-      if (!url || typeof url !== "string") return res.status(400).json({ error: "URL is required" });
+      if (!email || typeof email !== "string")
+        return res.status(400).json({ error: "Email is required" });
+      if (!url || typeof url !== "string")
+        return res.status(400).json({ error: "URL is required" });
       const trimmedUrl = url.trim();
       try {
         const parsed = new URL(trimmedUrl);
         if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
           return res.status(400).json({ error: "URL must use http or https" });
         }
-      } catch { return res.status(400).json({ error: "Invalid URL format" }); }
+      } catch {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
       const { eq, and, isNull } = await import("drizzle-orm");
-      const [company] = await db.select({ id: companies.id }).from(companies).where(
-        and(
-          eq(companies.email, email.trim().toLowerCase()),
-          eq(companies.subscriptionStatus, "pending_approval"),
-          isNull(companies.verificationUrl)
-        )
-      );
-      if (!company) return res.status(404).json({ error: "No pending account found for this email" });
-      await db.update(companies).set({ verificationUrl: trimmedUrl }).where(eq(companies.id, company.id));
+      const [company] = await db
+        .select({ id: companies.id })
+        .from(companies)
+        .where(
+          and(
+            eq(companies.email, email.trim().toLowerCase()),
+            eq(companies.subscriptionStatus, "pending_approval"),
+            isNull(companies.verificationUrl)
+          )
+        );
+      if (!company)
+        return res.status(404).json({ error: "No pending account found for this email" });
+      await db
+        .update(companies)
+        .set({ verificationUrl: trimmedUrl })
+        .where(eq(companies.id, company.id));
       res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   function verificationPendingPage(firstName: string, _appUrl: string, email: string): string {
@@ -448,14 +549,17 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
   app.get("/api/public/company/:slug", async (req: Request, res: Response) => {
     try {
-      const { slug: _slug } = req.params; const slug = p(_slug);
+      const { slug: _slug } = req.params;
+      const slug = p(_slug);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
       const pricingItems = await storage.getServicePricing(company.id);
       const activePricing = pricingItems
-        .filter(p => p.isActive && (p.category === "recurring_service" || p.category === "add_on"))
-        .map(p => ({
+        .filter(
+          (p) => p.isActive && (p.category === "recurring_service" || p.category === "add_on")
+        )
+        .map((p) => ({
           id: p.id,
           name: p.name,
           basePrice: p.basePrice,
@@ -481,12 +585,16 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         quoteFormLayout: company.quoteFormLayout || "stepper",
         country: company.country || "us",
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/public/check-zip/:slug/:zip", async (req: Request, res: Response) => {
     try {
-      const { slug: _slug2, zip: _zip } = req.params; const slug = p(_slug2); const zip = p(_zip);
+      const { slug: _slug2, zip: _zip } = req.params;
+      const slug = p(_slug2);
+      const zip = p(_zip);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -508,21 +616,21 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       }
 
       const zones = await storage.getServiceZones(company.id);
-      const activeZones = zones.filter(z => z.isActive);
+      const activeZones = zones.filter((z) => z.isActive);
 
       if (activeZones.length === 0) {
         return res.json({ inServiceArea: true, hasZones: false });
       }
 
-      let matchingZone: typeof activeZones[0] | undefined;
+      let matchingZone: (typeof activeZones)[0] | undefined;
       if (isCanadian) {
         const prefix = normalizedZip.replace(/\s/g, "").slice(0, 3).toUpperCase();
-        matchingZone = activeZones.find(z => {
+        matchingZone = activeZones.find((z) => {
           const zoneCode = z.zipCode.replace(/\s/g, "").toUpperCase();
           return zoneCode === normalizedZip.replace(/\s/g, "") || zoneCode.startsWith(prefix);
         });
       } else {
-        matchingZone = activeZones.find(z => z.zipCode.trim().slice(0, 5) === normalizedZip);
+        matchingZone = activeZones.find((z) => z.zipCode.trim().slice(0, 5) === normalizedZip);
       }
 
       res.json({
@@ -530,7 +638,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         hasZones: true,
         zoneSurchargePercent: matchingZone?.priceSurchargePercent ?? 0,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Public Invoice Pay (tip-enabled checkout for sent invoices) ================
@@ -538,10 +648,13 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
   app.get("/api/public/invoices/:id", async (req: Request, res: Response) => {
     try {
       const invoice = await storage.getInvoiceById(p(req.params.id));
-      if (!invoice || invoice.status === "draft") return res.status(404).json({ error: "Invoice not found" });
+      if (!invoice || invoice.status === "draft")
+        return res.status(404).json({ error: "Invoice not found" });
       const company = await storage.getCompany(invoice.companyId);
       const contact = invoice.contactId ? await storage.getContactById(invoice.contactId) : null;
-      const stripeEnabled = isStripeConfigured() && !!(company?.stripeConnectOnboarded && company.stripeConnectAccountId);
+      const stripeEnabled =
+        isStripeConfigured() &&
+        !!(company?.stripeConnectOnboarded && company.stripeConnectAccountId);
       res.json({
         invoiceNumber: invoice.invoiceNumber,
         total: invoice.total,
@@ -552,30 +665,40 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         contactName: contact ? `${contact.firstName} ${contact.lastName || ""}`.trim() : "",
         stripeEnabled,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/public/invoices/:id/pay", async (req: Request, res: Response) => {
     try {
       const invoice = await storage.getInvoiceById(p(req.params.id));
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-      if (invoice.status === "draft") return res.status(400).json({ error: "Invoice not yet sent" });
-      if (invoice.status === "voided") return res.status(400).json({ error: "Invoice has been voided" });
+      if (invoice.status === "draft")
+        return res.status(400).json({ error: "Invoice not yet sent" });
+      if (invoice.status === "voided")
+        return res.status(400).json({ error: "Invoice has been voided" });
       if (invoice.status === "paid") return res.status(400).json({ error: "Invoice already paid" });
 
       const tipAmount = Math.round(parseFloat(req.body?.tipAmount || "0") * 100) / 100;
-      if (isNaN(tipAmount) || tipAmount < 0) return res.status(400).json({ error: "Invalid tip amount" });
+      if (isNaN(tipAmount) || tipAmount < 0)
+        return res.status(400).json({ error: "Invalid tip amount" });
       if (tipAmount > 500) return res.status(400).json({ error: "Tip exceeds maximum" });
 
       const baseAmount = parseFloat(invoice.total);
       const chargeAmount = baseAmount + tipAmount;
-      if (chargeAmount < 0.5) return res.status(400).json({ error: "Minimum payment is $0.50. Please add a tip to continue." });
+      if (chargeAmount < 0.5)
+        return res
+          .status(400)
+          .json({ error: "Minimum payment is $0.50. Please add a tip to continue." });
 
       const company = await storage.getCompany(invoice.companyId);
       const contact = invoice.contactId ? await storage.getContactById(invoice.contactId) : null;
       const connectAcct = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
 
-      const contactName = contact ? `${contact.firstName} ${contact.lastName || ""}`.trim() : "Customer";
+      const contactName = contact
+        ? `${contact.firstName} ${contact.lastName || ""}`.trim()
+        : "Customer";
       const { customerId: stripeCustomerId, wasRecreated } = await ensureConnectedCustomer({
         currentCustomerId: contact?.stripeCustomerId || null,
         stripeAccount: connectAcct,
@@ -600,32 +723,53 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         tenantId: invoice.companyId,
       });
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   const webhookLeadSchema = z.object({
     firstName: z.string().min(1).max(255),
     lastName: z.string().max(255).default(""),
     email: z.string().email().max(255).optional().or(z.literal("")),
-    phone: z.string().max(50).regex(/^[+]?[\d\s\-().]{7,}$/, "Invalid phone number format").optional().or(z.literal("")),
+    phone: z
+      .string()
+      .max(50)
+      .regex(/^[+]?[\d\s\-().]{7,}$/, "Invalid phone number format")
+      .optional()
+      .or(z.literal("")),
     streetAddress: z.string().max(255).optional().or(z.literal("")),
     city: z.string().max(100).optional().or(z.literal("")),
     state: z.string().max(50).optional().or(z.literal("")),
     zipCode: z.string().max(20).optional().or(z.literal("")),
-    numberOfDogs: z.union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)]).default(1),
+    numberOfDogs: z
+      .union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)])
+      .default(1),
     yardSize: z.enum(["small", "medium", "large", "extra-large"]).optional(),
-    serviceFrequency: z.enum(["twice_weekly", "weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
-    serviceDay: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
+    serviceFrequency: z
+      .enum(["twice_weekly", "weekly", "biweekly", "monthly", "onetime"])
+      .default("weekly"),
+    serviceDay: z
+      .enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"])
+      .optional(),
     source: z.string().max(100).optional(),
     notes: z.string().max(2000).optional(),
   });
 
-  const DEFAULT_SMS_QUOTE_TEMPLATE = "Hi {firstName}! Thanks for your interest in our pet waste removal service. Based on {dogs} dog(s) with {frequency} service, your estimated price is ${price}/visit. Reply YES to get started!";
+  const DEFAULT_SMS_QUOTE_TEMPLATE =
+    "Hi {firstName}! Thanks for your interest in our pet waste removal service. Based on {dogs} dog(s) with {frequency} service, your estimated price is ${price}/visit. Reply YES to get started!";
 
-  async function lookupRealPrice(companyId: string, dogs: number, frequency: string, yardSize?: string): Promise<{ priceCents: number; callForQuote: boolean }> {
+  async function lookupRealPrice(
+    companyId: string,
+    dogs: number,
+    frequency: string,
+    yardSize?: string
+  ): Promise<{ priceCents: number; callForQuote: boolean }> {
     const pricingItems = await storage.getServicePricing(companyId);
-    const activeRecurring = pricingItems.filter(p => p.isActive && p.category === "recurring_service");
-    const activeAddOns = pricingItems.filter(p => p.isActive && p.category === "add_on");
+    const activeRecurring = pricingItems.filter(
+      (p) => p.isActive && p.category === "recurring_service"
+    );
+    const activeAddOns = pricingItems.filter((p) => p.isActive && p.category === "add_on");
 
     if (activeRecurring.length === 0) return { priceCents: 0, callForQuote: false };
 
@@ -641,13 +785,13 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     const matchFreq = (name: string, freq: string): boolean => {
       const lower = name.toLowerCase();
       if (freq === "weekly") {
-        if (twiceWeeklyKeys.some(k => lower.includes(k))) return false;
-        if ((freqMap["biweekly"] || []).some(k => lower.includes(k))) return false;
+        if (twiceWeeklyKeys.some((k) => lower.includes(k))) return false;
+        if ((freqMap["biweekly"] || []).some((k) => lower.includes(k))) return false;
       }
-      return (freqMap[freq] || [freq]).some(k => lower.includes(k));
+      return (freqMap[freq] || [freq]).some((k) => lower.includes(k));
     };
 
-    const freqItems = activeRecurring.filter(p => matchFreq(p.name, frequency));
+    const freqItems = activeRecurring.filter((p) => matchFreq(p.name, frequency));
 
     const matchDog = (name: string, d: number): boolean => {
       const lower = name.toLowerCase();
@@ -660,9 +804,12 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       return false;
     };
 
-    let matched = freqItems.find(p => matchDog(p.name, dogs));
+    let matched = freqItems.find((p) => matchDog(p.name, dogs));
     if (!matched) {
-      const plusItems = freqItems.filter(p => { const m = p.name.match(/(\d+)\+/); return m && dogs >= parseInt(m[1]); });
+      const plusItems = freqItems.filter((p) => {
+        const m = p.name.match(/(\d+)\+/);
+        return m && dogs >= parseInt(m[1]);
+      });
       if (plusItems.length > 0) matched = plusItems[plusItems.length - 1];
     }
 
@@ -672,30 +819,57 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
     let priceCents = Math.round(parseFloat(matched.basePrice) * 100);
 
-    const lotSizeAddOns = activeAddOns.filter(p => p.name.toLowerCase().includes("lot size") || p.name.toLowerCase().includes("acre"));
-    const yardAcreMap: Record<string, number> = { small: 0.1, medium: 0.35, large: 0.75, "extra-large": 1.0 };
+    const lotSizeAddOns = activeAddOns.filter(
+      (p) => p.name.toLowerCase().includes("lot size") || p.name.toLowerCase().includes("acre")
+    );
+    const yardAcreMap: Record<string, number> = {
+      small: 0.1,
+      medium: 0.35,
+      large: 0.75,
+      "extra-large": 1.0,
+    };
     const acreage = yardAcreMap[yardSize || "medium"] || 0.35;
-    let bestAddon: typeof activeAddOns[0] | null = null;
+    let bestAddon: (typeof activeAddOns)[0] | null = null;
     for (const addon of lotSizeAddOns.sort((a, b) => a.sortOrder - b.sortOrder)) {
       const acreMatch = addon.name.match(/([\d.]+)\s*acre/i);
-      if (acreMatch && acreage <= parseFloat(acreMatch[1])) { bestAddon = addon; break; }
+      if (acreMatch && acreage <= parseFloat(acreMatch[1])) {
+        bestAddon = addon;
+        break;
+      }
     }
     if (!bestAddon && lotSizeAddOns.length > 0) bestAddon = lotSizeAddOns[lotSizeAddOns.length - 1];
-    if (bestAddon && parseFloat(bestAddon.basePrice) > 0) priceCents += Math.round(parseFloat(bestAddon.basePrice) * 100);
+    if (bestAddon && parseFloat(bestAddon.basePrice) > 0)
+      priceCents += Math.round(parseFloat(bestAddon.basePrice) * 100);
 
     return { priceCents, callForQuote: false };
   }
 
-  async function sendAutoQuoteSms(company: typeof companies.$inferSelect, contact: { id: string; firstName: string; phone: string | null; numberOfDogs: number | null; serviceFrequency: string | null }, yardSize?: string): Promise<boolean> {
+  async function sendAutoQuoteSms(
+    company: typeof companies.$inferSelect,
+    contact: {
+      id: string;
+      firstName: string;
+      phone: string | null;
+      numberOfDogs: number | null;
+      serviceFrequency: string | null;
+    },
+    yardSize?: string
+  ): Promise<boolean> {
     if (!contact.phone) return false;
     const smsOk = await isSmsConfiguredForCompany(company.id);
     if (!smsOk) return false;
 
     const dogs = contact.numberOfDogs ?? 1;
-    const frequency = (contact.serviceFrequency || "weekly") as "weekly" | "biweekly" | "monthly" | "onetime";
+    const frequency = (contact.serviceFrequency || "weekly") as
+      | "weekly"
+      | "biweekly"
+      | "monthly"
+      | "onetime";
 
     const pricingItems = await storage.getServicePricing(company.id);
-    const hasActiveRecurring = pricingItems.some(p => p.isActive && p.category === "recurring_service");
+    const hasActiveRecurring = pricingItems.some(
+      (p) => p.isActive && p.category === "recurring_service"
+    );
 
     let priceDollars: string;
     if (hasActiveRecurring) {
@@ -706,7 +880,12 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         priceDollars = "Call for Quote";
       }
     } else {
-      const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
+      const yardSizeMap: Record<string, number> = {
+        small: 0.05,
+        medium: 0.1,
+        large: 0.2,
+        "extra-large": 0.35,
+      };
       const pricingInputs: PriceCalculatorInputs = {
         yardSizeAcres: yardSizeMap[yardSize || "medium"] || 0.1,
         dogCount: dogs,
@@ -725,12 +904,20 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       .replace(/\{frequency\}/g, frequency)
       .replace(/\{price\}/g, priceDollars);
 
-    const result = await sendSmsForCompany({ to: contact.phone, body, companyId: company.id, contactId: contact.id });
+    const result = await sendSmsForCompany({
+      to: contact.phone,
+      body,
+      companyId: company.id,
+      contactId: contact.id,
+    });
 
     if (result.success) {
       return true;
     } else {
-      console.error(`[webhook-lead-sms] Failed to send auto-quote SMS to ${contact.phone}:`, result.error);
+      console.error(
+        `[webhook-lead-sms] Failed to send auto-quote SMS to ${contact.phone}:`,
+        result.error
+      );
       return false;
     }
   }
@@ -739,13 +926,33 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     try {
       const { companyId } = await getCompanyContext(req);
       const parsed = webhookLeadSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten().fieldErrors });
-      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay, source, notes } = parsed.data;
+      if (!parsed.success)
+        return res
+          .status(400)
+          .json({ error: "Invalid payload", details: parsed.error.flatten().fieldErrors });
+      const {
+        firstName,
+        lastName,
+        email,
+        phone,
+        streetAddress,
+        city,
+        state,
+        zipCode,
+        numberOfDogs,
+        yardSize,
+        serviceFrequency,
+        serviceDay,
+        source,
+        notes,
+      } = parsed.data;
 
       const leadSource = source || "webhook";
 
       const existingSources = await storage.getLeadSources(companyId);
-      const sourceExists = existingSources.some(s => s.name.toLowerCase() === leadSource.toLowerCase());
+      const sourceExists = existingSources.some(
+        (s) => s.name.toLowerCase() === leadSource.toLowerCase()
+      );
       if (!sourceExists) {
         await storage.createLeadSource({ companyId, name: leadSource });
       }
@@ -783,19 +990,34 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         });
       }
 
-      notify(companyId, "new_lead", "New Lead (Webhook)", `${firstName} ${lastName} submitted via ${leadSource}.`.trim(), `/contacts/${contact.id}`);
+      notify(
+        companyId,
+        "new_lead",
+        "New Lead (Webhook)",
+        `${firstName} ${lastName} submitted via ${leadSource}.`.trim(),
+        `/contacts/${contact.id}`
+      );
 
       const company = await storage.getCompany(companyId);
       let smsSent = false;
       if (phone && company) {
         try {
-          smsSent = await sendAutoQuoteSms(company, { id: contact.id, firstName, phone, numberOfDogs, serviceFrequency }, yardSize);
+          smsSent = await sendAutoQuoteSms(
+            company,
+            { id: contact.id, firstName, phone, numberOfDogs, serviceFrequency },
+            yardSize
+          );
         } catch (err) {
           console.error("[webhook-lead] Auto-quote SMS error:", err);
         }
       }
 
-      const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
+      const yardSizeMap: Record<string, number> = {
+        small: 0.05,
+        medium: 0.1,
+        large: 0.2,
+        "extra-large": 0.35,
+      };
       const pricingInputs: PriceCalculatorInputs = {
         yardSizeAcres: yardSizeMap[yardSize || "medium"] || 0.1,
         dogCount: numberOfDogs,
@@ -814,7 +1036,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         },
         smsSent,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   const webhookQuoteSchema = z.object({
@@ -826,7 +1050,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     city: z.string().max(100).optional().or(z.literal("")),
     state: z.string().max(50).optional().or(z.literal("")),
     zipCode: z.string().max(20).optional().or(z.literal("")),
-    numberOfDogs: z.union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)]).default(1),
+    numberOfDogs: z
+      .union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)])
+      .default(1),
     yardSize: z.enum(["small", "medium", "large", "estate"]).default("medium"),
     frequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
     isFirstTime: z.boolean().default(true),
@@ -838,14 +1064,32 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     try {
       const { companyId } = await getCompanyContext(req);
       const parsed = webhookQuoteSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten().fieldErrors });
+      if (!parsed.success)
+        return res
+          .status(400)
+          .json({ error: "Invalid payload", details: parsed.error.flatten().fieldErrors });
 
-      const { firstName, lastName, email, phone, streetAddress, city, state: st, zipCode, numberOfDogs, yardSize, frequency, isFirstTime, source, notes } = parsed.data;
+      const {
+        firstName,
+        lastName,
+        email,
+        phone,
+        streetAddress,
+        city,
+        state: st,
+        zipCode,
+        numberOfDogs,
+        yardSize,
+        frequency,
+        isFirstTime,
+        source,
+        notes,
+      } = parsed.data;
 
       const leadSource = source || "website";
 
       const existingSources = await storage.getLeadSources(companyId);
-      if (!existingSources.some(s => s.name.toLowerCase() === leadSource.toLowerCase())) {
+      if (!existingSources.some((s) => s.name.toLowerCase() === leadSource.toLowerCase())) {
         await storage.createLeadSource({ companyId, name: leadSource });
       }
 
@@ -853,13 +1097,22 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       const normalizedEmail = email ? email.trim().toLowerCase() : null;
       const normalizedPhone = phone ? phone.replace(/[^\d+]/g, "") : null;
       if (normalizedEmail) {
-        const [existing] = await db.select().from(contacts)
-          .where(and(eq(contacts.companyId, companyId), sql`LOWER(TRIM(${contacts.email})) = ${normalizedEmail}`))
+        const [existing] = await db
+          .select()
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.companyId, companyId),
+              sql`LOWER(TRIM(${contacts.email})) = ${normalizedEmail}`
+            )
+          )
           .limit(1);
         if (existing) contactId = existing.id;
       }
       if (!contactId && normalizedPhone) {
-        const [existing] = await db.select().from(contacts)
+        const [existing] = await db
+          .select()
+          .from(contacts)
           .where(and(eq(contacts.companyId, companyId), eq(contacts.phone, normalizedPhone)))
           .limit(1);
         if (existing) contactId = existing.id;
@@ -901,8 +1154,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
             yardSize: yardSize || null,
           });
           propertyId = prop.id;
-        } catch {
-        }
+        } catch {}
       }
 
       const company = await storage.getCompany(companyId);
@@ -915,7 +1167,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       };
       const tierPricing = calculateQuotePricing(pricingInput, company?.quoteDefaults ?? null);
 
-      const fullAddress = hasFullAddress ? `${streetAddress}, ${city}, ${st} ${zipCode}` : (streetAddress || "");
+      const fullAddress = hasFullAddress
+        ? `${streetAddress}, ${city}, ${st} ${zipCode}`
+        : streetAddress || "";
 
       const quoteNumber = await storage.getNextQuoteNumber(companyId);
       const quote = await storage.createQuote({
@@ -944,7 +1198,13 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         status: "draft",
       });
 
-      notify(companyId, "new_quote", "New Quote (Webhook)", `Quote #${quoteNumber} created for ${firstName} ${lastName} via ${leadSource}.`.trim(), `/quotes/${quote.id}`);
+      notify(
+        companyId,
+        "new_quote",
+        "New Quote (Webhook)",
+        `Quote #${quoteNumber} created for ${firstName} ${lastName} via ${leadSource}.`.trim(),
+        `/quotes/${quote.id}`
+      );
 
       try {
         const { dispatchWebhooksForEvent } = await import("../services/webhook-dispatcher");
@@ -982,14 +1242,28 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         },
         source: leadSource,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   const quoteTrackSchema = z.object({
     sessionId: z.string().min(8).max(64),
-    event: z.enum(["form_loaded", "zip_entered", "zip_passed", "zip_failed", "step2_completed", "step3_started", "submitted", "quote_shown"]),
+    event: z.enum([
+      "form_loaded",
+      "zip_entered",
+      "zip_passed",
+      "zip_failed",
+      "step2_completed",
+      "step3_started",
+      "submitted",
+      "quote_shown",
+    ]),
     step: z.number().int().min(0).max(4).optional(),
-    zipCode: z.string().regex(/^\d{5}$/).optional(),
+    zipCode: z
+      .string()
+      .regex(/^\d{5}$/)
+      .optional(),
     isEmbed: z.boolean().optional(),
   });
 
@@ -1009,7 +1283,8 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         quoteTrackRateLimit.set(clientIp, { count: 1, resetAt: now + 60 * 60 * 1000 });
       }
 
-      const { slug: _slug } = req.params; const slug = p(_slug);
+      const { slug: _slug } = req.params;
+      const slug = p(_slug);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
@@ -1027,7 +1302,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       });
 
       res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   const publicLeadSchema = z.object({
@@ -1039,13 +1316,21 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     city: z.string().min(1).max(100),
     state: z.string().min(1).max(50),
     zipCode: z.string().min(1).max(20),
-    numberOfDogs: z.union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)]).default(1),
+    numberOfDogs: z
+      .union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)])
+      .default(1),
     yardSize: z.enum(["small", "medium", "large", "extra-large"]).default("medium"),
-    serviceFrequency: z.enum(["twice_weekly", "weekly", "biweekly", "monthly", "onetime"]).default("weekly"),
-    serviceDay: z.enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]).optional(),
+    serviceFrequency: z
+      .enum(["twice_weekly", "weekly", "biweekly", "monthly", "onetime"])
+      .default("weekly"),
+    serviceDay: z
+      .enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"])
+      .optional(),
     pricingItemId: z.string().uuid().optional(),
     lotAddonId: z.string().uuid().optional(),
-    lastCleanup: z.enum(["1_week", "2_weeks", "3_weeks", "1_month", "2_months", "3_4_months", "never"]).optional(),
+    lastCleanup: z
+      .enum(["1_week", "2_weeks", "3_weeks", "1_month", "2_months", "3_4_months", "never"])
+      .optional(),
     notes: z.string().max(2000).optional(),
     smsOptIn: z.boolean().optional().default(false),
   });
@@ -1066,13 +1351,35 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         publicLeadRateLimit.set(clientIp, { count: 1, resetAt: now + 60 * 60 * 1000 });
       }
 
-      const { slug: _slug } = req.params; const slug = p(_slug);
+      const { slug: _slug } = req.params;
+      const slug = p(_slug);
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
       const parsed = publicLeadSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors });
-      const { firstName, lastName, email, phone, streetAddress, city, state, zipCode, numberOfDogs, yardSize, serviceFrequency, serviceDay, pricingItemId, lotAddonId, lastCleanup, notes, smsOptIn } = parsed.data;
+      if (!parsed.success)
+        return res
+          .status(400)
+          .json({ error: "Invalid input", details: parsed.error.flatten().fieldErrors });
+      const {
+        firstName,
+        lastName,
+        email,
+        phone,
+        streetAddress,
+        city,
+        state,
+        zipCode,
+        numberOfDogs,
+        yardSize,
+        serviceFrequency,
+        serviceDay,
+        pricingItemId,
+        lotAddonId,
+        lastCleanup,
+        notes,
+        smsOptIn,
+      } = parsed.data;
 
       const contact = await storage.createContact({
         companyId: company.id,
@@ -1088,10 +1395,10 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         yardSize,
         serviceFrequency,
         serviceDay: serviceDay || null,
-        notes: [
-          lastCleanup ? `Last cleanup: ${lastCleanup}` : null,
-          notes || null,
-        ].filter(Boolean).join(". ") || null,
+        notes:
+          [lastCleanup ? `Last cleanup: ${lastCleanup}` : null, notes || null]
+            .filter(Boolean)
+            .join(". ") || null,
         status: "lead",
         leadSource: "website_widget",
       });
@@ -1109,16 +1416,26 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         });
       }
 
-      notify(company.id, "new_lead", "New Lead", `${firstName} ${lastName} signed up via your website widget.`.trim(), `/contacts/${contact.id}`);
+      notify(
+        company.id,
+        "new_lead",
+        "New Lead",
+        `${firstName} ${lastName} signed up via your website widget.`.trim(),
+        `/contacts/${contact.id}`
+      );
 
       let quotePriceCents: number | null = null;
       let callForQuote = false;
 
       const pricingItems = await storage.getServicePricing(company.id);
-      const hasActiveRecurring = pricingItems.some(p => p.isActive && p.category === "recurring_service");
+      const hasActiveRecurring = pricingItems.some(
+        (p) => p.isActive && p.category === "recurring_service"
+      );
 
       if (pricingItemId) {
-        const selectedItem = pricingItems.find(p => p.id === pricingItemId && p.isActive && p.category === "recurring_service");
+        const selectedItem = pricingItems.find(
+          (p) => p.id === pricingItemId && p.isActive && p.category === "recurring_service"
+        );
         if (selectedItem) {
           const meta = selectedItem.metadata as { callForQuote?: boolean } | null;
           if (meta?.callForQuote) {
@@ -1127,7 +1444,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
             quotePriceCents = Math.round(parseFloat(selectedItem.basePrice) * 100);
           }
           if (lotAddonId && quotePriceCents !== null) {
-            const lotItem = pricingItems.find(p => p.id === lotAddonId && p.isActive && p.category === "add_on");
+            const lotItem = pricingItems.find(
+              (p) => p.id === lotAddonId && p.isActive && p.category === "add_on"
+            );
             if (lotItem && parseFloat(lotItem.basePrice) > 0) {
               quotePriceCents += Math.round(parseFloat(lotItem.basePrice) * 100);
             }
@@ -1136,7 +1455,12 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       }
 
       if (quotePriceCents === null && !callForQuote && hasActiveRecurring) {
-        const realPrice = await lookupRealPrice(company.id, numberOfDogs, serviceFrequency, yardSize);
+        const realPrice = await lookupRealPrice(
+          company.id,
+          numberOfDogs,
+          serviceFrequency,
+          yardSize
+        );
         if (realPrice.callForQuote) {
           callForQuote = true;
         } else if (realPrice.priceCents > 0) {
@@ -1147,7 +1471,12 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       }
 
       if (quotePriceCents === null && !callForQuote && !hasActiveRecurring) {
-        const yardSizeMap: Record<string, number> = { small: 0.05, medium: 0.1, large: 0.2, "extra-large": 0.35 };
+        const yardSizeMap: Record<string, number> = {
+          small: 0.05,
+          medium: 0.1,
+          large: 0.2,
+          "extra-large": 0.35,
+        };
         const pricingInputs: PriceCalculatorInputs = {
           yardSizeAcres: yardSizeMap[yardSize] || 0.1,
           dogCount: numberOfDogs,
@@ -1163,7 +1492,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       if (zipCode && quotePriceCents !== null && !callForQuote) {
         const normalizedZip = zipCode.trim().slice(0, 5);
         const zones = await storage.getServiceZones(company.id);
-        const matchingZone = zones.find(z => z.zipCode.trim().slice(0, 5) === normalizedZip && z.isActive);
+        const matchingZone = zones.find(
+          (z) => z.zipCode.trim().slice(0, 5) === normalizedZip && z.isActive
+        );
         if (matchingZone && matchingZone.priceSurchargePercent > 0) {
           zoneSurchargePercent = matchingZone.priceSurchargePercent;
           quotePriceCents = Math.round(quotePriceCents * (1 + zoneSurchargePercent / 100));
@@ -1173,7 +1504,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       res.status(201).json({
         contactId: contact.id,
         quote: {
-          recommendedPriceCents: callForQuote ? 0 : (quotePriceCents || 0),
+          recommendedPriceCents: callForQuote ? 0 : quotePriceCents || 0,
           frequency: serviceFrequency,
           callForQuote,
           zoneSurchargePercent,
@@ -1181,7 +1512,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       });
 
       if (company.quoteAutoFollowUpEnabled) {
-        const priceDollars = callForQuote ? "Call for Quote" : ((quotePriceCents || 0) / 100).toFixed(2);
+        const priceDollars = callForQuote
+          ? "Call for Quote"
+          : ((quotePriceCents || 0) / 100).toFixed(2);
         const companyName = company.name || "Our Company";
         const priceForMerge = callForQuote ? "a custom quote" : `$${priceDollars}/visit`;
         const mergeReplace = (tpl: string) =>
@@ -1197,10 +1530,16 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
             try {
               const smsConfigured = await isSmsConfiguredForCompany(company.id);
               if (!smsConfigured) return;
-              const defaultSmsTpl = "Thanks {firstName}! Your estimated quote from {companyName} is {price} for {frequency} service. We'll be in touch to confirm your schedule!";
+              const defaultSmsTpl =
+                "Thanks {firstName}! Your estimated quote from {companyName} is {price} for {frequency} service. We'll be in touch to confirm your schedule!";
               const smsTpl = company.quoteFollowUpSmsTemplate || defaultSmsTpl;
               const smsBody = mergeReplace(smsTpl);
-              const result = await sendSmsForCompany({ to: phone, body: smsBody, companyId: company.id, contactId: contact.id });
+              const result = await sendSmsForCompany({
+                to: phone,
+                body: smsBody,
+                companyId: company.id,
+                contactId: contact.id,
+              });
               if (!result.success) console.error(`[quote-followup-sms] Failed:`, result.error);
             } catch (err) {
               console.error("[quote-followup-sms] Error:", err);
@@ -1213,7 +1552,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
             try {
               const safeCompanyName = escapeHtml(companyName);
               const defaultEmailSubject = "Your Quote from {companyName}";
-              const subject = mergeReplace(company.quoteFollowUpEmailSubject || defaultEmailSubject);
+              const subject = mergeReplace(
+                company.quoteFollowUpEmailSubject || defaultEmailSubject
+              );
               const priceDisplay = callForQuote ? "Custom Quote" : `$${priceDollars}/visit`;
               const cleanupLabel = lastCleanup ? lastCleanup.replace(/_/g, " ") : null;
               const initialCleanupNote = cleanupLabel
@@ -1257,9 +1598,25 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
                     ${safeCompanyName}
                   </div>
                 </div>`;
-              const emailResult = await sendEmail({ to: email, subject, text, html, companyId: company.id, contactId: contact.id, senderName: companyName, replyTo: company.email || undefined });
+              const emailResult = await sendEmail({
+                to: email,
+                subject,
+                text,
+                html,
+                companyId: company.id,
+                contactId: contact.id,
+                senderName: companyName,
+                replyTo: company.email || undefined,
+              });
               if (emailResult.success) {
-                await logEmailSent(company.id, email, subject, "quote_follow_up", emailResult.messageId, contact.id);
+                await logEmailSent(
+                  company.id,
+                  email,
+                  subject,
+                  "quote_follow_up",
+                  emailResult.messageId,
+                  contact.id
+                );
               } else {
                 console.error("[quote-followup-email] Failed:", emailResult.error);
               }
@@ -1269,7 +1626,8 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
           })();
         }
       }
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
-
 }

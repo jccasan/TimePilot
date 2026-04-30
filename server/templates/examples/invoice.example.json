@@ -39,35 +39,35 @@
       "description": "Weekly Yard Cleanup",
       "details": "Full backyard service - 4 visits",
       "qty": 4,
-      "unit_price": 35.00,
-      "line_total": 140.00
+      "unit_price": 35.0,
+      "line_total": 140.0
     },
     {
       "description": "Deodorizer Treatment",
       "details": "Enzyme-based yard deodorizer application",
       "qty": 2,
-      "unit_price": 15.00,
-      "line_total": 30.00
+      "unit_price": 15.0,
+      "line_total": 30.0
     },
     {
       "description": "One-Time Deep Clean",
       "details": "Initial property deep clean",
       "qty": 1,
-      "unit_price": 89.00,
-      "line_total": 89.00
+      "unit_price": 89.0,
+      "line_total": 89.0
     }
   ],
   "totals": {
-    "subtotal": 259.00,
-    "discount": 10.00,
+    "subtotal": 259.0,
+    "discount": 10.0,
     "tax_rate": 0.053,
     "paid": 0
   },
   "visits": [
-    { "date": "Feb 3, 2026", "time": "9:00 AM",  "status": "completed" },
+    { "date": "Feb 3, 2026", "time": "9:00 AM", "status": "completed" },
     { "date": "Feb 10, 2026", "time": "9:15 AM", "status": "completed" },
-    { "date": "Feb 17, 2026", "time": "10:00 AM","status": "completed" },
-    { "date": "Feb 24, 2026", "time": "",         "status": "scheduled" }
+    { "date": "Feb 17, 2026", "time": "10:00 AM", "status": "completed" },
+    { "date": "Feb 24, 2026", "time": "", "status": "scheduled" }
   ],
   "notes": "Gate code: 4523. Please latch gate after service. Dogs will be inside during service hours.",
   "payment_instructions": "Pay online at greenpaws.com/pay or mail a check to 123 Main Street, Suite 4, Springfield, IL 62701. Make checks payable to Green Paws Scooping.",

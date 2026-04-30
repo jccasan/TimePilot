@@ -160,38 +160,55 @@ export default function AuthPage() {
     }
   };
 
-  const isPending = loginMutation.isPending || registerMutation.isPending || forgotMutation.isPending || changePasswordMutation.isPending;
+  const isPending =
+    loginMutation.isPending ||
+    registerMutation.isPending ||
+    forgotMutation.isPending ||
+    changePasswordMutation.isPending;
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-card">
         <div className="w-full max-w-md space-y-6">
           <div className="flex flex-col items-start gap-4">
-            <img src={logoLong} alt="ScooPilot - Modern Solutions for Pet Waste Pros" className="w-full max-w-sm h-auto rounded-md" data-testid="img-brand-logo" />
-            <h1 className="sr-only" data-testid="text-brand-title">ScooPilot</h1>
+            <img
+              src={logoLong}
+              alt="ScooPilot - Modern Solutions for Pet Waste Pros"
+              className="w-full max-w-sm h-auto rounded-md"
+              data-testid="img-brand-logo"
+            />
+            <h1 className="sr-only" data-testid="text-brand-title">
+              ScooPilot
+            </h1>
           </div>
-          <p className="text-muted-foreground text-lg">
-            Professional Pet Waste Removal Management
-          </p>
+          <p className="text-muted-foreground text-lg">Professional Pet Waste Removal Management</p>
 
           {mode === "change-password" ? (
             <div className="space-y-4">
               <div className="rounded-md border border-primary/20 bg-primary/5 p-4 space-y-1">
                 <p className="font-medium">Set a new password</p>
-                <p className="text-sm text-muted-foreground">Your account requires a password change before you can continue.</p>
+                <p className="text-sm text-muted-foreground">
+                  Your account requires a password change before you can continue.
+                </p>
               </div>
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                if (newPassword !== confirmPassword) {
-                  toast({ title: "Passwords don't match", variant: "destructive" });
-                  return;
-                }
-                if (newPassword.length < 8) {
-                  toast({ title: "Password must be at least 8 characters", variant: "destructive" });
-                  return;
-                }
-                changePasswordMutation.mutate();
-              }} className="space-y-4">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (newPassword !== confirmPassword) {
+                    toast({ title: "Passwords don't match", variant: "destructive" });
+                    return;
+                  }
+                  if (newPassword.length < 8) {
+                    toast({
+                      title: "Password must be at least 8 characters",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  changePasswordMutation.mutate();
+                }}
+                className="space-y-4"
+              >
                 <div className="space-y-1.5">
                   <Label htmlFor="newPassword">New Password</Label>
                   <Input
@@ -218,7 +235,13 @@ export default function AuthPage() {
                     data-testid="input-confirm-password"
                   />
                 </div>
-                <Button type="submit" size="lg" className="w-full" disabled={isPending} data-testid="button-set-new-password">
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full"
+                  disabled={isPending}
+                  data-testid="button-set-new-password"
+                >
                   {isPending ? "Setting password..." : "Set New Password"}
                 </Button>
               </form>
@@ -227,15 +250,21 @@ export default function AuthPage() {
             forgotSent ? (
               <div className="space-y-4">
                 <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-center space-y-2">
-                  <p className="font-medium" data-testid="text-forgot-sent">Check your email</p>
+                  <p className="font-medium" data-testid="text-forgot-sent">
+                    Check your email
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    If an account exists for <span className="font-medium">{email}</span>, we've sent a password reset link. The link expires in 1 hour.
+                    If an account exists for <span className="font-medium">{email}</span>, we've
+                    sent a password reset link. The link expires in 1 hour.
                   </p>
                 </div>
                 <Button
                   variant="ghost"
                   className="w-full"
-                  onClick={() => { setMode("login"); setForgotSent(false); }}
+                  onClick={() => {
+                    setMode("login");
+                    setForgotSent(false);
+                  }}
                   data-testid="button-back-to-login"
                 >
                   <ArrowLeft className="mr-1 h-4 w-4" /> Back to Sign In
@@ -243,7 +272,9 @@ export default function AuthPage() {
               </div>
             ) : (
               <>
-                <p className="text-sm text-muted-foreground">Enter your email address and we'll send you a link to reset your password.</p>
+                <p className="text-sm text-muted-foreground">
+                  Enter your email address and we'll send you a link to reset your password.
+                </p>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="email">Email</Label>
@@ -257,7 +288,13 @@ export default function AuthPage() {
                       data-testid="input-forgot-email"
                     />
                   </div>
-                  <Button type="submit" size="lg" className="w-full" disabled={isPending} data-testid="button-send-reset">
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full"
+                    disabled={isPending}
+                    data-testid="button-send-reset"
+                  >
                     {isPending ? "Sending..." : "Send Reset Link"}
                   </Button>
                 </form>
@@ -351,8 +388,20 @@ export default function AuthPage() {
                     </button>
                   </div>
                 )}
-                <Button type="submit" size="lg" className="w-full" disabled={isPending} data-testid="button-submit-auth">
-                  {isPending ? (isRegister ? "Creating account..." : "Signing in...") : (isRegister ? "Create Account" : "Sign In")}
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full"
+                  disabled={isPending}
+                  data-testid="button-submit-auth"
+                >
+                  {isPending
+                    ? isRegister
+                      ? "Creating account..."
+                      : "Signing in..."
+                    : isRegister
+                      ? "Create Account"
+                      : "Sign In"}
                 </Button>
               </form>
 
@@ -381,7 +430,10 @@ export default function AuthPage() {
                 <CardContent className="flex items-center gap-4 p-4">
                   <feature.icon className="h-5 w-5 text-primary shrink-0" />
                   <div>
-                    <p className="font-medium" data-testid={`text-feature-${feature.title.toLowerCase()}`}>
+                    <p
+                      className="font-medium"
+                      data-testid={`text-feature-${feature.title.toLowerCase()}`}
+                    >
                       {feature.title}
                     </p>
                     <p className="text-sm text-muted-foreground">{feature.description}</p>

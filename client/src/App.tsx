@@ -11,7 +11,21 @@ import { useFeatureTour, FeatureTourOverlay } from "@/components/feature-tour";
 import { TutorialProvider } from "@/hooks/use-tutorials";
 import { AdminAuthProvider, useAdminAuth } from "@/hooks/use-admin-auth";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, LogOut, BarChart3, Building2, Home, MapPin, Users, Shield, CreditCard, Loader2, MessageSquare, Bug } from "lucide-react";
+import {
+  Moon,
+  Sun,
+  LogOut,
+  BarChart3,
+  Building2,
+  Home,
+  MapPin,
+  Users,
+  Shield,
+  CreditCard,
+  Loader2,
+  MessageSquare,
+  Bug,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Component, lazy, Suspense, useEffect, useState, useRef, useCallback } from "react";
 import type { ErrorInfo, ReactNode } from "react";
@@ -104,7 +118,9 @@ function Router() {
         <Route path="/contacts/:id" component={ContactDetail} />
         <Route path="/scheduling" component={Scheduling} />
         <Route path="/routes" component={RoutesPage} />
-        <Route path="/jobs"><Redirect to="/scheduling" /></Route>
+        <Route path="/jobs">
+          <Redirect to="/scheduling" />
+        </Route>
         <Route path="/pipeline" component={Pipeline} />
         <Route path="/m/today" component={TechMobile} />
         <Route path="/quotes" component={Quotes} />
@@ -120,11 +136,15 @@ function Router() {
         <Route path="/profitability/:contactId" component={ProfitabilityDetail} />
         <Route path="/route-profit-maps" component={RouteProfitMaps} />
         <Route path="/field-view" component={FieldView} />
-        <Route path="/ai-pricing-optimizer"><Redirect to="/pricing-calculator?tab=simulator" /></Route>
+        <Route path="/ai-pricing-optimizer">
+          <Redirect to="/pricing-calculator?tab=simulator" />
+        </Route>
         <Route path="/overhead-costs" component={OverheadCosts} />
         <Route path="/communications" component={Communications} />
         <Route path="/reports" component={Reports} />
-        <Route path="/analytics"><Redirect to="/reports?tab=analytics" /></Route>
+        <Route path="/analytics">
+          <Redirect to="/reports?tab=analytics" />
+        </Route>
         <Route path="/portal" component={Portal} />
         <Route path="/settings" component={Settings} />
         <Route path="/migration" component={MigrationPage} />
@@ -144,19 +164,26 @@ function AuthenticatedLayout() {
   const [setupState, setSetupState] = useState<"loading" | "ready" | "error" | "pending_approval">(
     (user as any)?.setupDone ? "ready" : "loading"
   );
-  const { activeTour, isRunning, startTour, handleCallback, getUnseenTours, isTourStatusLoaded } = useFeatureTour();
+  const { activeTour, isRunning, startTour, handleCallback, getUnseenTours, isTourStatusLoaded } =
+    useFeatureTour();
   const [autoTourChecked, setAutoTourChecked] = useState(false);
   const { data: onboardingStatus } = useQuery<{ isComplete: boolean }>({
     queryKey: ["/api/onboarding/status"],
     enabled: setupState === "ready",
   });
-  const { data: businessOnboarding, isLoading: businessOnboardingLoading, isError: businessOnboardingError } = useQuery<{ isComplete: boolean }>({
+  const {
+    data: businessOnboarding,
+    isLoading: businessOnboardingLoading,
+    isError: businessOnboardingError,
+  } = useQuery<{ isComplete: boolean }>({
     queryKey: ["/api/onboarding/business-status"],
     enabled: setupState === "ready",
     retry: 2,
   });
   const [businessOnboardingDone, setBusinessOnboardingDone] = useState(false);
-  const [setupDismissed, setSetupDismissed] = useState(() => localStorage.getItem("scoopilot_setup_dismissed") === "true");
+  const [setupDismissed, setSetupDismissed] = useState(
+    () => localStorage.getItem("scoopilot_setup_dismissed") === "true"
+  );
   useEffect(() => {
     const handler = () => setSetupDismissed(true);
     window.addEventListener("scoopilot:setup-dismissed", handler);
@@ -209,8 +236,8 @@ function AuthenticatedLayout() {
     const timer = setTimeout(() => {
       const unseen = getUnseenTours();
       if (unseen.length > 0) {
-        const welcomeUnseen = unseen.find(t => t.id === "welcome");
-        const whatsNewUnseen = unseen.find(t => t.id !== "welcome");
+        const welcomeUnseen = unseen.find((t) => t.id === "welcome");
+        const whatsNewUnseen = unseen.find((t) => t.id !== "welcome");
         if (welcomeUnseen) {
           startTour(welcomeUnseen.id);
         } else if (whatsNewUnseen) {
@@ -219,7 +246,15 @@ function AuthenticatedLayout() {
       }
     }, 1500);
     return () => clearTimeout(timer);
-  }, [setupState, autoTourChecked, isRunning, isTourStatusLoaded, isSetupDoneOrDismissed, getUnseenTours, startTour]);
+  }, [
+    setupState,
+    autoTourChecked,
+    isRunning,
+    isTourStatusLoaded,
+    isSetupDoneOrDismissed,
+    getUnseenTours,
+    startTour,
+  ]);
 
   if (setupState === "loading") {
     return (
@@ -233,7 +268,13 @@ function AuthenticatedLayout() {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4">
         <p className="text-muted-foreground">Failed to set up your account. Please try again.</p>
-        <Button onClick={() => { setSetupState("loading"); setupMutation.mutate(); }} data-testid="button-retry-setup">
+        <Button
+          onClick={() => {
+            setSetupState("loading");
+            setupMutation.mutate();
+          }}
+          data-testid="button-retry-setup"
+        >
           Retry
         </Button>
       </div>
@@ -248,7 +289,11 @@ function AuthenticatedLayout() {
     );
   }
 
-  if (!businessOnboardingDone && !businessOnboardingError && (businessOnboardingLoading || !businessOnboarding || !businessOnboarding.isComplete)) {
+  if (
+    !businessOnboardingDone &&
+    !businessOnboardingError &&
+    (businessOnboardingLoading || !businessOnboarding || !businessOnboarding.isComplete)
+  ) {
     if (businessOnboardingLoading || !businessOnboarding) {
       return (
         <div className="flex items-center justify-center h-screen bg-background">
@@ -276,13 +321,28 @@ function AuthenticatedLayout() {
     <TutorialProvider>
       <SidebarProvider>
         <div className="flex h-screen w-full">
-          <AppSidebar onStartTour={startTour} logout={logout} isLoggingOut={isLoggingOut} onOpenRover={openRover} />
+          <AppSidebar
+            onStartTour={startTour}
+            logout={logout}
+            isLoggingOut={isLoggingOut}
+            onOpenRover={openRover}
+          />
           <div className="flex flex-col flex-1 min-w-0">
             <header className="flex items-center justify-between gap-2 p-2 border-b sticky top-0 z-50 bg-background">
               <div className="flex items-center gap-2">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <img src={logoSquare} alt="ScooPilot" className="h-6 w-6 rounded object-cover" data-testid="img-platform-logo" />
-                <span className="text-sm font-semibold text-muted-foreground hidden sm:inline" data-testid="text-platform-name">ScooPilot</span>
+                <img
+                  src={logoSquare}
+                  alt="ScooPilot"
+                  className="h-6 w-6 rounded object-cover"
+                  data-testid="img-platform-logo"
+                />
+                <span
+                  className="text-sm font-semibold text-muted-foreground hidden sm:inline"
+                  data-testid="text-platform-name"
+                >
+                  ScooPilot
+                </span>
               </div>
               <div className="flex items-center gap-1">
                 <NotificationBell />
@@ -345,7 +405,13 @@ function TechnicianLayout() {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4">
         <p className="text-muted-foreground">Failed to set up your account. Please try again.</p>
-        <Button onClick={() => { setSetupState("loading"); setupMutation.mutate(); }} data-testid="button-retry-setup">
+        <Button
+          onClick={() => {
+            setSetupState("loading");
+            setupMutation.mutate();
+          }}
+          data-testid="button-retry-setup"
+        >
           Retry
         </Button>
       </div>
@@ -406,7 +472,19 @@ function TechnicianLayout() {
   );
 }
 
-function AdminSidebarLink({ href, icon: Icon, label, location, badge }: { href: string; icon: any; label: string; location: string; badge?: number }) {
+function AdminSidebarLink({
+  href,
+  icon: Icon,
+  label,
+  location,
+  badge,
+}: {
+  href: string;
+  icon: any;
+  label: string;
+  location: string;
+  badge?: number;
+}) {
   const isActive = location === href || (href !== "/admin" && location.startsWith(href));
   return (
     <WouterLink
@@ -421,7 +499,10 @@ function AdminSidebarLink({ href, icon: Icon, label, location, badge }: { href: 
       <Icon className="h-4 w-4" />
       <span className="flex-1">{label}</span>
       {badge != null && badge > 0 && (
-        <span className="ml-auto text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none" data-testid={`badge-${label.toLowerCase()}`}>
+        <span
+          className="ml-auto text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none"
+          data-testid={`badge-${label.toLowerCase()}`}
+        >
           {badge > 99 ? "99+" : badge}
         </span>
       )}
@@ -459,7 +540,9 @@ function AdminLayout() {
 
   return (
     <div className="flex h-screen">
-      <aside className={`${sidebarOpen ? "w-56" : "w-0 overflow-hidden"} transition-all duration-200 border-r bg-background flex flex-col shrink-0`}>
+      <aside
+        className={`${sidebarOpen ? "w-56" : "w-0 overflow-hidden"} transition-all duration-200 border-r bg-background flex flex-col shrink-0`}
+      >
         <div className="p-4 border-b">
           <div className="flex items-center gap-2">
             <img src={logoSquare} alt="ScooPilot" className="h-7 w-7 rounded" />
@@ -472,25 +555,62 @@ function AdminLayout() {
 
         <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">Platform</p>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">
+              Platform
+            </p>
             <div className="space-y-1">
               <AdminSidebarLink href="/admin" icon={Home} label="Overview" location={location} />
-              <AdminSidebarLink href="/admin/analytics" icon={BarChart3} label="Analytics" location={location} />
+              <AdminSidebarLink
+                href="/admin/analytics"
+                icon={BarChart3}
+                label="Analytics"
+                location={location}
+              />
             </div>
           </div>
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">Management</p>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">
+              Management
+            </p>
             <div className="space-y-1">
-              <AdminSidebarLink href="/admin/tenants" icon={Building2} label="Tenants" location={location} />
-              <AdminSidebarLink href="/admin/pricing" icon={CreditCard} label="Pricing" location={location} />
+              <AdminSidebarLink
+                href="/admin/tenants"
+                icon={Building2}
+                label="Tenants"
+                location={location}
+              />
+              <AdminSidebarLink
+                href="/admin/pricing"
+                icon={CreditCard}
+                label="Pricing"
+                location={location}
+              />
             </div>
           </div>
           <div>
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">System</p>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">
+              System
+            </p>
             <div className="space-y-1">
-              <AdminSidebarLink href="/admin/messaging" icon={MessageSquare} label="Messaging" location={location} />
-              <AdminSidebarLink href="/admin/errors" icon={Bug} label="Errors" location={location} badge={errorStats?.openCount} />
-              <AdminSidebarLink href="/admin/security" icon={Shield} label="Security" location={location} />
+              <AdminSidebarLink
+                href="/admin/messaging"
+                icon={MessageSquare}
+                label="Messaging"
+                location={location}
+              />
+              <AdminSidebarLink
+                href="/admin/errors"
+                icon={Bug}
+                label="Errors"
+                location={location}
+                badge={errorStats?.openCount}
+              />
+              <AdminSidebarLink
+                href="/admin/security"
+                icon={Shield}
+                label="Security"
+                location={location}
+              />
             </div>
           </div>
         </nav>
@@ -518,7 +638,21 @@ function AdminLayout() {
             data-testid="button-admin-sidebar-toggle"
             aria-label="Toggle sidebar"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
           </Button>
           <div className="flex items-center gap-1">
             <ThemeToggle />
@@ -535,7 +669,12 @@ function AdminLayout() {
               <Route path="/admin/messaging" component={AdminMessaging} />
               <Route path="/admin/errors" component={AdminErrors} />
               <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
-              <Route path="/admin/login">{() => { window.location.href = "/admin"; return null; }}</Route>
+              <Route path="/admin/login">
+                {() => {
+                  window.location.href = "/admin";
+                  return null;
+                }}
+              </Route>
               <Route component={NotFound} />
             </Switch>
           </Suspense>
@@ -560,7 +699,12 @@ function PortalRouter() {
             return <PortalQuoteView quoteId={params.quoteId} token={token} />;
           }}
         </Route>
-        <Route>{() => { window.location.href = "/portal/login"; return null; }}</Route>
+        <Route>
+          {() => {
+            window.location.href = "/portal/login";
+            return null;
+          }}
+        </Route>
       </Switch>
     </Suspense>
   );
@@ -568,64 +712,95 @@ function PortalRouter() {
 
 function AppContent() {
   const { isAuthenticated, isLoading, user } = useAuth();
-  const isPortalPath = typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/portal/");
-  const isAdminPath = typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/admin");
-  const isResetPasswordPath = typeof window !== "undefined" &&
-    window.location.pathname === "/reset-password";
+  const isPortalPath =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/portal/");
+  const isAdminPath =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+  const isResetPasswordPath =
+    typeof window !== "undefined" && window.location.pathname === "/reset-password";
 
-  const isSignupPath = typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/signup/");
+  const isSignupPath =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/signup/");
 
-  const isOnboardingPath = typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/onboarding/");
+  const isOnboardingPath =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/onboarding/");
 
-  const isVoiceSignupPath = typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/voice-signup/");
+  const isVoiceSignupPath =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/voice-signup/");
 
-  const isInvoicePayPath = typeof window !== "undefined" &&
-    /^\/invoice\/[^/]+\/pay$/.test(window.location.pathname);
+  const isInvoicePayPath =
+    typeof window !== "undefined" && /^\/invoice\/[^/]+\/pay$/.test(window.location.pathname);
 
-  const isPrivacyPolicyPath = typeof window !== "undefined" &&
-    window.location.pathname === "/privacy-policy";
+  const isPrivacyPolicyPath =
+    typeof window !== "undefined" && window.location.pathname === "/privacy-policy";
 
-  const isSmsTermsPath = typeof window !== "undefined" &&
-    window.location.pathname === "/sms-terms";
+  const isSmsTermsPath = typeof window !== "undefined" && window.location.pathname === "/sms-terms";
 
-  const isReviewPath = typeof window !== "undefined" &&
-    window.location.pathname.startsWith("/review/");
+  const isReviewPath =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/review/");
 
   if (isReviewPath) {
-    return <Suspense fallback={<PageLoader />}><ReviewRouter /></Suspense>;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ReviewRouter />
+      </Suspense>
+    );
   }
 
   if (isPrivacyPolicyPath) {
-    return <Suspense fallback={<PageLoader />}><PrivacyPolicy /></Suspense>;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <PrivacyPolicy />
+      </Suspense>
+    );
   }
 
   if (isSmsTermsPath) {
-    return <Suspense fallback={<PageLoader />}><SmsTerms /></Suspense>;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <SmsTerms />
+      </Suspense>
+    );
   }
 
   if (isResetPasswordPath) {
-    return <Suspense fallback={<PageLoader />}><ResetPassword /></Suspense>;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <ResetPassword />
+      </Suspense>
+    );
   }
 
   if (isSignupPath) {
-    return <Suspense fallback={<PageLoader />}><SignupWidget /></Suspense>;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <SignupWidget />
+      </Suspense>
+    );
   }
 
   if (isOnboardingPath) {
-    return <Suspense fallback={<PageLoader />}><OnboardingForm /></Suspense>;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <OnboardingForm />
+      </Suspense>
+    );
   }
 
   if (isVoiceSignupPath) {
-    return <Suspense fallback={<PageLoader />}><VoiceSignup /></Suspense>;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <VoiceSignup />
+      </Suspense>
+    );
   }
 
   if (isInvoicePayPath) {
-    return <Suspense fallback={<PageLoader />}><InvoicePayPage /></Suspense>;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <InvoicePayPage />
+      </Suspense>
+    );
   }
 
   if (isPortalPath) {
@@ -649,11 +824,19 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
-    return <Suspense fallback={<PageLoader />}><AuthPage /></Suspense>;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AuthPage />
+      </Suspense>
+    );
   }
 
   if (user?.mustChangePassword) {
-    return <Suspense fallback={<PageLoader />}><AuthPage /></Suspense>;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AuthPage />
+      </Suspense>
+    );
   }
 
   if (user?.role === "tech") {
@@ -725,13 +908,15 @@ class ErrorBoundary extends Component<
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("[ErrorBoundary]", error, errorInfo);
     if (!isChunkLoadError(error)) {
-      import("./lib/errorReporter").then(({ reportError }) => {
-        reportError(
-          error.message || "React error boundary catch",
-          (error.stack || "") + "\n\nComponent Stack:\n" + (errorInfo.componentStack || ""),
-          "react"
-        );
-      }).catch(() => {});
+      import("./lib/errorReporter")
+        .then(({ reportError }) => {
+          reportError(
+            error.message || "React error boundary catch",
+            (error.stack || "") + "\n\nComponent Stack:\n" + (errorInfo.componentStack || ""),
+            "react"
+          );
+        })
+        .catch(() => {});
     }
     if (isChunkLoadError(error)) {
       window.dispatchEvent(new Event("app:update-available"));
@@ -745,8 +930,18 @@ class ErrorBoundary extends Component<
           <div className="flex min-h-screen items-center justify-center bg-background p-8">
             <div className="max-w-md text-center">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                <svg className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <svg
+                  className="h-6 w-6 text-primary"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
                 </svg>
               </div>
               <h1 className="text-xl font-semibold text-foreground">A new version is available</h1>
@@ -768,8 +963,18 @@ class ErrorBoundary extends Component<
         <div className="flex min-h-screen items-center justify-center bg-background p-8">
           <div className="max-w-md text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-              <svg className="h-6 w-6 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <svg
+                className="h-6 w-6 text-destructive"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
               </svg>
             </div>
             <h1 className="text-xl font-semibold text-foreground">Something went wrong</h1>

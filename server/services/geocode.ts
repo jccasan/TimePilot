@@ -29,7 +29,10 @@ function isFresh(entry: CacheEntry<any>): boolean {
   return Date.now() - entry.storedAt < TTL_MS;
 }
 
-export async function getAutocompleteCached(query: string, country: string = "us"): Promise<any[] | null> {
+export async function getAutocompleteCached(
+  query: string,
+  country: string = "us"
+): Promise<any[] | null> {
   const key = `${country}:${normalizeAutocompleteQuery(query)}`;
 
   // L1: in-memory cache
@@ -95,10 +98,9 @@ export async function geocodeAddress(
   zipCode?: string | null,
   country?: string | null
 ): Promise<{ latitude: string; longitude: string } | null> {
-  const tokens = [
-    process.env.MAPBOX_PUBLIC_TOKEN,
-    process.env.MAPBOX_SECRET_TOKEN,
-  ].filter(Boolean) as string[];
+  const tokens = [process.env.MAPBOX_PUBLIC_TOKEN, process.env.MAPBOX_SECRET_TOKEN].filter(
+    Boolean
+  ) as string[];
   if (tokens.length === 0) return null;
 
   const parts = [streetAddress, city, state, zipCode].filter(Boolean).join(", ");
@@ -115,9 +117,10 @@ export async function geocodeAddress(
   try {
     const dbEntry = await storage.getGeocodeCache(cacheKey);
     if (dbEntry && Date.now() - dbEntry.cachedAt.getTime() < DB_TTL_MS) {
-      const result = dbEntry.latitude && dbEntry.longitude
-        ? { latitude: dbEntry.latitude, longitude: dbEntry.longitude }
-        : null;
+      const result =
+        dbEntry.latitude && dbEntry.longitude
+          ? { latitude: dbEntry.latitude, longitude: dbEntry.longitude }
+          : null;
       geocodeCache.set(cacheKey, { value: result, storedAt: Date.now() });
       return result;
     }
@@ -146,7 +149,10 @@ export async function geocodeAddress(
         if (sbResult) {
           geocodeCache.set(cacheKey, { value: sbResult, storedAt: Date.now() });
           storage.setGeocodeCache(cacheKey, sbResult.latitude, sbResult.longitude).catch((err) => {
-            console.warn("[GeocodeCache] DB write failed:", err instanceof Error ? err.message : err);
+            console.warn(
+              "[GeocodeCache] DB write failed:",
+              err instanceof Error ? err.message : err
+            );
           });
           trackApiCall("mapbox_searchbox", "geocode");
           return sbResult;

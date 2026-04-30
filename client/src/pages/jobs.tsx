@@ -23,16 +23,45 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Briefcase, Plus, Search, CheckCircle, Loader2,
-  Edit2, Trash2, Eye, ChevronDown, ChevronUp, Filter,
-  User, Calendar, XCircle,
+  Briefcase,
+  Plus,
+  Search,
+  CheckCircle,
+  Loader2,
+  Edit2,
+  Trash2,
+  Eye,
+  ChevronDown,
+  ChevronUp,
+  Filter,
+  User,
+  Calendar,
+  XCircle,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -125,9 +154,13 @@ function JobForm({
   const [jobType, setJobType] = useState<string>(initial?.jobType || "one_off");
   const [contactId, setContactId] = useState(initial?.contactId || "");
   const [propertyId, setPropertyId] = useState(initial?.propertyId || "");
-  const [selectedServices, setSelectedServices] = useState<Array<{ id: string; name: string; price: string }>>(() => {
+  const [selectedServices, setSelectedServices] = useState<
+    Array<{ id: string; name: string; price: string }>
+  >(() => {
     if (initial?.serviceName) {
-      return initial.serviceName.split(" + ").map((name, i) => ({ id: `initial-${i}`, name: name.trim(), price: "" }));
+      return initial.serviceName
+        .split(" + ")
+        .map((name, i) => ({ id: `initial-${i}`, name: name.trim(), price: "" }));
     }
     return [];
   });
@@ -136,10 +169,12 @@ function JobForm({
   const [dayOfWeek, setDayOfWeek] = useState(initial?.dayOfWeek || "");
   const [pricePerVisit, setPricePerVisit] = useState(initial?.pricePerVisit || "");
   const [manualServiceName, setManualServiceName] = useState<string>(() => {
-    if (initial?.serviceName && (!initial.serviceName.includes(" + "))) return initial.serviceName;
+    if (initial?.serviceName && !initial.serviceName.includes(" + ")) return initial.serviceName;
     return "";
   });
-  const [startDate, setStartDate] = useState(initial?.startDate || toLocalDateString(new Date(), tz));
+  const [startDate, setStartDate] = useState(
+    initial?.startDate || toLocalDateString(new Date(), tz)
+  );
   const [startTime, setStartTime] = useState(initial?.startTime || "");
   const [endTime, setEndTime] = useState(initial?.endTime || "");
   const [anytime, setAnytime] = useState(initial?.anytime !== false);
@@ -153,11 +188,11 @@ function JobForm({
   const [assignedUserId, setAssignedUserId] = useState(initial?.assignedUserId || "");
   const [suppressNotifications, setSuppressNotifications] = useState(false);
 
-  const activeServices = useMemo(() => services.filter(s => s.isActive), [services]);
+  const activeServices = useMemo(() => services.filter((s) => s.isActive), [services]);
 
   const filteredProperties = useMemo(() => {
     if (!contactId) return [];
-    return properties.filter(p => p.contactId === contactId);
+    return properties.filter((p) => p.contactId === contactId);
   }, [contactId, properties]);
 
   const totalPrice = useMemo(() => {
@@ -168,7 +203,7 @@ function JobForm({
 
   const combinedServiceName = useMemo(() => {
     if (selectedServices.length === 0) return manualServiceName || null;
-    return selectedServices.map(s => s.name).join(" + ");
+    return selectedServices.map((s) => s.name).join(" + ");
   }, [selectedServices, manualServiceName]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -182,11 +217,11 @@ function JobForm({
       dayOfWeek: dayOfWeek || null,
       pricePerVisit: totalPrice || "0",
       startDate,
-      startTime: anytime ? null : (startTime || null),
-      endTime: anytime ? null : (endTime || null),
+      startTime: anytime ? null : startTime || null,
+      endTime: anytime ? null : endTime || null,
       anytime,
       visitInstructions: visitInstructions || null,
-      assignedUserId: (assignedUserId && assignedUserId !== "none") ? assignedUserId : null,
+      assignedUserId: assignedUserId && assignedUserId !== "none" ? assignedUserId : null,
     };
 
     if (jobType === "recurring") {
@@ -248,12 +283,18 @@ function JobForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="job-contact">Customer</Label>
-          <Select value={contactId} onValueChange={(v) => { setContactId(v); setPropertyId(""); }}>
+          <Select
+            value={contactId}
+            onValueChange={(v) => {
+              setContactId(v);
+              setPropertyId("");
+            }}
+          >
             <SelectTrigger data-testid="select-job-contact">
               <SelectValue placeholder="Select customer" />
             </SelectTrigger>
             <SelectContent>
-              {contacts.map(c => (
+              {contacts.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.firstName} {c.lastName}
                 </SelectItem>
@@ -269,7 +310,7 @@ function JobForm({
               <SelectValue placeholder={contactId ? "Select property" : "Select customer first"} />
             </SelectTrigger>
             <SelectContent>
-              {filteredProperties.map(p => (
+              {filteredProperties.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   {p.streetAddress}
                 </SelectItem>
@@ -284,16 +325,22 @@ function JobForm({
         {selectedServices.length > 0 && (
           <div className="space-y-2">
             {selectedServices.map((svc, idx) => (
-              <div key={svc.id + idx} className="flex items-center justify-between bg-muted/50 rounded-md px-3 py-2" data-testid={`service-row-${idx}`}>
+              <div
+                key={svc.id + idx}
+                className="flex items-center justify-between bg-muted/50 rounded-md px-3 py-2"
+                data-testid={`service-row-${idx}`}
+              >
                 <span className="text-sm font-medium">{svc.name}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">${parseFloat(svc.price || "0").toFixed(2)}</span>
+                  <span className="text-sm text-muted-foreground">
+                    ${parseFloat(svc.price || "0").toFixed(2)}
+                  </span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className="h-6 w-6 p-0"
-                    onClick={() => setSelectedServices(prev => prev.filter((_, i) => i !== idx))}
+                    onClick={() => setSelectedServices((prev) => prev.filter((_, i) => i !== idx))}
                     data-testid={`button-remove-service-${idx}`}
                   >
                     <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -310,7 +357,7 @@ function JobForm({
                 <SelectValue placeholder="Add a service..." />
               </SelectTrigger>
               <SelectContent>
-                {activeServices.map(s => (
+                {activeServices.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name} — ${parseFloat(s.basePrice).toFixed(2)}
                   </SelectItem>
@@ -323,9 +370,12 @@ function JobForm({
               size="sm"
               disabled={!addServiceId}
               onClick={() => {
-                const svc = activeServices.find(s => s.id === addServiceId);
+                const svc = activeServices.find((s) => s.id === addServiceId);
                 if (svc) {
-                  setSelectedServices(prev => [...prev, { id: svc.id, name: svc.name, price: svc.basePrice }]);
+                  setSelectedServices((prev) => [
+                    ...prev,
+                    { id: svc.id, name: svc.name, price: svc.basePrice },
+                  ]);
                   setAddServiceId("");
                 }
               }}
@@ -338,7 +388,7 @@ function JobForm({
           <div className="space-y-2">
             <Input
               value={manualServiceName}
-              onChange={e => setManualServiceName(e.target.value)}
+              onChange={(e) => setManualServiceName(e.target.value)}
               placeholder="Service name (e.g. Waste Removal)"
               data-testid="input-job-service-name"
             />
@@ -348,15 +398,19 @@ function JobForm({
               min="0"
               step="0.01"
               value={pricePerVisit}
-              onChange={e => setPricePerVisit(e.target.value)}
+              onChange={(e) => setPricePerVisit(e.target.value)}
               placeholder="Price per visit (e.g. 35.00)"
               data-testid="input-job-price-manual"
             />
           </div>
         )}
         <div className="flex items-center justify-between pt-1">
-          <Label htmlFor="job-price" className="text-sm">Total per Visit</Label>
-          <span className="text-sm font-semibold" data-testid="text-total-price">${(parseFloat(totalPrice) || 0).toFixed(2)}</span>
+          <Label htmlFor="job-price" className="text-sm">
+            Total per Visit
+          </Label>
+          <span className="text-sm font-semibold" data-testid="text-total-price">
+            ${(parseFloat(totalPrice) || 0).toFixed(2)}
+          </span>
         </div>
       </div>
 
@@ -369,7 +423,7 @@ function JobForm({
             <Input
               type="date"
               value={startDate}
-              onChange={e => setStartDate(e.target.value)}
+              onChange={(e) => setStartDate(e.target.value)}
               data-testid="input-job-start-date"
             />
           </div>
@@ -381,7 +435,7 @@ function JobForm({
                 <Input
                   type="time"
                   value={startTime}
-                  onChange={e => setStartTime(e.target.value)}
+                  onChange={(e) => setStartTime(e.target.value)}
                   data-testid="input-job-start-time"
                 />
               </div>
@@ -390,7 +444,7 @@ function JobForm({
                 <Input
                   type="time"
                   value={endTime}
-                  onChange={e => setEndTime(e.target.value)}
+                  onChange={(e) => setEndTime(e.target.value)}
                   data-testid="input-job-end-time"
                 />
               </div>
@@ -405,7 +459,9 @@ function JobForm({
             onCheckedChange={(checked) => setAnytime(!!checked)}
             data-testid="checkbox-job-anytime"
           />
-          <Label htmlFor="anytime" className="text-sm cursor-pointer">Anytime</Label>
+          <Label htmlFor="anytime" className="text-sm cursor-pointer">
+            Anytime
+          </Label>
         </div>
       </div>
 
@@ -435,7 +491,9 @@ function JobForm({
                   </SelectTrigger>
                   <SelectContent>
                     {Object.entries(dayLabels).map(([val, label]) => (
-                      <SelectItem key={val} value={val}>{label}</SelectItem>
+                      <SelectItem key={val} value={val}>
+                        {label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -474,11 +532,14 @@ function JobForm({
                     type="number"
                     min="1"
                     value={endsAfterCount}
-                    onChange={e => setEndsAfterCount(e.target.value)}
+                    onChange={(e) => setEndsAfterCount(e.target.value)}
                     className="w-20"
                     data-testid="input-ends-after-count"
                   />
-                  <Select value={endsAfterUnit} onValueChange={setEndsAfterUnit as (v: string) => void}>
+                  <Select
+                    value={endsAfterUnit}
+                    onValueChange={setEndsAfterUnit as (v: string) => void}
+                  >
                     <SelectTrigger className="w-32" data-testid="select-ends-after-unit">
                       <SelectValue />
                     </SelectTrigger>
@@ -507,7 +568,7 @@ function JobForm({
                   <Input
                     type="date"
                     value={endDate}
-                    onChange={e => setEndDate(e.target.value)}
+                    onChange={(e) => setEndDate(e.target.value)}
                     data-testid="input-ends-on-date"
                   />
                 </div>
@@ -532,7 +593,7 @@ function JobForm({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">Unassigned</SelectItem>
-            {team.map(t => (
+            {team.map((t) => (
               <SelectItem key={t.id} value={t.id}>
                 {t.firstName} {t.lastName}
               </SelectItem>
@@ -545,7 +606,7 @@ function JobForm({
         <Label>Visit Instructions</Label>
         <Textarea
           value={visitInstructions}
-          onChange={e => setVisitInstructions(e.target.value)}
+          onChange={(e) => setVisitInstructions(e.target.value)}
           placeholder="Instructions for technician..."
           rows={3}
           data-testid="input-job-instructions"
@@ -560,15 +621,33 @@ function JobForm({
             onCheckedChange={setSuppressNotifications}
             data-testid="switch-suppress-notifications"
           />
-          <Label htmlFor="job-suppress-notifications" className="text-sm text-muted-foreground cursor-pointer">
+          <Label
+            htmlFor="job-suppress-notifications"
+            className="text-sm text-muted-foreground cursor-pointer"
+          >
             Suppress notifications
           </Label>
         </div>
       )}
 
       <DialogFooter>
-        <Button type="submit" disabled={isPending || !contactId || !propertyId || (activeServices.length > 0 && selectedServices.length === 0)} data-testid="button-submit-job">
-          {isPending ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Saving...</> : submitLabel}
+        <Button
+          type="submit"
+          disabled={
+            isPending ||
+            !contactId ||
+            !propertyId ||
+            (activeServices.length > 0 && selectedServices.length === 0)
+          }
+          data-testid="button-submit-job"
+        >
+          {isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Saving...
+            </>
+          ) : (
+            submitLabel
+          )}
         </Button>
       </DialogFooter>
     </form>
@@ -596,9 +675,11 @@ function CancelAllDialog({
 
   let descriptionText: string;
   if (countLoading || count === null) {
-    descriptionText = "This will cancel all upcoming scheduled visits for this recurring job and stop any future scheduling. Already-completed or invoiced visits will not be affected. This action cannot be undone.";
+    descriptionText =
+      "This will cancel all upcoming scheduled visits for this recurring job and stop any future scheduling. Already-completed or invoiced visits will not be affected. This action cannot be undone.";
   } else if (count === 0) {
-    descriptionText = "There are no upcoming scheduled visits for this job. Confirming will stop any future scheduling and mark this job as cancelled.";
+    descriptionText =
+      "There are no upcoming scheduled visits for this job. Confirming will stop any future scheduling and mark this job as cancelled.";
   } else {
     descriptionText = `This will cancel ${count} upcoming visit${count !== 1 ? "s" : ""} and stop any future scheduling for this recurring job. Already-completed or invoiced visits will not be affected. This action cannot be undone.`;
   }
@@ -615,7 +696,13 @@ function CancelAllDialog({
                 : `Cancel Recurring Job and ${count} Upcoming Visit${count !== 1 ? "s" : ""}?`}
           </AlertDialogTitle>
           <AlertDialogDescription data-testid="text-cancel-all-description">
-            {countLoading ? <span className="flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking upcoming visits...</span> : descriptionText}
+            {countLoading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking upcoming visits...
+              </span>
+            ) : (
+              descriptionText
+            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -627,7 +714,9 @@ function CancelAllDialog({
             data-testid="button-confirm-cancel-all-job"
           >
             {isPending ? (
-              <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Cancelling...</>
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Cancelling...
+              </>
             ) : (
               "Cancel All Visits"
             )}
@@ -678,8 +767,15 @@ export default function Jobs() {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId="),
+      });
       setCreateOpen(false);
       toast({ title: "Job created" });
     },
@@ -697,8 +793,15 @@ export default function Jobs() {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId="),
+      });
       setEditJob(null);
       toast({ title: "Job updated" });
     },
@@ -716,8 +819,15 @@ export default function Jobs() {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId="),
+      });
       setDeleteId(null);
       toast({ title: "Job deleted" });
     },
@@ -735,8 +845,15 @@ export default function Jobs() {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId="),
+      });
       toast({ title: "Job approved and activated" });
     },
     onError: (err: Error) => {
@@ -754,8 +871,15 @@ export default function Jobs() {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits") });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId=") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
+      });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          (query.queryKey[0] as string)?.startsWith("/api/service-plans?contactId="),
+      });
       setCancelAllId(null);
       toast({
         title: "Job cancelled",
@@ -769,25 +893,27 @@ export default function Jobs() {
 
   const enrichedJobs = useMemo<EnrichedJob[]>(() => {
     if (!jobs) return [];
-    return jobs.map(job => ({
+    return jobs.map((job) => ({
       ...job,
-      contact: contacts?.find(c => c.id === job.contactId),
-      property: properties?.find(p => p.id === job.propertyId),
+      contact: contacts?.find((c) => c.id === job.contactId),
+      property: properties?.find((p) => p.id === job.propertyId),
     }));
   }, [jobs, contacts, properties]);
 
   const filteredJobs = useMemo(() => {
     let result = enrichedJobs;
     if (statusFilter !== "all") {
-      result = result.filter(j => j.jobStatus === statusFilter);
+      result = result.filter((j) => j.jobStatus === statusFilter);
     }
     if (typeFilter !== "all") {
-      result = result.filter(j => j.jobType === typeFilter);
+      result = result.filter((j) => j.jobType === typeFilter);
     }
     if (search.trim()) {
       const q = search.toLowerCase();
-      result = result.filter(j => {
-        const contactName = j.contact ? `${j.contact.firstName} ${j.contact.lastName}`.toLowerCase() : "";
+      result = result.filter((j) => {
+        const contactName = j.contact
+          ? `${j.contact.firstName} ${j.contact.lastName}`.toLowerCase()
+          : "";
         const address = j.property?.streetAddress?.toLowerCase() || "";
         const name = j.serviceName?.toLowerCase() || "";
         return contactName.includes(q) || address.includes(q) || name.includes(q);
@@ -799,18 +925,18 @@ export default function Jobs() {
   const counts = useMemo(() => {
     if (!jobs) return { draft: 0, approved: 0, active: 0, completed: 0, cancelled: 0, total: 0 };
     return {
-      draft: jobs.filter(j => j.jobStatus === "draft").length,
-      approved: jobs.filter(j => j.jobStatus === "approved").length,
-      active: jobs.filter(j => j.jobStatus === "active").length,
-      completed: jobs.filter(j => j.jobStatus === "completed").length,
-      cancelled: jobs.filter(j => j.jobStatus === "cancelled").length,
+      draft: jobs.filter((j) => j.jobStatus === "draft").length,
+      approved: jobs.filter((j) => j.jobStatus === "approved").length,
+      active: jobs.filter((j) => j.jobStatus === "active").length,
+      completed: jobs.filter((j) => j.jobStatus === "completed").length,
+      cancelled: jobs.filter((j) => j.jobStatus === "cancelled").length,
       total: jobs.length,
     };
   }, [jobs]);
 
   const getAssignedName = (userId: string | null) => {
     if (!userId || !team) return null;
-    const member = team.find(t => t.id === userId);
+    const member = team.find((t) => t.id === userId);
     return member ? `${member.firstName} ${member.lastName}` : null;
   };
 
@@ -818,7 +944,10 @@ export default function Jobs() {
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-jobs-heading">
+          <h1
+            className="text-2xl font-bold flex items-center gap-2"
+            data-testid="text-jobs-heading"
+          >
             <Briefcase className="h-6 w-6" />
             Jobs
           </h1>
@@ -832,31 +961,51 @@ export default function Jobs() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <Card className="cursor-pointer" onClick={() => setStatusFilter("all")} data-testid="card-stat-total">
+        <Card
+          className="cursor-pointer"
+          onClick={() => setStatusFilter("all")}
+          data-testid="card-stat-total"
+        >
           <CardContent className="p-3 text-center">
             <p className="text-2xl font-bold">{counts.total}</p>
             <p className="text-xs text-muted-foreground">Total Jobs</p>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer" onClick={() => setStatusFilter("draft")} data-testid="card-stat-draft">
+        <Card
+          className="cursor-pointer"
+          onClick={() => setStatusFilter("draft")}
+          data-testid="card-stat-draft"
+        >
           <CardContent className="p-3 text-center">
             <p className="text-2xl font-bold">{counts.draft}</p>
             <p className="text-xs text-muted-foreground">Drafts</p>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer" onClick={() => setStatusFilter("approved")} data-testid="card-stat-approved">
+        <Card
+          className="cursor-pointer"
+          onClick={() => setStatusFilter("approved")}
+          data-testid="card-stat-approved"
+        >
           <CardContent className="p-3 text-center">
             <p className="text-2xl font-bold">{counts.approved}</p>
             <p className="text-xs text-muted-foreground">Approved</p>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer" onClick={() => setStatusFilter("active")} data-testid="card-stat-active">
+        <Card
+          className="cursor-pointer"
+          onClick={() => setStatusFilter("active")}
+          data-testid="card-stat-active"
+        >
           <CardContent className="p-3 text-center">
             <p className="text-2xl font-bold">{counts.active}</p>
             <p className="text-xs text-muted-foreground">Active</p>
           </CardContent>
         </Card>
-        <Card className="cursor-pointer" onClick={() => setStatusFilter("completed")} data-testid="card-stat-completed">
+        <Card
+          className="cursor-pointer"
+          onClick={() => setStatusFilter("completed")}
+          data-testid="card-stat-completed"
+        >
           <CardContent className="p-3 text-center">
             <p className="text-2xl font-bold">{counts.completed}</p>
             <p className="text-xs text-muted-foreground">Completed</p>
@@ -870,7 +1019,7 @@ export default function Jobs() {
           <Input
             placeholder="Search jobs..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
             data-testid="input-jobs-search"
           />
@@ -903,11 +1052,13 @@ export default function Jobs() {
 
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-20 w-full" />
+          ))}
         </div>
       ) : filteredJobs.length > 0 ? (
         <div className="space-y-3">
-          {filteredJobs.map(job => {
+          {filteredJobs.map((job) => {
             const isExpanded = expandedId === job.id;
             const assignedName = getAssignedName(job.assignedUserId);
             return (
@@ -920,35 +1071,56 @@ export default function Jobs() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm" data-testid={`text-job-contact-${job.id}`}>
-                          {job.contact ? `${job.contact.firstName} ${job.contact.lastName}` : "Unknown"}
+                        <p
+                          className="font-medium text-sm"
+                          data-testid={`text-job-contact-${job.id}`}
+                        >
+                          {job.contact
+                            ? `${job.contact.firstName} ${job.contact.lastName}`
+                            : "Unknown"}
                         </p>
                         {job.serviceName && (
                           <span className="text-xs text-muted-foreground">- {job.serviceName}</span>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-job-address-${job.id}`}>
+                      <p
+                        className="text-xs text-muted-foreground mt-0.5"
+                        data-testid={`text-job-address-${job.id}`}
+                      >
                         {job.property?.streetAddress || "No address"}
                       </p>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <Badge variant="secondary" className={`text-xs ${jobStatusColors[job.jobStatus || "active"]}`} data-testid={`badge-job-status-${job.id}`}>
+                        <Badge
+                          variant="secondary"
+                          className={`text-xs ${jobStatusColors[job.jobStatus || "active"]}`}
+                          data-testid={`badge-job-status-${job.id}`}
+                        >
                           {jobStatusLabels[job.jobStatus || "active"]}
                         </Badge>
-                        <Badge variant="outline" className="text-xs capitalize" data-testid={`badge-job-type-${job.id}`}>
+                        <Badge
+                          variant="outline"
+                          className="text-xs capitalize"
+                          data-testid={`badge-job-type-${job.id}`}
+                        >
                           {job.jobType === "one_off" ? "One-off" : "Recurring"}
                         </Badge>
                         {job.jobType === "recurring" && (
                           <span className="text-xs text-muted-foreground">
                             {frequencyLabels[job.frequency] || job.frequency}
-                            {job.dayOfWeek ? ` on ${dayLabels[job.dayOfWeek] || job.dayOfWeek}` : ""}
+                            {job.dayOfWeek
+                              ? ` on ${dayLabels[job.dayOfWeek] || job.dayOfWeek}`
+                              : ""}
                           </span>
                         )}
-                        <span className="text-xs text-muted-foreground">${(Number(job.pricePerVisit) || 0).toFixed(2)}/visit</span>
+                        <span className="text-xs text-muted-foreground">
+                          ${(Number(job.pricePerVisit) || 0).toFixed(2)}/visit
+                        </span>
                       </div>
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-muted-foreground">
                         {assignedName && (
                           <span data-testid={`text-job-assigned-${job.id}`}>
-                            <User className="h-3 w-3 inline mr-0.5" />{assignedName}
+                            <User className="h-3 w-3 inline mr-0.5" />
+                            {assignedName}
                           </span>
                         )}
                         <span data-testid={`text-job-next-visit-${job.id}`}>
@@ -963,7 +1135,11 @@ export default function Jobs() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      {isExpanded ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
                     </div>
                   </div>
 
@@ -982,7 +1158,11 @@ export default function Jobs() {
                         )}
                         <div>
                           <p className="text-xs text-muted-foreground">Time Window</p>
-                          <p>{job.anytime ? "Anytime" : `${job.startTime || "--"} - ${job.endTime || "--"}`}</p>
+                          <p>
+                            {job.anytime
+                              ? "Anytime"
+                              : `${job.startTime || "--"} - ${job.endTime || "--"}`}
+                          </p>
                         </div>
                         {assignedName && (
                           <div>
@@ -993,7 +1173,9 @@ export default function Jobs() {
                         {job.endsAfterCount && job.endsAfterUnit && (
                           <div>
                             <p className="text-xs text-muted-foreground">Ends After</p>
-                            <p>{job.endsAfterCount} {job.endsAfterUnit}</p>
+                            <p>
+                              {job.endsAfterCount} {job.endsAfterUnit}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -1009,7 +1191,10 @@ export default function Jobs() {
                         {job.jobStatus === "draft" && (
                           <Button
                             size="sm"
-                            onClick={(e) => { e.stopPropagation(); approveMutation.mutate(job.id); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              approveMutation.mutate(job.id);
+                            }}
                             disabled={approveMutation.isPending}
                             data-testid={`button-approve-job-${job.id}`}
                           >
@@ -1024,13 +1209,20 @@ export default function Jobs() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={(e) => { e.stopPropagation(); setEditJob(job); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditJob(job);
+                          }}
                           data-testid={`button-edit-job-${job.id}`}
                         >
                           <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
                         </Button>
                         <Link href={`/contacts/${job.contactId}`}>
-                          <Button size="sm" variant="outline" data-testid={`button-view-contact-${job.id}`}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            data-testid={`button-view-contact-${job.id}`}
+                          >
                             <Eye className="h-3.5 w-3.5 mr-1" /> View Customer
                           </Button>
                         </Link>
@@ -1039,7 +1231,10 @@ export default function Jobs() {
                             size="sm"
                             variant="outline"
                             className="text-destructive"
-                            onClick={(e) => { e.stopPropagation(); setCancelAllId(job.id); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCancelAllId(job.id);
+                            }}
                             disabled={cancelAllMutation.isPending}
                             data-testid={`button-cancel-all-job-${job.id}`}
                           >
@@ -1050,7 +1245,10 @@ export default function Jobs() {
                           size="sm"
                           variant="outline"
                           className="text-destructive"
-                          onClick={(e) => { e.stopPropagation(); setDeleteId(job.id); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteId(job.id);
+                          }}
                           data-testid={`button-delete-job-${job.id}`}
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
@@ -1080,7 +1278,7 @@ export default function Jobs() {
           </DialogHeader>
           {contacts && properties && team && (
             <JobForm
-              onSubmit={data => createMutation.mutate(data)}
+              onSubmit={(data) => createMutation.mutate(data)}
               isPending={createMutation.isPending}
               contacts={contacts}
               properties={properties}
@@ -1092,14 +1290,19 @@ export default function Jobs() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!editJob} onOpenChange={open => { if (!open) setEditJob(null); }}>
+      <Dialog
+        open={!!editJob}
+        onOpenChange={(open) => {
+          if (!open) setEditJob(null);
+        }}
+      >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Job</DialogTitle>
           </DialogHeader>
           {editJob && contacts && properties && team && (
             <JobForm
-              onSubmit={data => updateMutation.mutate({ id: editJob.id, data })}
+              onSubmit={(data) => updateMutation.mutate({ id: editJob.id, data })}
               isPending={updateMutation.isPending}
               contacts={contacts}
               properties={properties}
@@ -1112,12 +1315,18 @@ export default function Jobs() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteId} onOpenChange={open => { if (!open) setDeleteId(null); }}>
+      <AlertDialog
+        open={!!deleteId}
+        onOpenChange={(open) => {
+          if (!open) setDeleteId(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Job</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this job and all associated visits. This cannot be undone.
+              This will permanently delete this job and all associated visits. This cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1134,7 +1343,9 @@ export default function Jobs() {
 
       <CancelAllDialog
         cancelAllId={cancelAllId}
-        onOpenChange={open => { if (!open) setCancelAllId(null); }}
+        onOpenChange={(open) => {
+          if (!open) setCancelAllId(null);
+        }}
         onConfirm={() => cancelAllId && cancelAllMutation.mutate(cancelAllId)}
         isPending={cancelAllMutation.isPending}
       />

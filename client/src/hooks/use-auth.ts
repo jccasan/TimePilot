@@ -3,7 +3,12 @@ import { useEffect } from "react";
 import type { User } from "@shared/models/auth";
 import { setUserContext, clearUserContext } from "@/lib/errorReporter";
 
-type SafeUser = Omit<User, "passwordHash"> & { role?: string; companyId?: string | null; setupDone?: boolean; sessionToken?: string };
+type SafeUser = Omit<User, "passwordHash"> & {
+  role?: string;
+  companyId?: string | null;
+  setupDone?: boolean;
+  sessionToken?: string;
+};
 
 async function fetchUser(): Promise<SafeUser | null> {
   const token = localStorage.getItem("sessionToken");

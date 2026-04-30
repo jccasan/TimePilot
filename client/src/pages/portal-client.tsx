@@ -10,9 +10,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -168,49 +180,55 @@ function usePortalApi() {
   const [, navigate] = useLocation();
   const token = sessionStorage.getItem("portalToken");
 
-  const portalFetch = useCallback(async (url: string, options?: RequestInit) => {
-    if (!token) {
-      navigate("/portal/login");
-      throw new Error("Not authenticated");
-    }
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        ...(options?.headers || {}),
-      },
-    });
-    if (res.status === 401) {
-      sessionStorage.removeItem("portalToken");
-      sessionStorage.removeItem("portalContactId");
-      navigate("/portal/login");
-      throw new Error("Session expired");
-    }
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || "Request failed");
-    }
-    const contentType = res.headers.get("content-type");
-    if (contentType?.includes("application/pdf")) {
-      return res.blob();
-    }
-    return res.json();
-  }, [token, navigate]);
+  const portalFetch = useCallback(
+    async (url: string, options?: RequestInit) => {
+      if (!token) {
+        navigate("/portal/login");
+        throw new Error("Not authenticated");
+      }
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          ...(options?.headers || {}),
+        },
+      });
+      if (res.status === 401) {
+        sessionStorage.removeItem("portalToken");
+        sessionStorage.removeItem("portalContactId");
+        navigate("/portal/login");
+        throw new Error("Session expired");
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Request failed");
+      }
+      const contentType = res.headers.get("content-type");
+      if (contentType?.includes("application/pdf")) {
+        return res.blob();
+      }
+      return res.json();
+    },
+    [token, navigate]
+  );
 
-  const portalDownload = useCallback(async (url: string, filename: string) => {
-    if (!token) return;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error("Download failed");
-    const blob = await res.blob();
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }, [token]);
+  const portalDownload = useCallback(
+    async (url: string, filename: string) => {
+      if (!token) return;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    },
+    [token]
+  );
 
   return { portalFetch, portalDownload, token };
 }
@@ -279,7 +297,13 @@ const changeRequestStatusColors: Record<string, string> = {
   denied: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
-function SummaryCard({ icon: Icon, label, value, sublabel, accent }: {
+function SummaryCard({
+  icon: Icon,
+  label,
+  value,
+  sublabel,
+  accent,
+}: {
   icon: any;
   label: string;
   value: string;
@@ -293,14 +317,27 @@ function SummaryCard({ icon: Icon, label, value, sublabel, accent }: {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
-        <p className="text-lg font-semibold mt-0.5 truncate" data-testid={`text-summary-${label.toLowerCase().replace(/\s/g, '-')}`}>{value}</p>
+        <p
+          className="text-lg font-semibold mt-0.5 truncate"
+          data-testid={`text-summary-${label.toLowerCase().replace(/\s/g, "-")}`}
+        >
+          {value}
+        </p>
         {sublabel && <p className="text-xs text-muted-foreground mt-0.5">{sublabel}</p>}
       </div>
     </div>
   );
 }
 
-function EmptyState({ icon: Icon, title, description }: { icon: any; title: string; description: string }) {
+function EmptyState({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: any;
+  title: string;
+  description: string;
+}) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
       <div className="rounded-full bg-muted p-4 mb-4">
@@ -312,7 +349,15 @@ function EmptyState({ icon: Icon, title, description }: { icon: any; title: stri
   );
 }
 
-function SectionHeader({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) {
+function SectionHeader({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+}) {
   return (
     <div className="flex items-start justify-between gap-4 mb-4">
       <div>
@@ -344,11 +389,32 @@ export default function PortalClient() {
   const [cleanupNotes, setCleanupNotes] = useState("");
   const [cleanupPending, setCleanupPending] = useState(false);
   const [properties, setProperties] = useState<PortalProperty[]>([]);
-  const [propertyEdits, setPropertyEdits] = useState<Record<string, { gateCode: string; specialInstructions: string; streetAddress: string; city: string; state: string; zipCode: string }>>({});
+  const [propertyEdits, setPropertyEdits] = useState<
+    Record<
+      string,
+      {
+        gateCode: string;
+        specialInstructions: string;
+        streetAddress: string;
+        city: string;
+        state: string;
+        zipCode: string;
+      }
+    >
+  >({});
   const [savingProperties, setSavingProperties] = useState(false);
   const [numberOfDogs, setNumberOfDogs] = useState<number>(0);
   const [savingDogs, setSavingDogs] = useState(false);
-  const [profileEdits, setProfileEdits] = useState({ firstName: "", lastName: "", email: "", phone: "", streetAddress: "", city: "", state: "", zipCode: "" });
+  const [profileEdits, setProfileEdits] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    streetAddress: "",
+    city: "",
+    state: "",
+    zipCode: "",
+  });
   const [savingProfile, setSavingProfile] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [autoPayEnabled, setAutoPayEnabled] = useState(false);
@@ -376,10 +442,16 @@ export default function PortalClient() {
     preferredTiming: string;
     [key: string]: boolean | string;
   }>({
-    email: true, sms: false,
-    serviceReminder: true, serviceCompleted: true,
-    invoiceReady: true, invoiceDueReminder: true, paymentConfirmation: true,
-    reminderOptOut: false, preferredChannel: "", preferredTiming: "",
+    email: true,
+    sms: false,
+    serviceReminder: true,
+    serviceCompleted: true,
+    invoiceReady: true,
+    invoiceDueReminder: true,
+    paymentConfirmation: true,
+    reminderOptOut: false,
+    preferredChannel: "",
+    preferredTiming: "",
   });
   const [savingNotifs, setSavingNotifs] = useState(false);
   const [changeRequests, setChangeRequests] = useState<ServiceChangeRequest[]>([]);
@@ -401,14 +473,17 @@ export default function PortalClient() {
   const initialTab = params.get("tab") || "overview";
   const [activeTab, setActiveTab] = useState(initialTab);
 
-  const loadVisitHistory = useCallback(async (page: number) => {
-    try {
-      const data = await portalFetch(`/api/portal/visits/history?page=${page}&limit=20`);
-      setPastVisits(data.visits || []);
-      setPastVisitsTotal(data.total || 0);
-      setPastVisitsPage(data.page || 1);
-    } catch {}
-  }, [portalFetch]);
+  const loadVisitHistory = useCallback(
+    async (page: number) => {
+      try {
+        const data = await portalFetch(`/api/portal/visits/history?page=${page}&limit=20`);
+        setPastVisits(data.visits || []);
+        setPastVisitsTotal(data.total || 0);
+        setPastVisitsPage(data.page || 1);
+      } catch {}
+    },
+    [portalFetch]
+  );
 
   useEffect(() => {
     if (!token) {
@@ -420,7 +495,10 @@ export default function PortalClient() {
       try {
         const [profileData, scheduleData, invoicesData, propertiesData] = await Promise.all([
           portalFetch("/api/portal/me"),
-          portalFetch("/api/portal/schedule").catch(() => ({ servicePlans: [], upcomingVisits: [] })),
+          portalFetch("/api/portal/schedule").catch(() => ({
+            servicePlans: [],
+            upcomingVisits: [],
+          })),
           portalFetch("/api/portal/invoices").catch(() => []),
           portalFetch("/api/portal/properties").catch(() => []),
         ]);
@@ -441,7 +519,17 @@ export default function PortalClient() {
           state: profileData?.state || "",
           zipCode: profileData?.zipCode || "",
         });
-        const edits: Record<string, { gateCode: string; specialInstructions: string; streetAddress: string; city: string; state: string; zipCode: string }> = {};
+        const edits: Record<
+          string,
+          {
+            gateCode: string;
+            specialInstructions: string;
+            streetAddress: string;
+            city: string;
+            state: string;
+            zipCode: string;
+          }
+        > = {};
         for (const p of propertiesData) {
           edits[p.id] = {
             gateCode: p.gateCode || "",
@@ -456,9 +544,23 @@ export default function PortalClient() {
 
         await loadVisitHistory(1);
 
-        const [pmData, referralData, estimatesData, notifsData, changesData, photosData, messagesData] = await Promise.all([
-          portalFetch("/api/portal/payment-methods").catch(() => ({ methods: [], autoPayEnabled: false })),
-          portalFetch("/api/portal/referral").catch(() => ({ referralCode: null, referralCount: 0 })),
+        const [
+          pmData,
+          referralData,
+          estimatesData,
+          notifsData,
+          changesData,
+          photosData,
+          messagesData,
+        ] = await Promise.all([
+          portalFetch("/api/portal/payment-methods").catch(() => ({
+            methods: [],
+            autoPayEnabled: false,
+          })),
+          portalFetch("/api/portal/referral").catch(() => ({
+            referralCode: null,
+            referralCount: 0,
+          })),
           portalFetch("/api/portal/estimates").catch(() => []),
           portalFetch("/api/portal/notifications").catch(() => ({ email: true, sms: false })),
           portalFetch("/api/portal/service-changes").catch(() => []),
@@ -517,9 +619,10 @@ export default function PortalClient() {
       await portalFetch(`/api/portal/${action}`, { method: "POST" });
       toast({
         title: action === "pause" ? "Service paused" : "Service resumed",
-        description: action === "pause"
-          ? "Your service has been paused. You can resume anytime."
-          : "Your service has been resumed.",
+        description:
+          action === "pause"
+            ? "Your service has been paused. You can resume anytime."
+            : "Your service has been resumed.",
       });
       const scheduleData = await portalFetch("/api/portal/schedule");
       setSchedule(scheduleData);
@@ -531,7 +634,7 @@ export default function PortalClient() {
   };
 
   const handlePayInvoice = (invoiceId: string) => {
-    const inv = invoices.find(i => i.id === invoiceId);
+    const inv = invoices.find((i) => i.id === invoiceId);
     if (inv) {
       setTipDialogInvoice(inv);
       setSelectedTip(0);
@@ -543,7 +646,11 @@ export default function PortalClient() {
     if (!tipDialogInvoice) return;
     const tipValue = customTip ? parseFloat(customTip) : selectedTip;
     if (isNaN(tipValue) || tipValue < 0) {
-      toast({ title: "Invalid tip", description: "Please enter a valid tip amount.", variant: "destructive" });
+      toast({
+        title: "Invalid tip",
+        description: "Please enter a valid tip amount.",
+        variant: "destructive",
+      });
       return;
     }
     setActionPending(true);
@@ -576,7 +683,10 @@ export default function PortalClient() {
         method: "POST",
         body: JSON.stringify({ subject: contactSubject, message: contactMessage }),
       });
-      toast({ title: "Message sent", description: "Your message has been sent to the service provider." });
+      toast({
+        title: "Message sent",
+        description: "Your message has been sent to the service provider.",
+      });
       setContactSubject("");
       setContactMessage("");
       try {
@@ -593,7 +703,11 @@ export default function PortalClient() {
   const handleRequestCleanup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cleanupDate) {
-      toast({ title: "Required", description: "Please select a preferred date.", variant: "destructive" });
+      toast({
+        title: "Required",
+        description: "Please select a preferred date.",
+        variant: "destructive",
+      });
       return;
     }
     setCleanupPending(true);
@@ -602,7 +716,10 @@ export default function PortalClient() {
         method: "POST",
         body: JSON.stringify({ preferredDate: cleanupDate, notes: cleanupNotes }),
       });
-      toast({ title: "Request submitted", description: "Your one-time cleanup request has been sent." });
+      toast({
+        title: "Request submitted",
+        description: "Your one-time cleanup request has been sent.",
+      });
       setCleanupDate("");
       setCleanupNotes("");
     } catch (err: any) {
@@ -678,7 +795,17 @@ export default function PortalClient() {
       });
       const updatedProps = await portalFetch("/api/portal/properties").catch(() => []);
       setProperties(updatedProps);
-      const newEdits: Record<string, { gateCode: string; specialInstructions: string; streetAddress: string; city: string; state: string; zipCode: string }> = {};
+      const newEdits: Record<
+        string,
+        {
+          gateCode: string;
+          specialInstructions: string;
+          streetAddress: string;
+          city: string;
+          state: string;
+          zipCode: string;
+        }
+      > = {};
       for (const p of updatedProps) {
         newEdits[p.id] = {
           gateCode: p.gateCode || "",
@@ -742,7 +869,10 @@ export default function PortalClient() {
       return;
     }
     try {
-      await portalFetch("/api/portal/auto-pay", { method: "PATCH", body: JSON.stringify({ enabled: true }) });
+      await portalFetch("/api/portal/auto-pay", {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: true }),
+      });
       setAutoPayEnabled(true);
       toast({ title: "Auto-pay enabled" });
     } catch (err: any) {
@@ -752,10 +882,16 @@ export default function PortalClient() {
 
   const handleConfirmDisableAutoPay = async () => {
     try {
-      await portalFetch("/api/portal/auto-pay", { method: "PATCH", body: JSON.stringify({ enabled: false }) });
+      await portalFetch("/api/portal/auto-pay", {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: false }),
+      });
       setAutoPayEnabled(false);
       setConfirmDisableAutoPay(false);
-      toast({ title: "Auto-pay disabled", description: "You will need to pay invoices manually going forward." });
+      toast({
+        title: "Auto-pay disabled",
+        description: "You will need to pay invoices manually going forward.",
+      });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -790,7 +926,15 @@ export default function PortalClient() {
         body: JSON.stringify(action === "approve" ? { note } : { reason: note }),
       });
       setEstimates((prev) =>
-        prev.map((e) => e.id === estimateId ? { ...e, status: action === "approve" ? "approved" : "declined", respondedAt: new Date().toISOString() } : e)
+        prev.map((e) =>
+          e.id === estimateId
+            ? {
+                ...e,
+                status: action === "approve" ? "approved" : "declined",
+                respondedAt: new Date().toISOString(),
+              }
+            : e
+        )
       );
       toast({ title: `Estimate ${action}d`, description: `The estimate has been ${action}d.` });
     } catch (err: any) {
@@ -816,7 +960,11 @@ export default function PortalClient() {
   const handleSubmitChangeRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!changeType) {
-      toast({ title: "Required", description: "Please select a request type.", variant: "destructive" });
+      toast({
+        title: "Required",
+        description: "Please select a request type.",
+        variant: "destructive",
+      });
       return;
     }
     setSubmittingChange(true);
@@ -830,7 +978,10 @@ export default function PortalClient() {
           note: changeNote || null,
         }),
       });
-      toast({ title: "Request submitted", description: "Your service change request has been sent." });
+      toast({
+        title: "Request submitted",
+        description: "Your service change request has been sent.",
+      });
       setChangeType("");
       setChangePlanId("");
       setChangeValue("");
@@ -854,7 +1005,11 @@ export default function PortalClient() {
 
   const handleDownloadStatement = async () => {
     if (!billingStartDate || !billingEndDate) {
-      toast({ title: "Required", description: "Please select a date range.", variant: "destructive" });
+      toast({
+        title: "Required",
+        description: "Please select a date range.",
+        variant: "destructive",
+      });
       return;
     }
     setDownloadingStatement(true);
@@ -879,10 +1034,22 @@ export default function PortalClient() {
   };
 
   const hasActivePlans = schedule?.servicePlans?.some((p) => p.isActive);
-  const activeInvoices = useMemo(() => invoices.filter((inv) => inv.status !== "voided"), [invoices]);
-  const unpaidInvoices = useMemo(() => activeInvoices.filter((inv) => inv.status !== "paid" && inv.status !== "voided"), [activeInvoices]);
-  const balanceDue = useMemo(() => unpaidInvoices.reduce((sum, inv) => sum + Number(inv.total), 0), [unpaidInvoices]);
-  const pendingEstimates = useMemo(() => estimates.filter((e) => e.status === "pending"), [estimates]);
+  const activeInvoices = useMemo(
+    () => invoices.filter((inv) => inv.status !== "voided"),
+    [invoices]
+  );
+  const unpaidInvoices = useMemo(
+    () => activeInvoices.filter((inv) => inv.status !== "paid" && inv.status !== "voided"),
+    [activeInvoices]
+  );
+  const balanceDue = useMemo(
+    () => unpaidInvoices.reduce((sum, inv) => sum + Number(inv.total), 0),
+    [unpaidInvoices]
+  );
+  const pendingEstimates = useMemo(
+    () => estimates.filter((e) => e.status === "pending"),
+    [estimates]
+  );
   const pastEstimates = useMemo(() => estimates.filter((e) => e.status !== "pending"), [estimates]);
   const totalPages = Math.ceil(pastVisitsTotal / 20);
   const activePlan = schedule?.servicePlans?.find((p) => p.isActive);
@@ -923,7 +1090,13 @@ export default function PortalClient() {
                 Welcome, {profile?.firstName} {profile?.lastName}
               </p>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground" data-testid="button-portal-logout">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="text-muted-foreground hover:text-foreground"
+              data-testid="button-portal-logout"
+            >
               <LogOut className="h-4 w-4 mr-2" />
               <span className="hidden sm:inline">Sign Out</span>
             </Button>
@@ -938,20 +1111,33 @@ export default function PortalClient() {
               <h2 className="text-base font-semibold flex items-center gap-2">
                 <User className="h-4 w-4 text-primary" /> Your Information
               </h2>
-              <Button size="sm" onClick={handleSaveProfile} disabled={savingProfile} data-testid="button-save-profile-header">
+              <Button
+                size="sm"
+                onClick={handleSaveProfile}
+                disabled={savingProfile}
+                data-testid="button-save-profile-header"
+              >
                 <Save className="mr-1.5 h-3.5 w-3.5" />
                 {savingProfile ? "Saving..." : "Save"}
               </Button>
             </div>
             {profile?.pendingEmail && (
-              <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-700 px-3 py-2 text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2" data-testid="banner-pending-email">
+              <div
+                className="mb-3 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-700 px-3 py-2 text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2"
+                data-testid="banner-pending-email"
+              >
                 <Mail className="h-4 w-4 flex-shrink-0" />
-                <span>Verification email sent to <strong>{profile.pendingEmail}</strong> — check your inbox to confirm the change.</span>
+                <span>
+                  Verification email sent to <strong>{profile.pendingEmail}</strong> — check your
+                  inbox to confirm the change.
+                </span>
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="header-first-name" className="text-xs text-muted-foreground">Your First Name</Label>
+                <Label htmlFor="header-first-name" className="text-xs text-muted-foreground">
+                  Your First Name
+                </Label>
                 <Input
                   id="header-first-name"
                   value={profileEdits.firstName}
@@ -962,7 +1148,9 @@ export default function PortalClient() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="header-last-name" className="text-xs text-muted-foreground">Your Last Name</Label>
+                <Label htmlFor="header-last-name" className="text-xs text-muted-foreground">
+                  Your Last Name
+                </Label>
                 <Input
                   id="header-last-name"
                   value={profileEdits.lastName}
@@ -973,7 +1161,9 @@ export default function PortalClient() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="header-email" className="text-xs text-muted-foreground">Your Email</Label>
+                <Label htmlFor="header-email" className="text-xs text-muted-foreground">
+                  Your Email
+                </Label>
                 <Input
                   id="header-email"
                   type="email"
@@ -985,7 +1175,9 @@ export default function PortalClient() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="header-phone" className="text-xs text-muted-foreground">Your Phone</Label>
+                <Label htmlFor="header-phone" className="text-xs text-muted-foreground">
+                  Your Phone
+                </Label>
                 <Input
                   id="header-phone"
                   type="tel"
@@ -998,7 +1190,9 @@ export default function PortalClient() {
               </div>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="header-street" className="text-xs text-muted-foreground">Street Address</Label>
+              <Label htmlFor="header-street" className="text-xs text-muted-foreground">
+                Street Address
+              </Label>
               <Input
                 id="header-street"
                 value={profileEdits.streetAddress}
@@ -1010,7 +1204,9 @@ export default function PortalClient() {
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1 col-span-1">
-                <Label htmlFor="header-city" className="text-xs text-muted-foreground">City</Label>
+                <Label htmlFor="header-city" className="text-xs text-muted-foreground">
+                  City
+                </Label>
                 <Input
                   id="header-city"
                   value={profileEdits.city}
@@ -1021,7 +1217,9 @@ export default function PortalClient() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="header-state" className="text-xs text-muted-foreground">State</Label>
+                <Label htmlFor="header-state" className="text-xs text-muted-foreground">
+                  State
+                </Label>
                 <Input
                   id="header-state"
                   value={profileEdits.state}
@@ -1032,7 +1230,9 @@ export default function PortalClient() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="header-zip" className="text-xs text-muted-foreground">Zip Code</Label>
+                <Label htmlFor="header-zip" className="text-xs text-muted-foreground">
+                  Zip Code
+                </Label>
                 <Input
                   id="header-zip"
                   value={profileEdits.zipCode}
@@ -1049,16 +1249,31 @@ export default function PortalClient() {
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="w-full grid grid-cols-5 mb-6 h-auto min-h-[44px]" data-testid="tabs-portal-nav">
-            <TabsTrigger value="overview" className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm" data-testid="tab-overview">
+          <TabsList
+            className="w-full grid grid-cols-5 mb-6 h-auto min-h-[44px]"
+            data-testid="tabs-portal-nav"
+          >
+            <TabsTrigger
+              value="overview"
+              className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm"
+              data-testid="tab-overview"
+            >
               <LayoutDashboard className="h-5 w-5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Overview</span>
             </TabsTrigger>
-            <TabsTrigger value="services" className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm" data-testid="tab-services">
+            <TabsTrigger
+              value="services"
+              className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm"
+              data-testid="tab-services"
+            >
               <Wrench className="h-5 w-5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Services</span>
             </TabsTrigger>
-            <TabsTrigger value="billing" className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm relative" data-testid="tab-billing">
+            <TabsTrigger
+              value="billing"
+              className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm relative"
+              data-testid="tab-billing"
+            >
               <Receipt className="h-5 w-5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Billing</span>
               {unpaidInvoices.length > 0 && (
@@ -1067,11 +1282,19 @@ export default function PortalClient() {
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="messages" className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm" data-testid="tab-messages">
+            <TabsTrigger
+              value="messages"
+              className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm"
+              data-testid="tab-messages"
+            >
               <MessageSquare className="h-5 w-5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Messages</span>
             </TabsTrigger>
-            <TabsTrigger value="account" className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm" data-testid="tab-account">
+            <TabsTrigger
+              value="account"
+              className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm"
+              data-testid="tab-account"
+            >
               <Settings className="h-5 w-5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Account</span>
             </TabsTrigger>
@@ -1080,15 +1303,27 @@ export default function PortalClient() {
           {/* ==================== OVERVIEW TAB ==================== */}
           <TabsContent value="overview" className="space-y-6">
             {pendingEstimates.length > 0 && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 flex items-start gap-3" data-testid="alert-pending-estimates">
+              <div
+                className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 flex items-start gap-3"
+                data-testid="alert-pending-estimates"
+              >
                 <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                    You have {pendingEstimates.length} estimate{pendingEstimates.length > 1 ? "s" : ""} awaiting your review
+                    You have {pendingEstimates.length} estimate
+                    {pendingEstimates.length > 1 ? "s" : ""} awaiting your review
                   </p>
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Review and approve or decline from the Billing tab</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                    Review and approve or decline from the Billing tab
+                  </p>
                 </div>
-                <Button size="sm" variant="outline" className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200" onClick={() => handleTabChange("billing")} data-testid="button-go-estimates">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200"
+                  onClick={() => handleTabChange("billing")}
+                  data-testid="button-go-estimates"
+                >
                   Review
                 </Button>
               </div>
@@ -1106,28 +1341,59 @@ export default function PortalClient() {
                 icon={DollarSign}
                 label="Amount Due"
                 value={balanceDue > 0 ? `$${balanceDue.toFixed(2)}` : "All clear"}
-                sublabel={balanceDue > 0 ? `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length > 1 ? "s" : ""}` : "No outstanding balance"}
-                accent={balanceDue > 0 ? "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400" : "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400"}
+                sublabel={
+                  balanceDue > 0
+                    ? `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length > 1 ? "s" : ""}`
+                    : "No outstanding balance"
+                }
+                accent={
+                  balanceDue > 0
+                    ? "bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400"
+                    : "bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400"
+                }
               />
               <SummaryCard
                 icon={Calendar}
                 label="Your Job"
-                value={activePlan ? (frequencyLabels[activePlan.frequency] || activePlan.frequency) : "No active plan"}
-                sublabel={activePlan ? `${activePlan.dayOfWeek ? activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1) + "s" : ""} - $${(Number(activePlan.pricePerVisit) || 0).toFixed(2)}/visit` : undefined}
+                value={
+                  activePlan
+                    ? frequencyLabels[activePlan.frequency] || activePlan.frequency
+                    : "No active plan"
+                }
+                sublabel={
+                  activePlan
+                    ? `${activePlan.dayOfWeek ? activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1) + "s" : ""} - $${(Number(activePlan.pricePerVisit) || 0).toFixed(2)}/visit`
+                    : undefined
+                }
                 accent="bg-primary/10 text-primary"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {balanceDue > 0 && (
-                <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("billing")} data-testid="button-quick-pay">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-2"
+                  onClick={() => handleTabChange("billing")}
+                  data-testid="button-quick-pay"
+                >
                   <CreditCard className="h-4 w-4" /> Pay Invoice
                 </Button>
               )}
-              <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("services")} data-testid="button-quick-services">
+              <Button
+                variant="outline"
+                className="w-full justify-start gap-2"
+                onClick={() => handleTabChange("services")}
+                data-testid="button-quick-services"
+              >
                 <ArrowRightLeft className="h-4 w-4" /> Manage Services
               </Button>
-              <Button variant="outline" className="w-full justify-start gap-2" onClick={() => handleTabChange("messages")} data-testid="button-quick-contact">
+              <Button
+                variant="outline"
+                className="w-full justify-start gap-2"
+                onClick={() => handleTabChange("messages")}
+                data-testid="button-quick-contact"
+              >
                 <MessageSquare className="h-4 w-4" /> Messages
               </Button>
             </div>
@@ -1139,11 +1405,22 @@ export default function PortalClient() {
                     <Calendar className="h-4 w-4 text-primary" /> Jobs
                   </CardTitle>
                   {hasActivePlans ? (
-                    <Button size="sm" variant="outline" onClick={() => handlePauseResume("pause")} disabled={actionPending} data-testid="button-portal-pause">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handlePauseResume("pause")}
+                      disabled={actionPending}
+                      data-testid="button-portal-pause"
+                    >
                       <Pause className="mr-1.5 h-3.5 w-3.5" /> Pause
                     </Button>
                   ) : schedule?.servicePlans && schedule.servicePlans.length > 0 ? (
-                    <Button size="sm" onClick={() => handlePauseResume("resume")} disabled={actionPending} data-testid="button-portal-resume">
+                    <Button
+                      size="sm"
+                      onClick={() => handlePauseResume("resume")}
+                      disabled={actionPending}
+                      data-testid="button-portal-resume"
+                    >
                       <Play className="mr-1.5 h-3.5 w-3.5" /> Resume
                     </Button>
                   ) : null}
@@ -1152,24 +1429,49 @@ export default function PortalClient() {
               <CardContent className="space-y-2">
                 {schedule?.servicePlans && schedule.servicePlans.length > 0 ? (
                   schedule.servicePlans.map((plan) => (
-                    <div key={plan.id} className="flex items-center justify-between rounded-lg border p-3 bg-card hover:bg-accent/30 transition-colors">
+                    <div
+                      key={plan.id}
+                      className="flex items-center justify-between rounded-lg border p-3 bg-card hover:bg-accent/30 transition-colors"
+                    >
                       <div className="flex items-center gap-3">
-                        <div className={`h-2.5 w-2.5 rounded-full ${plan.isActive ? "bg-green-500" : "bg-gray-400"}`} />
+                        <div
+                          className={`h-2.5 w-2.5 rounded-full ${plan.isActive ? "bg-green-500" : "bg-gray-400"}`}
+                        />
                         <div>
-                          <p className="text-sm font-medium">{frequencyLabels[plan.frequency] || plan.frequency}</p>
-                          {plan.dayOfWeek && <p className="text-xs text-muted-foreground capitalize">{plan.dayOfWeek}s</p>}
+                          <p className="text-sm font-medium">
+                            {frequencyLabels[plan.frequency] || plan.frequency}
+                          </p>
+                          {plan.dayOfWeek && (
+                            <p className="text-xs text-muted-foreground capitalize">
+                              {plan.dayOfWeek}s
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium">${(Number(plan.pricePerVisit) || 0).toFixed(2)}/visit</span>
-                        <Badge variant="secondary" className={plan.isActive ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"}>
+                        <span className="text-sm font-medium">
+                          ${(Number(plan.pricePerVisit) || 0).toFixed(2)}/visit
+                        </span>
+                        <Badge
+                          variant="secondary"
+                          className={
+                            plan.isActive
+                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                              : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+                          }
+                        >
                           {plan.isActive ? "Active" : "Paused"}
                         </Badge>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-plans">No jobs found.</p>
+                  <p
+                    className="text-sm text-muted-foreground text-center py-4"
+                    data-testid="text-no-plans"
+                  >
+                    No jobs found.
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -1184,14 +1486,21 @@ export default function PortalClient() {
                 <CardContent>
                   <div className="space-y-1.5">
                     {schedule.upcomingVisits.slice(0, 5).map((visit) => (
-                      <div key={visit.id} className="flex items-center justify-between rounded-lg p-2.5 hover:bg-accent/30 transition-colors">
+                      <div
+                        key={visit.id}
+                        className="flex items-center justify-between rounded-lg p-2.5 hover:bg-accent/30 transition-colors"
+                      >
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
                             <Calendar className="h-3.5 w-3.5 text-primary" />
                           </div>
                           <div>
                             <p className="text-sm font-medium">{visit.scheduledDate}</p>
-                            {visit.propertyAddress && <p className="text-xs text-muted-foreground">{visit.propertyAddress}</p>}
+                            {visit.propertyAddress && (
+                              <p className="text-xs text-muted-foreground">
+                                {visit.propertyAddress}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <Badge variant="secondary" className={statusColors[visit.status] || ""}>
@@ -1201,7 +1510,12 @@ export default function PortalClient() {
                     ))}
                   </div>
                   {schedule.upcomingVisits.length > 5 && (
-                    <Button variant="ghost" size="sm" className="w-full mt-2 text-muted-foreground" onClick={() => handleTabChange("services")}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full mt-2 text-muted-foreground"
+                      onClick={() => handleTabChange("services")}
+                    >
                       View all {schedule.upcomingVisits.length} visits
                     </Button>
                   )}
@@ -1210,7 +1524,12 @@ export default function PortalClient() {
             ) : (
               <Card>
                 <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-visits">No upcoming visits scheduled.</p>
+                  <p
+                    className="text-sm text-muted-foreground text-center py-4"
+                    data-testid="text-no-visits"
+                  >
+                    No upcoming visits scheduled.
+                  </p>
                 </CardContent>
               </Card>
             )}
@@ -1225,10 +1544,22 @@ export default function PortalClient() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm">Refer a Friend</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Share your referral link and earn rewards. {referralCount > 0 && `${referralCount} successful referral${referralCount > 1 ? "s" : ""} so far.`}
+                        Share your referral link and earn rewards.{" "}
+                        {referralCount > 0 &&
+                          `${referralCount} successful referral${referralCount > 1 ? "s" : ""} so far.`}
                       </p>
-                      <Button variant="outline" size="sm" className="mt-2 gap-1.5" onClick={handleCopyReferral} data-testid="button-copy-referral-overview">
-                        {copiedReferral ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 gap-1.5"
+                        onClick={handleCopyReferral}
+                        data-testid="button-copy-referral-overview"
+                      >
+                        {copiedReferral ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
                         {copiedReferral ? "Copied" : "Copy Link"}
                       </Button>
                     </div>
@@ -1247,11 +1578,22 @@ export default function PortalClient() {
                   description="Your active jobs"
                   action={
                     hasActivePlans ? (
-                      <Button size="sm" variant="outline" onClick={() => handlePauseResume("pause")} disabled={actionPending} data-testid="button-portal-pause-svc">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handlePauseResume("pause")}
+                        disabled={actionPending}
+                        data-testid="button-portal-pause-svc"
+                      >
                         <Pause className="mr-1.5 h-3.5 w-3.5" /> Pause All
                       </Button>
                     ) : (
-                      <Button size="sm" onClick={() => handlePauseResume("resume")} disabled={actionPending} data-testid="button-portal-resume-svc">
+                      <Button
+                        size="sm"
+                        onClick={() => handlePauseResume("resume")}
+                        disabled={actionPending}
+                        data-testid="button-portal-resume-svc"
+                      >
                         <Play className="mr-1.5 h-3.5 w-3.5" /> Resume All
                       </Button>
                     )
@@ -1263,11 +1605,29 @@ export default function PortalClient() {
                       <CardContent className="pt-4 pb-4">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-semibold">{frequencyLabels[plan.frequency] || plan.frequency}</p>
-                            {plan.dayOfWeek && <p className="text-sm text-muted-foreground capitalize mt-0.5">{plan.dayOfWeek}s</p>}
-                            <p className="text-lg font-bold text-primary mt-2">${(Number(plan.pricePerVisit) || 0).toFixed(2)}<span className="text-xs font-normal text-muted-foreground">/visit</span></p>
+                            <p className="font-semibold">
+                              {frequencyLabels[plan.frequency] || plan.frequency}
+                            </p>
+                            {plan.dayOfWeek && (
+                              <p className="text-sm text-muted-foreground capitalize mt-0.5">
+                                {plan.dayOfWeek}s
+                              </p>
+                            )}
+                            <p className="text-lg font-bold text-primary mt-2">
+                              ${(Number(plan.pricePerVisit) || 0).toFixed(2)}
+                              <span className="text-xs font-normal text-muted-foreground">
+                                /visit
+                              </span>
+                            </p>
                           </div>
-                          <Badge variant="secondary" className={plan.isActive ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"}>
+                          <Badge
+                            variant="secondary"
+                            className={
+                              plan.isActive
+                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200"
+                            }
+                          >
                             {plan.isActive ? "Active" : "Paused"}
                           </Badge>
                         </div>
@@ -1280,21 +1640,33 @@ export default function PortalClient() {
 
             {schedule?.upcomingVisits && schedule.upcomingVisits.length > 0 && (
               <section>
-                <SectionHeader title="Upcoming Visits" description={`${schedule.upcomingVisits.length} visit${schedule.upcomingVisits.length > 1 ? "s" : ""} scheduled`} />
+                <SectionHeader
+                  title="Upcoming Visits"
+                  description={`${schedule.upcomingVisits.length} visit${schedule.upcomingVisits.length > 1 ? "s" : ""} scheduled`}
+                />
                 <Card>
                   <CardContent className="pt-4 divide-y">
                     {schedule.upcomingVisits.slice(0, 10).map((visit) => (
-                      <div key={visit.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                      <div
+                        key={visit.id}
+                        className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                      >
                         <div className="flex items-center gap-3">
                           <div className="h-9 w-9 rounded-full bg-blue-50 dark:bg-blue-950 flex items-center justify-center">
                             <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                           </div>
                           <div>
                             <p className="text-sm font-medium">{visit.scheduledDate}</p>
-                            {visit.propertyAddress && <p className="text-xs text-muted-foreground">{visit.propertyAddress}</p>}
+                            {visit.propertyAddress && (
+                              <p className="text-xs text-muted-foreground">
+                                {visit.propertyAddress}
+                              </p>
+                            )}
                           </div>
                         </div>
-                        <Badge variant="secondary" className={statusColors[visit.status] || ""}>{statusLabels[visit.status] || visit.status}</Badge>
+                        <Badge variant="secondary" className={statusColors[visit.status] || ""}>
+                          {statusLabels[visit.status] || visit.status}
+                        </Badge>
                       </div>
                     ))}
                   </CardContent>
@@ -1304,20 +1676,29 @@ export default function PortalClient() {
 
             {pastVisits.length > 0 && (
               <section>
-                <SectionHeader title="Past Visits" description={`${pastVisitsTotal} total visit${pastVisitsTotal > 1 ? "s" : ""}`} />
+                <SectionHeader
+                  title="Past Visits"
+                  description={`${pastVisitsTotal} total visit${pastVisitsTotal > 1 ? "s" : ""}`}
+                />
                 <Card>
                   <CardContent className="pt-4 divide-y">
                     {pastVisits.map((visit) => (
-                      <div key={visit.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0" data-testid={`card-past-visit-${visit.id}`}>
+                      <div
+                        key={visit.id}
+                        className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                        data-testid={`card-past-visit-${visit.id}`}
+                      >
                         <div className="flex items-center gap-3">
-                          {(visit.proofOfServicePhoto || visit.proofOfServicePhotoBefore) ? (
+                          {visit.proofOfServicePhoto || visit.proofOfServicePhotoBefore ? (
                             <button
                               className="h-10 w-10 rounded-full overflow-hidden border-2 border-primary/20 hover:border-primary transition-colors shrink-0"
                               onClick={() => setVisitPhotoModal(visit)}
                               data-testid={`button-view-photos-${visit.id}`}
                             >
                               <img
-                                src={visit.proofOfServicePhoto || visit.proofOfServicePhotoBefore || ""}
+                                src={
+                                  visit.proofOfServicePhoto || visit.proofOfServicePhotoBefore || ""
+                                }
                                 alt="Service"
                                 className="h-full w-full object-cover"
                               />
@@ -1329,16 +1710,27 @@ export default function PortalClient() {
                           )}
                           <div>
                             <p className="text-sm font-medium">{visit.scheduledDate}</p>
-                            {visit.propertyAddress && <p className="text-xs text-muted-foreground">{visit.propertyAddress}</p>}
+                            {visit.propertyAddress && (
+                              <p className="text-xs text-muted-foreground">
+                                {visit.propertyAddress}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           {(visit.proofOfServicePhoto || visit.proofOfServicePhotoBefore) && (
-                            <Button variant="ghost" size="sm" className="min-h-[44px] px-2 text-xs" onClick={() => setVisitPhotoModal(visit)}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="min-h-[44px] px-2 text-xs"
+                              onClick={() => setVisitPhotoModal(visit)}
+                            >
                               <Camera className="h-3 w-3 mr-1" /> Photos
                             </Button>
                           )}
-                          <Badge variant="secondary" className={statusColors[visit.status] || ""}>{statusLabels[visit.status] || visit.status}</Badge>
+                          <Badge variant="secondary" className={statusColors[visit.status] || ""}>
+                            {statusLabels[visit.status] || visit.status}
+                          </Badge>
                         </div>
                       </div>
                     ))}
@@ -1346,11 +1738,25 @@ export default function PortalClient() {
                 </Card>
                 {totalPages > 1 && (
                   <div className="flex items-center justify-center gap-3 mt-4">
-                    <Button variant="outline" size="sm" disabled={pastVisitsPage <= 1} onClick={() => loadVisitHistory(pastVisitsPage - 1)} data-testid="button-prev-visits">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pastVisitsPage <= 1}
+                      onClick={() => loadVisitHistory(pastVisitsPage - 1)}
+                      data-testid="button-prev-visits"
+                    >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <span className="text-sm text-muted-foreground">Page {pastVisitsPage} of {totalPages}</span>
-                    <Button variant="outline" size="sm" disabled={pastVisitsPage >= totalPages} onClick={() => loadVisitHistory(pastVisitsPage + 1)} data-testid="button-next-visits">
+                    <span className="text-sm text-muted-foreground">
+                      Page {pastVisitsPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pastVisitsPage >= totalPages}
+                      onClick={() => loadVisitHistory(pastVisitsPage + 1)}
+                      data-testid="button-next-visits"
+                    >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
@@ -1360,7 +1766,10 @@ export default function PortalClient() {
 
             {galleryPhotos.length > 0 && (
               <section>
-                <SectionHeader title="Service Gallery" description="Before and after photos from recent visits" />
+                <SectionHeader
+                  title="Service Gallery"
+                  description="Before and after photos from recent visits"
+                />
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                   {galleryPhotos.map((photo, idx) => (
                     <button
@@ -1376,7 +1785,9 @@ export default function PortalClient() {
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                       <div className="absolute bottom-0 left-0 right-0 p-2">
-                        <p className="text-white text-xs font-medium opacity-80 group-hover:opacity-100 transition-opacity">{photo.scheduledDate}</p>
+                        <p className="text-white text-xs font-medium opacity-80 group-hover:opacity-100 transition-opacity">
+                          {photo.scheduledDate}
+                        </p>
                       </div>
                     </button>
                   ))}
@@ -1387,7 +1798,10 @@ export default function PortalClient() {
             <Separator />
 
             <section>
-              <SectionHeader title="Request Extra Visit" description="Need an extra visit? Submit a request below." />
+              <SectionHeader
+                title="Request Extra Visit"
+                description="Need an extra visit? Submit a request below."
+              />
               <Card>
                 <CardContent className="pt-4">
                   <form onSubmit={handleRequestCleanup} className="space-y-4">
@@ -1414,7 +1828,11 @@ export default function PortalClient() {
                         />
                       </div>
                     </div>
-                    <Button type="submit" disabled={cleanupPending} data-testid="button-submit-cleanup">
+                    <Button
+                      type="submit"
+                      disabled={cleanupPending}
+                      data-testid="button-submit-cleanup"
+                    >
                       <Send className="mr-1.5 h-4 w-4" />
                       {cleanupPending ? "Submitting..." : "Submit Request"}
                     </Button>
@@ -1424,7 +1842,10 @@ export default function PortalClient() {
             </section>
 
             <section>
-              <SectionHeader title="Change Your Job" description="Change frequency, service day, pause, or request same-day service" />
+              <SectionHeader
+                title="Change Your Job"
+                description="Change frequency, service day, pause, or request same-day service"
+              />
               <Card>
                 <CardContent className="pt-4">
                   <form onSubmit={handleSubmitChangeRequest} className="space-y-4">
@@ -1439,7 +1860,8 @@ export default function PortalClient() {
                             <SelectContent>
                               {schedule.servicePlans.map((plan) => (
                                 <SelectItem key={plan.id} value={plan.id}>
-                                  {frequencyLabels[plan.frequency] || plan.frequency} {plan.dayOfWeek ? `- ${plan.dayOfWeek}` : ""}
+                                  {frequencyLabels[plan.frequency] || plan.frequency}{" "}
+                                  {plan.dayOfWeek ? `- ${plan.dayOfWeek}` : ""}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1453,7 +1875,9 @@ export default function PortalClient() {
                             <SelectValue placeholder="What would you like to change?" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="same_day_service">Request Same-Day Service</SelectItem>
+                            <SelectItem value="same_day_service">
+                              Request Same-Day Service
+                            </SelectItem>
                             <SelectItem value="frequency_change">Change Frequency</SelectItem>
                             <SelectItem value="day_change">Change Service Day</SelectItem>
                             <SelectItem value="pause">Pause Service</SelectItem>
@@ -1465,7 +1889,9 @@ export default function PortalClient() {
                     </div>
                     {(changeType === "frequency_change" || changeType === "day_change") && (
                       <div className="space-y-1.5">
-                        <Label>Preferred {changeType === "frequency_change" ? "Frequency" : "Day"}</Label>
+                        <Label>
+                          Preferred {changeType === "frequency_change" ? "Frequency" : "Day"}
+                        </Label>
                         {changeType === "frequency_change" ? (
                           <Select value={changeValue} onValueChange={setChangeValue}>
                             <SelectTrigger data-testid="select-change-value">
@@ -1483,8 +1909,18 @@ export default function PortalClient() {
                               <SelectValue placeholder="Select new day..." />
                             </SelectTrigger>
                             <SelectContent>
-                              {["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map((day) => (
-                                <SelectItem key={day} value={day}>{day.charAt(0).toUpperCase() + day.slice(1)}</SelectItem>
+                              {[
+                                "monday",
+                                "tuesday",
+                                "wednesday",
+                                "thursday",
+                                "friday",
+                                "saturday",
+                                "sunday",
+                              ].map((day) => (
+                                <SelectItem key={day} value={day}>
+                                  {day.charAt(0).toUpperCase() + day.slice(1)}
+                                </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -1502,7 +1938,11 @@ export default function PortalClient() {
                         data-testid="input-change-note"
                       />
                     </div>
-                    <Button type="submit" disabled={submittingChange} data-testid="button-submit-change">
+                    <Button
+                      type="submit"
+                      disabled={submittingChange}
+                      data-testid="button-submit-change"
+                    >
                       <Send className="mr-1.5 h-4 w-4" />
                       {submittingChange ? "Submitting..." : "Submit Request"}
                     </Button>
@@ -1514,17 +1954,36 @@ export default function PortalClient() {
                 <div className="mt-4 space-y-2">
                   <p className="text-sm font-medium text-muted-foreground">Your Requests</p>
                   {changeRequests.map((cr) => (
-                    <div key={cr.id} className="flex items-start justify-between gap-3 rounded-lg border p-3 bg-card" data-testid={`card-change-request-${cr.id}`}>
+                    <div
+                      key={cr.id}
+                      className="flex items-start justify-between gap-3 rounded-lg border p-3 bg-card"
+                      data-testid={`card-change-request-${cr.id}`}
+                    >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium">{changeRequestTypeLabels[cr.requestType] || cr.requestType}</p>
-                          <Badge variant="secondary" className={`text-xs ${changeRequestStatusColors[cr.status] || ""}`}>{changeRequestStatusLabels[cr.status] || cr.status}</Badge>
+                          <p className="text-sm font-medium">
+                            {changeRequestTypeLabels[cr.requestType] || cr.requestType}
+                          </p>
+                          <Badge
+                            variant="secondary"
+                            className={`text-xs ${changeRequestStatusColors[cr.status] || ""}`}
+                          >
+                            {changeRequestStatusLabels[cr.status] || cr.status}
+                          </Badge>
                         </div>
-                        {cr.requestedValue && <p className="text-xs text-muted-foreground mt-1">Requested: {cr.requestedValue}</p>}
+                        {cr.requestedValue && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Requested: {cr.requestedValue}
+                          </p>
+                        )}
                         {cr.note && <p className="text-xs text-muted-foreground">{cr.note}</p>}
-                        {cr.adminNote && <p className="text-xs text-primary mt-1">Response: {cr.adminNote}</p>}
+                        {cr.adminNote && (
+                          <p className="text-xs text-primary mt-1">Response: {cr.adminNote}</p>
+                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground shrink-0">{new Date(cr.createdAt).toLocaleDateString()}</p>
+                      <p className="text-xs text-muted-foreground shrink-0">
+                        {new Date(cr.createdAt).toLocaleDateString()}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -1539,23 +1998,39 @@ export default function PortalClient() {
                 <SectionHeader title="Estimates Awaiting Review" />
                 <div className="space-y-3">
                   {pendingEstimates.map((est) => (
-                    <Card key={est.id} className="border-amber-200 dark:border-amber-800" data-testid={`card-estimate-${est.id}`}>
+                    <Card
+                      key={est.id}
+                      className="border-amber-200 dark:border-amber-800"
+                      data-testid={`card-estimate-${est.id}`}
+                    >
                       <CardContent className="pt-4 space-y-3">
                         <div className="flex items-start justify-between">
                           <div>
                             <p className="font-semibold">{est.description}</p>
-                            {est.sentAt && <p className="text-xs text-muted-foreground mt-0.5">Sent {new Date(est.sentAt).toLocaleDateString()}</p>}
+                            {est.sentAt && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Sent {new Date(est.sentAt).toLocaleDateString()}
+                              </p>
+                            )}
                           </div>
-                          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">Pending</Badge>
+                          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                            Pending
+                          </Badge>
                         </div>
                         {est.items && est.items.length > 0 && (
                           <div className="rounded-lg border overflow-x-auto">
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="bg-muted/50">
-                                  <th className="text-left p-2 font-medium text-muted-foreground">Item</th>
-                                  <th className="text-center p-2 font-medium text-muted-foreground">Qty</th>
-                                  <th className="text-right p-2 font-medium text-muted-foreground">Amount</th>
+                                  <th className="text-left p-2 font-medium text-muted-foreground">
+                                    Item
+                                  </th>
+                                  <th className="text-center p-2 font-medium text-muted-foreground">
+                                    Qty
+                                  </th>
+                                  <th className="text-right p-2 font-medium text-muted-foreground">
+                                    Amount
+                                  </th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y">
@@ -1563,7 +2038,9 @@ export default function PortalClient() {
                                   <tr key={idx}>
                                     <td className="p-2">{item.description}</td>
                                     <td className="p-2 text-center">{item.quantity}</td>
-                                    <td className="p-2 text-right">${Number(item.total).toFixed(2)}</td>
+                                    <td className="p-2 text-right">
+                                      ${Number(item.total).toFixed(2)}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1571,21 +2048,36 @@ export default function PortalClient() {
                           </div>
                         )}
                         <div className="flex items-center justify-between pt-2 border-t">
-                          <p className="text-lg font-bold">Total: ${(est.totalCents / 100).toFixed(2)}</p>
+                          <p className="text-lg font-bold">
+                            Total: ${(est.totalCents / 100).toFixed(2)}
+                          </p>
                         </div>
                         <Textarea
                           placeholder="Add a note (optional)..."
                           value={estimateNote[est.id] || ""}
-                          onChange={(e) => setEstimateNote((prev) => ({ ...prev, [est.id]: e.target.value }))}
+                          onChange={(e) =>
+                            setEstimateNote((prev) => ({ ...prev, [est.id]: e.target.value }))
+                          }
                           rows={2}
                           className="text-sm"
                           data-testid={`input-estimate-note-${est.id}`}
                         />
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => handleEstimateAction(est.id, "approve")} className="gap-1.5" data-testid={`button-approve-estimate-${est.id}`}>
+                          <Button
+                            size="sm"
+                            onClick={() => handleEstimateAction(est.id, "approve")}
+                            className="gap-1.5"
+                            data-testid={`button-approve-estimate-${est.id}`}
+                          >
                             <Check className="h-3.5 w-3.5" /> Approve
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => handleEstimateAction(est.id, "decline")} className="gap-1.5" data-testid={`button-decline-estimate-${est.id}`}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEstimateAction(est.id, "decline")}
+                            className="gap-1.5"
+                            data-testid={`button-decline-estimate-${est.id}`}
+                          >
                             <X className="h-3.5 w-3.5" /> Decline
                           </Button>
                         </div>
@@ -1599,17 +2091,31 @@ export default function PortalClient() {
             <section>
               <SectionHeader
                 title="Invoices"
-                description={activeInvoices.length > 0 ? `${activeInvoices.length} invoice${activeInvoices.length > 1 ? "s" : ""}` : undefined}
+                description={
+                  activeInvoices.length > 0
+                    ? `${activeInvoices.length} invoice${activeInvoices.length > 1 ? "s" : ""}`
+                    : undefined
+                }
               />
               {activeInvoices.length > 0 ? (
                 <Card>
                   <CardContent className="pt-0 pb-0">
                     <div className="divide-y">
                       {activeInvoices.map((inv) => (
-                        <div key={inv.id} className="flex items-center justify-between py-3 gap-3" data-testid={`card-portal-invoice-${inv.id}`}>
+                        <div
+                          key={inv.id}
+                          className="flex items-center justify-between py-3 gap-3"
+                          data-testid={`card-portal-invoice-${inv.id}`}
+                        >
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${inv.status === "paid" ? "bg-green-50 dark:bg-green-950" : "bg-amber-50 dark:bg-amber-950"}`}>
-                              {inv.status === "paid" ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" /> : <Receipt className="h-4 w-4 text-amber-600 dark:text-amber-400" />}
+                            <div
+                              className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 ${inv.status === "paid" ? "bg-green-50 dark:bg-green-950" : "bg-amber-50 dark:bg-amber-950"}`}
+                            >
+                              {inv.status === "paid" ? (
+                                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                              ) : (
+                                <Receipt className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                              )}
                             </div>
                             <div className="min-w-0">
                               <p className="text-sm font-medium truncate">{inv.invoiceNumber}</p>
@@ -1618,17 +2124,46 @@ export default function PortalClient() {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <div className="text-right mr-1">
-                              <p className="text-sm font-semibold" data-testid={`text-invoice-total-${inv.id}`}>${Number(inv.total).toFixed(2)}</p>
+                              <p
+                                className="text-sm font-semibold"
+                                data-testid={`text-invoice-total-${inv.id}`}
+                              >
+                                ${Number(inv.total).toFixed(2)}
+                              </p>
                               {Number(inv.tipAmount) > 0 && (
-                                <p className="text-xs text-green-600 dark:text-green-400" data-testid={`text-invoice-tip-${inv.id}`}>+ ${Number(inv.tipAmount).toFixed(2)} tip</p>
+                                <p
+                                  className="text-xs text-green-600 dark:text-green-400"
+                                  data-testid={`text-invoice-tip-${inv.id}`}
+                                >
+                                  + ${Number(inv.tipAmount).toFixed(2)} tip
+                                </p>
                               )}
-                              <Badge variant="secondary" className={`text-xs ${invoiceStatusColors[inv.status] || ""}`}>{invoiceStatusLabels[inv.status] || inv.status}</Badge>
+                              <Badge
+                                variant="secondary"
+                                className={`text-xs ${invoiceStatusColors[inv.status] || ""}`}
+                              >
+                                {invoiceStatusLabels[inv.status] || inv.status}
+                              </Badge>
                             </div>
-                            <Button variant="ghost" size="icon" className="h-10 w-10 min-h-[44px]" onClick={() => handleDownloadInvoicePdf(inv.id, inv.invoiceNumber)} data-testid={`button-download-invoice-${inv.id}`}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-10 w-10 min-h-[44px]"
+                              onClick={() => handleDownloadInvoicePdf(inv.id, inv.invoiceNumber)}
+                              data-testid={`button-download-invoice-${inv.id}`}
+                            >
                               <Download className="h-3.5 w-3.5" />
                             </Button>
-                            {(inv.status === "sent" || inv.status === "pending" || inv.status === "failed") && (
-                              <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-md px-4 py-2 text-sm" onClick={() => handlePayInvoice(inv.id)} disabled={actionPending} data-testid={`button-portal-pay-${inv.id}`}>
+                            {(inv.status === "sent" ||
+                              inv.status === "pending" ||
+                              inv.status === "failed") && (
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-md px-4 py-2 text-sm"
+                                onClick={() => handlePayInvoice(inv.id)}
+                                disabled={actionPending}
+                                data-testid={`button-portal-pay-${inv.id}`}
+                              >
                                 Pay Invoice
                               </Button>
                             )}
@@ -1641,26 +2176,50 @@ export default function PortalClient() {
               ) : (
                 <Card>
                   <CardContent className="pt-4">
-                    <EmptyState icon={FileText} title="No invoices yet" description="Your invoices will appear here once generated." />
+                    <EmptyState
+                      icon={FileText}
+                      title="No invoices yet"
+                      description="Your invoices will appear here once generated."
+                    />
                   </CardContent>
                 </Card>
               )}
             </section>
 
             <section>
-              <SectionHeader title="Billing Statement" description="Download a PDF summary for a date range" />
+              <SectionHeader
+                title="Billing Statement"
+                description="Download a PDF summary for a date range"
+              />
               <Card>
                 <CardContent className="pt-4">
                   <div className="flex flex-wrap items-end gap-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="billing-start">Start Date</Label>
-                      <Input id="billing-start" type="date" value={billingStartDate} onChange={(e) => setBillingStartDate(e.target.value)} data-testid="input-billing-start" />
+                      <Input
+                        id="billing-start"
+                        type="date"
+                        value={billingStartDate}
+                        onChange={(e) => setBillingStartDate(e.target.value)}
+                        data-testid="input-billing-start"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="billing-end">End Date</Label>
-                      <Input id="billing-end" type="date" value={billingEndDate} onChange={(e) => setBillingEndDate(e.target.value)} data-testid="input-billing-end" />
+                      <Input
+                        id="billing-end"
+                        type="date"
+                        value={billingEndDate}
+                        onChange={(e) => setBillingEndDate(e.target.value)}
+                        data-testid="input-billing-end"
+                      />
                     </div>
-                    <Button onClick={handleDownloadStatement} disabled={downloadingStatement} className="gap-1.5" data-testid="button-download-statement">
+                    <Button
+                      onClick={handleDownloadStatement}
+                      disabled={downloadingStatement}
+                      className="gap-1.5"
+                      data-testid="button-download-statement"
+                    >
                       <Download className="h-4 w-4" />
                       {downloadingStatement ? "Downloading..." : "Download PDF"}
                     </Button>
@@ -1678,37 +2237,82 @@ export default function PortalClient() {
                   {paymentMethods.length > 0 ? (
                     <div className="space-y-2">
                       {paymentMethods.map((pm) => (
-                        <div key={pm.id} className="flex items-center justify-between rounded-lg border p-3 bg-card" data-testid={`card-payment-method-${pm.id}`}>
+                        <div
+                          key={pm.id}
+                          className="flex items-center justify-between rounded-lg border p-3 bg-card"
+                          data-testid={`card-payment-method-${pm.id}`}
+                        >
                           <div className="flex items-center gap-3">
                             <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
                               <CreditCard className="h-5 w-5 text-muted-foreground" />
                             </div>
                             <div>
-                              <p className="text-sm font-medium capitalize">{pm.brand} ending in {pm.last4}</p>
-                              <p className="text-xs text-muted-foreground">Expires {pm.expMonth}/{pm.expYear}</p>
+                              <p className="text-sm font-medium capitalize">
+                                {pm.brand} ending in {pm.last4}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Expires {pm.expMonth}/{pm.expYear}
+                              </p>
                             </div>
                           </div>
-                          <Button variant="ghost" size="icon" className="h-10 w-10 min-h-[44px] text-muted-foreground hover:text-destructive" onClick={() => handleRemoveCard(pm.id)} data-testid={`button-remove-card-${pm.id}`}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-10 w-10 min-h-[44px] text-muted-foreground hover:text-destructive"
+                            onClick={() => handleRemoveCard(pm.id)}
+                            data-testid={`button-remove-card-${pm.id}`}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground text-center py-2">No payment methods on file.</p>
+                    <p className="text-sm text-muted-foreground text-center py-2">
+                      No payment methods on file.
+                    </p>
                   )}
-                  <Button variant="outline" className="w-full border-dashed gap-1.5" onClick={handleAddCard} disabled={addingCard} data-testid="button-add-card">
+                  <Button
+                    variant="outline"
+                    className="w-full border-dashed gap-1.5"
+                    onClick={handleAddCard}
+                    disabled={addingCard}
+                    data-testid="button-add-card"
+                  >
                     <Plus className="h-4 w-4" /> {addingCard ? "Setting up..." : "Add New Card"}
                   </Button>
-                  <div className={`flex items-center justify-between rounded-lg p-3 border ${autoPayEnabled ? "bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800" : "bg-muted/50 border-border"}`}>
+                  <div
+                    className={`flex items-center justify-between rounded-lg p-3 border ${autoPayEnabled ? "bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800" : "bg-muted/50 border-border"}`}
+                  >
                     <div className="flex items-center gap-3">
-                      <Shield className={`h-5 w-5 ${autoPayEnabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`} />
+                      <Shield
+                        className={`h-5 w-5 ${autoPayEnabled ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}
+                      />
                       <div>
-                        <p className="text-sm font-medium">Auto-Pay {autoPayEnabled ? <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400 ml-1">· Active</span> : <span className="text-xs font-normal text-muted-foreground ml-1">· Off</span>}</p>
-                        <p className="text-xs text-muted-foreground">{autoPayEnabled ? "Invoices are charged automatically when due" : "You will receive invoices to pay manually"}</p>
+                        <p className="text-sm font-medium">
+                          Auto-Pay{" "}
+                          {autoPayEnabled ? (
+                            <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400 ml-1">
+                              · Active
+                            </span>
+                          ) : (
+                            <span className="text-xs font-normal text-muted-foreground ml-1">
+                              · Off
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {autoPayEnabled
+                            ? "Invoices are charged automatically when due"
+                            : "You will receive invoices to pay manually"}
+                        </p>
                       </div>
                     </div>
-                    <Switch checked={autoPayEnabled} onCheckedChange={handleToggleAutoPay} data-testid="switch-auto-pay" />
+                    <Switch
+                      checked={autoPayEnabled}
+                      onCheckedChange={handleToggleAutoPay}
+                      data-testid="switch-auto-pay"
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -1720,12 +2324,24 @@ export default function PortalClient() {
                 <Card>
                   <CardContent className="pt-0 pb-0 divide-y">
                     {pastEstimates.map((est) => (
-                      <div key={est.id} className="flex items-center justify-between py-3" data-testid={`card-estimate-past-${est.id}`}>
+                      <div
+                        key={est.id}
+                        className="flex items-center justify-between py-3"
+                        data-testid={`card-estimate-past-${est.id}`}
+                      >
                         <div>
                           <p className="text-sm font-medium">{est.description}</p>
-                          <p className="text-xs text-muted-foreground">${(est.totalCents / 100).toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            ${(est.totalCents / 100).toFixed(2)}
+                          </p>
                         </div>
-                        <Badge className={est.status === "approved" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"}>
+                        <Badge
+                          className={
+                            est.status === "approved"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                              : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                          }
+                        >
                           {est.status.charAt(0).toUpperCase() + est.status.slice(1)}
                         </Badge>
                       </div>
@@ -1735,36 +2351,63 @@ export default function PortalClient() {
               </section>
             )}
 
-            <Dialog open={confirmDisableAutoPay} onOpenChange={(open) => { if (!open) setConfirmDisableAutoPay(false); }}>
+            <Dialog
+              open={confirmDisableAutoPay}
+              onOpenChange={(open) => {
+                if (!open) setConfirmDisableAutoPay(false);
+              }}
+            >
               <DialogContent className="sm:max-w-sm">
                 <DialogHeader>
                   <DialogTitle>Disable Auto-Pay?</DialogTitle>
                   <DialogDescription>
-                    Auto-pay is enabled by default and ensures your invoices are paid on time without any action from you. If you turn it off, you'll need to log in and pay each invoice manually.
+                    Auto-pay is enabled by default and ensures your invoices are paid on time
+                    without any action from you. If you turn it off, you'll need to log in and pay
+                    each invoice manually.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex gap-2 mt-2">
-                  <Button variant="outline" className="flex-1" onClick={() => setConfirmDisableAutoPay(false)} data-testid="button-cancel-disable-autopay">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setConfirmDisableAutoPay(false)}
+                    data-testid="button-cancel-disable-autopay"
+                  >
                     Keep Auto-Pay On
                   </Button>
-                  <Button variant="destructive" className="flex-1" onClick={handleConfirmDisableAutoPay} data-testid="button-confirm-disable-autopay">
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={handleConfirmDisableAutoPay}
+                    data-testid="button-confirm-disable-autopay"
+                  >
                     Turn Off Auto-Pay
                   </Button>
                 </div>
               </DialogContent>
             </Dialog>
 
-            <Dialog open={!!tipDialogInvoice} onOpenChange={(open) => { if (!open) setTipDialogInvoice(null); }}>
+            <Dialog
+              open={!!tipDialogInvoice}
+              onOpenChange={(open) => {
+                if (!open) setTipDialogInvoice(null);
+              }}
+            >
               <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Pay Invoice {tipDialogInvoice?.invoiceNumber}</DialogTitle>
-                  <DialogDescription>Tips are appreciated but never expected. Add a tip to show your appreciation for your technician.</DialogDescription>
+                  <DialogDescription>
+                    Tips are appreciated but never expected. Add a tip to show your appreciation for
+                    your technician.
+                  </DialogDescription>
                 </DialogHeader>
                 {tipDialogInvoice && (
                   <div className="space-y-4">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Invoice Total</span>
-                      <span className="font-semibold" data-testid="text-tip-invoice-total">${Number(tipDialogInvoice.total).toFixed(2)}</span>
+                      <span className="font-semibold" data-testid="text-tip-invoice-total">
+                        ${Number(tipDialogInvoice.total).toFixed(2)}
+                      </span>
                     </div>
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Tip Amount</Label>
@@ -1776,7 +2419,10 @@ export default function PortalClient() {
                             variant={selectedTip === amt && !customTip ? "default" : "outline"}
                             size="sm"
                             className="w-full"
-                            onClick={() => { setSelectedTip(amt); setCustomTip(""); }}
+                            onClick={() => {
+                              setSelectedTip(amt);
+                              setCustomTip("");
+                            }}
                             data-testid={`button-tip-${amt}`}
                           >
                             {amt === 0 ? "No Tip" : `$${amt}`}
@@ -1784,7 +2430,12 @@ export default function PortalClient() {
                         ))}
                       </div>
                       <div className="flex items-center gap-2 mt-2">
-                        <Label htmlFor="custom-tip" className="text-sm text-muted-foreground whitespace-nowrap">Custom:</Label>
+                        <Label
+                          htmlFor="custom-tip"
+                          className="text-sm text-muted-foreground whitespace-nowrap"
+                        >
+                          Custom:
+                        </Label>
                         <div className="relative flex-1">
                           <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                           <Input
@@ -1795,7 +2446,10 @@ export default function PortalClient() {
                             placeholder="0.00"
                             className="pl-7"
                             value={customTip}
-                            onChange={(e) => { setCustomTip(e.target.value); setSelectedTip(0); }}
+                            onChange={(e) => {
+                              setCustomTip(e.target.value);
+                              setSelectedTip(0);
+                            }}
                             data-testid="input-custom-tip"
                           />
                         </div>
@@ -1810,7 +2464,9 @@ export default function PortalClient() {
                         <>
                           <div className="flex justify-between text-sm font-semibold">
                             <span>Total Charge</span>
-                            <span data-testid="text-tip-total-charge">${totalCharge.toFixed(2)}</span>
+                            <span data-testid="text-tip-total-charge">
+                              ${totalCharge.toFixed(2)}
+                            </span>
                           </div>
                           {isBelowMinimum && (
                             <p className="text-xs text-amber-600 text-center">
@@ -1839,10 +2495,16 @@ export default function PortalClient() {
           {/* ==================== MESSAGES TAB ==================== */}
           <TabsContent value="messages" className="space-y-6">
             <section>
-              <SectionHeader title="Messages" description="Your conversation history with your service provider" />
+              <SectionHeader
+                title="Messages"
+                description="Your conversation history with your service provider"
+              />
               <Card>
                 <CardContent className="pt-4">
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto mb-4" data-testid="messages-thread">
+                  <div
+                    className="space-y-3 max-h-[500px] overflow-y-auto mb-4"
+                    data-testid="messages-thread"
+                  >
                     {loadingMessages ? (
                       <div className="space-y-3">
                         <Skeleton className="h-16 w-3/4 ml-auto" />
@@ -1866,17 +2528,35 @@ export default function PortalClient() {
                               }`}
                             >
                               {msg.subject && (
-                                <p className={`text-xs font-semibold mb-1 ${isCustomer ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
+                                <p
+                                  className={`text-xs font-semibold mb-1 ${isCustomer ? "text-primary-foreground/80" : "text-muted-foreground"}`}
+                                >
                                   {msg.subject}
                                 </p>
                               )}
                               <p className="text-sm whitespace-pre-wrap break-words">{msg.body}</p>
-                              <div className={`flex items-center gap-1.5 mt-1.5 ${isCustomer ? "justify-end" : "justify-start"}`}>
-                                <span className={`text-[10px] ${isCustomer ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                                  {new Date(msg.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                              <div
+                                className={`flex items-center gap-1.5 mt-1.5 ${isCustomer ? "justify-end" : "justify-start"}`}
+                              >
+                                <span
+                                  className={`text-[10px] ${isCustomer ? "text-primary-foreground/60" : "text-muted-foreground"}`}
+                                >
+                                  {new Date(msg.createdAt).toLocaleString(undefined, {
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                  })}
                                 </span>
-                                <Badge variant="outline" className={`text-[9px] px-1 py-0 h-4 ${isCustomer ? "border-primary-foreground/30 text-primary-foreground/60" : ""}`}>
-                                  {msg.channel === "email" ? <Mail className="h-2.5 w-2.5 mr-0.5" /> : <MessageSquare className="h-2.5 w-2.5 mr-0.5" />}
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[9px] px-1 py-0 h-4 ${isCustomer ? "border-primary-foreground/30 text-primary-foreground/60" : ""}`}
+                                >
+                                  {msg.channel === "email" ? (
+                                    <Mail className="h-2.5 w-2.5 mr-0.5" />
+                                  ) : (
+                                    <MessageSquare className="h-2.5 w-2.5 mr-0.5" />
+                                  )}
                                   {msg.channel}
                                 </Badge>
                               </div>
@@ -1885,7 +2565,11 @@ export default function PortalClient() {
                         );
                       })
                     ) : (
-                      <EmptyState icon={MessageSquare} title="No messages yet" description="Send a message to start a conversation with your service provider." />
+                      <EmptyState
+                        icon={MessageSquare}
+                        title="No messages yet"
+                        description="Send a message to start a conversation with your service provider."
+                      />
                     )}
                   </div>
 
@@ -1913,7 +2597,12 @@ export default function PortalClient() {
                         data-testid="input-message-body"
                       />
                     </div>
-                    <Button type="submit" disabled={sendingMessage} className="gap-1.5" data-testid="button-send-message">
+                    <Button
+                      type="submit"
+                      disabled={sendingMessage}
+                      className="gap-1.5"
+                      data-testid="button-send-message"
+                    >
                       <Send className="h-4 w-4" />
                       {sendingMessage ? "Sending..." : "Send Message"}
                     </Button>
@@ -1930,48 +2619,116 @@ export default function PortalClient() {
               <Card>
                 <CardContent className="pt-4 pb-4 space-y-3">
                   {profile?.pendingEmail && (
-                    <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-700 px-3 py-2 text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2" data-testid="banner-pending-email-mobile">
+                    <div
+                      className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-700 px-3 py-2 text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2"
+                      data-testid="banner-pending-email-mobile"
+                    >
                       <Mail className="h-4 w-4 flex-shrink-0" />
-                      <span>Verification email sent to <strong>{profile.pendingEmail}</strong></span>
+                      <span>
+                        Verification email sent to <strong>{profile.pendingEmail}</strong>
+                      </span>
                     </div>
                   )}
                   <div className="space-y-3">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">First Name</Label>
-                      <Input value={profileEdits.firstName} onChange={(e) => setProfileEdits((p) => ({ ...p, firstName: e.target.value }))} placeholder="First name" className="h-10" data-testid="input-mobile-first-name" />
+                      <Input
+                        value={profileEdits.firstName}
+                        onChange={(e) =>
+                          setProfileEdits((p) => ({ ...p, firstName: e.target.value }))
+                        }
+                        placeholder="First name"
+                        className="h-10"
+                        data-testid="input-mobile-first-name"
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Last Name</Label>
-                      <Input value={profileEdits.lastName} onChange={(e) => setProfileEdits((p) => ({ ...p, lastName: e.target.value }))} placeholder="Last name" className="h-10" data-testid="input-mobile-last-name" />
+                      <Input
+                        value={profileEdits.lastName}
+                        onChange={(e) =>
+                          setProfileEdits((p) => ({ ...p, lastName: e.target.value }))
+                        }
+                        placeholder="Last name"
+                        className="h-10"
+                        data-testid="input-mobile-last-name"
+                      />
                     </div>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Email</Label>
-                    <Input type="email" value={profileEdits.email} onChange={(e) => setProfileEdits((p) => ({ ...p, email: e.target.value }))} placeholder="Email" className="h-10" data-testid="input-mobile-email" />
+                    <Input
+                      type="email"
+                      value={profileEdits.email}
+                      onChange={(e) => setProfileEdits((p) => ({ ...p, email: e.target.value }))}
+                      placeholder="Email"
+                      className="h-10"
+                      data-testid="input-mobile-email"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Phone</Label>
-                    <Input type="tel" value={profileEdits.phone} onChange={(e) => setProfileEdits((p) => ({ ...p, phone: e.target.value }))} placeholder="Phone" className="h-10" data-testid="input-mobile-phone" />
+                    <Input
+                      type="tel"
+                      value={profileEdits.phone}
+                      onChange={(e) => setProfileEdits((p) => ({ ...p, phone: e.target.value }))}
+                      placeholder="Phone"
+                      className="h-10"
+                      data-testid="input-mobile-phone"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Street Address</Label>
-                    <Input value={profileEdits.streetAddress} onChange={(e) => setProfileEdits((p) => ({ ...p, streetAddress: e.target.value }))} placeholder="Street address" className="h-10" data-testid="input-mobile-street" />
+                    <Input
+                      value={profileEdits.streetAddress}
+                      onChange={(e) =>
+                        setProfileEdits((p) => ({ ...p, streetAddress: e.target.value }))
+                      }
+                      placeholder="Street address"
+                      className="h-10"
+                      data-testid="input-mobile-street"
+                    />
                   </div>
                   <div className="space-y-3">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">City</Label>
-                      <Input value={profileEdits.city} onChange={(e) => setProfileEdits((p) => ({ ...p, city: e.target.value }))} placeholder="City" className="h-10" data-testid="input-mobile-city" />
+                      <Input
+                        value={profileEdits.city}
+                        onChange={(e) => setProfileEdits((p) => ({ ...p, city: e.target.value }))}
+                        placeholder="City"
+                        className="h-10"
+                        data-testid="input-mobile-city"
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">State</Label>
-                      <Input value={profileEdits.state} onChange={(e) => setProfileEdits((p) => ({ ...p, state: e.target.value }))} placeholder="ST" className="h-10" data-testid="input-mobile-state" />
+                      <Input
+                        value={profileEdits.state}
+                        onChange={(e) => setProfileEdits((p) => ({ ...p, state: e.target.value }))}
+                        placeholder="ST"
+                        className="h-10"
+                        data-testid="input-mobile-state"
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Zip</Label>
-                      <Input value={profileEdits.zipCode} onChange={(e) => setProfileEdits((p) => ({ ...p, zipCode: e.target.value }))} placeholder="Zip" className="h-10" data-testid="input-mobile-zip" />
+                      <Input
+                        value={profileEdits.zipCode}
+                        onChange={(e) =>
+                          setProfileEdits((p) => ({ ...p, zipCode: e.target.value }))
+                        }
+                        placeholder="Zip"
+                        className="h-10"
+                        data-testid="input-mobile-zip"
+                      />
                     </div>
                   </div>
-                  <Button onClick={handleSaveProfile} disabled={savingProfile} className="w-full min-h-[44px]" data-testid="button-save-profile-mobile">
+                  <Button
+                    onClick={handleSaveProfile}
+                    disabled={savingProfile}
+                    className="w-full min-h-[44px]"
+                    data-testid="button-save-profile-mobile"
+                  >
                     <Save className="mr-1.5 h-4 w-4" />
                     {savingProfile ? "Saving..." : "Save Profile"}
                   </Button>
@@ -1989,7 +2746,9 @@ export default function PortalClient() {
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="space-y-1">
-                        <Label htmlFor="number-of-dogs" className="text-xs text-muted-foreground">Number of Dogs</Label>
+                        <Label htmlFor="number-of-dogs" className="text-xs text-muted-foreground">
+                          Number of Dogs
+                        </Label>
                         <Input
                           id="number-of-dogs"
                           type="number"
@@ -2000,7 +2759,13 @@ export default function PortalClient() {
                           data-testid="input-number-of-dogs"
                         />
                       </div>
-                      <Button size="sm" onClick={handleSaveDogs} disabled={savingDogs} className="mt-5" data-testid="button-save-dogs">
+                      <Button
+                        size="sm"
+                        onClick={handleSaveDogs}
+                        disabled={savingDogs}
+                        className="mt-5"
+                        data-testid="button-save-dogs"
+                      >
                         <Save className="mr-1 h-3.5 w-3.5" />
                         {savingDogs ? "Saving..." : "Save"}
                       </Button>
@@ -2016,7 +2781,12 @@ export default function PortalClient() {
                   title="My Properties"
                   description="Update your address, gate codes, and special instructions"
                   action={
-                    <Button size="sm" onClick={handleSaveProperties} disabled={savingProperties} data-testid="button-save-properties">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveProperties}
+                      disabled={savingProperties}
+                      data-testid="button-save-properties"
+                    >
                       <Save className="mr-1.5 h-3.5 w-3.5" />
                       {savingProperties ? "Saving..." : "Save Changes"}
                     </Button>
@@ -2030,14 +2800,21 @@ export default function PortalClient() {
                           <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
                             <Home className="h-4 w-4 text-muted-foreground" />
                           </div>
-                          <p className="font-medium text-sm pt-1.5" data-testid={`text-property-address-${prop.id}`}>
-                            {prop.streetAddress ? `${prop.streetAddress}, ${prop.city}, ${prop.state} ${prop.zipCode}` : "No address on file"}
+                          <p
+                            className="font-medium text-sm pt-1.5"
+                            data-testid={`text-property-address-${prop.id}`}
+                          >
+                            {prop.streetAddress
+                              ? `${prop.streetAddress}, ${prop.city}, ${prop.state} ${prop.zipCode}`
+                              : "No address on file"}
                           </p>
                         </div>
                         <div className="pl-0 sm:pl-12 space-y-3">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5 sm:col-span-2">
-                              <Label htmlFor={`street-${prop.id}`} className="text-xs">Street Address</Label>
+                              <Label htmlFor={`street-${prop.id}`} className="text-xs">
+                                Street Address
+                              </Label>
                               <Input
                                 id={`street-${prop.id}`}
                                 value={propertyEdits[prop.id]?.streetAddress || ""}
@@ -2053,7 +2830,9 @@ export default function PortalClient() {
                               />
                             </div>
                             <div className="space-y-1.5">
-                              <Label htmlFor={`city-${prop.id}`} className="text-xs">City</Label>
+                              <Label htmlFor={`city-${prop.id}`} className="text-xs">
+                                City
+                              </Label>
                               <Input
                                 id={`city-${prop.id}`}
                                 value={propertyEdits[prop.id]?.city || ""}
@@ -2070,7 +2849,9 @@ export default function PortalClient() {
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-1.5">
-                                <Label htmlFor={`state-${prop.id}`} className="text-xs">State</Label>
+                                <Label htmlFor={`state-${prop.id}`} className="text-xs">
+                                  State
+                                </Label>
                                 <Input
                                   id={`state-${prop.id}`}
                                   value={propertyEdits[prop.id]?.state || ""}
@@ -2086,7 +2867,9 @@ export default function PortalClient() {
                                 />
                               </div>
                               <div className="space-y-1.5">
-                                <Label htmlFor={`zip-${prop.id}`} className="text-xs">Zip Code</Label>
+                                <Label htmlFor={`zip-${prop.id}`} className="text-xs">
+                                  Zip Code
+                                </Label>
                                 <Input
                                   id={`zip-${prop.id}`}
                                   value={propertyEdits[prop.id]?.zipCode || ""}
@@ -2105,7 +2888,9 @@ export default function PortalClient() {
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1.5">
-                              <Label htmlFor={`gate-code-${prop.id}`} className="text-xs">Gate Code</Label>
+                              <Label htmlFor={`gate-code-${prop.id}`} className="text-xs">
+                                Gate Code
+                              </Label>
                               <Input
                                 id={`gate-code-${prop.id}`}
                                 value={propertyEdits[prop.id]?.gateCode || ""}
@@ -2121,14 +2906,19 @@ export default function PortalClient() {
                               />
                             </div>
                             <div className="space-y-1.5">
-                              <Label htmlFor={`special-${prop.id}`} className="text-xs">Special Instructions</Label>
+                              <Label htmlFor={`special-${prop.id}`} className="text-xs">
+                                Special Instructions
+                              </Label>
                               <Input
                                 id={`special-${prop.id}`}
                                 value={propertyEdits[prop.id]?.specialInstructions || ""}
                                 onChange={(e) =>
                                   setPropertyEdits((prev) => ({
                                     ...prev,
-                                    [prop.id]: { ...prev[prop.id], specialInstructions: e.target.value },
+                                    [prop.id]: {
+                                      ...prev[prop.id],
+                                      specialInstructions: e.target.value,
+                                    },
                                   }))
                                 }
                                 placeholder="Special instructions"
@@ -2148,7 +2938,10 @@ export default function PortalClient() {
             <Separator />
 
             <section>
-              <SectionHeader title="How We Reach You" description="Choose how you want to be notified" />
+              <SectionHeader
+                title="How We Reach You"
+                description="Choose how you want to be notified"
+              />
               <Card>
                 <CardContent className="pt-4 space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2157,57 +2950,105 @@ export default function PortalClient() {
                         <Mail className="h-4 w-4 text-muted-foreground" />
                         <p className="text-sm font-medium">Email</p>
                       </div>
-                      <Switch checked={notifPrefs.email} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, email: v }))} data-testid="switch-notif-email-global" />
+                      <Switch
+                        checked={notifPrefs.email}
+                        onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, email: v }))}
+                        data-testid="switch-notif-email-global"
+                      />
                     </div>
                     <div className="flex items-center justify-between rounded-lg border p-3">
                       <div className="flex items-center gap-2.5">
                         <Send className="h-4 w-4 text-muted-foreground" />
                         <p className="text-sm font-medium">SMS</p>
                       </div>
-                      <Switch checked={notifPrefs.sms} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, sms: v }))} data-testid="switch-notif-sms-global" />
+                      <Switch
+                        checked={notifPrefs.sms}
+                        onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, sms: v }))}
+                        data-testid="switch-notif-sms-global"
+                      />
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Notification Types</p>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Notification Types
+                    </p>
                     <div className="divide-y rounded-lg border">
                       {[
-                        { key: "serviceReminder", label: "Service Reminders", desc: "Before upcoming visits" },
-                        { key: "serviceCompleted", label: "Service Completed", desc: "After a visit is done" },
-                        { key: "invoiceReady", label: "Invoice Ready", desc: "When a new invoice is created" },
-                        { key: "invoiceDueReminder", label: "Invoice Due Reminder", desc: "Before payment is due" },
-                        { key: "paymentConfirmation", label: "Payment Confirmation", desc: "After a payment is processed" },
+                        {
+                          key: "serviceReminder",
+                          label: "Service Reminders",
+                          desc: "Before upcoming visits",
+                        },
+                        {
+                          key: "serviceCompleted",
+                          label: "Service Completed",
+                          desc: "After a visit is done",
+                        },
+                        {
+                          key: "invoiceReady",
+                          label: "Invoice Ready",
+                          desc: "When a new invoice is created",
+                        },
+                        {
+                          key: "invoiceDueReminder",
+                          label: "Invoice Due Reminder",
+                          desc: "Before payment is due",
+                        },
+                        {
+                          key: "paymentConfirmation",
+                          label: "Payment Confirmation",
+                          desc: "After a payment is processed",
+                        },
                       ].map(({ key, label, desc }) => (
                         <div key={key} className="flex items-center justify-between p-3">
                           <div>
                             <p className="text-sm font-medium">{label}</p>
                             <p className="text-xs text-muted-foreground">{desc}</p>
                           </div>
-                          <Switch checked={(notifPrefs[key] as boolean) ?? true} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, [key]: v }))} data-testid={`switch-notif-${key}`} />
+                          <Switch
+                            checked={(notifPrefs[key] as boolean) ?? true}
+                            onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, [key]: v }))}
+                            data-testid={`switch-notif-${key}`}
+                          />
                         </div>
                       ))}
                     </div>
                   </div>
 
                   <div className="space-y-1 border-t pt-3">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Reminder Preferences</p>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Reminder Preferences
+                    </p>
                     <div className="rounded-lg border divide-y">
                       <div className="flex items-center justify-between p-3">
                         <div>
                           <p className="text-sm font-medium">Opt Out of All Reminders</p>
-                          <p className="text-xs text-muted-foreground">Stop receiving all automated service and invoice reminders</p>
+                          <p className="text-xs text-muted-foreground">
+                            Stop receiving all automated service and invoice reminders
+                          </p>
                         </div>
-                        <Switch checked={notifPrefs.reminderOptOut ?? false} onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, reminderOptOut: v }))} data-testid="switch-reminder-opt-out" />
+                        <Switch
+                          checked={notifPrefs.reminderOptOut ?? false}
+                          onCheckedChange={(v) =>
+                            setNotifPrefs((p) => ({ ...p, reminderOptOut: v }))
+                          }
+                          data-testid="switch-reminder-opt-out"
+                        />
                       </div>
                       <div className="flex items-center justify-between p-3">
                         <div>
                           <p className="text-sm font-medium">Preferred Reminder Channel</p>
-                          <p className="text-xs text-muted-foreground">Override the default channel for reminders</p>
+                          <p className="text-xs text-muted-foreground">
+                            Override the default channel for reminders
+                          </p>
                         </div>
                         <select
                           className="border rounded px-2 py-1 text-sm bg-background"
                           value={notifPrefs.preferredChannel || ""}
-                          onChange={(e) => setNotifPrefs((p) => ({ ...p, preferredChannel: e.target.value || "" }))}
+                          onChange={(e) =>
+                            setNotifPrefs((p) => ({ ...p, preferredChannel: e.target.value || "" }))
+                          }
                           data-testid="select-preferred-channel"
                         >
                           <option value="">Use default</option>
@@ -2219,12 +3060,16 @@ export default function PortalClient() {
                       <div className="flex items-center justify-between p-3">
                         <div>
                           <p className="text-sm font-medium">Preferred Reminder Timing</p>
-                          <p className="text-xs text-muted-foreground">When you'd like to receive service reminders</p>
+                          <p className="text-xs text-muted-foreground">
+                            When you'd like to receive service reminders
+                          </p>
                         </div>
                         <select
                           className="border rounded px-2 py-1 text-sm bg-background"
                           value={notifPrefs.preferredTiming || ""}
-                          onChange={(e) => setNotifPrefs((p) => ({ ...p, preferredTiming: e.target.value || "" }))}
+                          onChange={(e) =>
+                            setNotifPrefs((p) => ({ ...p, preferredTiming: e.target.value || "" }))
+                          }
                           data-testid="select-preferred-timing"
                         >
                           <option value="">Use default</option>
@@ -2236,7 +3081,12 @@ export default function PortalClient() {
                     </div>
                   </div>
 
-                  <Button onClick={handleSaveNotifPrefs} disabled={savingNotifs} className="w-full sm:w-auto" data-testid="button-save-notifications">
+                  <Button
+                    onClick={handleSaveNotifPrefs}
+                    disabled={savingNotifs}
+                    className="w-full sm:w-auto"
+                    data-testid="button-save-notifications"
+                  >
                     <Save className="mr-1.5 h-4 w-4" />
                     {savingNotifs ? "Saving..." : "Save Preferences"}
                   </Button>
@@ -2245,23 +3095,40 @@ export default function PortalClient() {
             </section>
 
             <section>
-              <SectionHeader title="Refer a Friend" description="Share your referral link and earn rewards" />
+              <SectionHeader
+                title="Refer a Friend"
+                description="Share your referral link and earn rewards"
+              />
               <Card className="border-primary/20">
                 <CardContent className="pt-4">
                   {referralCode ? (
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-muted rounded-lg px-4 py-2.5 text-sm font-mono truncate" data-testid="text-referral-code">
+                        <div
+                          className="flex-1 bg-muted rounded-lg px-4 py-2.5 text-sm font-mono truncate"
+                          data-testid="text-referral-code"
+                        >
                           {`${window.location.origin}/portal/login?ref=${referralCode}`}
                         </div>
-                        <Button variant="outline" size="icon" className="shrink-0 h-10 w-10" onClick={handleCopyReferral} data-testid="button-copy-referral">
-                          {copiedReferral ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="shrink-0 h-10 w-10"
+                          onClick={handleCopyReferral}
+                          data-testid="button-copy-referral"
+                        >
+                          {copiedReferral ? (
+                            <Check className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <Gift className="h-4 w-4 text-primary" />
                         <span data-testid="text-referral-count">
-                          <span className="font-semibold">{referralCount}</span> successful referral{referralCount !== 1 ? "s" : ""}
+                          <span className="font-semibold">{referralCount}</span> successful referral
+                          {referralCount !== 1 ? "s" : ""}
                         </span>
                       </div>
                     </div>
@@ -2271,7 +3138,12 @@ export default function PortalClient() {
                       <p className="text-sm text-muted-foreground mb-3">
                         Generate your unique referral link to share with friends and family.
                       </p>
-                      <Button onClick={handleGenerateReferral} disabled={generatingCode} className="gap-1.5" data-testid="button-generate-referral">
+                      <Button
+                        onClick={handleGenerateReferral}
+                        disabled={generatingCode}
+                        className="gap-1.5"
+                        data-testid="button-generate-referral"
+                      >
                         <Gift className="h-4 w-4" />
                         {generatingCode ? "Generating..." : "Get My Referral Link"}
                       </Button>
@@ -2282,7 +3154,12 @@ export default function PortalClient() {
             </section>
 
             <div className="pt-4 pb-8">
-              <Button variant="outline" className="w-full text-muted-foreground hover:text-destructive hover:border-destructive/50" onClick={handleLogout} data-testid="button-portal-signout">
+              <Button
+                variant="outline"
+                className="w-full text-muted-foreground hover:text-destructive hover:border-destructive/50"
+                onClick={handleLogout}
+                data-testid="button-portal-signout"
+              >
                 <LogOut className="h-4 w-4 mr-2" /> Sign Out
               </Button>
             </div>
@@ -2295,7 +3172,10 @@ export default function PortalClient() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Service Photos</DialogTitle>
-            <DialogDescription>{visitPhotoModal?.scheduledDate} {visitPhotoModal?.propertyAddress && `- ${visitPhotoModal.propertyAddress}`}</DialogDescription>
+            <DialogDescription>
+              {visitPhotoModal?.scheduledDate}{" "}
+              {visitPhotoModal?.propertyAddress && `- ${visitPhotoModal.propertyAddress}`}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {visitPhotoModal?.proofOfServicePhotoBefore && (
@@ -2325,11 +3205,16 @@ export default function PortalClient() {
       </Dialog>
 
       {/* Gallery Photo Dialog */}
-      <Dialog open={photoModalIndex !== null} onOpenChange={(open) => !open && setPhotoModalIndex(null)}>
+      <Dialog
+        open={photoModalIndex !== null}
+        onOpenChange={(open) => !open && setPhotoModalIndex(null)}
+      >
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
-              <span>{photoModalIndex !== null && galleryPhotos[photoModalIndex]?.scheduledDate}</span>
+              <span>
+                {photoModalIndex !== null && galleryPhotos[photoModalIndex]?.scheduledDate}
+              </span>
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"

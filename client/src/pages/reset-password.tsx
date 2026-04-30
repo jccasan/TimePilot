@@ -44,7 +44,11 @@ export default function ResetPassword() {
       return;
     }
     if (password.length < 8) {
-      toast({ title: "Error", description: "Password must be at least 8 characters", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Password must be at least 8 characters",
+        variant: "destructive",
+      });
       return;
     }
     resetMutation.mutate();
@@ -54,10 +58,17 @@ export default function ResetPassword() {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-card">
         <div className="w-full max-w-md space-y-6 text-center">
-          <img src={logoLong} alt="ScooPilot" className="w-full max-w-sm h-auto rounded-md mx-auto" />
+          <img
+            src={logoLong}
+            alt="ScooPilot"
+            className="w-full max-w-sm h-auto rounded-md mx-auto"
+          />
           <Card>
             <CardContent className="p-6 space-y-4">
-              <p className="text-muted-foreground">Invalid or missing reset link. Please request a new password reset from the sign in page.</p>
+              <p className="text-muted-foreground">
+                Invalid or missing reset link. Please request a new password reset from the sign in
+                page.
+              </p>
               <Button asChild className="w-full">
                 <a href="/login" data-testid="link-back-to-login">
                   <ArrowLeft className="mr-1 h-4 w-4" /> Back to Sign In
@@ -74,14 +85,24 @@ export default function ResetPassword() {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-card">
         <div className="w-full max-w-md space-y-6 text-center">
-          <img src={logoLong} alt="ScooPilot" className="w-full max-w-sm h-auto rounded-md mx-auto" />
+          <img
+            src={logoLong}
+            alt="ScooPilot"
+            className="w-full max-w-sm h-auto rounded-md mx-auto"
+          />
           <Card>
             <CardContent className="p-6 space-y-4">
               <CheckCircle className="h-12 w-12 text-primary mx-auto" />
-              <h2 className="text-xl font-semibold" data-testid="text-reset-success">Password Reset Successful</h2>
-              <p className="text-muted-foreground">Your password has been updated. You can now sign in with your new password.</p>
+              <h2 className="text-xl font-semibold" data-testid="text-reset-success">
+                Password Reset Successful
+              </h2>
+              <p className="text-muted-foreground">
+                Your password has been updated. You can now sign in with your new password.
+              </p>
               <Button asChild className="w-full">
-                <a href="/login" data-testid="link-sign-in-after-reset">Sign In</a>
+                <a href="/login" data-testid="link-sign-in-after-reset">
+                  Sign In
+                </a>
               </Button>
             </CardContent>
           </Card>
@@ -96,7 +117,9 @@ export default function ResetPassword() {
         <div className="flex flex-col items-start gap-4">
           <img src={logoLong} alt="ScooPilot" className="w-full max-w-sm h-auto rounded-md" />
         </div>
-        <h2 className="text-xl font-semibold" data-testid="text-reset-heading">Set New Password</h2>
+        <h2 className="text-xl font-semibold" data-testid="text-reset-heading">
+          Set New Password
+        </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="password">New Password</Label>
@@ -124,12 +147,22 @@ export default function ResetPassword() {
               data-testid="input-confirm-password"
             />
           </div>
-          <Button type="submit" size="lg" className="w-full" disabled={resetMutation.isPending} data-testid="button-reset-password">
+          <Button
+            type="submit"
+            size="lg"
+            className="w-full"
+            disabled={resetMutation.isPending}
+            data-testid="button-reset-password"
+          >
             {resetMutation.isPending ? "Resetting..." : "Reset Password"}
           </Button>
         </form>
         <div className="text-center">
-          <a href="/login" className="text-sm text-muted-foreground hover:underline" data-testid="link-back-to-sign-in">
+          <a
+            href="/login"
+            className="text-sm text-muted-foreground hover:underline"
+            data-testid="link-back-to-sign-in"
+          >
             Back to Sign In
           </a>
         </div>

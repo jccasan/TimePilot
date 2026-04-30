@@ -11,10 +11,30 @@ import { User, Phone, Mail, Dog } from "lucide-react";
 
 const COLUMNS: { key: Contact["status"]; label: string; color: string; bgClass: string }[] = [
   { key: "lead", label: "Lead", color: "bg-blue-500", bgClass: "bg-blue-50 dark:bg-blue-950/30" },
-  { key: "estimate", label: "Estimate", color: "bg-yellow-500", bgClass: "bg-yellow-50 dark:bg-yellow-950/30" },
-  { key: "active", label: "Active", color: "bg-green-500", bgClass: "bg-green-950/10 dark:bg-green-950/30" },
-  { key: "paused", label: "Paused", color: "bg-orange-500", bgClass: "bg-orange-50 dark:bg-orange-950/30" },
-  { key: "cancelled", label: "Cancelled", color: "bg-red-500", bgClass: "bg-red-50 dark:bg-red-950/30" },
+  {
+    key: "estimate",
+    label: "Estimate",
+    color: "bg-yellow-500",
+    bgClass: "bg-yellow-50 dark:bg-yellow-950/30",
+  },
+  {
+    key: "active",
+    label: "Active",
+    color: "bg-green-500",
+    bgClass: "bg-green-950/10 dark:bg-green-950/30",
+  },
+  {
+    key: "paused",
+    label: "Paused",
+    color: "bg-orange-500",
+    bgClass: "bg-orange-50 dark:bg-orange-950/30",
+  },
+  {
+    key: "cancelled",
+    label: "Cancelled",
+    color: "bg-red-500",
+    bgClass: "bg-red-50 dark:bg-red-950/30",
+  },
 ];
 
 function formatDuration(dateStr: string | Date): string {
@@ -32,7 +52,13 @@ function formatDuration(dateStr: string | Date): string {
   return years === 1 ? "1 year" : `${years} years`;
 }
 
-function ContactCard({ contact, onDragStart }: { contact: Contact; onDragStart: (e: React.DragEvent, id: string) => void }) {
+function ContactCard({
+  contact,
+  onDragStart,
+}: {
+  contact: Contact;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+}) {
   return (
     <div
       draggable
@@ -41,14 +67,20 @@ function ContactCard({ contact, onDragStart }: { contact: Contact; onDragStart: 
       data-testid={`pipeline-card-${contact.id}`}
     >
       <Link href={`/contacts/${contact.id}`}>
-        <Card className="hover-elevate transition-shadow" data-testid={`pipeline-card-link-${contact.id}`}>
+        <Card
+          className="hover-elevate transition-shadow"
+          data-testid={`pipeline-card-link-${contact.id}`}
+        >
           <CardContent className="p-3 space-y-1.5">
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
                 <User className="h-4 w-4 text-muted-foreground" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-sm truncate" data-testid={`pipeline-name-${contact.id}`}>
+                <p
+                  className="font-medium text-sm truncate"
+                  data-testid={`pipeline-name-${contact.id}`}
+                >
                   {contact.firstName} {contact.lastName}
                 </p>
               </div>
@@ -73,7 +105,10 @@ function ContactCard({ contact, onDragStart }: { contact: Contact; onDragStart: 
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-muted-foreground/70" data-testid={`pipeline-stage-duration-${contact.id}`}>
+            <p
+              className="text-[11px] text-muted-foreground/70"
+              data-testid={`pipeline-stage-duration-${contact.id}`}
+            >
               In stage {formatDuration(contact.updatedAt)}
             </p>
           </CardContent>
@@ -102,7 +137,11 @@ export default function Pipeline() {
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to update status", description: error.message, variant: "destructive" });
+      toast({
+        title: "Failed to update status",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -135,23 +174,28 @@ export default function Pipeline() {
     setDragOverColumn(null);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent, newStatus: string) => {
-    e.preventDefault();
-    setDragOverColumn(null);
-    const contactId = draggedContactId.current;
-    if (!contactId) return;
-    draggedContactId.current = null;
+  const handleDrop = useCallback(
+    (e: React.DragEvent, newStatus: string) => {
+      e.preventDefault();
+      setDragOverColumn(null);
+      const contactId = draggedContactId.current;
+      if (!contactId) return;
+      draggedContactId.current = null;
 
-    const contact = contacts?.find(c => c.id === contactId);
-    if (!contact || contact.status === newStatus) return;
+      const contact = contacts?.find((c) => c.id === contactId);
+      if (!contact || contact.status === newStatus) return;
 
-    updateStatusMutation.mutate({ id: contactId, status: newStatus });
-  }, [contacts, updateStatusMutation]);
+      updateStatusMutation.mutate({ id: contactId, status: newStatus });
+    },
+    [contacts, updateStatusMutation]
+  );
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="p-4 md:p-6 pb-2 flex-shrink-0">
-        <h1 className="text-2xl font-bold" data-testid="text-pipeline-heading">Pipeline</h1>
+        <h1 className="text-2xl font-bold" data-testid="text-pipeline-heading">
+          Pipeline
+        </h1>
         <p className="text-sm text-muted-foreground mt-1" data-testid="text-pipeline-subtitle">
           Drag contacts between stages to update their status
         </p>
@@ -170,7 +214,10 @@ export default function Pipeline() {
           ))}
         </div>
       ) : (
-        <div className="flex-1 flex gap-3 p-4 pt-2 overflow-x-auto min-h-0" data-testid="pipeline-board">
+        <div
+          className="flex-1 flex gap-3 p-4 pt-2 overflow-x-auto min-h-0"
+          data-testid="pipeline-board"
+        >
           {COLUMNS.map((col) => {
             const columnContacts = grouped[col.key] || [];
             const isOver = dragOverColumn === col.key;
@@ -180,14 +227,23 @@ export default function Pipeline() {
                 className="flex-shrink-0 w-64 flex flex-col min-h-0"
                 data-testid={`pipeline-column-${col.key}`}
               >
-                <div className={`rounded-lg px-3 py-2 mb-2 flex items-center justify-between ${col.bgClass}`}>
+                <div
+                  className={`rounded-lg px-3 py-2 mb-2 flex items-center justify-between ${col.bgClass}`}
+                >
                   <div className="flex items-center gap-2">
                     <div className={`h-2.5 w-2.5 rounded-full ${col.color}`} />
-                    <span className="text-sm font-medium" data-testid={`pipeline-column-label-${col.key}`}>
+                    <span
+                      className="text-sm font-medium"
+                      data-testid={`pipeline-column-label-${col.key}`}
+                    >
                       {col.label}
                     </span>
                   </div>
-                  <Badge variant="secondary" className="text-xs h-5 min-w-[20px] px-1.5" data-testid={`pipeline-column-count-${col.key}`}>
+                  <Badge
+                    variant="secondary"
+                    className="text-xs h-5 min-w-[20px] px-1.5"
+                    data-testid={`pipeline-column-count-${col.key}`}
+                  >
                     {columnContacts.length}
                   </Badge>
                 </div>
@@ -202,7 +258,10 @@ export default function Pipeline() {
                   data-testid={`pipeline-dropzone-${col.key}`}
                 >
                   {columnContacts.length === 0 ? (
-                    <div className="text-center py-8 text-sm text-muted-foreground/50" data-testid={`pipeline-empty-${col.key}`}>
+                    <div
+                      className="text-center py-8 text-sm text-muted-foreground/50"
+                      data-testid={`pipeline-empty-${col.key}`}
+                    >
                       No contacts
                     </div>
                   ) : (

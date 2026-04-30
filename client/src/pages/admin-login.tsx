@@ -40,7 +40,9 @@ export default function AdminLogin() {
               <Shield className="h-6 w-6 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-xl" data-testid="text-admin-login-title">Admin Dashboard</CardTitle>
+          <CardTitle className="text-xl" data-testid="text-admin-login-title">
+            Admin Dashboard
+          </CardTitle>
           <p className="text-sm text-muted-foreground mt-1">Sign in to manage the platform</p>
         </CardHeader>
         <CardContent>
@@ -88,7 +90,12 @@ export default function AdminLogin() {
                 </Button>
               </div>
             </div>
-            <Button type="submit" className="w-full" disabled={loading} data-testid="button-admin-login">
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading}
+              data-testid="button-admin-login"
+            >
               {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>

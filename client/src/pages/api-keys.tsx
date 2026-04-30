@@ -97,7 +97,9 @@ export default function ApiKeys() {
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold" data-testid="text-api-keys-heading">API Keys</h1>
+        <h1 className="text-2xl font-bold" data-testid="text-api-keys-heading">
+          API Keys
+        </h1>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-create-api-key">
@@ -109,49 +111,66 @@ export default function ApiKeys() {
               <DialogTitle>Create API Key</DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
-                <FormField control={form.control} name="name" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Key Name</FormLabel>
-                    <FormControl><Input {...field} data-testid="input-key-name" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="scopes" render={() => (
-                  <FormItem>
-                    <FormLabel>Scopes</FormLabel>
-                    <div className="space-y-2">
-                      {availableScopes.map((scope) => (
-                        <FormField
-                          key={scope}
-                          control={form.control}
-                          name="scopes"
-                          render={({ field }) => (
-                            <FormItem className="flex items-center gap-2 space-y-0">
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(scope)}
-                                  onCheckedChange={(checked) => {
-                                    const current = field.value || [];
-                                    if (checked) {
-                                      field.onChange([...current, scope]);
-                                    } else {
-                                      field.onChange(current.filter((s: string) => s !== scope));
-                                    }
-                                  }}
-                                  data-testid={`checkbox-scope-${scope}`}
-                                />
-                              </FormControl>
-                              <span className="text-sm font-mono">{scope}</span>
-                            </FormItem>
-                          )}
-                        />
-                      ))}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-api-key">
+              <form
+                onSubmit={form.handleSubmit((v) => createMutation.mutate(v))}
+                className="space-y-4"
+              >
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Key Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} data-testid="input-key-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="scopes"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Scopes</FormLabel>
+                      <div className="space-y-2">
+                        {availableScopes.map((scope) => (
+                          <FormField
+                            key={scope}
+                            control={form.control}
+                            name="scopes"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center gap-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(scope)}
+                                    onCheckedChange={(checked) => {
+                                      const current = field.value || [];
+                                      if (checked) {
+                                        field.onChange([...current, scope]);
+                                      } else {
+                                        field.onChange(current.filter((s: string) => s !== scope));
+                                      }
+                                    }}
+                                    data-testid={`checkbox-scope-${scope}`}
+                                  />
+                                </FormControl>
+                                <span className="text-sm font-mono">{scope}</span>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  data-testid="button-submit-api-key"
+                >
                   {createMutation.isPending ? "Creating..." : "Create Key"}
                 </Button>
               </form>
@@ -169,8 +188,15 @@ export default function ApiKeys() {
             Copy this key now. You will not be able to see it again.
           </p>
           <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
-            <code className="text-sm flex-1 break-all" data-testid="text-raw-key">{rawKey}</code>
-            <Button variant="ghost" size="icon" onClick={() => rawKey && copyToClipboard(rawKey)} data-testid="button-copy-key">
+            <code className="text-sm flex-1 break-all" data-testid="text-raw-key">
+              {rawKey}
+            </code>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => rawKey && copyToClipboard(rawKey)}
+              data-testid="button-copy-key"
+            >
               <Copy />
             </Button>
           </div>
@@ -191,8 +217,13 @@ export default function ApiKeys() {
                 <div className="flex items-center gap-3">
                   <Key className="h-5 w-5 text-muted-foreground shrink-0" />
                   <div>
-                    <p className="font-medium" data-testid={`text-key-name-${key.id}`}>{key.name}</p>
-                    <p className="text-sm text-muted-foreground font-mono" data-testid={`text-key-prefix-${key.id}`}>
+                    <p className="font-medium" data-testid={`text-key-name-${key.id}`}>
+                      {key.name}
+                    </p>
+                    <p
+                      className="text-sm text-muted-foreground font-mono"
+                      data-testid={`text-key-prefix-${key.id}`}
+                    >
                       {key.keyPrefix}...
                     </p>
                     <div className="flex flex-wrap items-center gap-1 mt-1">
@@ -208,7 +239,10 @@ export default function ApiKeys() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant={key.isActive ? "default" : "secondary"} data-testid={`badge-key-status-${key.id}`}>
+                  <Badge
+                    variant={key.isActive ? "default" : "secondary"}
+                    data-testid={`badge-key-status-${key.id}`}
+                  >
                     {key.isActive ? "Active" : "Inactive"}
                   </Badge>
                   <Button
@@ -226,7 +260,10 @@ export default function ApiKeys() {
         </div>
       ) : (
         <Card>
-          <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-no-api-keys">
+          <CardContent
+            className="p-6 text-center text-muted-foreground"
+            data-testid="text-no-api-keys"
+          >
             No API keys. Create one to access the API programmatically.
           </CardContent>
         </Card>

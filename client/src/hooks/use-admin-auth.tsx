@@ -6,7 +6,10 @@ interface AdminAuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   mustChangePassword: boolean;
-  login: (email: string, password: string) => Promise<{ error?: string; mustChangePassword?: boolean }>;
+  login: (
+    email: string,
+    password: string
+  ) => Promise<{ error?: string; mustChangePassword?: boolean }>;
   logout: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ error?: string }>;
 }
@@ -35,7 +38,10 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     }
     fetch("/api/admin/check", { headers: { "x-admin-token": token } })
       .then((r) => {
-        if (!r.ok) { clearAuth(); return null; }
+        if (!r.ok) {
+          clearAuth();
+          return null;
+        }
         return r.json();
       })
       .then((data) => {
@@ -73,30 +79,35 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     clearAuth();
   }, [token, clearAuth]);
 
-  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
-    if (!token) return { error: "Not authenticated" };
-    const res = await fetch("/api/admin/change-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-admin-token": token },
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
-    const data = await res.json();
-    if (!res.ok) return { error: data.error || "Failed to change password" };
-    setMustChangePassword(false);
-    return {};
-  }, [token]);
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      if (!token) return { error: "Not authenticated" };
+      const res = await fetch("/api/admin/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { error: data.error || "Failed to change password" };
+      setMustChangePassword(false);
+      return {};
+    },
+    [token]
+  );
 
   return (
-    <AdminAuthContext.Provider value={{
-      token,
-      email,
-      isAuthenticated: !!token && !!email,
-      isLoading,
-      mustChangePassword,
-      login,
-      logout,
-      changePassword,
-    }}>
+    <AdminAuthContext.Provider
+      value={{
+        token,
+        email,
+        isAuthenticated: !!token && !!email,
+        isLoading,
+        mustChangePassword,
+        login,
+        logout,
+        changePassword,
+      }}
+    >
       {children}
     </AdminAuthContext.Provider>
   );

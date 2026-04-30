@@ -17,12 +17,7 @@ export async function runTrialExpirationCheck(): Promise<void> {
         subscriptionStatus: companies.subscriptionStatus,
       })
       .from(companies)
-      .where(
-        and(
-          eq(companies.subscriptionStatus, "trialing"),
-          lt(companies.trialEndsAt, now)
-        )
-      );
+      .where(and(eq(companies.subscriptionStatus, "trialing"), lt(companies.trialEndsAt, now)));
 
     if (expiredTrials.length === 0) {
       console.log("[Trial Expiration] No expired trials found");
@@ -50,7 +45,9 @@ export async function runTrialExpirationCheck(): Promise<void> {
           .returning({ id: companies.id });
 
         if (updated.length === 0) {
-          console.log(`[Trial Expiration] Skipped company "${company.name}" (${company.id}) — status changed since query`);
+          console.log(
+            `[Trial Expiration] Skipped company "${company.name}" (${company.id}) — status changed since query`
+          );
           continue;
         }
 
@@ -73,12 +70,7 @@ export async function runTrialExpirationCheck(): Promise<void> {
           .select({ email: users.email })
           .from(companyUsers)
           .innerJoin(users, eq(companyUsers.userId, users.id))
-          .where(
-            and(
-              eq(companyUsers.companyId, company.id),
-              eq(companyUsers.role, "owner")
-            )
-          )
+          .where(and(eq(companyUsers.companyId, company.id), eq(companyUsers.role, "owner")))
           .limit(1);
 
         if (ownerRow.length > 0 && ownerRow[0].email) {
@@ -108,7 +100,9 @@ export async function runTrialExpirationCheck(): Promise<void> {
           });
 
           if (!emailResult.success) {
-            console.error(`[Trial Expiration] Email delivery failed for ${company.id} (${ownerRow[0].email}): ${emailResult.error}`);
+            console.error(
+              `[Trial Expiration] Email delivery failed for ${company.id} (${ownerRow[0].email}): ${emailResult.error}`
+            );
           }
         }
 
@@ -122,7 +116,9 @@ export async function runTrialExpirationCheck(): Promise<void> {
       }
     }
 
-    console.log(`[Trial Expiration] Completed: ${suspended}/${expiredTrials.length} accounts suspended`);
+    console.log(
+      `[Trial Expiration] Completed: ${suspended}/${expiredTrials.length} accounts suspended`
+    );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[Trial Expiration] Job error:", msg);

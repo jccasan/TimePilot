@@ -9,12 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
@@ -24,7 +19,17 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
-import { ArrowLeft, ArrowRight, FileText, CalendarDays, Send, CheckCircle2, Minus, Plus, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  FileText,
+  CalendarDays,
+  Send,
+  CheckCircle2,
+  Minus,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -81,14 +86,19 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [step, setStep] = useState<1 | 2>(1);
-  const [createdContact, setCreatedContact] = useState<{ id: string; firstName: string } | null>(null);
+  const [createdContact, setCreatedContact] = useState<{ id: string; firstName: string } | null>(
+    null
+  );
   const [sendingPortalInvite, setSendingPortalInvite] = useState(false);
   const [addressCoords, setAddressCoords] = useState<{ lat: string; lng: string } | null>(null);
   const [suggestedDay, setSuggestedDay] = useState<string | null>(null);
   const [isFetchingSuggestion, setIsFetchingSuggestion] = useState(false);
   const [suppressNotifications, setSuppressNotifications] = useState(false);
   const scheduleNowRef = useRef(false);
-  const servicePrefRef = useRef<{ frequency: string; serviceDay: string }>({ frequency: "", serviceDay: "" });
+  const servicePrefRef = useRef<{ frequency: string; serviceDay: string }>({
+    frequency: "",
+    serviceDay: "",
+  });
 
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(contactFormSchema),
@@ -124,15 +134,21 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
       if (scheduleNowRef.current) {
         handleClose();
         const params = new URLSearchParams({ addJob: "1", contactId: result.id as string });
-        if (servicePrefRef.current.frequency) params.set("frequency", servicePrefRef.current.frequency);
-        if (servicePrefRef.current.serviceDay) params.set("serviceDay", servicePrefRef.current.serviceDay);
+        if (servicePrefRef.current.frequency)
+          params.set("frequency", servicePrefRef.current.frequency);
+        if (servicePrefRef.current.serviceDay)
+          params.set("serviceDay", servicePrefRef.current.serviceDay);
         navigate(`/scheduling?${params.toString()}`);
       } else {
         setCreatedContact({ id: result.id as string, firstName: result.firstName as string });
       }
     },
     onError: (error: Error) => {
-      toast({ title: "Error creating customer", description: error.message, variant: "destructive" });
+      toast({
+        title: "Error creating customer",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -156,8 +172,13 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
     if (!createdContact) return;
     setSendingPortalInvite(true);
     try {
-      await apiRequest("POST", "/api/contacts/bulk/send-portal-link", { contactIds: [createdContact.id] });
-      toast({ title: "Portal invite sent", description: `Invite sent to ${createdContact.firstName}.` });
+      await apiRequest("POST", "/api/contacts/bulk/send-portal-link", {
+        contactIds: [createdContact.id],
+      });
+      toast({
+        title: "Portal invite sent",
+        description: `Invite sent to ${createdContact.firstName}.`,
+      });
       handleClose();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -173,7 +194,10 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
     if (addressCoords) {
       setIsFetchingSuggestion(true);
       try {
-        const res = await apiRequest("GET", `/api/routes/suggest-day?lat=${addressCoords.lat}&lng=${addressCoords.lng}`);
+        const res = await apiRequest(
+          "GET",
+          `/api/routes/suggest-day?lat=${addressCoords.lat}&lng=${addressCoords.lng}`
+        );
         const data = await res.json();
         if (data?.day) {
           setSuggestedDay(data.day);
@@ -182,7 +206,9 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
             form.setValue("serviceDay", data.day);
           }
         }
-      } catch { /* suggestion is best-effort */ } finally {
+      } catch {
+        /* suggestion is best-effort */
+      } finally {
         setIsFetchingSuggestion(false);
       }
     }
@@ -208,10 +234,13 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
   const dogs = form.watch("numberOfDogs") ?? 0;
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
-      if (!isOpen) handleClose();
-      else onOpenChange(isOpen);
-    }}>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) handleClose();
+        else onOpenChange(isOpen);
+      }}
+    >
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>New Customer</DialogTitle>
@@ -231,7 +260,9 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
                 variant="outline"
                 className="w-full justify-start gap-2"
                 data-testid="button-next-schedule-service"
-                onClick={() => handleNavigateAction(`/scheduling?addJob=1&contactId=${createdContact.id}`)}
+                onClick={() =>
+                  handleNavigateAction(`/scheduling?addJob=1&contactId=${createdContact.id}`)
+                }
               >
                 <CalendarDays className="h-4 w-4 text-blue-600" />
                 Schedule a Service
@@ -240,7 +271,9 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
                 variant="outline"
                 className="w-full justify-start gap-2"
                 data-testid="button-next-create-quote"
-                onClick={() => handleNavigateAction(`/quotes?create=true&contactId=${createdContact.id}`)}
+                onClick={() =>
+                  handleNavigateAction(`/quotes?create=true&contactId=${createdContact.id}`)
+                }
               >
                 <FileText className="h-4 w-4 text-green-600" />
                 Create a Quote
@@ -256,7 +289,12 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
                 {sendingPortalInvite ? "Sending..." : "Send Portal Invite"}
               </Button>
             </div>
-            <Button variant="ghost" className="w-full" data-testid="button-next-done" onClick={handleClose}>
+            <Button
+              variant="ghost"
+              className="w-full"
+              data-testid="button-next-done"
+              onClick={handleClose}
+            >
               Done
             </Button>
           </div>
@@ -305,17 +343,21 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
 function StepIndicator({ current }: { current: 1 | 2 }) {
   return (
     <div className="flex items-center gap-2" aria-label="Step indicator">
-      <div className={cn(
-        "flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold",
-        current === 1 ? "bg-primary text-primary-foreground" : "bg-primary/20 text-primary"
-      )}>
+      <div
+        className={cn(
+          "flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold",
+          current === 1 ? "bg-primary text-primary-foreground" : "bg-primary/20 text-primary"
+        )}
+      >
         1
       </div>
       <div className="flex-1 h-px bg-border" />
-      <div className={cn(
-        "flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold",
-        current === 2 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-      )}>
+      <div
+        className={cn(
+          "flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold",
+          current === 2 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+        )}
+      >
         2
       </div>
       <span className="text-xs text-muted-foreground ml-1">
@@ -325,7 +367,15 @@ function StepIndicator({ current }: { current: 1 | 2 }) {
   );
 }
 
-function Step1({ form, isPending, suppressNotifications, onSuppressChange, onContinue, onSaveAndFinish, onAddressSelect }: {
+function Step1({
+  form,
+  isPending,
+  suppressNotifications,
+  onSuppressChange,
+  onContinue,
+  onSaveAndFinish,
+  onAddressSelect,
+}: {
   form: ReturnType<typeof useForm<ContactFormValues>>;
   isPending: boolean;
   suppressNotifications: boolean;
@@ -342,9 +392,17 @@ function Step1({ form, isPending, suppressNotifications, onSuppressChange, onCon
           name="firstName"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>First name <span className="text-destructive">*</span></FormLabel>
+              <FormLabel>
+                First name <span className="text-destructive">*</span>
+              </FormLabel>
               <FormControl>
-                <Input {...field} data-testid="input-first-name" autoFocus placeholder="Jane" className="h-11" />
+                <Input
+                  {...field}
+                  data-testid="input-first-name"
+                  autoFocus
+                  placeholder="Jane"
+                  className="h-11"
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -357,7 +415,12 @@ function Step1({ form, isPending, suppressNotifications, onSuppressChange, onCon
             <FormItem>
               <FormLabel>Last name</FormLabel>
               <FormControl>
-                <Input {...field} data-testid="input-last-name" placeholder="Smith" className="h-11" />
+                <Input
+                  {...field}
+                  data-testid="input-last-name"
+                  placeholder="Smith"
+                  className="h-11"
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -461,7 +524,10 @@ function Step1({ form, isPending, suppressNotifications, onSuppressChange, onCon
           onCheckedChange={onSuppressChange}
           data-testid="switch-suppress-notifications"
         />
-        <Label htmlFor="suppress-notifications-step1" className="text-sm text-muted-foreground cursor-pointer">
+        <Label
+          htmlFor="suppress-notifications-step1"
+          className="text-sm text-muted-foreground cursor-pointer"
+        >
           Suppress notifications
         </Label>
       </div>
@@ -490,7 +556,20 @@ function Step1({ form, isPending, suppressNotifications, onSuppressChange, onCon
   );
 }
 
-function Step2({ form, frequency, serviceDay, dogs, isPending, suggestedDay, isFetchingSuggestion, suppressNotifications, onSuppressChange, onBack, onCreateAndSchedule, onCreateOnly }: {
+function Step2({
+  form,
+  frequency,
+  serviceDay,
+  dogs,
+  isPending,
+  suggestedDay,
+  isFetchingSuggestion,
+  suppressNotifications,
+  onSuppressChange,
+  onBack,
+  onCreateAndSchedule,
+  onCreateOnly,
+}: {
   form: ReturnType<typeof useForm<ContactFormValues>>;
   frequency: string;
   serviceDay: string;
@@ -514,7 +593,9 @@ function Step2({ form, frequency, serviceDay, dogs, isPending, suggestedDay, isF
               key={f.value}
               type="button"
               data-testid={`pill-frequency-${f.value}`}
-              onClick={() => form.setValue("serviceFrequency", frequency === f.value ? "" : f.value)}
+              onClick={() =>
+                form.setValue("serviceFrequency", frequency === f.value ? "" : f.value)
+              }
               className={cn(
                 "rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors text-center",
                 frequency === f.value
@@ -630,7 +711,10 @@ function Step2({ form, frequency, serviceDay, dogs, isPending, suggestedDay, isF
           onCheckedChange={onSuppressChange}
           data-testid="switch-suppress-notifications"
         />
-        <Label htmlFor="suppress-notifications-step2" className="text-sm text-muted-foreground cursor-pointer">
+        <Label
+          htmlFor="suppress-notifications-step2"
+          className="text-sm text-muted-foreground cursor-pointer"
+        >
           Suppress notifications
         </Label>
       </div>

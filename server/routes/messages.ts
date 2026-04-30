@@ -8,12 +8,9 @@ import { messages as messagesTable, type Message } from "@shared/schema";
 import { sendEmail, generateEmailThreadId } from "../services/email";
 import { sendInvoiceEmail } from "../services/invoice-email";
 import { sendSmsForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "../services/sms";
-import {
-  reportRetellMinutes,
-} from "../services/stripe";
+import { reportRetellMinutes } from "../services/stripe";
 
 import { isAuthenticated, getCompanyContext, getBaseUrl, handleError, p, notify } from "./shared";
-
 
 export async function registerMessagesRoutes(app: Express): Promise<void> {
   // ================ Messages / Communications ================
@@ -21,7 +18,14 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
   app.get("/api/messages", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const filters: { contactId?: string; channel?: string; direction?: string; isRead?: boolean; phone?: string; emailThreadId?: string } = {};
+      const filters: {
+        contactId?: string;
+        channel?: string;
+        direction?: string;
+        isRead?: boolean;
+        phone?: string;
+        emailThreadId?: string;
+      } = {};
       if (req.query.contactId) filters.contactId = req.query.contactId as string;
       if (req.query.channel) filters.channel = req.query.channel as string;
       if (req.query.direction) filters.direction = req.query.direction as string;
@@ -31,21 +35,25 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
       const msgs = await storage.getMessages(companyId, filters);
 
       const contactCache = new Map<string, string>();
-      const enriched = await Promise.all(msgs.map(async (m) => {
-        let contactName = "";
-        if (m.contactId) {
-          if (contactCache.has(m.contactId)) {
-            contactName = contactCache.get(m.contactId)!;
-          } else {
-            const contact = await storage.getContactById(m.contactId);
-            contactName = contact ? `${contact.firstName} ${contact.lastName}` : "";
-            contactCache.set(m.contactId, contactName);
+      const enriched = await Promise.all(
+        msgs.map(async (m) => {
+          let contactName = "";
+          if (m.contactId) {
+            if (contactCache.has(m.contactId)) {
+              contactName = contactCache.get(m.contactId)!;
+            } else {
+              const contact = await storage.getContactById(m.contactId);
+              contactName = contact ? `${contact.firstName} ${contact.lastName}` : "";
+              contactCache.set(m.contactId, contactName);
+            }
           }
-        }
-        return { ...m, contactName };
-      }));
+          return { ...m, contactName };
+        })
+      );
       res.json(enriched);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/messages/:id/read", isAuthenticated, async (req: Request, res: Response) => {
@@ -54,16 +62,24 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
       const msg = await storage.markMessageRead(p(req.params.id), companyId);
       if (!msg) return res.status(404).json({ error: "Message not found" });
       res.json(msg);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.patch("/api/messages/read-by-contact/:contactId", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      await storage.markMessagesReadByContact(p(req.params.contactId), companyId);
-      res.json({ success: true });
-    } catch (err) { handleError(res, err); }
-  });
+  app.patch(
+    "/api/messages/read-by-contact/:contactId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        await storage.markMessagesReadByContact(p(req.params.contactId), companyId);
+        res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.patch("/api/messages/read-by-phone", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -72,27 +88,46 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
       if (!phone) return res.status(400).json({ error: "phone is required" });
       await storage.markMessagesReadByPhone(phone, companyId);
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.get("/api/messages/unread-sms-count", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const count = await storage.getUnreadSmsCount(companyId);
-      res.json({ count });
-    } catch (err) { handleError(res, err); }
-  });
+  app.get(
+    "/api/messages/unread-sms-count",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const count = await storage.getUnreadSmsCount(companyId);
+        res.json({ count });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.get("/api/messages/conversations", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const channelFilter = req.query.channel as string | undefined;
       const contacts = await storage.getContacts(companyId);
-      const contactMap = new Map(contacts.map(c => [c.id, c]));
+      const contactMap = new Map(contacts.map((c) => [c.id, c]));
       const company = await storage.getCompany(companyId);
       const retentionDays = company?.messageRetentionDays ?? 30;
 
-      type ConvThread = { contactId: string; contactName: string; phone: string; email: string; lastMessage: Message; unreadCount: number; messageCount: number; channel: string; emailThreadId: string; subject: string };
+      type ConvThread = {
+        contactId: string;
+        contactName: string;
+        phone: string;
+        email: string;
+        lastMessage: Message;
+        unreadCount: number;
+        messageCount: number;
+        channel: string;
+        emailThreadId: string;
+        subject: string;
+      };
 
       const threadMap = new Map<string, ConvThread>();
 
@@ -112,7 +147,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
               phone,
               email: "",
               lastMessage: msg,
-              unreadCount: (msg.direction === "inbound" && !msg.isRead) ? 1 : 0,
+              unreadCount: msg.direction === "inbound" && !msg.isRead ? 1 : 0,
               messageCount: 1,
               channel: "sms",
               emailThreadId: "",
@@ -136,7 +171,9 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
           const existing = threadMap.get(key);
           const contact = msg.contactId ? contactMap.get(msg.contactId) : null;
           const emailAddr = msg.direction === "inbound" ? msg.fromAddress : msg.toAddress;
-          const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : emailAddr;
+          const contactName = contact
+            ? `${contact.firstName} ${contact.lastName}`.trim()
+            : emailAddr;
 
           if (!existing) {
             threadMap.set(key, {
@@ -145,7 +182,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
               phone: "",
               email: emailAddr,
               lastMessage: msg,
-              unreadCount: (msg.direction === "inbound" && !msg.isRead) ? 1 : 0,
+              unreadCount: msg.direction === "inbound" && !msg.isRead ? 1 : 0,
               messageCount: 1,
               channel: "email",
               emailThreadId: canonicalThreadId,
@@ -162,28 +199,43 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         }
       }
 
-      const conversations = Array.from(threadMap.values()).sort((a, b) =>
-        new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()
+      const conversations = Array.from(threadMap.values()).sort(
+        (a, b) =>
+          new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()
       );
       res.json(conversations);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.get("/api/messages/unread-email-count", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const count = await storage.getUnreadEmailCount(companyId);
-      res.json({ count });
-    } catch (err) { handleError(res, err); }
-  });
+  app.get(
+    "/api/messages/unread-email-count",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const count = await storage.getUnreadEmailCount(companyId);
+        res.json({ count });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
-  app.patch("/api/messages/read-by-email-thread/:threadId", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      await storage.markMessagesReadByEmail(p(req.params.threadId), companyId);
-      res.json({ success: true });
-    } catch (err) { handleError(res, err); }
-  });
+  app.patch(
+    "/api/messages/read-by-email-thread/:threadId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        await storage.markMessagesReadByEmail(p(req.params.threadId), companyId);
+        res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.post("/api/messages/email", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -203,20 +255,31 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
 
       let emailThreadId = generateEmailThreadId();
       if (existingThreadId) {
-        const existingThread = await storage.getMessagesByEmailThreadId(existingThreadId, companyId);
+        const existingThread = await storage.getMessagesByEmailThreadId(
+          existingThreadId,
+          companyId
+        );
         if (existingThread.length > 0) {
           emailThreadId = existingThreadId;
         } else {
-          const [legacyMsg] = await db.select().from(messagesTable)
-            .where(and(
-              eq(messagesTable.id, existingThreadId),
-              eq(messagesTable.companyId, companyId),
-              eq(messagesTable.channel, "email")
-            )).limit(1);
+          const [legacyMsg] = await db
+            .select()
+            .from(messagesTable)
+            .where(
+              and(
+                eq(messagesTable.id, existingThreadId),
+                eq(messagesTable.companyId, companyId),
+                eq(messagesTable.channel, "email")
+              )
+            )
+            .limit(1);
           if (legacyMsg && !legacyMsg.emailThreadId) {
-            await db.update(messagesTable)
+            await db
+              .update(messagesTable)
               .set({ emailThreadId })
-              .where(and(eq(messagesTable.id, existingThreadId), eq(messagesTable.companyId, companyId)));
+              .where(
+                and(eq(messagesTable.id, existingThreadId), eq(messagesTable.companyId, companyId))
+              );
           }
         }
       }
@@ -255,7 +318,9 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         const updated = await storage.updateMessageStatus(msg.id, "failed", result.error);
         res.status(500).json({ error: result.error, message: updated });
       }
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/messages/sms", isAuthenticated, async (req: Request, res: Response) => {
@@ -288,7 +353,13 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         mediaCount: mediaUrls.length,
       });
 
-      const result = await sendSmsForCompany({ to, body, companyId, contactId: contactId || undefined, mediaUrl });
+      const result = await sendSmsForCompany({
+        to,
+        body,
+        companyId,
+        contactId: contactId || undefined,
+        mediaUrl,
+      });
 
       if (result.success) {
         const updated = await storage.updateMessageStatus(msg.id, "sent");
@@ -297,7 +368,9 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         const updated = await storage.updateMessageStatus(msg.id, "failed", result.error);
         res.status(500).json({ error: result.error, message: updated });
       }
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   const ALLOWED_MMS_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
@@ -310,119 +383,149 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
     limits: { fileSize: MMS_MAX_PER_FILE, files: MMS_MAX_ATTACHMENTS },
   });
 
-  app.post("/api/messages/mms", isAuthenticated, (req: Request, res: Response, next: Function) => {
-    mmsUpload.array("media", MMS_MAX_ATTACHMENTS)(req, res, (err: any) => {
-      if (err) {
-        if (err.code === "LIMIT_FILE_SIZE") {
-          return res.status(400).json({ error: `File too large. Maximum per file: ${Math.round(MMS_MAX_PER_FILE / 1024 / 1024)}MB` });
+  app.post(
+    "/api/messages/mms",
+    isAuthenticated,
+    (req: Request, res: Response, next: Function) => {
+      mmsUpload.array("media", MMS_MAX_ATTACHMENTS)(req, res, (err: any) => {
+        if (err) {
+          if (err.code === "LIMIT_FILE_SIZE") {
+            return res.status(400).json({
+              error: `File too large. Maximum per file: ${Math.round(MMS_MAX_PER_FILE / 1024 / 1024)}MB`,
+            });
+          }
+          if (err.code === "LIMIT_FILE_COUNT") {
+            return res
+              .status(400)
+              .json({ error: `Too many files. Maximum: ${MMS_MAX_ATTACHMENTS}` });
+          }
+          if (err.code === "LIMIT_UNEXPECTED_FILE") {
+            return res.status(400).json({ error: "Unexpected file field" });
+          }
+          return res.status(400).json({ error: err.message || "File upload error" });
         }
-        if (err.code === "LIMIT_FILE_COUNT") {
-          return res.status(400).json({ error: `Too many files. Maximum: ${MMS_MAX_ATTACHMENTS}` });
-        }
-        if (err.code === "LIMIT_UNEXPECTED_FILE") {
-          return res.status(400).json({ error: "Unexpected file field" });
-        }
-        return res.status(400).json({ error: err.message || "File upload error" });
-      }
-      next();
-    });
-  }, async (req: Request, res: Response) => {
-    try {
-      const { companyId, userId } = await getCompanyContext(req);
-      const { contactId, to, body, originalSizes } = req.body;
-      if (!to) return res.status(400).json({ error: "to is required" });
-
-      const files = req.files as Express.Multer.File[] | undefined;
-      if (!files || files.length === 0) return res.status(400).json({ error: "At least one media file is required" });
-
-      let totalBytes = 0;
-      for (const file of files) {
-        if (!ALLOWED_MMS_TYPES.includes(file.mimetype)) {
-          return res.status(400).json({ error: `Unsupported file type: ${file.mimetype}. Allowed: JPG, PNG, WebP` });
-        }
-        totalBytes += file.size;
-      }
-      if (totalBytes > MMS_MAX_TOTAL) {
-        return res.status(400).json({ error: `Total payload too large (${Math.round(totalBytes / 1024)}KB). Maximum: ${Math.round(MMS_MAX_TOTAL / 1024 / 1024)}MB` });
-      }
-
-      if (contactId) {
-        const contact = await storage.getContact(contactId, companyId);
-        if (!contact) return res.status(400).json({ error: "Contact not found in your company" });
-      }
-
-      const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
-      const objStorage = new ObjectStorageService();
-      const protocol = req.headers["x-forwarded-proto"] || "https";
-      const host = req.headers.host || "localhost:5000";
-
-      const storedPaths: string[] = [];
-      const publicUrls: string[] = [];
-      const parsedOriginals: number[] = (() => {
-        try { return originalSizes ? JSON.parse(originalSizes) : []; } catch { return []; }
-      })();
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const uploadURL = await objStorage.getObjectEntityUploadURL();
-        const objectPath = objStorage.normalizeObjectEntityPath(uploadURL);
-        const putResponse = await fetch(uploadURL, {
-          method: "PUT",
-          body: file.buffer,
-          headers: { "Content-Type": file.mimetype },
-        });
-        if (!putResponse.ok) {
-          return res.status(500).json({ error: `Failed to upload media file ${i + 1} to storage` });
-        }
-        storedPaths.push(objectPath);
-        publicUrls.push(`${protocol}://${host}${objectPath}`);
-      }
-
-      const fromPhone = await getFromPhoneForCompany(companyId);
-      const messageBody = body || "";
-
-      const msg = await storage.createMessage({
-        companyId,
-        contactId: contactId || null,
-        channel: "sms",
-        direction: "outbound",
-        status: "queued",
-        fromAddress: fromPhone,
-        toAddress: to,
-        body: messageBody,
-        sentBy: userId,
-        mediaUrls: storedPaths,
-        mediaCount: storedPaths.length,
+        next();
       });
+    },
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, userId } = await getCompanyContext(req);
+        const { contactId, to, body, originalSizes } = req.body;
+        if (!to) return res.status(400).json({ error: "to is required" });
 
-      for (let i = 0; i < files.length; i++) {
-        try {
-          const origSize = (parsedOriginals[i] && parsedOriginals[i] > 0) ? parsedOriginals[i] : files[i].size;
-          await storage.createMessageAttachment({
-            messageId: msg.id,
-            companyId,
-            mimeType: files[i].mimetype,
-            originalFilename: files[i].originalname,
-            originalSizeBytes: origSize,
-            compressedSizeBytes: files[i].size,
-            storageUrl: storedPaths[i],
-          });
-        } catch (attachErr) {
-          console.error(`[MMS] Failed to create attachment record ${i}:`, attachErr);
+        const files = req.files as Express.Multer.File[] | undefined;
+        if (!files || files.length === 0)
+          return res.status(400).json({ error: "At least one media file is required" });
+
+        let totalBytes = 0;
+        for (const file of files) {
+          if (!ALLOWED_MMS_TYPES.includes(file.mimetype)) {
+            return res
+              .status(400)
+              .json({ error: `Unsupported file type: ${file.mimetype}. Allowed: JPG, PNG, WebP` });
+          }
+          totalBytes += file.size;
         }
-      }
+        if (totalBytes > MMS_MAX_TOTAL) {
+          return res.status(400).json({
+            error: `Total payload too large (${Math.round(totalBytes / 1024)}KB). Maximum: ${Math.round(MMS_MAX_TOTAL / 1024 / 1024)}MB`,
+          });
+        }
 
-      const result = await sendSmsForCompany({ to, body: messageBody, companyId, contactId: contactId || undefined, mediaUrls: publicUrls });
+        if (contactId) {
+          const contact = await storage.getContact(contactId, companyId);
+          if (!contact) return res.status(400).json({ error: "Contact not found in your company" });
+        }
 
-      if (result.success) {
-        const updated = await storage.updateMessageStatus(msg.id, "sent");
-        res.json(updated);
-      } else {
-        const updated = await storage.updateMessageStatus(msg.id, "failed", result.error);
-        res.status(500).json({ error: result.error, message: updated });
+        const { ObjectStorageService } =
+          await import("../replit_integrations/object_storage/objectStorage");
+        const objStorage = new ObjectStorageService();
+        const protocol = req.headers["x-forwarded-proto"] || "https";
+        const host = req.headers.host || "localhost:5000";
+
+        const storedPaths: string[] = [];
+        const publicUrls: string[] = [];
+        const parsedOriginals: number[] = (() => {
+          try {
+            return originalSizes ? JSON.parse(originalSizes) : [];
+          } catch {
+            return [];
+          }
+        })();
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const uploadURL = await objStorage.getObjectEntityUploadURL();
+          const objectPath = objStorage.normalizeObjectEntityPath(uploadURL);
+          const putResponse = await fetch(uploadURL, {
+            method: "PUT",
+            body: file.buffer,
+            headers: { "Content-Type": file.mimetype },
+          });
+          if (!putResponse.ok) {
+            return res
+              .status(500)
+              .json({ error: `Failed to upload media file ${i + 1} to storage` });
+          }
+          storedPaths.push(objectPath);
+          publicUrls.push(`${protocol}://${host}${objectPath}`);
+        }
+
+        const fromPhone = await getFromPhoneForCompany(companyId);
+        const messageBody = body || "";
+
+        const msg = await storage.createMessage({
+          companyId,
+          contactId: contactId || null,
+          channel: "sms",
+          direction: "outbound",
+          status: "queued",
+          fromAddress: fromPhone,
+          toAddress: to,
+          body: messageBody,
+          sentBy: userId,
+          mediaUrls: storedPaths,
+          mediaCount: storedPaths.length,
+        });
+
+        for (let i = 0; i < files.length; i++) {
+          try {
+            const origSize =
+              parsedOriginals[i] && parsedOriginals[i] > 0 ? parsedOriginals[i] : files[i].size;
+            await storage.createMessageAttachment({
+              messageId: msg.id,
+              companyId,
+              mimeType: files[i].mimetype,
+              originalFilename: files[i].originalname,
+              originalSizeBytes: origSize,
+              compressedSizeBytes: files[i].size,
+              storageUrl: storedPaths[i],
+            });
+          } catch (attachErr) {
+            console.error(`[MMS] Failed to create attachment record ${i}:`, attachErr);
+          }
+        }
+
+        const result = await sendSmsForCompany({
+          to,
+          body: messageBody,
+          companyId,
+          contactId: contactId || undefined,
+          mediaUrls: publicUrls,
+        });
+
+        if (result.success) {
+          const updated = await storage.updateMessageStatus(msg.id, "sent");
+          res.json(updated);
+        } else {
+          const updated = await storage.updateMessageStatus(msg.id, "failed", result.error);
+          res.status(500).json({ error: result.error, message: updated });
+        }
+      } catch (err) {
+        handleError(res, err);
       }
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
   app.get("/api/messages/config", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -439,85 +542,126 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
           isSharedNumber: !!sharedNumber && isShared(smsConfig.phoneNumber),
         },
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ─── Message Exception Queue (tenant-scoped via candidateCompanyIds) ─
   app.get("/api/message-exceptions", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
-      if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
-      const resolved = req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
+      if (role !== "owner" && role !== "admin")
+        return res.status(403).json({ error: "Owner or admin access required" });
+      const resolved =
+        req.query.resolved === "true" ? true : req.query.resolved === "false" ? false : undefined;
       const exceptions = await storage.getMessageExceptions({ resolved, companyId });
       res.json(exceptions);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/message-exceptions/:id/resolve", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, userId, role } = await getCompanyContext(req);
-      if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
+  app.post(
+    "/api/message-exceptions/:id/resolve",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, userId, role } = await getCompanyContext(req);
+        if (role !== "owner" && role !== "admin")
+          return res.status(403).json({ error: "Owner or admin access required" });
 
-      const targetCompanyId = req.body.companyId || companyId;
-      if (targetCompanyId !== companyId) {
-        return res.status(403).json({ error: "Cannot resolve exceptions for another company" });
-      }
-
-      const exception = await storage.resolveMessageException(p(req.params.id), userId, targetCompanyId);
-      if (!exception) return res.status(404).json({ error: "Exception not found, already resolved, or not assigned to your company" });
-
-      if (exception.body && exception.fromAddress) {
-        try {
-          const allContacts = await storage.getContacts(targetCompanyId);
-          const fromDigits = exception.fromAddress.replace(/\D/g, "");
-          const matchedContact = allContacts.find(c => {
-            const cDigits = (c.phone || "").replace(/\D/g, "");
-            return cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
-          });
-
-          await storage.createMessage({
-            companyId: targetCompanyId,
-            contactId: matchedContact?.id || null,
-            channel: "sms",
-            direction: "inbound",
-            status: "received",
-            fromAddress: exception.fromAddress,
-            toAddress: exception.toAddress,
-            body: exception.body,
-            externalId: exception.providerMessageId || undefined,
-          });
-
-          if (matchedContact) {
-            const { isSharedNumber } = await import("../services/sms");
-            if (isSharedNumber(exception.toAddress)) {
-              await storage.upsertMessageRouting({
-                sharedNumber: exception.toAddress,
-                customerPhone: exception.fromAddress,
-                companyId: targetCompanyId,
-                contactId: matchedContact.id,
-                channel: "sms",
-                lastUsedAt: new Date(),
-              });
-            }
-          }
-        } catch (msgErr) {
-          console.error(`[MessageException] Resolved exception ${p(req.params.id)} but message delivery failed:`, msgErr);
+        const targetCompanyId = req.body.companyId || companyId;
+        if (targetCompanyId !== companyId) {
+          return res.status(403).json({ error: "Cannot resolve exceptions for another company" });
         }
+
+        const exception = await storage.resolveMessageException(
+          p(req.params.id),
+          userId,
+          targetCompanyId
+        );
+        if (!exception)
+          return res.status(404).json({
+            error: "Exception not found, already resolved, or not assigned to your company",
+          });
+
+        if (exception.body && exception.fromAddress) {
+          try {
+            const allContacts = await storage.getContacts(targetCompanyId);
+            const fromDigits = exception.fromAddress.replace(/\D/g, "");
+            const matchedContact = allContacts.find((c) => {
+              const cDigits = (c.phone || "").replace(/\D/g, "");
+              return (
+                cDigits.length >= 10 &&
+                fromDigits.length >= 10 &&
+                fromDigits.endsWith(cDigits.slice(-10))
+              );
+            });
+
+            await storage.createMessage({
+              companyId: targetCompanyId,
+              contactId: matchedContact?.id || null,
+              channel: "sms",
+              direction: "inbound",
+              status: "received",
+              fromAddress: exception.fromAddress,
+              toAddress: exception.toAddress,
+              body: exception.body,
+              externalId: exception.providerMessageId || undefined,
+            });
+
+            if (matchedContact) {
+              const { isSharedNumber } = await import("../services/sms");
+              if (isSharedNumber(exception.toAddress)) {
+                await storage.upsertMessageRouting({
+                  sharedNumber: exception.toAddress,
+                  customerPhone: exception.fromAddress,
+                  companyId: targetCompanyId,
+                  contactId: matchedContact.id,
+                  channel: "sms",
+                  lastUsedAt: new Date(),
+                });
+              }
+            }
+          } catch (msgErr) {
+            console.error(
+              `[MessageException] Resolved exception ${p(req.params.id)} but message delivery failed:`,
+              msgErr
+            );
+          }
+        }
+
+        res.json(exception);
+      } catch (err) {
+        handleError(res, err);
       }
+    }
+  );
 
-      res.json(exception);
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/message-exceptions/:id/dismiss", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, userId, role } = await getCompanyContext(req);
-      if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Owner or admin access required" });
-      const exception = await storage.dismissMessageException(p(req.params.id), userId, companyId);
-      if (!exception) return res.status(404).json({ error: "Exception not found, already resolved, or not assigned to your company" });
-      res.json(exception);
-    } catch (err) { handleError(res, err); }
-  });
+  app.post(
+    "/api/message-exceptions/:id/dismiss",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, userId, role } = await getCompanyContext(req);
+        if (role !== "owner" && role !== "admin")
+          return res.status(403).json({ error: "Owner or admin access required" });
+        const exception = await storage.dismissMessageException(
+          p(req.params.id),
+          userId,
+          companyId
+        );
+        if (!exception)
+          return res.status(404).json({
+            error: "Exception not found, already resolved, or not assigned to your company",
+          });
+        res.json(exception);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // Twilio incoming SMS webhook
   app.post("/api/webhooks/twilio/sms", async (req: Request, res: Response) => {
@@ -533,22 +677,30 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
         const params = req.body as Record<string, string>;
         const sortedKeys = Object.keys(params).sort();
-        const paramStr = sortedKeys.map(k => `${k}${params[k]}`).join("");
-        const expected = cryptoMod.createHmac("sha1", twilioAuthToken)
+        const paramStr = sortedKeys.map((k) => `${k}${params[k]}`).join("");
+        const expected = cryptoMod
+          .createHmac("sha1", twilioAuthToken)
           .update(url + paramStr)
           .digest("base64");
         const sigBuf = Buffer.from(signature);
         const expectedBuf = Buffer.from(expected);
-        if (sigBuf.length !== expectedBuf.length || !cryptoMod.timingSafeEqual(sigBuf, expectedBuf)) {
+        if (
+          sigBuf.length !== expectedBuf.length ||
+          !cryptoMod.timingSafeEqual(sigBuf, expectedBuf)
+        ) {
           console.warn("[Twilio SMS Webhook] Signature mismatch");
           return res.type("text/xml").send("<Response></Response>");
         }
       } else {
         if (process.env.NODE_ENV === "production") {
-          console.error("[Twilio SMS Webhook] TWILIO_AUTH_TOKEN not set in production — rejecting request");
+          console.error(
+            "[Twilio SMS Webhook] TWILIO_AUTH_TOKEN not set in production — rejecting request"
+          );
           return res.type("text/xml").send("<Response></Response>");
         }
-        console.warn("[Twilio SMS Webhook] TWILIO_AUTH_TOKEN not set — skipping signature verification (dev only)");
+        console.warn(
+          "[Twilio SMS Webhook] TWILIO_AUTH_TOKEN not set — skipping signature verification (dev only)"
+        );
       }
 
       const { From, Body, MessageSid } = req.body;
@@ -561,7 +713,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         const companyId = allCompanies[0].id;
         const allContacts = await storage.getContacts(companyId);
         const digits = From.replace(/\D/g, "");
-        const matchedContact = allContacts.find(c => {
+        const matchedContact = allContacts.find((c) => {
           const cDigits = (c.phone || "").replace(/\D/g, "");
           return cDigits.length >= 10 && digits.endsWith(cDigits.slice(-10));
         });
@@ -579,7 +731,13 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         });
 
         if (matchedContact) {
-          notify(companyId, "new_message", "New Text Message", `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`, `/communications?contactId=${matchedContact.id}`);
+          notify(
+            companyId,
+            "new_message",
+            "New Text Message",
+            `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`,
+            `/communications?contactId=${matchedContact.id}`
+          );
         }
       }
 
@@ -601,9 +759,10 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
           return res.status(401).json({ error: "Missing webhook signature headers" });
         }
         const cryptoMod = await import("crypto");
-        const rawBodyStr = req.rawBody instanceof Buffer
-          ? req.rawBody.toString("utf8")
-          : String(req.rawBody ?? JSON.stringify(req.body));
+        const rawBodyStr =
+          req.rawBody instanceof Buffer
+            ? req.rawBody.toString("utf8")
+            : String(req.rawBody ?? JSON.stringify(req.body));
         const signingPayload = Buffer.from(`${timestamp}|${rawBodyStr}`);
         const sigBuf = Buffer.from(signature, "base64");
         // Telnyx provides a raw 32-byte Ed25519 public key (base64-encoded).
@@ -627,7 +786,9 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
           console.error("[Telnyx SMS] TELNYX_PUBLIC_KEY not set in production — rejecting request");
           return res.status(401).json({ error: "Webhook verification not configured" });
         }
-        console.warn("[Telnyx SMS] TELNYX_PUBLIC_KEY not set — skipping signature verification (dev only)");
+        console.warn(
+          "[Telnyx SMS] TELNYX_PUBLIC_KEY not set — skipping signature verification (dev only)"
+        );
       }
 
       const eventType = req.body?.data?.event_type;
@@ -644,7 +805,9 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         return res.status(200).json({ ok: true });
       }
 
-      console.log(`[Telnyx SMS] Payload shape: id=${payload.id}, from=${JSON.stringify(payload.from)}, to=${JSON.stringify(payload.to)}, text length=${payload.text?.length ?? 0}`);
+      console.log(
+        `[Telnyx SMS] Payload shape: id=${payload.id}, from=${JSON.stringify(payload.from)}, to=${JSON.stringify(payload.to)}, text length=${payload.text?.length ?? 0}`
+      );
 
       const fromNumber = payload.from?.phone_number;
       const textBody = payload.text;
@@ -659,16 +822,21 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         toNumber = payload.to;
       }
 
-      console.log(`[Telnyx SMS] Parsed: from=${maskPhone(fromNumber)}, to=${maskPhone(toNumber)}, messageId=${messageId}`);
+      console.log(
+        `[Telnyx SMS] Parsed: from=${maskPhone(fromNumber)}, to=${maskPhone(toNumber)}, messageId=${messageId}`
+      );
 
       type TelnyxMedia = { url?: string; content_type?: string; size?: number };
       const rawMedia: TelnyxMedia[] = Array.isArray(payload.media) ? payload.media : [];
       const inboundMedia = rawMedia.filter(
-        (m): m is TelnyxMedia & { url: string } => typeof m.url === "string" && m.url.startsWith("https://")
+        (m): m is TelnyxMedia & { url: string } =>
+          typeof m.url === "string" && m.url.startsWith("https://")
       );
 
       if (!fromNumber || (!textBody && inboundMedia.length === 0)) {
-        console.log(`[Telnyx SMS] Missing required fields: fromNumber=${maskPhone(fromNumber)}, textBody=${textBody ? "present" : "missing"}, media=${inboundMedia.length}`);
+        console.log(
+          `[Telnyx SMS] Missing required fields: fromNumber=${maskPhone(fromNumber)}, textBody=${textBody ? "present" : "missing"}, media=${inboundMedia.length}`
+        );
         return res.status(200).json({ ok: true });
       }
 
@@ -679,29 +847,39 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
       let matchedCompany: (typeof allCompanies)[number] | undefined;
 
       // Step 1: Try dedicated number match
-      matchedCompany = allCompanies.find(c => {
+      matchedCompany = allCompanies.find((c) => {
         const cDigits = (c.telnyxPhoneNumber || "").replace(/\D/g, "");
-        return cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
+        return (
+          cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10))
+        );
       });
       if (!matchedCompany) {
-        matchedCompany = allCompanies.find(c => {
+        matchedCompany = allCompanies.find((c) => {
           const cDigits = (c.dedicatedPhoneNumber || "").replace(/\D/g, "");
-          return cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10));
+          return (
+            cDigits.length >= 10 && toDigits.length >= 10 && toDigits.endsWith(cDigits.slice(-10))
+          );
         });
       }
 
       // Step 2: If no dedicated match, check if this is a shared number
       if (!matchedCompany && isSharedNumber(toNumber)) {
-        console.log(`[Telnyx SMS] Shared number detected, looking up routing table for from=${fromNumber}`);
+        console.log(
+          `[Telnyx SMS] Shared number detected, looking up routing table for from=${fromNumber}`
+        );
         const routingEntries = await storage.findMessageRouting(toNumber, fromNumber);
 
         if (routingEntries.length === 1) {
-          matchedCompany = allCompanies.find(c => c.id === routingEntries[0].companyId);
+          matchedCompany = allCompanies.find((c) => c.id === routingEntries[0].companyId);
           if (matchedCompany) {
-            console.log(`[Telnyx SMS] Shared number routed to company: ${matchedCompany.name} (via routing table)`);
+            console.log(
+              `[Telnyx SMS] Shared number routed to company: ${matchedCompany.name} (via routing table)`
+            );
           }
         } else if (routingEntries.length > 1) {
-          console.warn(`[Telnyx SMS] Ambiguous routing: ${routingEntries.length} companies for from=${maskPhone(fromNumber)} on shared number. Sending to exception queue.`);
+          console.warn(
+            `[Telnyx SMS] Ambiguous routing: ${routingEntries.length} companies for from=${maskPhone(fromNumber)} on shared number. Sending to exception queue.`
+          );
           await storage.createMessageException({
             providerMessageId: messageId,
             fromAddress: fromNumber,
@@ -709,7 +887,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
             body: textBody,
             rawPayload: payload as Record<string, unknown>,
             reason: `Ambiguous routing: ${routingEntries.length} tenants matched for sender ${fromNumber}`,
-            candidateCompanyIds: routingEntries.map(r => r.companyId),
+            candidateCompanyIds: routingEntries.map((r) => r.companyId),
           });
           return res.status(200).json({ ok: true });
         } else {
@@ -718,18 +896,26 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
           const matchingCompanies: typeof allCompanies = [];
           for (const company of allCompanies) {
             const contacts = await storage.getContacts(company.id);
-            const hasMatch = contacts.some(c => {
+            const hasMatch = contacts.some((c) => {
               const cDigits = (c.phone || "").replace(/\D/g, "");
-              return cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
+              return (
+                cDigits.length >= 10 &&
+                fromDigits.length >= 10 &&
+                fromDigits.endsWith(cDigits.slice(-10))
+              );
             });
             if (hasMatch) matchingCompanies.push(company);
           }
 
           if (matchingCompanies.length === 1) {
             matchedCompany = matchingCompanies[0];
-            console.log(`[Telnyx SMS] Shared number routed to company: ${matchedCompany.name} (via contact phone match)`);
+            console.log(
+              `[Telnyx SMS] Shared number routed to company: ${matchedCompany.name} (via contact phone match)`
+            );
           } else if (matchingCompanies.length > 1) {
-            console.warn(`[Telnyx SMS] Ambiguous contact match: ${matchingCompanies.length} companies have a contact with phone ${fromNumber}. Sending to exception queue.`);
+            console.warn(
+              `[Telnyx SMS] Ambiguous contact match: ${matchingCompanies.length} companies have a contact with phone ${fromNumber}. Sending to exception queue.`
+            );
             await storage.createMessageException({
               providerMessageId: messageId,
               fromAddress: fromNumber,
@@ -737,11 +923,13 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
               body: textBody,
               rawPayload: payload as Record<string, unknown>,
               reason: `Ambiguous contact match: ${matchingCompanies.length} tenants have a contact with phone ${fromNumber}`,
-              candidateCompanyIds: matchingCompanies.map(c => c.id),
+              candidateCompanyIds: matchingCompanies.map((c) => c.id),
             });
             return res.status(200).json({ ok: true });
           } else {
-            console.warn(`[Telnyx SMS] No routing or contact match for from=${fromNumber} on shared number. Sending to exception queue.`);
+            console.warn(
+              `[Telnyx SMS] No routing or contact match for from=${fromNumber} on shared number. Sending to exception queue.`
+            );
             await storage.createMessageException({
               providerMessageId: messageId,
               fromAddress: fromNumber,
@@ -757,18 +945,27 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
       }
 
       if (!matchedCompany) {
-        const checkedNumbers = allCompanies.map(c => `${c.name}: telnyx=${c.telnyxPhoneNumber || "none"}, dedicated=${c.dedicatedPhoneNumber || "none"}`).join("; ");
-        console.warn(`[Telnyx SMS] WARNING: No company matched for to number: ${maskPhone(toNumber)}. Checked: ${checkedNumbers}`);
+        const checkedNumbers = allCompanies
+          .map(
+            (c) =>
+              `${c.name}: telnyx=${c.telnyxPhoneNumber || "none"}, dedicated=${c.dedicatedPhoneNumber || "none"}`
+          )
+          .join("; ");
+        console.warn(
+          `[Telnyx SMS] WARNING: No company matched for to number: ${maskPhone(toNumber)}. Checked: ${checkedNumbers}`
+        );
         return res.status(200).json({ ok: true });
       }
 
-      console.log(`[Telnyx SMS] Matched company: ${matchedCompany.name} (id: ${matchedCompany.id})`);
+      console.log(
+        `[Telnyx SMS] Matched company: ${matchedCompany.name} (id: ${matchedCompany.id})`
+      );
 
       const companyId = matchedCompany.id;
 
       if (messageId) {
         const existing = await storage.getMessages(companyId, { phone: fromNumber });
-        if (existing.some(m => m.externalId === messageId)) {
+        if (existing.some((m) => m.externalId === messageId)) {
           console.log(`[Telnyx SMS] Duplicate message ${messageId}, skipping`);
           return res.status(200).json({ ok: true });
         }
@@ -776,12 +973,16 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
 
       const allContacts = await storage.getContacts(companyId);
       const fromDigits = fromNumber.replace(/\D/g, "");
-      const matchedContact = allContacts.find(c => {
+      const matchedContact = allContacts.find((c) => {
         const cDigits = (c.phone || "").replace(/\D/g, "");
-        return cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10));
+        return (
+          cDigits.length >= 10 && fromDigits.length >= 10 && fromDigits.endsWith(cDigits.slice(-10))
+        );
       });
 
-      console.log(`[Telnyx SMS] Contact match: ${matchedContact ? `${matchedContact.firstName} ${matchedContact.lastName} (id: ${matchedContact.id})` : "no match found"} for from number: ${fromNumber}`);
+      console.log(
+        `[Telnyx SMS] Contact match: ${matchedContact ? `${matchedContact.firstName} ${matchedContact.lastName} (id: ${matchedContact.id})` : "no match found"} for from number: ${fromNumber}`
+      );
 
       const savedMsg = await storage.createMessage({
         companyId,
@@ -798,12 +999,20 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
       });
 
       if (inboundMedia.length > 0) {
-        const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+        const { ObjectStorageService } =
+          await import("../replit_integrations/object_storage/objectStorage");
         const ingestStorage = new ObjectStorageService();
         const storedPaths: string[] = [];
         const INBOUND_ALLOWED_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-        const INBOUND_MAX_BYTES = parseInt(process.env.MMS_INBOUND_MAX_FILE_BYTES || String(10 * 1024 * 1024), 10);
-        const TELNYX_MEDIA_HOSTS = ["media.telnyx.com", "storage.telnyx.com", "telnyx-mms.s3.amazonaws.com"];
+        const INBOUND_MAX_BYTES = parseInt(
+          process.env.MMS_INBOUND_MAX_FILE_BYTES || String(10 * 1024 * 1024),
+          10
+        );
+        const TELNYX_MEDIA_HOSTS = [
+          "media.telnyx.com",
+          "storage.telnyx.com",
+          "telnyx-mms.s3.amazonaws.com",
+        ];
 
         for (const media of inboundMedia) {
           try {
@@ -814,42 +1023,63 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
               console.warn(`[Telnyx MMS] Skipping invalid media URL: ${media.url}`);
               continue;
             }
-            if (!TELNYX_MEDIA_HOSTS.some(allowed => mediaHost === allowed || mediaHost.endsWith(`.${allowed}`))) {
-              console.warn(`[Telnyx MMS] Skipping media from disallowed host ${mediaHost}: ${media.url}`);
+            if (
+              !TELNYX_MEDIA_HOSTS.some(
+                (allowed) => mediaHost === allowed || mediaHost.endsWith(`.${allowed}`)
+              )
+            ) {
+              console.warn(
+                `[Telnyx MMS] Skipping media from disallowed host ${mediaHost}: ${media.url}`
+              );
               continue;
             }
 
             if (media.size && media.size > INBOUND_MAX_BYTES) {
-              console.warn(`[Telnyx MMS] Skipping oversized media (${media.size} bytes > ${INBOUND_MAX_BYTES}): ${media.url}`);
+              console.warn(
+                `[Telnyx MMS] Skipping oversized media (${media.size} bytes > ${INBOUND_MAX_BYTES}): ${media.url}`
+              );
               continue;
             }
 
             if (media.content_type && !INBOUND_ALLOWED_MIME.includes(media.content_type)) {
-              console.warn(`[Telnyx MMS] Skipping disallowed MIME type ${media.content_type}: ${media.url}`);
+              console.warn(
+                `[Telnyx MMS] Skipping disallowed MIME type ${media.content_type}: ${media.url}`
+              );
               continue;
             }
 
             const mediaResp = await fetch(media.url);
             if (!mediaResp.ok) {
-              console.warn(`[Telnyx MMS] Failed to download media from ${media.url}: ${mediaResp.status}`);
+              console.warn(
+                `[Telnyx MMS] Failed to download media from ${media.url}: ${mediaResp.status}`
+              );
               continue;
             }
 
             const contentLength = parseInt(mediaResp.headers.get("content-length") || "0", 10);
             if (contentLength > INBOUND_MAX_BYTES) {
-              console.warn(`[Telnyx MMS] Skipping oversized media (content-length ${contentLength} > ${INBOUND_MAX_BYTES}): ${media.url}`);
+              console.warn(
+                `[Telnyx MMS] Skipping oversized media (content-length ${contentLength} > ${INBOUND_MAX_BYTES}): ${media.url}`
+              );
               continue;
             }
 
             const mediaBuffer = Buffer.from(await mediaResp.arrayBuffer());
             if (mediaBuffer.length > INBOUND_MAX_BYTES) {
-              console.warn(`[Telnyx MMS] Skipping oversized downloaded media (${mediaBuffer.length} bytes): ${media.url}`);
+              console.warn(
+                `[Telnyx MMS] Skipping oversized downloaded media (${mediaBuffer.length} bytes): ${media.url}`
+              );
               continue;
             }
 
-            const detectedMime = media.content_type || mediaResp.headers.get("content-type") || "application/octet-stream";
+            const detectedMime =
+              media.content_type ||
+              mediaResp.headers.get("content-type") ||
+              "application/octet-stream";
             if (!INBOUND_ALLOWED_MIME.includes(detectedMime)) {
-              console.warn(`[Telnyx MMS] Skipping disallowed detected MIME ${detectedMime}: ${media.url}`);
+              console.warn(
+                `[Telnyx MMS] Skipping disallowed detected MIME ${detectedMime}: ${media.url}`
+              );
               continue;
             }
             const mediaSize = mediaBuffer.length;
@@ -863,7 +1093,9 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
               headers: { "Content-Type": detectedMime },
             });
             if (!putResp.ok) {
-              console.warn(`[Telnyx MMS] Failed to upload media to object storage: ${putResp.status}`);
+              console.warn(
+                `[Telnyx MMS] Failed to upload media to object storage: ${putResp.status}`
+              );
               continue;
             }
 
@@ -885,13 +1117,16 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
 
         if (storedPaths.length > 0) {
           try {
-            await db.update(messagesTable)
+            await db
+              .update(messagesTable)
               .set({ mediaUrls: storedPaths, mediaCount: storedPaths.length })
               .where(eq(messagesTable.id, savedMsg.id));
           } catch (updateErr) {
             console.error("[Telnyx MMS] Failed to update message mediaUrls:", updateErr);
           }
-          console.log(`[Telnyx MMS] Ingested ${storedPaths.length}/${inboundMedia.length} media to object storage for message ${savedMsg.id}`);
+          console.log(
+            `[Telnyx MMS] Ingested ${storedPaths.length}/${inboundMedia.length} media to object storage for message ${savedMsg.id}`
+          );
         }
       }
 
@@ -899,18 +1134,26 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
 
       // Update routing table for shared number (so future inbound messages route correctly)
       if (isSharedNumber(toNumber) && matchedContact) {
-        storage.upsertMessageRouting({
-          sharedNumber: toNumber,
-          customerPhone: fromNumber,
-          companyId,
-          contactId: matchedContact.id,
-          channel: "sms",
-          lastUsedAt: new Date(),
-        }).catch((err) => console.error("[SMS Routing] Failed to upsert routing on inbound:", err));
+        storage
+          .upsertMessageRouting({
+            sharedNumber: toNumber,
+            customerPhone: fromNumber,
+            companyId,
+            contactId: matchedContact.id,
+            channel: "sms",
+            lastUsedAt: new Date(),
+          })
+          .catch((err) => console.error("[SMS Routing] Failed to upsert routing on inbound:", err));
       }
 
       if (matchedContact) {
-        notify(companyId, "new_message", "New Text Message", `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`, `/communications?contactId=${matchedContact.id}`);
+        notify(
+          companyId,
+          "new_message",
+          "New Text Message",
+          `${matchedContact.firstName} ${matchedContact.lastName} sent a text message.`,
+          `/communications?contactId=${matchedContact.id}`
+        );
       }
 
       const { logSmsMessage } = await import("../services/sms");
@@ -928,207 +1171,251 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
     limits: { fileSize: MMS_MAX_PER_FILE, files: MMS_MAX_ATTACHMENTS },
   });
 
-  app.post("/api/webhooks/sendgrid/inbound", (req: Request, res: Response, next: Function) => {
-    inboundEmailUpload.any()(req, res, (err: any) => {
-      if (err instanceof multer.MulterError) {
-        if (err.code === "LIMIT_FILE_SIZE") {
-          console.warn(`[Inbound Email] Attachment too large, processing body without attachments`);
-          req.files = [];
-          return next();
+  app.post(
+    "/api/webhooks/sendgrid/inbound",
+    (req: Request, res: Response, next: Function) => {
+      inboundEmailUpload.any()(req, res, (err: any) => {
+        if (err instanceof multer.MulterError) {
+          if (err.code === "LIMIT_FILE_SIZE") {
+            console.warn(
+              `[Inbound Email] Attachment too large, processing body without attachments`
+            );
+            req.files = [];
+            return next();
+          }
+          if (err.code === "LIMIT_FILE_COUNT") {
+            console.warn(
+              `[Inbound Email] Too many attachments, processing with already parsed files`
+            );
+            return next();
+          }
+          console.warn(`[Inbound Email] Multer error: ${err.code}`);
+          return res.status(400).json({ error: `Upload error: ${err.message}` });
         }
-        if (err.code === "LIMIT_FILE_COUNT") {
-          console.warn(`[Inbound Email] Too many attachments, processing with already parsed files`);
-          return next();
+        if (err) {
+          console.error(`[Inbound Email] Upload error:`, err);
+          return res.status(400).json({ error: "Failed to parse inbound email" });
         }
-        console.warn(`[Inbound Email] Multer error: ${err.code}`);
-        return res.status(400).json({ error: `Upload error: ${err.message}` });
-      }
-      if (err) {
-        console.error(`[Inbound Email] Upload error:`, err);
-        return res.status(400).json({ error: "Failed to parse inbound email" });
-      }
-      next();
-    });
-  }, async (req: Request, res: Response) => {
-    try {
-      const webhookToken = process.env.SENDGRID_INBOUND_WEBHOOK_TOKEN;
-      if (!webhookToken && process.env.NODE_ENV === "production") {
-        console.error("[Inbound Email] SENDGRID_INBOUND_WEBHOOK_TOKEN not set in production — rejecting request");
-        return res.status(503).json({ error: "Inbound email not configured" });
-      }
-      if (webhookToken) {
-        const providedToken = req.query.token || req.headers["x-webhook-token"];
-        if (providedToken !== webhookToken) {
-          console.warn("[Inbound Email] Invalid or missing webhook token");
-          return res.status(403).json({ error: "Forbidden" });
-        }
-      }
-
-      const from = req.body.from || "";
-      const subject = req.body.subject || "";
-      const textBody = req.body.text || "";
-      const htmlBody = req.body.html || "";
-
-      const fromMatch = from.match(/<([^>]+)>/) || [null, from.trim()];
-      const senderEmail = fromMatch[1]?.toLowerCase() || "";
-
-      const allTo = (req.body.to || "").toLowerCase();
-      let envelopeTo = "";
+        next();
+      });
+    },
+    async (req: Request, res: Response) => {
       try {
-        const envelope = JSON.parse(req.body.envelope || "{}");
-        envelopeTo = (Array.isArray(envelope.to) ? envelope.to.join(" ") : envelope.to || "").toLowerCase();
-      } catch { /* ignore */ }
-
-      const combinedTo = `${allTo} ${envelopeTo}`;
-      let threadId: string | null = null;
-      const replyPattern = /reply\+([a-f0-9]+)@/gi;
-      let match;
-      while ((match = replyPattern.exec(combinedTo)) !== null) {
-        threadId = match[1];
-        break;
-      }
-
-      if (!threadId) {
-        console.log(`[Inbound Email] No thread ID found in to addresses: ${combinedTo.substring(0, 200)}`);
-        return res.status(200).json({ ok: true });
-      }
-
-      if (!senderEmail) {
-        console.log("[Inbound Email] No sender email found");
-        return res.status(200).json({ ok: true });
-      }
-
-      console.log(`[Inbound Email] Processing reply from ${maskEmail(senderEmail)}, threadId=${threadId}`);
-
-      const threadMessages = await storage.getMessagesByEmailThreadId(threadId);
-      if (threadMessages.length === 0) {
-        console.warn(`[Inbound Email] No existing thread found for threadId=${threadId}`);
-        return res.status(200).json({ ok: true });
-      }
-
-      const originalMsg = threadMessages[0];
-      const companyId = originalMsg.companyId;
-      const contactId = originalMsg.contactId;
-
-      if (contactId) {
-        const contact = await storage.getContact(contactId, companyId);
-        if (contact?.email && contact.email.toLowerCase() !== senderEmail) {
-          console.warn(`[Inbound Email] Sender mismatch: expected=${contact.email}, got=${senderEmail}, thread=${threadId}`);
+        const webhookToken = process.env.SENDGRID_INBOUND_WEBHOOK_TOKEN;
+        if (!webhookToken && process.env.NODE_ENV === "production") {
+          console.error(
+            "[Inbound Email] SENDGRID_INBOUND_WEBHOOK_TOKEN not set in production — rejecting request"
+          );
+          return res.status(503).json({ error: "Inbound email not configured" });
         }
-      }
+        if (webhookToken) {
+          const providedToken = req.query.token || req.headers["x-webhook-token"];
+          if (providedToken !== webhookToken) {
+            console.warn("[Inbound Email] Invalid or missing webhook token");
+            return res.status(403).json({ error: "Forbidden" });
+          }
+        }
 
-      const inboundBody = textBody || htmlBody || "";
-      const dedupeWindowMs = 60_000;
-      const now = Date.now();
-      const isDuplicate = threadMessages.some(m => {
-        if (m.direction !== "inbound" || m.fromAddress !== senderEmail) return false;
-        const msgAge = now - new Date(m.createdAt).getTime();
-        return msgAge < dedupeWindowMs && m.body === inboundBody;
-      });
-      if (isDuplicate) {
-        console.log(`[Inbound Email] Duplicate inbound email skipped (within ${dedupeWindowMs}ms) for thread ${threadId}`);
-        return res.status(200).json({ ok: true });
-      }
+        const from = req.body.from || "";
+        const subject = req.body.subject || "";
+        const textBody = req.body.text || "";
+        const htmlBody = req.body.html || "";
 
-      const savedMsg = await storage.createMessage({
-        companyId,
-        contactId: contactId || null,
-        channel: "email",
-        direction: "inbound",
-        status: "received",
-        fromAddress: senderEmail,
-        toAddress: originalMsg.fromAddress,
-        subject: subject || originalMsg.subject || "",
-        body: textBody || htmlBody || "",
-        htmlBody: htmlBody || null,
-        emailThreadId: threadId,
-        isRead: false,
-      });
+        const fromMatch = from.match(/<([^>]+)>/) || [null, from.trim()];
+        const senderEmail = fromMatch[1]?.toLowerCase() || "";
 
-      const files = req.files as Express.Multer.File[] | undefined;
-      if (files && files.length > 0) {
-        const ALLOWED_EMAIL_ATTACH_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-        const EMAIL_MAX_ATTACH_BYTES = parseInt(process.env.MMS_MAX_FILE_BYTES || String(5 * 1024 * 1024), 10);
-        const EMAIL_MAX_ATTACHMENTS = parseInt(process.env.MMS_MAX_ATTACHMENTS || "5", 10);
-
+        const allTo = (req.body.to || "").toLowerCase();
+        let envelopeTo = "";
         try {
-          const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
-          const objStorage = new ObjectStorageService();
-          const storedUrls: string[] = [];
+          const envelope = JSON.parse(req.body.envelope || "{}");
+          envelopeTo = (
+            Array.isArray(envelope.to) ? envelope.to.join(" ") : envelope.to || ""
+          ).toLowerCase();
+        } catch {
+          /* ignore */
+        }
 
-          let attachCount = 0;
-          let totalBytes = 0;
-          const EMAIL_MAX_TOTAL_BYTES = parseInt(process.env.MMS_MAX_TOTAL_BYTES || String(10 * 1024 * 1024), 10);
-          for (const file of files) {
-            if (attachCount >= EMAIL_MAX_ATTACHMENTS) {
-              console.log(`[Inbound Email] Attachment limit reached (${EMAIL_MAX_ATTACHMENTS}), skipping remaining`);
-              break;
-            }
-            if (totalBytes + file.size > EMAIL_MAX_TOTAL_BYTES) {
-              console.log(`[Inbound Email] Total payload limit reached (${EMAIL_MAX_TOTAL_BYTES}), skipping remaining`);
-              break;
-            }
-            if (!ALLOWED_EMAIL_ATTACH_MIME.includes(file.mimetype)) {
-              console.log(`[Inbound Email] Skipping attachment with unsupported MIME: ${file.mimetype}`);
-              continue;
-            }
-            if (file.size > EMAIL_MAX_ATTACH_BYTES) {
-              console.log(`[Inbound Email] Skipping oversized attachment: ${file.size} bytes`);
-              continue;
+        const combinedTo = `${allTo} ${envelopeTo}`;
+        let threadId: string | null = null;
+        const replyPattern = /reply\+([a-f0-9]+)@/gi;
+        let match;
+        while ((match = replyPattern.exec(combinedTo)) !== null) {
+          threadId = match[1];
+          break;
+        }
+
+        if (!threadId) {
+          console.log(
+            `[Inbound Email] No thread ID found in to addresses: ${combinedTo.substring(0, 200)}`
+          );
+          return res.status(200).json({ ok: true });
+        }
+
+        if (!senderEmail) {
+          console.log("[Inbound Email] No sender email found");
+          return res.status(200).json({ ok: true });
+        }
+
+        console.log(
+          `[Inbound Email] Processing reply from ${maskEmail(senderEmail)}, threadId=${threadId}`
+        );
+
+        const threadMessages = await storage.getMessagesByEmailThreadId(threadId);
+        if (threadMessages.length === 0) {
+          console.warn(`[Inbound Email] No existing thread found for threadId=${threadId}`);
+          return res.status(200).json({ ok: true });
+        }
+
+        const originalMsg = threadMessages[0];
+        const companyId = originalMsg.companyId;
+        const contactId = originalMsg.contactId;
+
+        if (contactId) {
+          const contact = await storage.getContact(contactId, companyId);
+          if (contact?.email && contact.email.toLowerCase() !== senderEmail) {
+            console.warn(
+              `[Inbound Email] Sender mismatch: expected=${contact.email}, got=${senderEmail}, thread=${threadId}`
+            );
+          }
+        }
+
+        const inboundBody = textBody || htmlBody || "";
+        const dedupeWindowMs = 60_000;
+        const now = Date.now();
+        const isDuplicate = threadMessages.some((m) => {
+          if (m.direction !== "inbound" || m.fromAddress !== senderEmail) return false;
+          const msgAge = now - new Date(m.createdAt).getTime();
+          return msgAge < dedupeWindowMs && m.body === inboundBody;
+        });
+        if (isDuplicate) {
+          console.log(
+            `[Inbound Email] Duplicate inbound email skipped (within ${dedupeWindowMs}ms) for thread ${threadId}`
+          );
+          return res.status(200).json({ ok: true });
+        }
+
+        const savedMsg = await storage.createMessage({
+          companyId,
+          contactId: contactId || null,
+          channel: "email",
+          direction: "inbound",
+          status: "received",
+          fromAddress: senderEmail,
+          toAddress: originalMsg.fromAddress,
+          subject: subject || originalMsg.subject || "",
+          body: textBody || htmlBody || "",
+          htmlBody: htmlBody || null,
+          emailThreadId: threadId,
+          isRead: false,
+        });
+
+        const files = req.files as Express.Multer.File[] | undefined;
+        if (files && files.length > 0) {
+          const ALLOWED_EMAIL_ATTACH_MIME = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+          const EMAIL_MAX_ATTACH_BYTES = parseInt(
+            process.env.MMS_MAX_FILE_BYTES || String(5 * 1024 * 1024),
+            10
+          );
+          const EMAIL_MAX_ATTACHMENTS = parseInt(process.env.MMS_MAX_ATTACHMENTS || "5", 10);
+
+          try {
+            const { ObjectStorageService } =
+              await import("../replit_integrations/object_storage/objectStorage");
+            const objStorage = new ObjectStorageService();
+            const storedUrls: string[] = [];
+
+            let attachCount = 0;
+            let totalBytes = 0;
+            const EMAIL_MAX_TOTAL_BYTES = parseInt(
+              process.env.MMS_MAX_TOTAL_BYTES || String(10 * 1024 * 1024),
+              10
+            );
+            for (const file of files) {
+              if (attachCount >= EMAIL_MAX_ATTACHMENTS) {
+                console.log(
+                  `[Inbound Email] Attachment limit reached (${EMAIL_MAX_ATTACHMENTS}), skipping remaining`
+                );
+                break;
+              }
+              if (totalBytes + file.size > EMAIL_MAX_TOTAL_BYTES) {
+                console.log(
+                  `[Inbound Email] Total payload limit reached (${EMAIL_MAX_TOTAL_BYTES}), skipping remaining`
+                );
+                break;
+              }
+              if (!ALLOWED_EMAIL_ATTACH_MIME.includes(file.mimetype)) {
+                console.log(
+                  `[Inbound Email] Skipping attachment with unsupported MIME: ${file.mimetype}`
+                );
+                continue;
+              }
+              if (file.size > EMAIL_MAX_ATTACH_BYTES) {
+                console.log(`[Inbound Email] Skipping oversized attachment: ${file.size} bytes`);
+                continue;
+              }
+
+              const uploadURL = await objStorage.getObjectEntityUploadURL();
+              const storagePath = objStorage.normalizeObjectEntityPath(uploadURL);
+
+              const putResp = await fetch(uploadURL, {
+                method: "PUT",
+                body: file.buffer,
+                headers: { "Content-Type": file.mimetype },
+              });
+              if (!putResp.ok) {
+                console.warn(`[Inbound Email] Failed to upload attachment: ${putResp.status}`);
+                continue;
+              }
+
+              storedUrls.push(storagePath);
+              attachCount++;
+              totalBytes += file.size;
+              await storage.createMessageAttachment({
+                messageId: savedMsg.id,
+                companyId,
+                mimeType: file.mimetype,
+                originalFilename: file.originalname || "attachment",
+                originalSizeBytes: file.size,
+                compressedSizeBytes: file.size,
+                storageUrl: storagePath,
+              });
             }
 
-            const uploadURL = await objStorage.getObjectEntityUploadURL();
-            const storagePath = objStorage.normalizeObjectEntityPath(uploadURL);
-
-            const putResp = await fetch(uploadURL, {
-              method: "PUT",
-              body: file.buffer,
-              headers: { "Content-Type": file.mimetype },
-            });
-            if (!putResp.ok) {
-              console.warn(`[Inbound Email] Failed to upload attachment: ${putResp.status}`);
-              continue;
+            if (storedUrls.length > 0) {
+              await db
+                .update(messagesTable)
+                .set({ mediaUrls: storedUrls, mediaCount: storedUrls.length })
+                .where(eq(messagesTable.id, savedMsg.id));
             }
+          } catch (attachErr) {
+            console.error("[Inbound Email] Attachment processing error:", attachErr);
+          }
+        }
 
-            storedUrls.push(storagePath);
-            attachCount++;
-            totalBytes += file.size;
-            await storage.createMessageAttachment({
-              messageId: savedMsg.id,
+        console.log(
+          `[Inbound Email] Saved inbound email in thread ${threadId} for company ${companyId}`
+        );
+
+        if (contactId) {
+          const contact = await storage.getContact(contactId, companyId);
+          if (contact) {
+            notify(
               companyId,
-              mimeType: file.mimetype,
-              originalFilename: file.originalname || "attachment",
-              originalSizeBytes: file.size,
-              compressedSizeBytes: file.size,
-              storageUrl: storagePath,
-            });
+              "new_message",
+              "New Email Reply",
+              `${contact.firstName} ${contact.lastName} replied to an email.`,
+              `/communications`
+            );
           }
-
-          if (storedUrls.length > 0) {
-            await db.update(messagesTable)
-              .set({ mediaUrls: storedUrls, mediaCount: storedUrls.length })
-              .where(eq(messagesTable.id, savedMsg.id));
-          }
-        } catch (attachErr) {
-          console.error("[Inbound Email] Attachment processing error:", attachErr);
         }
+
+        res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("[Inbound Email] Webhook error:", err);
+        res.status(200).json({ ok: true });
       }
-
-      console.log(`[Inbound Email] Saved inbound email in thread ${threadId} for company ${companyId}`);
-
-      if (contactId) {
-        const contact = await storage.getContact(contactId, companyId);
-        if (contact) {
-          notify(companyId, "new_message", "New Email Reply", `${contact.firstName} ${contact.lastName} replied to an email.`, `/communications`);
-        }
-      }
-
-      res.status(200).json({ ok: true });
-    } catch (err) {
-      console.error("[Inbound Email] Webhook error:", err);
-      res.status(200).json({ ok: true });
     }
-  });
+  );
 
   app.post("/api/webhooks/quickbooks", async (req: Request, res: Response) => {
     try {
@@ -1142,9 +1429,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         }
         const crypto = await import("crypto");
         const rawBody = (req as any).rawBody;
-        const hash = crypto.createHmac("sha256", verifierToken)
-          .update(rawBody)
-          .digest("base64");
+        const hash = crypto.createHmac("sha256", verifierToken).update(rawBody).digest("base64");
         const hashBuf = Buffer.from(hash);
         const sigBuf = Buffer.from(signature);
         if (hashBuf.length !== sigBuf.length || !crypto.timingSafeEqual(hashBuf, sigBuf)) {
@@ -1153,15 +1438,20 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         }
       } else {
         if (process.env.NODE_ENV === "production") {
-          console.error("[QBO Webhook] QBO_WEBHOOK_VERIFIER_TOKEN not set in production — rejecting request");
+          console.error(
+            "[QBO Webhook] QBO_WEBHOOK_VERIFIER_TOKEN not set in production — rejecting request"
+          );
           return res.status(401).json({ error: "Webhook verification not configured" });
         }
-        console.warn("[QBO Webhook] QBO_WEBHOOK_VERIFIER_TOKEN not set — skipping signature verification (dev only)");
+        console.warn(
+          "[QBO Webhook] QBO_WEBHOOK_VERIFIER_TOKEN not set — skipping signature verification (dev only)"
+        );
       }
 
       const payload = req.body;
       if (payload?.eventNotifications) {
-        const { lookupCompanyByRealmId, processWebhookEntity } = await import("../services/quickbooks");
+        const { lookupCompanyByRealmId, processWebhookEntity } =
+          await import("../services/quickbooks");
         for (const notification of payload.eventNotifications) {
           const realmId = notification.realmId;
           const companyId = await lookupCompanyByRealmId(realmId);
@@ -1171,9 +1461,12 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
           }
           const entities = notification.dataChangeEvent?.entities || [];
           for (const entity of entities) {
-            console.log(`[QBO Webhook] realmId=${realmId} company=${companyId} operation=${entity.operation} entity=${entity.name} id=${entity.id}`);
-            processWebhookEntity(companyId, entity.name, String(entity.id), entity.operation)
-              .catch((err: any) => console.error(`[QBO Webhook] Async processing failed:`, err.message));
+            console.log(
+              `[QBO Webhook] realmId=${realmId} company=${companyId} operation=${entity.operation} entity=${entity.name} id=${entity.id}`
+            );
+            processWebhookEntity(companyId, entity.name, String(entity.id), entity.operation).catch(
+              (err: any) => console.error(`[QBO Webhook] Async processing failed:`, err.message)
+            );
           }
         }
       }
@@ -1196,7 +1489,8 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         }
         const crypto = await import("crypto");
         const rawBody = (req as any).rawBody || JSON.stringify(req.body);
-        const expectedSignature = crypto.createHmac("sha256", retellApiKey)
+        const expectedSignature = crypto
+          .createHmac("sha256", retellApiKey)
           .update(rawBody)
           .digest("hex");
         const sigBuf = Buffer.from(signature);
@@ -1228,12 +1522,15 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
       }
 
       const agentPhone = (callData.to_number || callData.agent_id || "").replace(/\D/g, "");
-      const durationMs = callData.end_timestamp && callData.start_timestamp
-        ? callData.end_timestamp - callData.start_timestamp
-        : 0;
+      const durationMs =
+        callData.end_timestamp && callData.start_timestamp
+          ? callData.end_timestamp - callData.start_timestamp
+          : 0;
       const durationSeconds = Math.round(durationMs / 1000);
       const durationMinutes = durationSeconds > 0 ? Math.ceil(durationSeconds / 60) : 0;
-      const outcome = callData.call_analysis?.call_successful ? "successful" : (callData.disconnection_reason || "unknown");
+      const outcome = callData.call_analysis?.call_successful
+        ? "successful"
+        : callData.disconnection_reason || "unknown";
       const summary = callData.call_analysis?.call_summary || null;
 
       const existing = await storage.getVoiceCallByRetellId(retellCallId);
@@ -1244,7 +1541,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
             outcome,
             summary,
             metadata: {
-              ...(existing.metadata as Record<string, any> || {}),
+              ...((existing.metadata as Record<string, any>) || {}),
               callAnalysis: callData.call_analysis,
             },
           });
@@ -1256,13 +1553,17 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
       }
 
       const allCompanies = await storage.listCompanies();
-      const matchedCompany = allCompanies.find(c => {
+      const matchedCompany = allCompanies.find((c) => {
         const cDigits = (c.dedicatedPhoneNumber || "").replace(/\D/g, "");
-        return cDigits.length >= 10 && agentPhone.length >= 10 && agentPhone.endsWith(cDigits.slice(-10));
+        return (
+          cDigits.length >= 10 && agentPhone.length >= 10 && agentPhone.endsWith(cDigits.slice(-10))
+        );
       });
 
       if (!matchedCompany) {
-        console.warn(`[Retell Webhook] No company matched for agent phone ${maskPhone(agentPhone)}, call ${retellCallId}`);
+        console.warn(
+          `[Retell Webhook] No company matched for agent phone ${maskPhone(agentPhone)}, call ${retellCallId}`
+        );
         return res.status(200).json({ ok: true });
       }
 
@@ -1292,13 +1593,15 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         });
 
         if (matchedCompany.stripeCustomerId) {
-          reportRetellMinutes(matchedCompany.stripeCustomerId, durationMinutes).catch(err =>
+          reportRetellMinutes(matchedCompany.stripeCustomerId, durationMinutes).catch((err) =>
             console.error(`[Retell Webhook] Failed to report metered usage:`, err.message)
           );
         }
       }
 
-      console.log(`[Retell Webhook] Recorded call ${retellCallId} for company ${matchedCompany.name} (${companyId}): ${durationMinutes} min(s)`);
+      console.log(
+        `[Retell Webhook] Recorded call ${retellCallId} for company ${matchedCompany.name} (${companyId}): ${durationMinutes} min(s)`
+      );
       res.status(200).json({ ok: true });
     } catch (err) {
       console.error("[Retell Webhook] Error:", err);
@@ -1311,13 +1614,28 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
     try {
       const { companyId, userId } = await getCompanyContext(req);
       const invoiceId = p(req.params.id);
-      const result = await sendInvoiceEmail(invoiceId, companyId, { sentBy: userId, baseUrl: getBaseUrl(req) });
+      const result = await sendInvoiceEmail(invoiceId, companyId, {
+        sentBy: userId,
+        baseUrl: getBaseUrl(req),
+      });
       if (!result.success) {
-        const status = result.error === "Invoice not found" ? 404 : result.error === "Invoice already paid" ? 400 : result.error === "Contact has no email address" ? 400 : 500;
+        const status =
+          result.error === "Invoice not found"
+            ? 404
+            : result.error === "Invoice already paid"
+              ? 400
+              : result.error === "Contact has no email address"
+                ? 400
+                : 500;
         return res.status(status).json({ error: result.error });
       }
-      return res.json({ success: true, messageId: result.messageId || null, paymentUrl: result.paymentUrl || null });
-    } catch (err) { handleError(res, err); }
+      return res.json({
+        success: true,
+        messageId: result.messageId || null,
+        paymentUrl: result.paymentUrl || null,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
   });
-
 }

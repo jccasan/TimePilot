@@ -5,7 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { CreditCard, Pencil, Users, DollarSign } from "lucide-react";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 import { queryClient } from "@/lib/queryClient";
@@ -21,7 +28,6 @@ interface SubscriptionTier {
   isActive: boolean;
   updatedAt: string;
 }
-
 
 const tierColors: Record<string, string> = {
   free_trial: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
@@ -88,15 +94,19 @@ export default function AdminSubscriptionPricing() {
     });
   }
 
-  const activeTiers = tiers?.filter(t => t.isActive) || [];
+  const activeTiers = tiers?.filter((t) => t.isActive) || [];
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6" data-testid="admin-subscription-pricing-page">
       <div className="flex items-center gap-3">
         <CreditCard className="h-6 w-6 text-muted-foreground" />
         <div>
-          <h1 className="text-2xl font-bold" data-testid="heading-subscription-pricing">Subscription Pricing</h1>
-          <p className="text-sm text-muted-foreground">Manage platform subscription tiers and pricing</p>
+          <h1 className="text-2xl font-bold" data-testid="heading-subscription-pricing">
+            Subscription Pricing
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Manage platform subscription tiers and pricing
+          </p>
         </div>
       </div>
 
@@ -109,7 +119,9 @@ export default function AdminSubscriptionPricing() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold" data-testid="text-total-tiers">{tiers?.length ?? 0}</p>
+            <p className="text-3xl font-bold" data-testid="text-total-tiers">
+              {tiers?.length ?? 0}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -121,7 +133,10 @@ export default function AdminSubscriptionPricing() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold" data-testid="text-highest-tier">
-              ${activeTiers.length ? Math.max(...activeTiers.map(t => parseFloat(t.price))).toFixed(2) : "0.00"}
+              $
+              {activeTiers.length
+                ? Math.max(...activeTiers.map((t) => parseFloat(t.price))).toFixed(2)
+                : "0.00"}
             </p>
             <p className="text-xs text-muted-foreground mt-1">per month</p>
           </CardContent>
@@ -135,7 +150,7 @@ export default function AdminSubscriptionPricing() {
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-bold" data-testid="text-max-users-top">
-              {activeTiers.length ? Math.max(...activeTiers.map(t => t.maxUsers)) : 0}
+              {activeTiers.length ? Math.max(...activeTiers.map((t) => t.maxUsers)) : 0}
             </p>
           </CardContent>
         </Card>
@@ -152,24 +167,36 @@ export default function AdminSubscriptionPricing() {
             <p className="text-sm text-muted-foreground">No tiers configured</p>
           ) : (
             <div className="space-y-3">
-              {tiers.map(tier => (
+              {tiers.map((tier) => (
                 <div
                   key={tier.id}
                   className={`flex items-center justify-between border rounded-lg px-4 py-4 ${!tier.isActive ? "opacity-50" : ""}`}
                   data-testid={`tier-row-${tier.tierKey}`}
                 >
                   <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <Badge className={tierColors[tier.tierKey] || "bg-gray-100 text-gray-800"} variant="secondary">
+                    <Badge
+                      className={tierColors[tier.tierKey] || "bg-gray-100 text-gray-800"}
+                      variant="secondary"
+                    >
                       {tier.tierKey}
                     </Badge>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm" data-testid={`text-tier-name-${tier.tierKey}`}>{tier.name}</p>
+                      <p
+                        className="font-medium text-sm"
+                        data-testid={`text-tier-name-${tier.tierKey}`}
+                      >
+                        {tier.name}
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        Up to {tier.maxUsers === 999 ? "unlimited" : tier.maxUsers} user{tier.maxUsers !== 1 ? "s" : ""}
+                        Up to {tier.maxUsers === 999 ? "unlimited" : tier.maxUsers} user
+                        {tier.maxUsers !== 1 ? "s" : ""}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-bold" data-testid={`text-tier-price-${tier.tierKey}`}>
+                      <p
+                        className="text-lg font-bold"
+                        data-testid={`text-tier-price-${tier.tierKey}`}
+                      >
                         ${parseFloat(tier.price).toFixed(2)}
                       </p>
                       <p className="text-xs text-muted-foreground">/month</p>
@@ -201,7 +228,9 @@ export default function AdminSubscriptionPricing() {
         <DialogContent data-testid="dialog-edit-tier">
           <DialogHeader>
             <DialogTitle>Edit Tier: {editingTier?.tierKey}</DialogTitle>
-            <DialogDescription>Update the name, user limit, and pricing for this subscription tier.</DialogDescription>
+            <DialogDescription>
+              Update the name, user limit, and pricing for this subscription tier.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
@@ -209,7 +238,7 @@ export default function AdminSubscriptionPricing() {
               <Input
                 id="tierName"
                 value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 data-testid="input-tier-name"
               />
             </div>
@@ -220,7 +249,7 @@ export default function AdminSubscriptionPricing() {
                 type="number"
                 min={1}
                 value={form.maxUsers}
-                onChange={e => setForm(f => ({ ...f, maxUsers: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, maxUsers: e.target.value }))}
                 data-testid="input-tier-max-users"
               />
             </div>
@@ -232,14 +261,24 @@ export default function AdminSubscriptionPricing() {
                 min={0}
                 step="0.01"
                 value={form.price}
-                onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
                 data-testid="input-tier-price"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} data-testid="button-cancel-edit">Cancel</Button>
-            <Button onClick={handleSave} disabled={updateTier.isPending} data-testid="button-save-tier">
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(false)}
+              data-testid="button-cancel-edit"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={updateTier.isPending}
+              data-testid="button-save-tier"
+            >
               {updateTier.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>

@@ -7,14 +7,45 @@ import type { ParsedContact } from "./competitor-import";
 
 type ImportError = { row: number; field?: string; message: string };
 type ContactStatus = "lead" | "estimate" | "active" | "paused" | "cancelled";
-type DayOfWeek = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | "tbd";
+type DayOfWeek =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday"
+  | "tbd";
 type PaymentMethod = "cash" | "check" | "card" | "ach" | "other" | "imported";
 type PaymentSource = "stripe" | "manual" | "imported";
 type InvoiceStatus = "draft" | "sent" | "pending" | "paid" | "failed" | "refunded" | "voided";
 
-const VALID_CONTACT_STATUSES = new Set<ContactStatus>(["lead", "estimate", "active", "paused", "cancelled"]);
-const VALID_DAY_OF_WEEK = new Set<DayOfWeek>(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "tbd"]);
-const VALID_INVOICE_STATUSES = new Set<InvoiceStatus>(["draft", "sent", "pending", "paid", "failed", "refunded", "voided"]);
+const VALID_CONTACT_STATUSES = new Set<ContactStatus>([
+  "lead",
+  "estimate",
+  "active",
+  "paused",
+  "cancelled",
+]);
+const VALID_DAY_OF_WEEK = new Set<DayOfWeek>([
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+  "tbd",
+]);
+const VALID_INVOICE_STATUSES = new Set<InvoiceStatus>([
+  "draft",
+  "sent",
+  "pending",
+  "paid",
+  "failed",
+  "refunded",
+  "voided",
+]);
 
 function toContactStatus(val: unknown): ContactStatus {
   return VALID_CONTACT_STATUSES.has(val as ContactStatus) ? (val as ContactStatus) : "lead";
@@ -32,10 +63,15 @@ const GEOCODE_CONCURRENCY = 10;
 class Semaphore {
   private count: number;
   private queue: Array<() => void> = [];
-  constructor(max: number) { this.count = max; }
+  constructor(max: number) {
+    this.count = max;
+  }
   acquire(): Promise<void> {
-    if (this.count > 0) { this.count--; return Promise.resolve(); }
-    return new Promise<void>(resolve => this.queue.push(resolve));
+    if (this.count > 0) {
+      this.count--;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => this.queue.push(resolve));
   }
   release(): void {
     if (this.queue.length > 0) {
@@ -85,7 +121,9 @@ async function updateProgress(
   skippedRows: number,
   errors?: ImportError[]
 ): Promise<void> {
-  await storage.updateImportRun(jobId, { importedRows, skippedRows, errors: errors ?? null }).catch(console.error);
+  await storage
+    .updateImportRun(jobId, { importedRows, skippedRows, errors: errors ?? null })
+    .catch(console.error);
 }
 
 export interface CompetitorImportPayload {
@@ -102,11 +140,13 @@ export async function enqueueCompetitorImport(payload: CompetitorImportPayload):
   runCompetitorImport(payload).catch(async (err) => {
     console.error(`[import-runner] Competitor import ${payload.jobId} failed:`, err);
     const fatalError: ImportError[] = [{ row: 0, message: (err as Error)?.message || String(err) }];
-    await storage.updateImportRun(payload.jobId, {
-      status: "failed",
-      errors: fatalError,
-      completedAt: new Date(),
-    }).catch(console.error);
+    await storage
+      .updateImportRun(payload.jobId, {
+        status: "failed",
+        errors: fatalError,
+        completedAt: new Date(),
+      })
+      .catch(console.error);
   });
 }
 
@@ -116,8 +156,8 @@ async function runCompetitorImport(payload: CompetitorImportPayload): Promise<vo
   const existingContacts = await storage.getContacts(companyId, {});
   const emailSet = new Set<string>();
   const addressSet = new Set<string>();
-  const emailToContactMap = new Map<string, typeof existingContacts[0]>();
-  const addressToContactMap = new Map<string, typeof existingContacts[0]>();
+  const emailToContactMap = new Map<string, (typeof existingContacts)[0]>();
+  const addressToContactMap = new Map<string, (typeof existingContacts)[0]>();
 
   for (const c of existingContacts) {
     if (c.email) {
@@ -148,9 +188,10 @@ async function runCompetitorImport(payload: CompetitorImportPayload): Promise<vo
       const pc = batch[i];
       const globalRowNum = batchIdx * BATCH_SIZE + i + 2;
       const email = pc.email?.toLowerCase() || "";
-      const addressKey = pc.streetAddress && pc.city && pc.state
-        ? `${pc.streetAddress}|${pc.city}|${pc.state}|${pc.zipCode ?? ""}`.toLowerCase()
-        : "";
+      const addressKey =
+        pc.streetAddress && pc.city && pc.state
+          ? `${pc.streetAddress}|${pc.city}|${pc.state}|${pc.zipCode ?? ""}`.toLowerCase()
+          : "";
 
       const isDuplicateEmail = email && emailSet.has(email);
       const isDuplicateAddress = addressKey && addressSet.has(addressKey);
@@ -159,7 +200,9 @@ async function runCompetitorImport(payload: CompetitorImportPayload): Promise<vo
         if (duplicateHandling === "update") {
           const existing = isDuplicateEmail
             ? emailToContactMap.get(email)
-            : (addressKey ? addressToContactMap.get(addressKey) : undefined);
+            : addressKey
+              ? addressToContactMap.get(addressKey)
+              : undefined;
           if (existing) {
             toUpdate.push({ pc, existingId: existing.id, rowNum: globalRowNum });
             continue;
@@ -175,8 +218,10 @@ async function runCompetitorImport(payload: CompetitorImportPayload): Promise<vo
     for (const { pc, existingId } of toUpdate) {
       try {
         const updates: Record<string, any> = {};
-        if (pc.phone && !emailToContactMap.get(pc.email?.toLowerCase() || "")?.phone) updates.phone = pc.phone;
-        if (pc.email && !emailToContactMap.get(pc.email.toLowerCase())?.email) updates.email = pc.email;
+        if (pc.phone && !emailToContactMap.get(pc.email?.toLowerCase() || "")?.phone)
+          updates.phone = pc.phone;
+        if (pc.email && !emailToContactMap.get(pc.email.toLowerCase())?.email)
+          updates.email = pc.email;
         if (pc.streetAddress) updates.streetAddress = pc.streetAddress;
         if (pc.city) updates.city = pc.city;
         if (pc.state) updates.state = pc.state;
@@ -220,11 +265,17 @@ async function runCompetitorImport(payload: CompetitorImportPayload): Promise<vo
       try {
         const subBatches = chunkArray(contactValues, BATCH_SIZE);
         for (const sub of subBatches) {
-          const rows = await db.insert(contacts).values(sub as Array<typeof contacts.$inferInsert>).returning();
+          const rows = await db
+            .insert(contacts)
+            .values(sub as Array<typeof contacts.$inferInsert>)
+            .returning();
           insertedContacts = insertedContacts.concat(rows);
         }
       } catch (err: unknown) {
-        importErrors.push({ row: batchIdx * BATCH_SIZE + 2, message: `Bulk insert failed: ${(err as Error).message}` });
+        importErrors.push({
+          row: batchIdx * BATCH_SIZE + 2,
+          message: `Bulk insert failed: ${(err as Error).message}`,
+        });
         skipped += toInsert.length;
         await updateProgress(jobId, imported + updated, skipped, importErrors);
         continue;
@@ -232,13 +283,21 @@ async function runCompetitorImport(payload: CompetitorImportPayload): Promise<vo
 
       for (const c of insertedContacts) {
         if (c.email) emailSet.add(c.email.toLowerCase());
-        const addressKey = c.streetAddress && c.city && c.state
-          ? `${c.streetAddress}|${c.city}|${c.state}|${c.zipCode ?? ""}`.toLowerCase()
-          : "";
+        const addressKey =
+          c.streetAddress && c.city && c.state
+            ? `${c.streetAddress}|${c.city}|${c.state}|${c.zipCode ?? ""}`.toLowerCase()
+            : "";
         if (addressKey) addressSet.add(addressKey);
       }
 
-      const addressItems: Array<{ id: string; street: string; city: string; state: string; zip: string; pcIdx: number }> = [];
+      const addressItems: Array<{
+        id: string;
+        street: string;
+        city: string;
+        state: string;
+        zip: string;
+        pcIdx: number;
+      }> = [];
       for (let i = 0; i < toInsert.length; i++) {
         const { pc } = toInsert[i];
         const contactId = insertedContacts[i]?.id;
@@ -278,16 +337,27 @@ async function runCompetitorImport(payload: CompetitorImportPayload): Promise<vo
 
         const propSubBatches = chunkArray(propertyValues, BATCH_SIZE);
         for (const sub of propSubBatches) {
-          await db.insert(properties).values(sub as Array<typeof properties.$inferInsert>).catch((err: unknown) => {
-            importErrors.push({ row: 0, message: `Property insert failed: ${(err as Error).message}` });
-          });
+          await db
+            .insert(properties)
+            .values(sub as Array<typeof properties.$inferInsert>)
+            .catch((err: unknown) => {
+              importErrors.push({
+                row: 0,
+                message: `Property insert failed: ${(err as Error).message}`,
+              });
+            });
         }
       }
 
       imported += insertedContacts.length;
     }
 
-    await updateProgress(jobId, imported + updated, skipped, importErrors.length > 0 ? importErrors : undefined);
+    await updateProgress(
+      jobId,
+      imported + updated,
+      skipped,
+      importErrors.length > 0 ? importErrors : undefined
+    );
   }
 
   await storage.updateImportRun(jobId, {
@@ -314,16 +384,27 @@ export async function enqueueCsvContactsImport(payload: CsvContactsPayload): Pro
   runCsvContactsImport(payload).catch(async (err) => {
     console.error(`[import-runner] CSV import ${payload.jobId} failed:`, err);
     const fatalError: ImportError[] = [{ row: 0, message: (err as Error)?.message || String(err) }];
-    await storage.updateImportRun(payload.jobId, {
-      status: "failed",
-      errors: fatalError,
-      completedAt: new Date(),
-    }).catch(console.error);
+    await storage
+      .updateImportRun(payload.jobId, {
+        status: "failed",
+        errors: fatalError,
+        completedAt: new Date(),
+      })
+      .catch(console.error);
   });
 }
 
 async function runCsvContactsImport(payload: CsvContactsPayload): Promise<void> {
-  const { companyId, jobId, headers, rows: rawRows, mappings, transformations, skippedRows: skippedRowIndices, editedCells } = payload;
+  const {
+    companyId,
+    jobId,
+    headers,
+    rows: rawRows,
+    mappings,
+    transformations,
+    skippedRows: skippedRowIndices,
+    editedCells,
+  } = payload;
 
   const rows = rawRows.map((row) => [...row]);
   for (const [key, value] of Object.entries(editedCells)) {
@@ -345,27 +426,31 @@ async function runCsvContactsImport(payload: CsvContactsPayload): Promise<void> 
   const transformed = applyTransformations(rows, headers, mappings, transformations, ["firstName"]);
 
   const existingContacts = await storage.getContacts(companyId, {});
-  const emailSet = new Set<string>(existingContacts.map(c => c.email?.toLowerCase()).filter(Boolean) as string[]);
+  const emailSet = new Set<string>(
+    existingContacts.map((c) => c.email?.toLowerCase()).filter(Boolean) as string[]
+  );
 
   let imported = 0;
   let skipped = 0;
   const importErrors: Array<{ row: number; message: string }> = [];
 
-  const validRows = transformed.filter(r => !skipSet.has(r.rowIndex) && r.isValid);
-  const invalidRows = transformed.filter(r => !skipSet.has(r.rowIndex) && !r.isValid);
-  const skippedManualRows = transformed.filter(r => skipSet.has(r.rowIndex));
+  const validRows = transformed.filter((r) => !skipSet.has(r.rowIndex) && r.isValid);
+  const invalidRows = transformed.filter((r) => !skipSet.has(r.rowIndex) && !r.isValid);
+  const skippedManualRows = transformed.filter((r) => skipSet.has(r.rowIndex));
 
   skipped += skippedManualRows.length;
   for (const r of invalidRows) {
     skipped++;
-    importErrors.push(...r.errors.map(e => ({ row: e.row + 2, message: `${e.field}: ${e.message}` })));
+    importErrors.push(
+      ...r.errors.map((e) => ({ row: e.row + 2, message: `${e.field}: ${e.message}` }))
+    );
   }
 
   const batches = chunkArray(validRows, BATCH_SIZE);
 
   for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
     const batch = batches[batchIdx];
-    const contactValues = batch.map(row => {
+    const contactValues = batch.map((row) => {
       const t = row.transformed;
       return {
         companyId,
@@ -393,11 +478,17 @@ async function runCsvContactsImport(payload: CsvContactsPayload): Promise<void> 
     try {
       const subBatches = chunkArray(contactValues, BATCH_SIZE);
       for (const sub of subBatches) {
-        const rows2 = await db.insert(contacts).values(sub as Array<typeof contacts.$inferInsert>).returning();
+        const rows2 = await db
+          .insert(contacts)
+          .values(sub as Array<typeof contacts.$inferInsert>)
+          .returning();
         insertedContacts = insertedContacts.concat(rows2);
       }
     } catch (err: unknown) {
-      importErrors.push({ row: batchIdx * BATCH_SIZE + 2, message: `Bulk insert failed: ${(err as Error).message}` });
+      importErrors.push({
+        row: batchIdx * BATCH_SIZE + 2,
+        message: `Bulk insert failed: ${(err as Error).message}`,
+      });
       skipped += batch.length;
       await updateProgress(jobId, imported, skipped, importErrors);
       continue;
@@ -407,7 +498,14 @@ async function runCsvContactsImport(payload: CsvContactsPayload): Promise<void> 
       if (c.email) emailSet.add(c.email.toLowerCase());
     }
 
-    const addressItems: Array<{ id: string; street: string; city: string; state: string; zip: string; batchIdx: number }> = [];
+    const addressItems: Array<{
+      id: string;
+      street: string;
+      city: string;
+      state: string;
+      zip: string;
+      batchIdx: number;
+    }> = [];
     for (let i = 0; i < insertedContacts.length; i++) {
       const c = insertedContacts[i];
       const bRow = batch[i];
@@ -453,14 +551,25 @@ async function runCsvContactsImport(payload: CsvContactsPayload): Promise<void> 
 
       const propSubBatches = chunkArray(propertyValues, BATCH_SIZE);
       for (const sub of propSubBatches) {
-        await db.insert(properties).values(sub as Array<typeof properties.$inferInsert>).catch((err: unknown) => {
-          importErrors.push({ row: 0, message: `Property insert failed: ${(err as Error).message}` });
-        });
+        await db
+          .insert(properties)
+          .values(sub as Array<typeof properties.$inferInsert>)
+          .catch((err: unknown) => {
+            importErrors.push({
+              row: 0,
+              message: `Property insert failed: ${(err as Error).message}`,
+            });
+          });
       }
     }
 
     imported += insertedContacts.length;
-    await updateProgress(jobId, imported, skipped, importErrors.length > 0 ? importErrors : undefined);
+    await updateProgress(
+      jobId,
+      imported,
+      skipped,
+      importErrors.length > 0 ? importErrors : undefined
+    );
   }
 
   await storage.updateImportRun(jobId, {
@@ -487,16 +596,19 @@ export async function enqueueCsvRoutesImport(payload: CsvRoutesPayload): Promise
   runCsvRoutesImport(payload).catch(async (err) => {
     console.error(`[import-runner] CSV routes import ${payload.jobId} failed:`, err);
     const fatalError: ImportError[] = [{ row: 0, message: (err as Error)?.message || String(err) }];
-    await storage.updateImportRun(payload.jobId, {
-      status: "failed",
-      errors: fatalError,
-      completedAt: new Date(),
-    }).catch(console.error);
+    await storage
+      .updateImportRun(payload.jobId, {
+        status: "failed",
+        errors: fatalError,
+        completedAt: new Date(),
+      })
+      .catch(console.error);
   });
 }
 
 async function runCsvRoutesImport(payload: CsvRoutesPayload): Promise<void> {
-  const { companyId, jobId, headers, rows, mappings, transformations, skippedRows, editedCells } = payload;
+  const { companyId, jobId, headers, rows, mappings, transformations, skippedRows, editedCells } =
+    payload;
 
   const skipSet = new Set<number>(skippedRows);
   const mutableRows = rows.map((r) => [...r]);
@@ -508,7 +620,9 @@ async function runCsvRoutesImport(payload: CsvRoutesPayload): Promise<void> {
   }
 
   const { applyTransformations } = await import("./import-transforms");
-  const transformed = applyTransformations(mutableRows, headers, mappings, transformations, ["routeName"]);
+  const transformed = applyTransformations(mutableRows, headers, mappings, transformations, [
+    "routeName",
+  ]);
 
   const validRows = transformed.filter((r) => !skipSet.has(r.rowIndex) && r.isValid);
   const importErrors: ImportError[] = [];
@@ -524,28 +638,38 @@ async function runCsvRoutesImport(payload: CsvRoutesPayload): Promise<void> {
 
   const batches = chunkArray(validRows, BATCH_SIZE);
   for (const batch of batches) {
-    const routeValues = batch.map((r) => {
-      const t = r.transformed as Record<string, unknown>;
-      return {
-        companyId,
-        name: String(t.routeName || t.name || ""),
-        dayOfWeek: toDayOfWeek(t.dayOfWeek),
-        date: t.date ? String(t.date) : null,
-        color: t.color ? String(t.color) : "#3b82f6",
-        isLocked: false,
-      };
-    }).filter((v) => v.name);
+    const routeValues = batch
+      .map((r) => {
+        const t = r.transformed as Record<string, unknown>;
+        return {
+          companyId,
+          name: String(t.routeName || t.name || ""),
+          dayOfWeek: toDayOfWeek(t.dayOfWeek),
+          date: t.date ? String(t.date) : null,
+          color: t.color ? String(t.color) : "#3b82f6",
+          isLocked: false,
+        };
+      })
+      .filter((v) => v.name);
 
     if (routeValues.length === 0) continue;
 
     try {
-      const inserted = await db.insert(routes).values(routeValues as Array<typeof routes.$inferInsert>).returning();
+      const inserted = await db
+        .insert(routes)
+        .values(routeValues as Array<typeof routes.$inferInsert>)
+        .returning();
       imported += inserted.length;
     } catch (err: unknown) {
       importErrors.push({ row: 0, message: `Route insert failed: ${(err as Error).message}` });
     }
 
-    await updateProgress(jobId, imported, skipped, importErrors.length > 0 ? importErrors : undefined);
+    await updateProgress(
+      jobId,
+      imported,
+      skipped,
+      importErrors.length > 0 ? importErrors : undefined
+    );
   }
 
   await storage.updateImportRun(jobId, {
@@ -565,15 +689,19 @@ export interface SweepAndGoInvoicesPayload {
   includeInReminders: boolean;
 }
 
-export async function enqueueSweepAndGoInvoicesImport(payload: SweepAndGoInvoicesPayload): Promise<void> {
+export async function enqueueSweepAndGoInvoicesImport(
+  payload: SweepAndGoInvoicesPayload
+): Promise<void> {
   runSweepAndGoInvoicesImport(payload).catch(async (err) => {
     console.error(`[import-runner] S&G invoices import ${payload.jobId} failed:`, err);
     const fatalError: ImportError[] = [{ row: 0, message: (err as Error)?.message || String(err) }];
-    await storage.updateImportRun(payload.jobId, {
-      status: "failed",
-      errors: fatalError,
-      completedAt: new Date(),
-    }).catch(console.error);
+    await storage
+      .updateImportRun(payload.jobId, {
+        status: "failed",
+        errors: fatalError,
+        completedAt: new Date(),
+      })
+      .catch(console.error);
   });
 }
 
@@ -592,8 +720,8 @@ async function runSweepAndGoInvoicesImport(payload: SweepAndGoInvoicesPayload): 
   const importErrors: Array<{ row: number; message: string }> = [];
 
   const allContacts = await storage.getContacts(companyId);
-  const emailToContact = new Map<string, typeof allContacts[0]>();
-  const nameToContact = new Map<string, typeof allContacts[0]>();
+  const emailToContact = new Map<string, (typeof allContacts)[0]>();
+  const nameToContact = new Map<string, (typeof allContacts)[0]>();
 
   for (const c of allContacts) {
     if (c.email) emailToContact.set(c.email.toLowerCase(), c);
@@ -608,8 +736,15 @@ async function runSweepAndGoInvoicesImport(payload: SweepAndGoInvoicesPayload): 
 
     for (const inv of batch) {
       try {
-        const existing = await storage.getInvoiceByExternalId(companyId, "sweepandgo", inv.externalId);
-        if (existing && !allowDuplicates) { skipped++; continue; }
+        const existing = await storage.getInvoiceByExternalId(
+          companyId,
+          "sweepandgo",
+          inv.externalId
+        );
+        if (existing && !allowDuplicates) {
+          skipped++;
+          continue;
+        }
 
         let contactId: string | null = null;
         if (inv.contactEmail) {
@@ -622,7 +757,10 @@ async function runSweepAndGoInvoicesImport(payload: SweepAndGoInvoicesPayload): 
         }
 
         if (!contactId) {
-          importErrors.push({ row: 0, message: `Could not match invoice ${inv.invoiceNumber} to existing contact` });
+          importErrors.push({
+            row: 0,
+            message: `Could not match invoice ${inv.invoiceNumber} to existing contact`,
+          });
           skipped++;
           continue;
         }
@@ -648,7 +786,10 @@ async function runSweepAndGoInvoicesImport(payload: SweepAndGoInvoicesPayload): 
           issuedDate: inv.issuedDate || null,
           notes: inv.notes || null,
           excludeFromReminders: !includeInReminders,
-          paidAt: inv.status === "paid" && inv.payments.length > 0 ? new Date(inv.payments[0].paidAt) : null,
+          paidAt:
+            inv.status === "paid" && inv.payments.length > 0
+              ? new Date(inv.payments[0].paidAt)
+              : null,
         });
 
         for (const li of inv.lineItems) {
@@ -664,7 +805,10 @@ async function runSweepAndGoInvoicesImport(payload: SweepAndGoInvoicesPayload): 
         for (let pIdx = 0; pIdx < inv.payments.length; pIdx++) {
           const payment = inv.payments[pIdx];
           const paymentExtId = `sweepandgo-payment-${inv.externalId}-${pIdx}`;
-          const existingPayment = await storage.getInvoicePaymentByExternalId(companyId, paymentExtId);
+          const existingPayment = await storage.getInvoicePaymentByExternalId(
+            companyId,
+            paymentExtId
+          );
           if (existingPayment) continue;
           await storage.createInvoicePayment({
             companyId,
@@ -681,12 +825,20 @@ async function runSweepAndGoInvoicesImport(payload: SweepAndGoInvoicesPayload): 
 
         imported++;
       } catch (invErr: unknown) {
-        importErrors.push({ row: 0, message: `Invoice ${inv.invoiceNumber}: ${(invErr as Error).message}` });
+        importErrors.push({
+          row: 0,
+          message: `Invoice ${inv.invoiceNumber}: ${(invErr as Error).message}`,
+        });
         skipped++;
       }
     }
 
-    await updateProgress(jobId, imported, skipped, importErrors.length > 0 ? importErrors : undefined);
+    await updateProgress(
+      jobId,
+      imported,
+      skipped,
+      importErrors.length > 0 ? importErrors : undefined
+    );
   }
 
   await storage.updateImportRun(jobId, {

@@ -4,12 +4,16 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { getUserByEmail, createUserWithTempPassword } from "../services/app-auth";
 import { sendEmail } from "../services/email";
+import { reportMeteredUsageSet } from "../services/stripe";
+
 import {
-  reportMeteredUsageSet,
-} from "../services/stripe";
-
-import { isAuthenticated, getCompanyContext, requireRole, handleError, getDemoCompanyId, ensureCompanySetup } from "./shared";
-
+  isAuthenticated,
+  getCompanyContext,
+  requireRole,
+  handleError,
+  getDemoCompanyId,
+  ensureCompanySetup,
+} from "./shared";
 
 export async function registerOnboardingRoutes(app: Express): Promise<void> {
   // ================ Setup / Onboarding ================
@@ -21,10 +25,14 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
       const result = await ensureCompanySetup(userId);
       const demoId = await getDemoCompanyId();
       if (demoId && demoId === result.companyId) {
-        await db.execute(sql`UPDATE companies SET business_onboarding_step = 0, business_onboarding_complete = false WHERE id = ${result.companyId}`);
+        await db.execute(
+          sql`UPDATE companies SET business_onboarding_step = 0, business_onboarding_complete = false WHERE id = ${result.companyId}`
+        );
       }
       return res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/onboarding/status", isAuthenticated, async (req: Request, res: Response) => {
@@ -61,79 +69,112 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
       const steps = [
         { key: "service_zones", label: "Set up your service zones", completed: hasServiceZones },
         { key: "add_customer", label: "Add your first customer", completed: hasContacts },
-        { key: "price_property", label: "Price your first property", completed: hasPriceRecommendation || hasServicePlans },
-        { key: "create_service_plan", label: "Schedule your first service", completed: hasServicePlans },
+        {
+          key: "price_property",
+          label: "Price your first property",
+          completed: hasPriceRecommendation || hasServicePlans,
+        },
+        {
+          key: "create_service_plan",
+          label: "Schedule your first service",
+          completed: hasServicePlans,
+        },
         { key: "generate_route", label: "Generate your first route", completed: hasRoutes },
       ];
 
-      const isComplete = steps.filter(s => s.key !== "service_zones").every(s => s.completed);
+      const isComplete = steps.filter((s) => s.key !== "service_zones").every((s) => s.completed);
       res.json({
         isComplete,
         steps,
-        firstContact: firstContact ? { id: firstContact.id, firstName: firstContact.firstName, lastName: firstContact.lastName } : null,
-        firstProperty: firstProperty ? {
-          id: firstProperty.id,
-          streetAddress: firstProperty.streetAddress,
-          city: firstProperty.city,
-          state: firstProperty.state,
-          yardSize: firstProperty.yardSize,
-          numberOfDogs: firstProperty.numberOfDogs,
-          measuredYardSqft: firstProperty.measuredYardSqft,
-        } : null,
-        firstServicePlan: firstServicePlan ? { id: firstServicePlan.id, routeId: firstServicePlan.routeId } : null,
+        firstContact: firstContact
+          ? {
+              id: firstContact.id,
+              firstName: firstContact.firstName,
+              lastName: firstContact.lastName,
+            }
+          : null,
+        firstProperty: firstProperty
+          ? {
+              id: firstProperty.id,
+              streetAddress: firstProperty.streetAddress,
+              city: firstProperty.city,
+              state: firstProperty.state,
+              yardSize: firstProperty.yardSize,
+              numberOfDogs: firstProperty.numberOfDogs,
+              measuredYardSqft: firstProperty.measuredYardSqft,
+            }
+          : null,
+        firstServicePlan: firstServicePlan
+          ? { id: firstServicePlan.id, routeId: firstServicePlan.routeId }
+          : null,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.get("/api/onboarding/business-status", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const demoId = await getDemoCompanyId();
-      const isDemo = demoId && demoId === companyId;
-      const result = await db.execute(sql`SELECT name, email, phone, address, logo_url, website_url, business_description, service_area_description, pricing_config, stripe_connect_account_id, stripe_connect_onboarded, business_onboarding_step, business_onboarding_complete FROM companies WHERE id = ${companyId}`);
-      const rows = result.rows as Record<string, unknown>[];
-      if (!rows || rows.length === 0) return res.status(404).json({ error: "Company not found" });
-      const row = rows[0];
-      const step = (row.business_onboarding_step as number) ?? 0;
-      const completedSteps: number[] = Array.from({ length: step }, (_, i) => i);
-      res.json({
-        currentStep: step,
-        isComplete: isDemo ? false : ((row.business_onboarding_complete as boolean) ?? false),
-        completedSteps,
-        companyData: {
-          name: row.name,
-          email: row.email,
-          phone: row.phone,
-          address: row.address,
-          logoUrl: row.logo_url,
-          websiteUrl: row.website_url,
-          businessDescription: row.business_description,
-          serviceAreaDescription: row.service_area_description,
-          pricingConfig: row.pricing_config,
-          stripeConnectAccountId: row.stripe_connect_account_id,
-          stripeConnectOnboarded: row.stripe_connect_onboarded,
-        },
-      });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/onboarding/business-step", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role, ["owner", "admin"]);
-      const { step, data, resetWizard } = req.body;
-
-      if (resetWizard) {
-        await db.execute(sql`UPDATE companies SET business_onboarding_step = 0, business_onboarding_complete = false WHERE id = ${companyId}`);
-        return res.json({ success: true, nextStep: 0 });
+  app.get(
+    "/api/onboarding/business-status",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const demoId = await getDemoCompanyId();
+        const isDemo = demoId && demoId === companyId;
+        const result = await db.execute(
+          sql`SELECT name, email, phone, address, logo_url, website_url, business_description, service_area_description, pricing_config, stripe_connect_account_id, stripe_connect_onboarded, business_onboarding_step, business_onboarding_complete FROM companies WHERE id = ${companyId}`
+        );
+        const rows = result.rows as Record<string, unknown>[];
+        if (!rows || rows.length === 0) return res.status(404).json({ error: "Company not found" });
+        const row = rows[0];
+        const step = (row.business_onboarding_step as number) ?? 0;
+        const completedSteps: number[] = Array.from({ length: step }, (_, i) => i);
+        res.json({
+          currentStep: step,
+          isComplete: isDemo ? false : ((row.business_onboarding_complete as boolean) ?? false),
+          completedSteps,
+          companyData: {
+            name: row.name,
+            email: row.email,
+            phone: row.phone,
+            address: row.address,
+            logoUrl: row.logo_url,
+            websiteUrl: row.website_url,
+            businessDescription: row.business_description,
+            serviceAreaDescription: row.service_area_description,
+            pricingConfig: row.pricing_config,
+            stripeConnectAccountId: row.stripe_connect_account_id,
+            stripeConnectOnboarded: row.stripe_connect_onboarded,
+          },
+        });
+      } catch (err) {
+        handleError(res, err);
       }
+    }
+  );
 
-      if (typeof step !== "number" || step < 0 || step > 4) {
-        return res.status(400).json({ error: "Invalid step number" });
-      }
+  app.post(
+    "/api/onboarding/business-step",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+        const { step, data, resetWizard } = req.body;
 
-      if (step === 0 && data) {
-        await db.execute(sql`UPDATE companies SET
+        if (resetWizard) {
+          await db.execute(
+            sql`UPDATE companies SET business_onboarding_step = 0, business_onboarding_complete = false WHERE id = ${companyId}`
+          );
+          return res.json({ success: true, nextStep: 0 });
+        }
+
+        if (typeof step !== "number" || step < 0 || step > 4) {
+          return res.status(400).json({ error: "Invalid step number" });
+        }
+
+        if (step === 0 && data) {
+          await db.execute(sql`UPDATE companies SET
           name = ${data.name || sql`name`},
           email = ${data.email || sql`email`},
           phone = ${data.phone || sql`phone`},
@@ -142,185 +183,253 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
           timezone = ${data.timezone || sql`timezone`},
           business_onboarding_step = ${step + 1}
           WHERE id = ${companyId}`);
-      } else if (step === 1 && data) {
-        await db.execute(sql`UPDATE companies SET business_description = ${data.businessDescription || null}, service_area_description = ${data.serviceAreaDescription || null}, business_onboarding_step = ${step + 1} WHERE id = ${companyId}`);
-      } else if (step === 2 && data?.pricingConfig) {
-        await db.execute(sql`UPDATE companies SET pricing_config = ${JSON.stringify(data.pricingConfig)}::jsonb, business_onboarding_step = ${step + 1} WHERE id = ${companyId}`);
-      } else {
-        await db.execute(sql`UPDATE companies SET business_onboarding_step = ${step + 1} WHERE id = ${companyId}`);
-      }
-
-      res.json({ success: true, nextStep: step + 1 });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/onboarding/business-complete", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      requireRole(role, ["owner", "admin"]);
-      const demoId = await getDemoCompanyId();
-      if (!demoId || demoId !== companyId) {
-        await db.execute(
-          sql`UPDATE companies SET business_onboarding_complete = true, business_onboarding_step = 5 WHERE id = ${companyId}`
-        );
-      }
-      res.json({ success: true });
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/onboarding/scrape-website", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { role } = await getCompanyContext(req);
-      requireRole(role, ["owner", "admin"]);
-      let { websiteUrl } = req.body;
-      if (!websiteUrl || typeof websiteUrl !== "string") return res.status(400).json({ error: "Website URL is required" });
-
-      websiteUrl = websiteUrl.trim();
-      if (!/^https?:\/\//i.test(websiteUrl)) {
-        websiteUrl = `https://${websiteUrl}`;
-      }
-
-      let parsed: URL;
-      try {
-        parsed = new URL(websiteUrl);
-      } catch {
-        return res.status(400).json({ error: "Invalid URL format" });
-      }
-      if (!["http:", "https:"].includes(parsed.protocol)) {
-        return res.status(400).json({ error: "Only HTTP/HTTPS URLs are allowed" });
-      }
-      const hostname = parsed.hostname.toLowerCase();
-      const hostnameBlockedPatterns = [
-        /^localhost$/i,
-        /metadata\.google/i,
-        /\.internal$/i,
-        /\.local$/i,
-      ];
-      if (hostnameBlockedPatterns.some(p => p.test(hostname))) {
-        return res.status(400).json({ error: "URL points to a restricted network address" });
-      }
-
-      const isPrivateIP = (ip: string): boolean => {
-        const parts = ip.split(".").map(Number);
-        if (parts.length === 4) {
-          if (parts[0] === 127) return true;
-          if (parts[0] === 10) return true;
-          if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-          if (parts[0] === 192 && parts[1] === 168) return true;
-          if (parts[0] === 169 && parts[1] === 254) return true;
-          if (parts[0] === 0) return true;
+        } else if (step === 1 && data) {
+          await db.execute(
+            sql`UPDATE companies SET business_description = ${data.businessDescription || null}, service_area_description = ${data.serviceAreaDescription || null}, business_onboarding_step = ${step + 1} WHERE id = ${companyId}`
+          );
+        } else if (step === 2 && data?.pricingConfig) {
+          await db.execute(
+            sql`UPDATE companies SET pricing_config = ${JSON.stringify(data.pricingConfig)}::jsonb, business_onboarding_step = ${step + 1} WHERE id = ${companyId}`
+          );
+        } else {
+          await db.execute(
+            sql`UPDATE companies SET business_onboarding_step = ${step + 1} WHERE id = ${companyId}`
+          );
         }
-        if (ip === "::1" || ip === "::" || ip.startsWith("fc00:") || ip.startsWith("fd") || ip.startsWith("fe80:")) return true;
-        return false;
-      };
 
-      const ipLiteralMatch = hostname.match(/^\[?([0-9a-f.:]+)\]?$/i);
-      if (ipLiteralMatch && isPrivateIP(ipLiteralMatch[1])) {
-        return res.status(400).json({ error: "URL points to a restricted network address" });
+        res.json({ success: true, nextStep: step + 1 });
+      } catch (err) {
+        handleError(res, err);
       }
-      if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) && isPrivateIP(hostname)) {
-        return res.status(400).json({ error: "URL points to a restricted network address" });
-      }
+    }
+  );
 
-      const dns = await import("dns");
-      const { promisify } = await import("util");
-      const dnsResolve = promisify(dns.resolve);
-
-      const validateResolvedIPs = async (host: string): Promise<boolean> => {
-        let resolvedIPs: string[] = [];
-        try { resolvedIPs = resolvedIPs.concat(await dnsResolve(host, "A")); } catch {}
-        try { resolvedIPs = resolvedIPs.concat(await dnsResolve(host, "AAAA")); } catch {}
-        if (resolvedIPs.length === 0) return true;
-        return !resolvedIPs.some(isPrivateIP);
-      };
-
-      if (!(await validateResolvedIPs(hostname))) {
-        return res.status(400).json({ error: "URL resolves to a private network address" });
-      }
-
-      let pageText = "";
+  app.post(
+    "/api/onboarding/business-complete",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        const response = await fetch(parsed.toString(), {
-          signal: controller.signal,
-          headers: { "User-Agent": "ScooPilot-Onboarding/1.0" },
-          redirect: "manual",
-        });
-        if (response.status >= 300 && response.status < 400) {
-          const location = response.headers.get("location");
-          if (location) {
-            try {
-              const redirectUrl = new URL(location, parsed.toString());
-              if (!["http:", "https:"].includes(redirectUrl.protocol)) {
-                return res.json({ success: false, error: "Redirect to non-HTTP URL blocked.", insights: null });
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+        const demoId = await getDemoCompanyId();
+        if (!demoId || demoId !== companyId) {
+          await db.execute(
+            sql`UPDATE companies SET business_onboarding_complete = true, business_onboarding_step = 5 WHERE id = ${companyId}`
+          );
+        }
+        res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/onboarding/scrape-website",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+        let { websiteUrl } = req.body;
+        if (!websiteUrl || typeof websiteUrl !== "string")
+          return res.status(400).json({ error: "Website URL is required" });
+
+        websiteUrl = websiteUrl.trim();
+        if (!/^https?:\/\//i.test(websiteUrl)) {
+          websiteUrl = `https://${websiteUrl}`;
+        }
+
+        let parsed: URL;
+        try {
+          parsed = new URL(websiteUrl);
+        } catch {
+          return res.status(400).json({ error: "Invalid URL format" });
+        }
+        if (!["http:", "https:"].includes(parsed.protocol)) {
+          return res.status(400).json({ error: "Only HTTP/HTTPS URLs are allowed" });
+        }
+        const hostname = parsed.hostname.toLowerCase();
+        const hostnameBlockedPatterns = [
+          /^localhost$/i,
+          /metadata\.google/i,
+          /\.internal$/i,
+          /\.local$/i,
+        ];
+        if (hostnameBlockedPatterns.some((p) => p.test(hostname))) {
+          return res.status(400).json({ error: "URL points to a restricted network address" });
+        }
+
+        const isPrivateIP = (ip: string): boolean => {
+          const parts = ip.split(".").map(Number);
+          if (parts.length === 4) {
+            if (parts[0] === 127) return true;
+            if (parts[0] === 10) return true;
+            if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+            if (parts[0] === 192 && parts[1] === 168) return true;
+            if (parts[0] === 169 && parts[1] === 254) return true;
+            if (parts[0] === 0) return true;
+          }
+          if (
+            ip === "::1" ||
+            ip === "::" ||
+            ip.startsWith("fc00:") ||
+            ip.startsWith("fd") ||
+            ip.startsWith("fe80:")
+          )
+            return true;
+          return false;
+        };
+
+        const ipLiteralMatch = hostname.match(/^\[?([0-9a-f.:]+)\]?$/i);
+        if (ipLiteralMatch && isPrivateIP(ipLiteralMatch[1])) {
+          return res.status(400).json({ error: "URL points to a restricted network address" });
+        }
+        if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) && isPrivateIP(hostname)) {
+          return res.status(400).json({ error: "URL points to a restricted network address" });
+        }
+
+        const dns = await import("dns");
+        const { promisify } = await import("util");
+        const dnsResolve = promisify(dns.resolve);
+
+        const validateResolvedIPs = async (host: string): Promise<boolean> => {
+          let resolvedIPs: string[] = [];
+          try {
+            resolvedIPs = resolvedIPs.concat(await dnsResolve(host, "A"));
+          } catch {}
+          try {
+            resolvedIPs = resolvedIPs.concat(await dnsResolve(host, "AAAA"));
+          } catch {}
+          if (resolvedIPs.length === 0) return true;
+          return !resolvedIPs.some(isPrivateIP);
+        };
+
+        if (!(await validateResolvedIPs(hostname))) {
+          return res.status(400).json({ error: "URL resolves to a private network address" });
+        }
+
+        let pageText = "";
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10000);
+          const response = await fetch(parsed.toString(), {
+            signal: controller.signal,
+            headers: { "User-Agent": "ScooPilot-Onboarding/1.0" },
+            redirect: "manual",
+          });
+          if (response.status >= 300 && response.status < 400) {
+            const location = response.headers.get("location");
+            if (location) {
+              try {
+                const redirectUrl = new URL(location, parsed.toString());
+                if (!["http:", "https:"].includes(redirectUrl.protocol)) {
+                  return res.json({
+                    success: false,
+                    error: "Redirect to non-HTTP URL blocked.",
+                    insights: null,
+                  });
+                }
+                const rHost = redirectUrl.hostname.toLowerCase();
+                if (hostnameBlockedPatterns.some((p) => p.test(rHost))) {
+                  return res.json({
+                    success: false,
+                    error: "Redirect to restricted address blocked.",
+                    insights: null,
+                  });
+                }
+                if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(rHost) && isPrivateIP(rHost)) {
+                  return res.json({
+                    success: false,
+                    error: "Redirect to private IP blocked.",
+                    insights: null,
+                  });
+                }
+                if (!(await validateResolvedIPs(rHost))) {
+                  return res.json({
+                    success: false,
+                    error: "Redirect resolves to private address.",
+                    insights: null,
+                  });
+                }
+                const controller2 = new AbortController();
+                const timeout2 = setTimeout(() => controller2.abort(), 10000);
+                const response2 = await fetch(redirectUrl.toString(), {
+                  signal: controller2.signal,
+                  headers: { "User-Agent": "ScooPilot-Onboarding/1.0" },
+                  redirect: "manual",
+                });
+                clearTimeout(timeout2);
+                const ct2 = response2.headers.get("content-type") || "";
+                if (!ct2.includes("text/html") && !ct2.includes("text/plain")) {
+                  return res.json({
+                    success: false,
+                    error: "URL did not return an HTML page.",
+                    insights: null,
+                  });
+                }
+                const html2 = await response2.text();
+                pageText = html2
+                  .replace(/<script[\s\S]*?<\/script>/gi, "")
+                  .replace(/<style[\s\S]*?<\/style>/gi, "")
+                  .replace(/<[^>]+>/g, " ")
+                  .replace(/\s+/g, " ")
+                  .trim()
+                  .slice(0, 5000);
+              } catch {
+                return res.json({
+                  success: false,
+                  error: "Could not follow redirect.",
+                  insights: null,
+                });
               }
-              const rHost = redirectUrl.hostname.toLowerCase();
-              if (hostnameBlockedPatterns.some(p => p.test(rHost))) {
-                return res.json({ success: false, error: "Redirect to restricted address blocked.", insights: null });
-              }
-              if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(rHost) && isPrivateIP(rHost)) {
-                return res.json({ success: false, error: "Redirect to private IP blocked.", insights: null });
-              }
-              if (!(await validateResolvedIPs(rHost))) {
-                return res.json({ success: false, error: "Redirect resolves to private address.", insights: null });
-              }
-              const controller2 = new AbortController();
-              const timeout2 = setTimeout(() => controller2.abort(), 10000);
-              const response2 = await fetch(redirectUrl.toString(), {
-                signal: controller2.signal,
-                headers: { "User-Agent": "ScooPilot-Onboarding/1.0" },
-                redirect: "manual",
+            } else {
+              return res.json({
+                success: false,
+                error: "Redirect without location header.",
+                insights: null,
               });
-              clearTimeout(timeout2);
-              const ct2 = response2.headers.get("content-type") || "";
-              if (!ct2.includes("text/html") && !ct2.includes("text/plain")) {
-                return res.json({ success: false, error: "URL did not return an HTML page.", insights: null });
-              }
-              const html2 = await response2.text();
-              pageText = html2.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 5000);
-            } catch {
-              return res.json({ success: false, error: "Could not follow redirect.", insights: null });
             }
           } else {
-            return res.json({ success: false, error: "Redirect without location header.", insights: null });
+            clearTimeout(timeout);
+            const contentType = response.headers.get("content-type") || "";
+            if (!contentType.includes("text/html") && !contentType.includes("text/plain")) {
+              return res.json({
+                success: false,
+                error: "URL did not return an HTML page.",
+                insights: null,
+              });
+            }
+            const html = await response.text();
+            pageText = html
+              .replace(/<script[\s\S]*?<\/script>/gi, "")
+              .replace(/<style[\s\S]*?<\/style>/gi, "")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 5000);
           }
-        } else {
-          clearTimeout(timeout);
-          const contentType = response.headers.get("content-type") || "";
-          if (!contentType.includes("text/html") && !contentType.includes("text/plain")) {
-            return res.json({ success: false, error: "URL did not return an HTML page.", insights: null });
-          }
-          const html = await response.text();
-          pageText = html
-            .replace(/<script[\s\S]*?<\/script>/gi, "")
-            .replace(/<style[\s\S]*?<\/style>/gi, "")
-            .replace(/<[^>]+>/g, " ")
-            .replace(/\s+/g, " ")
-            .trim()
-            .slice(0, 5000);
+        } catch (fetchErr) {
+          return res.json({
+            success: false,
+            error: "Could not fetch website. Please check the URL and try again.",
+            insights: null,
+          });
         }
-      } catch (fetchErr) {
-        return res.json({
-          success: false,
-          error: "Could not fetch website. Please check the URL and try again.",
-          insights: null,
-        });
-      }
 
-      try {
-        const OpenAI = (await import("openai")).default;
-        const ai = new OpenAI({
-          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
-        });
+        try {
+          const OpenAI = (await import("openai")).default;
+          const ai = new OpenAI({
+            apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+            baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
+          });
 
-        const completion = await ai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content: `You are a business analyst specializing in pet waste removal companies. Analyze the following website text and extract business intelligence. Return a JSON object with these fields:
+          const completion = await ai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+              {
+                role: "system",
+                content: `You are a business analyst specializing in pet waste removal companies. Analyze the following website text and extract business intelligence. Return a JSON object with these fields:
 - businessDescription: string (1-2 sentence summary of what the business does)
 - serviceArea: string (geographic area they serve, if mentioned)
 - servicesOffered: string[] (list of services)
@@ -328,84 +437,130 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
 - competitiveInsights: string (brief competitive positioning notes)
 - suggestedPricingMode: "aggressive" | "standard" | "premium" (based on their positioning)
 Return ONLY valid JSON, no markdown.`,
+              },
+              { role: "user", content: pageText },
+            ],
+            temperature: 0.3,
+            max_tokens: 1000,
+          });
+
+          const raw = completion.choices[0]?.message?.content || "{}";
+          let insights;
+          try {
+            insights = JSON.parse(
+              raw
+                .replace(/```json?\n?/g, "")
+                .replace(/```/g, "")
+                .trim()
+            );
+          } catch {
+            insights = {
+              businessDescription: raw,
+              serviceArea: "",
+              servicesOffered: [],
+              pricingInfo: {},
+              competitiveInsights: "",
+              suggestedPricingMode: "standard",
+            };
+          }
+
+          res.json({ success: true, insights, rawTextLength: pageText.length });
+        } catch (aiErr) {
+          console.error(
+            "[Onboarding] AI analysis failed:",
+            aiErr instanceof Error ? aiErr.message : aiErr
+          );
+          res.json({
+            success: true,
+            insights: {
+              businessDescription: "Unable to analyze website content automatically.",
+              serviceArea: "",
+              servicesOffered: [],
+              pricingInfo: {},
+              competitiveInsights: "",
+              suggestedPricingMode: "standard",
             },
-            { role: "user", content: pageText },
-          ],
-          temperature: 0.3,
-          max_tokens: 1000,
+            rawTextLength: pageText.length,
+          });
+        }
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/onboarding/import-pricing-csv",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+        const { csvText } = req.body;
+        if (!csvText) return res.status(400).json({ error: "CSV text is required" });
+
+        const { parseCSV } = await import("../services/import-transforms");
+        const { headers, rows } = parseCSV(csvText);
+
+        if (rows.length === 0) return res.status(400).json({ error: "CSV has no data rows" });
+
+        const priceHeaders = headers.filter((h) => {
+          const lower = h.toLowerCase();
+          return (
+            lower.includes("price") ||
+            lower.includes("rate") ||
+            lower.includes("cost") ||
+            lower.includes("amount") ||
+            lower.includes("fee") ||
+            lower.includes("charge")
+          );
+        });
+        const freqHeaders = headers.filter((h) => {
+          const lower = h.toLowerCase();
+          return (
+            lower.includes("frequency") || lower.includes("schedule") || lower.includes("service")
+          );
+        });
+        const sizeHeaders = headers.filter((h) => {
+          const lower = h.toLowerCase();
+          return (
+            lower.includes("yard") ||
+            lower.includes("size") ||
+            lower.includes("lot") ||
+            lower.includes("acre") ||
+            lower.includes("sqft")
+          );
+        });
+        const dogHeaders = headers.filter((h) => {
+          const lower = h.toLowerCase();
+          return lower.includes("dog") || lower.includes("pet");
         });
 
-        const raw = completion.choices[0]?.message?.content || "{}";
-        let insights;
-        try {
-          insights = JSON.parse(raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim());
-        } catch {
-          insights = { businessDescription: raw, serviceArea: "", servicesOffered: [], pricingInfo: {}, competitiveInsights: "", suggestedPricingMode: "standard" };
+        const pricingData: any[] = [];
+        for (const row of rows) {
+          const entry: any = {};
+          for (let i = 0; i < headers.length; i++) {
+            entry[headers[i]] = row[i] || "";
+          }
+          pricingData.push(entry);
         }
 
-        res.json({ success: true, insights, rawTextLength: pageText.length });
-      } catch (aiErr) {
-        console.error("[Onboarding] AI analysis failed:", aiErr instanceof Error ? aiErr.message : aiErr);
-        res.json({
-          success: true,
-          insights: { businessDescription: "Unable to analyze website content automatically.", serviceArea: "", servicesOffered: [], pricingInfo: {}, competitiveInsights: "", suggestedPricingMode: "standard" },
-          rawTextLength: pageText.length,
-        });
+        const summary = {
+          totalRows: rows.length,
+          headers,
+          priceColumns: priceHeaders,
+          frequencyColumns: freqHeaders,
+          sizeColumns: sizeHeaders,
+          dogColumns: dogHeaders,
+          sampleRows: pricingData.slice(0, 5),
+        };
+
+        res.json({ success: true, summary });
+      } catch (err) {
+        handleError(res, err);
       }
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.post("/api/onboarding/import-pricing-csv", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { role } = await getCompanyContext(req);
-      requireRole(role, ["owner", "admin"]);
-      const { csvText } = req.body;
-      if (!csvText) return res.status(400).json({ error: "CSV text is required" });
-
-      const { parseCSV } = await import("../services/import-transforms");
-      const { headers, rows } = parseCSV(csvText);
-
-      if (rows.length === 0) return res.status(400).json({ error: "CSV has no data rows" });
-
-      const priceHeaders = headers.filter(h => {
-        const lower = h.toLowerCase();
-        return lower.includes("price") || lower.includes("rate") || lower.includes("cost") || lower.includes("amount") || lower.includes("fee") || lower.includes("charge");
-      });
-      const freqHeaders = headers.filter(h => {
-        const lower = h.toLowerCase();
-        return lower.includes("frequency") || lower.includes("schedule") || lower.includes("service");
-      });
-      const sizeHeaders = headers.filter(h => {
-        const lower = h.toLowerCase();
-        return lower.includes("yard") || lower.includes("size") || lower.includes("lot") || lower.includes("acre") || lower.includes("sqft");
-      });
-      const dogHeaders = headers.filter(h => {
-        const lower = h.toLowerCase();
-        return lower.includes("dog") || lower.includes("pet");
-      });
-
-      const pricingData: any[] = [];
-      for (const row of rows) {
-        const entry: any = {};
-        for (let i = 0; i < headers.length; i++) {
-          entry[headers[i]] = row[i] || "";
-        }
-        pricingData.push(entry);
-      }
-
-      const summary = {
-        totalRows: rows.length,
-        headers,
-        priceColumns: priceHeaders,
-        frequencyColumns: freqHeaders,
-        sizeColumns: sizeHeaders,
-        dogColumns: dogHeaders,
-        sampleRows: pricingData.slice(0, 5),
-      };
-
-      res.json({ success: true, summary });
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
   app.post("/api/company/invite", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -421,13 +576,18 @@ Return ONLY valid JSON, no markdown.`,
 
       const company = await storage.getCompany(companyId);
       const companyUsersList = await storage.getCompanyUsers(companyId);
-      const activeCount = companyUsersList.filter(cu => cu.isActive).length;
+      const activeCount = companyUsersList.filter((cu) => cu.isActive).length;
       const tier = company?.subscriptionTier || "tier_1";
       const tierConfig = (await import("@shared/schema")).TIER_CONFIG;
       const tierMaxUsers = tierConfig[tier as keyof typeof tierConfig]?.maxUsers || 1;
       const maxUsers = company?.customMaxUsers ?? tierMaxUsers;
       if (activeCount >= maxUsers) {
-        return res.status(402).json({ error: `Seat limit reached (${activeCount}/${maxUsers}).`, seatLimitReached: true, currentCount: activeCount, maxUsers });
+        return res.status(402).json({
+          error: `Seat limit reached (${activeCount}/${maxUsers}).`,
+          seatLimitReached: true,
+          currentCount: activeCount,
+          maxUsers,
+        });
       }
 
       let existingUser = await getUserByEmail(email);
@@ -439,14 +599,22 @@ Return ONLY valid JSON, no markdown.`,
           return res.status(409).json({ error: "This user is already a team member" });
         }
         if (existingMembership && !existingMembership.isActive) {
-          await storage.updateCompanyUser(existingMembership.id, { isActive: true, role: targetRole || "tech" });
+          await storage.updateCompanyUser(existingMembership.id, {
+            isActive: true,
+            role: targetRole || "tech",
+          });
         } else {
           await storage.addUserToCompany(existingUser.id, companyId, targetRole || "tech");
         }
       } else {
         const crypto = await import("crypto");
         tempPassword = crypto.randomBytes(6).toString("base64url");
-        existingUser = await createUserWithTempPassword(email, firstName, lastName || "", tempPassword);
+        existingUser = await createUserWithTempPassword(
+          email,
+          firstName,
+          lastName || "",
+          tempPassword
+        );
         await storage.addUserToCompany(existingUser.id, companyId, targetRole || "tech");
       }
 
@@ -520,10 +688,12 @@ Return ONLY valid JSON, no markdown.`,
             metadata: { userId: existingUser.id, email, role: targetRole || "tech" },
           });
           const activeMembers = await storage.getCompanyUsers(companyId);
-          const activeCount = activeMembers.filter(m => m.isActive !== false).length;
+          const activeCount = activeMembers.filter((m) => m.isActive !== false).length;
           const company = await storage.getCompany(companyId);
           if (company?.stripeSubscriptionId) {
-            reportMeteredUsageSet(company.stripeSubscriptionId, "user_seat", activeCount).catch(() => {});
+            reportMeteredUsageSet(company.stripeSubscriptionId, "user_seat", activeCount).catch(
+              () => {}
+            );
           }
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
@@ -532,7 +702,8 @@ Return ONLY valid JSON, no markdown.`,
       })();
 
       res.json({ success: true, userId: existingUser.id, email, role: targetRole || "tech" });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
-
 }

@@ -5,7 +5,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { ServicePricingItem, ServicePackage, PricingRulesConfig, PricingConfig, ServiceBillingRule } from "@shared/schema";
+import type {
+  ServicePricingItem,
+  ServicePackage,
+  PricingRulesConfig,
+  PricingConfig,
+  ServiceBillingRule,
+} from "@shared/schema";
 import { DEFAULT_PRICING_RULES } from "@shared/schema";
 import {
   BILLING_CADENCE_LABELS,
@@ -42,7 +48,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, DollarSign, Package, Sparkles, RefreshCw, CheckCircle2, Phone, Settings2, X } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  DollarSign,
+  Package,
+  Sparkles,
+  RefreshCw,
+  CheckCircle2,
+  Phone,
+  Settings2,
+  X,
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -94,7 +111,10 @@ function EditablePriceCell({
 
   if (isCallForQuote || disabled) {
     return (
-      <span className="text-sm text-muted-foreground italic px-2 py-1" data-testid={`text-call-quote-${item.id}`}>
+      <span
+        className="text-sm text-muted-foreground italic px-2 py-1"
+        data-testid={`text-call-quote-${item.id}`}
+      >
         <Phone className="inline h-3 w-3 mr-1" />
         Call for Quote
       </span>
@@ -115,7 +135,10 @@ function EditablePriceCell({
           autoFocus
           onKeyDown={(e) => {
             if (e.key === "Enter") {
-              onSave(item.id, { basePrice: price, metadata: { ...meta, manualOverride: true } } as Partial<ServicePricingItem>);
+              onSave(item.id, {
+                basePrice: price,
+                metadata: { ...meta, manualOverride: true },
+              } as Partial<ServicePricingItem>);
               setEditing(false);
             }
             if (e.key === "Escape") {
@@ -124,7 +147,10 @@ function EditablePriceCell({
             }
           }}
           onBlur={() => {
-            onSave(item.id, { basePrice: price, metadata: { ...meta, manualOverride: true } } as Partial<ServicePricingItem>);
+            onSave(item.id, {
+              basePrice: price,
+              metadata: { ...meta, manualOverride: true },
+            } as Partial<ServicePricingItem>);
             setEditing(false);
           }}
         />
@@ -178,11 +204,14 @@ function PricingRulesPanel({
   };
 
   const updatePerDogRule = (key: keyof PricingRulesConfig["perDogRule"], value: string) => {
-    const num = value === "" ? 0 : (key === "surchargeAmount" ? parseFloat(value) : parseInt(value));
+    const num = value === "" ? 0 : key === "surchargeAmount" ? parseFloat(value) : parseInt(value);
     if (!isNaN(num)) {
       setLocalRules((prev) => ({
         ...prev,
-        perDogRule: { ...prev.perDogRule, [key]: Math.max(key === "incrementDogs" || key === "maxDogs" ? 1 : 0, num) },
+        perDogRule: {
+          ...prev.perDogRule,
+          [key]: Math.max(key === "incrementDogs" || key === "maxDogs" ? 1 : 0, num),
+        },
       }));
     }
   };
@@ -205,7 +234,10 @@ function PricingRulesPanel({
         ...prev,
         yardSizeTiers: [
           ...prev.yardSizeTiers,
-          { upToAcres: (lastTier?.upToAcres || 0) + 0.25, surcharge: (lastTier?.surcharge || 0) + 7 },
+          {
+            upToAcres: (lastTier?.upToAcres || 0) + 0.25,
+            surcharge: (lastTier?.surcharge || 0) + 7,
+          },
         ],
       };
     });
@@ -225,196 +257,207 @@ function PricingRulesPanel({
           <Settings2 className="h-5 w-5" />
           Pricing Rules
         </CardTitle>
-        <p className="text-sm text-muted-foreground">Set your base prices and rules, then generate individual pricing rows</p>
+        <p className="text-sm text-muted-foreground">
+          Set your base prices and rules, then generate individual pricing rows
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <DollarSign className="h-4 w-4" />
-            Base Prices (1 Dog)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Weekly</label>
-              <div className="flex items-center gap-1">
-                <span className="text-muted-foreground">$</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={localRules.basePrices.weekly}
-                  onChange={(e) => updateBasePrice("weekly", e.target.value)}
-                  data-testid="input-base-weekly"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Bi-Weekly</label>
-              <div className="flex items-center gap-1">
-                <span className="text-muted-foreground">$</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={localRules.basePrices.biWeekly}
-                  onChange={(e) => updateBasePrice("biWeekly", e.target.value)}
-                  data-testid="input-base-biweekly"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Twice Weekly</label>
-              <div className="flex items-center gap-1">
-                <span className="text-muted-foreground">$</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={localRules.basePrices.twiceWeekly}
-                  onChange={(e) => updateBasePrice("twiceWeekly", e.target.value)}
-                  data-testid="input-base-twiceweekly"
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Settings2 className="h-4 w-4" />
-            Per-Dog Pricing Rule
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">For every</label>
-              <Input
-                type="number"
-                min={1}
-                value={localRules.perDogRule.incrementDogs}
-                onChange={(e) => updatePerDogRule("incrementDogs", e.target.value)}
-                className="w-20"
-                data-testid="input-increment-dogs"
-              />
-            </div>
-            <span className="text-sm text-muted-foreground pb-2">dog(s), add</span>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Surcharge</label>
-              <div className="flex items-center gap-1">
-                <span className="text-muted-foreground">$</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={localRules.perDogRule.surchargeAmount}
-                  onChange={(e) => updatePerDogRule("surchargeAmount", e.target.value)}
-                  className="w-24"
-                  data-testid="input-surcharge-amount"
-                />
-              </div>
-            </div>
-            <span className="text-sm text-muted-foreground pb-2">up to</span>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Max Dogs</label>
-              <Input
-                type="number"
-                min={1}
-                max={20}
-                value={localRules.perDogRule.maxDogs}
-                onChange={(e) => updatePerDogRule("maxDogs", e.target.value)}
-                className="w-20"
-                data-testid="input-max-dogs"
-              />
-            </div>
-            <span className="text-sm text-muted-foreground pb-2">dogs</span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Dogs beyond the max will be marked "Call for Quote"
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Settings2 className="h-4 w-4" />
-            Yard Size Adjustments
-          </CardTitle>
-          <Button variant="outline" size="sm" onClick={addYardTier} data-testid="button-add-yard-tier">
-            <Plus className="h-3 w-3 mr-1" /> Add Tier
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {localRules.yardSizeTiers.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-2">No yard size tiers defined.</p>
-          ) : (
-            <div className="space-y-2">
-              {localRules.yardSizeTiers.map((tier, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Up to</span>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Base Prices (1 Dog)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Weekly</label>
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground">$</span>
                   <Input
                     type="number"
-                    step="0.05"
-                    min={0}
-                    value={tier.upToAcres}
-                    onChange={(e) => updateYardTier(index, "upToAcres", e.target.value)}
-                    className="w-24"
-                    data-testid={`input-yard-acres-${index}`}
+                    step="0.01"
+                    value={localRules.basePrices.weekly}
+                    onChange={(e) => updateBasePrice("weekly", e.target.value)}
+                    data-testid="input-base-weekly"
                   />
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">acre =</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">$</span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Bi-Weekly</label>
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={localRules.basePrices.biWeekly}
+                    onChange={(e) => updateBasePrice("biWeekly", e.target.value)}
+                    data-testid="input-base-biweekly"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Twice Weekly</label>
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={localRules.basePrices.twiceWeekly}
+                    onChange={(e) => updateBasePrice("twiceWeekly", e.target.value)}
+                    data-testid="input-base-twiceweekly"
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Settings2 className="h-4 w-4" />
+              Per-Dog Pricing Rule
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-muted-foreground">For every</label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={localRules.perDogRule.incrementDogs}
+                  onChange={(e) => updatePerDogRule("incrementDogs", e.target.value)}
+                  className="w-20"
+                  data-testid="input-increment-dogs"
+                />
+              </div>
+              <span className="text-sm text-muted-foreground pb-2">dog(s), add</span>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Surcharge</label>
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={localRules.perDogRule.surchargeAmount}
+                    onChange={(e) => updatePerDogRule("surchargeAmount", e.target.value)}
+                    className="w-24"
+                    data-testid="input-surcharge-amount"
+                  />
+                </div>
+              </div>
+              <span className="text-sm text-muted-foreground pb-2">up to</span>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-muted-foreground">Max Dogs</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={localRules.perDogRule.maxDogs}
+                  onChange={(e) => updatePerDogRule("maxDogs", e.target.value)}
+                  className="w-20"
+                  data-testid="input-max-dogs"
+                />
+              </div>
+              <span className="text-sm text-muted-foreground pb-2">dogs</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Dogs beyond the max will be marked "Call for Quote"
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Settings2 className="h-4 w-4" />
+              Yard Size Adjustments
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addYardTier}
+              data-testid="button-add-yard-tier"
+            >
+              <Plus className="h-3 w-3 mr-1" /> Add Tier
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {localRules.yardSizeTiers.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-2">
+                No yard size tiers defined.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {localRules.yardSizeTiers.map((tier, index) => (
+                  <div key={index} className="flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">Up to</span>
                     <Input
                       type="number"
-                      step="0.01"
+                      step="0.05"
                       min={0}
-                      value={tier.surcharge}
-                      onChange={(e) => updateYardTier(index, "surcharge", e.target.value)}
+                      value={tier.upToAcres}
+                      onChange={(e) => updateYardTier(index, "upToAcres", e.target.value)}
                       className="w-24"
-                      data-testid={`input-yard-surcharge-${index}`}
+                      data-testid={`input-yard-acres-${index}`}
                     />
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">acre =</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-muted-foreground">$</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={tier.surcharge}
+                        onChange={(e) => updateYardTier(index, "surcharge", e.target.value)}
+                        className="w-24"
+                        data-testid={`input-yard-surcharge-${index}`}
+                      />
+                    </div>
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                      surcharge
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={() => removeYardTier(index)}
+                      data-testid={`button-remove-yard-tier-${index}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
                   </div>
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">surcharge</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0"
-                    onClick={() => removeYardTier(index)}
-                    data-testid={`button-remove-yard-tier-${index}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-      <div className="flex gap-3">
-        <Button
-          variant="outline"
-          onClick={() => onSave(localRules)}
-          disabled={isSaving}
-          className="flex-1"
-          data-testid="button-save-rules"
-        >
-          <CheckCircle2 className="mr-2 h-4 w-4" />
-          {isSaving ? "Saving..." : "Save Rules"}
-        </Button>
-        <Button
-          onClick={() => onGenerate(localRules)}
-          disabled={isGenerating}
-          className="flex-1"
-          data-testid="button-generate-prices"
-        >
-          <RefreshCw className={`mr-2 h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
-          {isGenerating ? "Generating..." : "Generate Prices from Rules"}
-        </Button>
-      </div>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={() => onSave(localRules)}
+            disabled={isSaving}
+            className="flex-1"
+            data-testid="button-save-rules"
+          >
+            <CheckCircle2 className="mr-2 h-4 w-4" />
+            {isSaving ? "Saving..." : "Save Rules"}
+          </Button>
+          <Button
+            onClick={() => onGenerate(localRules)}
+            disabled={isGenerating}
+            className="flex-1"
+            data-testid="button-generate-prices"
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
+            {isGenerating ? "Generating..." : "Generate Prices from Rules"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -442,12 +485,22 @@ export default function Pricing() {
     queryKey: ["/api/service-billing-rules"],
   });
 
-  const { data: company } = useQuery<{ billingCadence: string; billingTrigger: string; defaultPaymentBehavior: string }>({
+  const { data: company } = useQuery<{
+    billingCadence: string;
+    billingTrigger: string;
+    defaultPaymentBehavior: string;
+  }>({
     queryKey: ["/api/company"],
   });
 
   const upsertBillingRuleMutation = useMutation({
-    mutationFn: async ({ servicePricingId, data }: { servicePricingId: string; data: Partial<ServiceBillingRule> }) => {
+    mutationFn: async ({
+      servicePricingId,
+      data,
+    }: {
+      servicePricingId: string;
+      data: Partial<ServiceBillingRule>;
+    }) => {
       await apiRequest("PUT", `/api/service-billing-rules/${servicePricingId}`, data);
     },
     onSuccess: () => {
@@ -496,7 +549,10 @@ export default function Pricing() {
       queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
       queryClient.invalidateQueries({ queryKey: ["/api/packages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
-      toast({ title: "Pricing loaded", description: "Default pricing has been set up. Review and confirm your pricing." });
+      toast({
+        title: "Pricing loaded",
+        description: "Default pricing has been set up. Review and confirm your pricing.",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -572,7 +628,9 @@ export default function Pricing() {
   const createPackageMutation = useMutation({
     mutationFn: async (data: PackageFormValues) => {
       const { includedItemsText, ...rest } = data;
-      const includedItems = includedItemsText ? includedItemsText.split("\n").filter((s) => s.trim()) : [];
+      const includedItems = includedItemsText
+        ? includedItemsText.split("\n").filter((s) => s.trim())
+        : [];
       await apiRequest("POST", "/api/packages", { ...rest, includedItems });
     },
     onSuccess: () => {
@@ -650,12 +708,20 @@ export default function Pricing() {
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-pricing-heading">Pricing & Packages</h1>
-          <p className="text-sm text-muted-foreground">Customize your service pricing, then confirm to generate packages</p>
+          <h1 className="text-2xl font-bold" data-testid="text-pricing-heading">
+            Pricing & Packages
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Customize your service pricing, then confirm to generate packages
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {!hasPricing && (
-            <Button onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending} data-testid="button-load-defaults">
+            <Button
+              onClick={() => seedMutation.mutate()}
+              disabled={seedMutation.isPending}
+              data-testid="button-load-defaults"
+            >
               <Sparkles className="mr-1 h-4 w-4" />
               {seedMutation.isPending ? "Loading..." : "Load Default Pricing"}
             </Button>
@@ -673,45 +739,109 @@ export default function Pricing() {
                     <DialogTitle>Add Service / Option</DialogTitle>
                   </DialogHeader>
                   <Form {...pricingForm}>
-                    <form onSubmit={pricingForm.handleSubmit((v) => createPricingMutation.mutate(v))} className="space-y-4">
-                      <FormField control={pricingForm.control} name="name" render={({ field }) => (
-                        <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} data-testid="input-service-name" /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <FormField control={pricingForm.control} name="description" render={({ field }) => (
-                        <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} data-testid="input-service-description" /></FormControl><FormMessage /></FormItem>
-                      )} />
+                    <form
+                      onSubmit={pricingForm.handleSubmit((v) => createPricingMutation.mutate(v))}
+                      className="space-y-4"
+                    >
+                      <FormField
+                        control={pricingForm.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Name</FormLabel>
+                            <FormControl>
+                              <Input {...field} data-testid="input-service-name" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={pricingForm.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} data-testid="input-service-description" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                       <div className="grid grid-cols-2 gap-3">
-                        <FormField control={pricingForm.control} name="category" render={({ field }) => (
-                          <FormItem><FormLabel>Category</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl><SelectTrigger data-testid="select-category"><SelectValue /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                <SelectItem value="recurring_service">Recurring Service</SelectItem>
-                                <SelectItem value="one_time_service">One-Time Service</SelectItem>
-                                <SelectItem value="add_on">Add-On</SelectItem>
-                              </SelectContent>
-                            </Select><FormMessage />
-                          </FormItem>
-                        )} />
-                        <FormField control={pricingForm.control} name="unit" render={({ field }) => (
-                          <FormItem><FormLabel>Billing Unit</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl><SelectTrigger data-testid="select-unit"><SelectValue /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                <SelectItem value="per_visit">Per Visit</SelectItem>
-                                <SelectItem value="per_week">Per Week</SelectItem>
-                                <SelectItem value="per_month">Per Month</SelectItem>
-                                <SelectItem value="flat_rate">Flat Rate</SelectItem>
-                                <SelectItem value="one_time">One-Time</SelectItem>
-                              </SelectContent>
-                            </Select><FormMessage />
-                          </FormItem>
-                        )} />
+                        <FormField
+                          control={pricingForm.control}
+                          name="category"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Category</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-category">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="recurring_service">
+                                    Recurring Service
+                                  </SelectItem>
+                                  <SelectItem value="one_time_service">One-Time Service</SelectItem>
+                                  <SelectItem value="add_on">Add-On</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={pricingForm.control}
+                          name="unit"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Billing Unit</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger data-testid="select-unit">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="per_visit">Per Visit</SelectItem>
+                                  <SelectItem value="per_week">Per Week</SelectItem>
+                                  <SelectItem value="per_month">Per Month</SelectItem>
+                                  <SelectItem value="flat_rate">Flat Rate</SelectItem>
+                                  <SelectItem value="one_time">One-Time</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </div>
-                      <FormField control={pricingForm.control} name="basePrice" render={({ field }) => (
-                        <FormItem><FormLabel>Base Price ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} data-testid="input-service-price" /></FormControl><FormMessage /></FormItem>
-                      )} />
-                      <Button type="submit" disabled={createPricingMutation.isPending} data-testid="button-submit-service">
+                      <FormField
+                        control={pricingForm.control}
+                        name="basePrice"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Base Price ($)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                {...field}
+                                data-testid="input-service-price"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button
+                        type="submit"
+                        disabled={createPricingMutation.isPending}
+                        data-testid="button-submit-service"
+                      >
                         {createPricingMutation.isPending ? "Adding..." : "Add Service"}
                       </Button>
                     </form>
@@ -733,7 +863,9 @@ export default function Pricing() {
 
       {pricingLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
         </div>
       ) : !hasPricing ? (
         <Card>
@@ -742,10 +874,15 @@ export default function Pricing() {
             <div>
               <p className="text-lg font-medium">No pricing configured yet</p>
               <p className="text-sm text-muted-foreground">
-                Load default pricing to get started with industry-standard rates, then customize to match your business.
+                Load default pricing to get started with industry-standard rates, then customize to
+                match your business.
               </p>
             </div>
-            <Button onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending} data-testid="button-load-defaults-empty">
+            <Button
+              onClick={() => seedMutation.mutate()}
+              disabled={seedMutation.isPending}
+              data-testid="button-load-defaults-empty"
+            >
               <Sparkles className="mr-1 h-4 w-4" />
               {seedMutation.isPending ? "Loading..." : "Load Default Pricing"}
             </Button>
@@ -784,7 +921,9 @@ export default function Pricing() {
             </CardHeader>
             <CardContent>
               {filteredItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No items in this category yet.</p>
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No items in this category yet.
+                </p>
               ) : (
                 <div className="space-y-2">
                   {filteredItems
@@ -805,28 +944,43 @@ export default function Pricing() {
                         >
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <p className={`font-medium truncate ${isCallForQuote ? "text-muted-foreground" : ""}`}>{item.name}</p>
+                              <p
+                                className={`font-medium truncate ${isCallForQuote ? "text-muted-foreground" : ""}`}
+                              >
+                                {item.name}
+                              </p>
                               <Badge variant="secondary" className="no-default-active-elevate">
                                 {UNIT_LABELS[item.unit] || item.unit}
                               </Badge>
                               {isCallForQuoteRow && (
-                                <Badge variant="outline" className="no-default-active-elevate text-muted-foreground">
+                                <Badge
+                                  variant="outline"
+                                  className="no-default-active-elevate text-muted-foreground"
+                                >
                                   <Phone className="h-3 w-3 mr-1" /> Custom Quote
                                 </Badge>
                               )}
                               {isManualOverride && activeTab === "recurring_service" && (
-                                <Badge variant="outline" className="no-default-active-elevate text-xs">
+                                <Badge
+                                  variant="outline"
+                                  className="no-default-active-elevate text-xs"
+                                >
                                   Override
                                 </Badge>
                               )}
                               {!item.isActive && (
-                                <Badge variant="outline" className="no-default-active-elevate text-muted-foreground">
+                                <Badge
+                                  variant="outline"
+                                  className="no-default-active-elevate text-muted-foreground"
+                                >
                                   Inactive
                                 </Badge>
                               )}
                             </div>
                             {item.description && (
-                              <p className="text-sm text-muted-foreground truncate">{item.description}</p>
+                              <p className="text-sm text-muted-foreground truncate">
+                                {item.description}
+                              </p>
                             )}
                           </div>
                           <div className="flex items-center gap-3">
@@ -834,10 +988,14 @@ export default function Pricing() {
                               <div className="flex items-center gap-1.5">
                                 <Switch
                                   checked={isCallForQuote}
-                                  onCheckedChange={(checked) => handleToggleCallForQuote(item, checked)}
+                                  onCheckedChange={(checked) =>
+                                    handleToggleCallForQuote(item, checked)
+                                  }
                                   data-testid={`switch-call-quote-${item.id}`}
                                 />
-                                <span className="text-xs text-muted-foreground whitespace-nowrap">Call for Quote</span>
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                  Call for Quote
+                                </span>
                               </div>
                             )}
                             <EditablePriceCell
@@ -874,108 +1032,183 @@ export default function Pricing() {
                   <Settings2 className="h-4 w-4" />
                   Billing Rules for {CATEGORY_LABELS[activeTab]}
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">Override the system billing defaults for individual services. Leave as "Use system default" to inherit from your company billing settings.</p>
+                <p className="text-xs text-muted-foreground">
+                  Override the system billing defaults for individual services. Leave as "Use system
+                  default" to inherit from your company billing settings.
+                </p>
               </CardHeader>
               <CardContent className="space-y-3">
-                {filteredItems.sort((a, b) => a.sortOrder - b.sortOrder).map((item) => {
-                  const existingRule = serviceBillingRules.find(r => r.servicePricingId === item.id);
-                  const hasCustomRule = !!(existingRule?.billingCadence || existingRule?.billingTrigger || existingRule?.paymentBehavior);
-                  const systemCadence = company?.billingCadence || "per_visit";
-                  const systemTrigger = company?.billingTrigger || "after_job";
-                  const systemBehavior = company?.defaultPaymentBehavior || "send_invoice";
-                  return (
-                    <div key={item.id} className="border rounded-md p-3 space-y-2" data-testid={`billing-rule-item-${item.id}`}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium truncate">{item.name}</span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {!hasCustomRule && (
-                            <span className="text-xs text-muted-foreground">Using system default</span>
-                          )}
-                          {hasCustomRule && (
-                            <Badge variant="outline" className="text-xs">Custom Rule</Badge>
-                          )}
-                          <Switch
-                            checked={hasCustomRule}
-                            onCheckedChange={(checked) => {
-                              if (!checked) {
-                                deleteBillingRuleMutation.mutate(item.id);
-                              } else {
-                                upsertBillingRuleMutation.mutate({
-                                  servicePricingId: item.id,
-                                  data: {
-                                    billingCadence: systemCadence,
-                                    billingTrigger: systemTrigger,
-                                    paymentBehavior: systemBehavior,
-                                  },
-                                });
-                              }
-                            }}
-                            data-testid={`switch-billing-rule-${item.id}`}
-                          />
+                {filteredItems
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((item) => {
+                    const existingRule = serviceBillingRules.find(
+                      (r) => r.servicePricingId === item.id
+                    );
+                    const hasCustomRule = !!(
+                      existingRule?.billingCadence ||
+                      existingRule?.billingTrigger ||
+                      existingRule?.paymentBehavior
+                    );
+                    const systemCadence = company?.billingCadence || "per_visit";
+                    const systemTrigger = company?.billingTrigger || "after_job";
+                    const systemBehavior = company?.defaultPaymentBehavior || "send_invoice";
+                    return (
+                      <div
+                        key={item.id}
+                        className="border rounded-md p-3 space-y-2"
+                        data-testid={`billing-rule-item-${item.id}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium truncate">{item.name}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {!hasCustomRule && (
+                              <span className="text-xs text-muted-foreground">
+                                Using system default
+                              </span>
+                            )}
+                            {hasCustomRule && (
+                              <Badge variant="outline" className="text-xs">
+                                Custom Rule
+                              </Badge>
+                            )}
+                            <Switch
+                              checked={hasCustomRule}
+                              onCheckedChange={(checked) => {
+                                if (!checked) {
+                                  deleteBillingRuleMutation.mutate(item.id);
+                                } else {
+                                  upsertBillingRuleMutation.mutate({
+                                    servicePricingId: item.id,
+                                    data: {
+                                      billingCadence: systemCadence,
+                                      billingTrigger: systemTrigger,
+                                      paymentBehavior: systemBehavior,
+                                    },
+                                  });
+                                }
+                              }}
+                              data-testid={`switch-billing-rule-${item.id}`}
+                            />
+                          </div>
                         </div>
+                        {!hasCustomRule && (
+                          <div className="space-y-1 pl-1">
+                            <BillingRuleInheritance
+                              label="Cadence"
+                              value={systemCadence}
+                              labels={BILLING_CADENCE_LABELS}
+                              origin="system"
+                              muted
+                            />
+                            <BillingRuleInheritance
+                              label="Trigger"
+                              value={systemTrigger}
+                              labels={BILLING_TRIGGER_LABELS}
+                              origin="system"
+                              muted
+                            />
+                            <BillingRuleInheritance
+                              label="Payment"
+                              value={systemBehavior}
+                              labels={PAYMENT_BEHAVIOR_LABELS}
+                              origin="system"
+                              muted
+                            />
+                          </div>
+                        )}
+                        {hasCustomRule && (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-1">
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Cadence</p>
+                              <Select
+                                value={existingRule?.billingCadence || systemCadence}
+                                onValueChange={(v) =>
+                                  upsertBillingRuleMutation.mutate({
+                                    servicePricingId: item.id,
+                                    data: { ...(existingRule || {}), billingCadence: v },
+                                  })
+                                }
+                              >
+                                <SelectTrigger
+                                  className="h-8 text-xs"
+                                  data-testid={`select-rule-cadence-${item.id}`}
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Object.entries(BILLING_CADENCE_LABELS).map(([v, l]) => (
+                                    <SelectItem key={v} value={v}>
+                                      {l}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Trigger</p>
+                              <Select
+                                value={existingRule?.billingTrigger || systemTrigger}
+                                onValueChange={(v) =>
+                                  upsertBillingRuleMutation.mutate({
+                                    servicePricingId: item.id,
+                                    data: { ...(existingRule || {}), billingTrigger: v },
+                                  })
+                                }
+                              >
+                                <SelectTrigger
+                                  className="h-8 text-xs"
+                                  data-testid={`select-rule-trigger-${item.id}`}
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Object.entries(BILLING_TRIGGER_LABELS).map(([v, l]) => (
+                                    <SelectItem key={v} value={v}>
+                                      {l}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Payment</p>
+                              <Select
+                                value={existingRule?.paymentBehavior || systemBehavior}
+                                onValueChange={(v) =>
+                                  upsertBillingRuleMutation.mutate({
+                                    servicePricingId: item.id,
+                                    data: { ...(existingRule || {}), paymentBehavior: v },
+                                  })
+                                }
+                              >
+                                <SelectTrigger
+                                  className="h-8 text-xs"
+                                  data-testid={`select-rule-payment-${item.id}`}
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Object.entries(PAYMENT_BEHAVIOR_LABELS).map(([v, l]) => (
+                                    <SelectItem key={v} value={v}>
+                                      {l}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      {!hasCustomRule && (
-                        <div className="space-y-1 pl-1">
-                          <BillingRuleInheritance label="Cadence" value={systemCadence} labels={BILLING_CADENCE_LABELS} origin="system" muted />
-                          <BillingRuleInheritance label="Trigger" value={systemTrigger} labels={BILLING_TRIGGER_LABELS} origin="system" muted />
-                          <BillingRuleInheritance label="Payment" value={systemBehavior} labels={PAYMENT_BEHAVIOR_LABELS} origin="system" muted />
-                        </div>
-                      )}
-                      {hasCustomRule && (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-1">
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">Cadence</p>
-                            <Select
-                              value={existingRule?.billingCadence || systemCadence}
-                              onValueChange={(v) => upsertBillingRuleMutation.mutate({ servicePricingId: item.id, data: { ...(existingRule || {}), billingCadence: v } })}
-                            >
-                              <SelectTrigger className="h-8 text-xs" data-testid={`select-rule-cadence-${item.id}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {Object.entries(BILLING_CADENCE_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">Trigger</p>
-                            <Select
-                              value={existingRule?.billingTrigger || systemTrigger}
-                              onValueChange={(v) => upsertBillingRuleMutation.mutate({ servicePricingId: item.id, data: { ...(existingRule || {}), billingTrigger: v } })}
-                            >
-                              <SelectTrigger className="h-8 text-xs" data-testid={`select-rule-trigger-${item.id}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {Object.entries(BILLING_TRIGGER_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground mb-1">Payment</p>
-                            <Select
-                              value={existingRule?.paymentBehavior || systemBehavior}
-                              onValueChange={(v) => upsertBillingRuleMutation.mutate({ servicePricingId: item.id, data: { ...(existingRule || {}), paymentBehavior: v } })}
-                            >
-                              <SelectTrigger className="h-8 text-xs" data-testid={`select-rule-payment-${item.id}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {Object.entries(PAYMENT_BEHAVIOR_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </CardContent>
             </Card>
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xl font-bold" data-testid="text-packages-heading">Service Packages</h2>
+            <h2 className="text-xl font-bold" data-testid="text-packages-heading">
+              Service Packages
+            </h2>
             <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" data-testid="button-add-package">
@@ -987,39 +1220,101 @@ export default function Pricing() {
                   <DialogTitle>Create Service Package</DialogTitle>
                 </DialogHeader>
                 <Form {...packageForm}>
-                  <form onSubmit={packageForm.handleSubmit((v) => createPackageMutation.mutate(v))} className="space-y-4">
-                    <FormField control={packageForm.control} name="name" render={({ field }) => (
-                      <FormItem><FormLabel>Package Name</FormLabel><FormControl><Input {...field} data-testid="input-package-name" /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <FormField control={packageForm.control} name="description" render={({ field }) => (
-                      <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea {...field} data-testid="input-package-description" /></FormControl><FormMessage /></FormItem>
-                    )} />
-                    <div className="grid grid-cols-2 gap-3">
-                      <FormField control={packageForm.control} name="frequency" render={({ field }) => (
-                        <FormItem><FormLabel>Frequency</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl><SelectTrigger data-testid="select-package-frequency"><SelectValue /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              <SelectItem value="weekly">Weekly</SelectItem>
-                              <SelectItem value="biweekly">Bi-Weekly</SelectItem>
-                              <SelectItem value="monthly">Monthly</SelectItem>
-                              <SelectItem value="one_time">One-Time</SelectItem>
-                            </SelectContent>
-                          </Select><FormMessage />
+                  <form
+                    onSubmit={packageForm.handleSubmit((v) => createPackageMutation.mutate(v))}
+                    className="space-y-4"
+                  >
+                    <FormField
+                      control={packageForm.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Package Name</FormLabel>
+                          <FormControl>
+                            <Input {...field} data-testid="input-package-name" />
+                          </FormControl>
+                          <FormMessage />
                         </FormItem>
-                      )} />
-                      <FormField control={packageForm.control} name="basePrice" render={({ field }) => (
-                        <FormItem><FormLabel>Package Price ($)</FormLabel><FormControl><Input type="number" step="0.01" {...field} data-testid="input-package-price" /></FormControl><FormMessage /></FormItem>
-                      )} />
+                      )}
+                    />
+                    <FormField
+                      control={packageForm.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Description</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} data-testid="input-package-description" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField
+                        control={packageForm.control}
+                        name="frequency"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Frequency</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-package-frequency">
+                                  <SelectValue />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="weekly">Weekly</SelectItem>
+                                <SelectItem value="biweekly">Bi-Weekly</SelectItem>
+                                <SelectItem value="monthly">Monthly</SelectItem>
+                                <SelectItem value="one_time">One-Time</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={packageForm.control}
+                        name="basePrice"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Package Price ($)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                {...field}
+                                data-testid="input-package-price"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
-                    <FormField control={packageForm.control} name="includedItemsText" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Included Items (one per line)</FormLabel>
-                        <FormControl><Textarea {...field} placeholder={"Weekly scooping\nDeodorizing treatment\nUp to 2 dogs"} data-testid="input-package-items" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <Button type="submit" disabled={createPackageMutation.isPending} data-testid="button-submit-package">
+                    <FormField
+                      control={packageForm.control}
+                      name="includedItemsText"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Included Items (one per line)</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              {...field}
+                              placeholder={"Weekly scooping\nDeodorizing treatment\nUp to 2 dogs"}
+                              data-testid="input-package-items"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="submit"
+                      disabled={createPackageMutation.isPending}
+                      data-testid="button-submit-package"
+                    >
                       {createPackageMutation.isPending ? "Creating..." : "Create Package"}
                     </Button>
                   </form>
@@ -1030,7 +1325,9 @@ export default function Pricing() {
 
           {packagesLoading ? (
             <div className="space-y-3">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-32 w-full" />)}
+              {[1, 2].map((i) => (
+                <Skeleton key={i} className="h-32 w-full" />
+              ))}
             </div>
           ) : packages && packages.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1045,7 +1342,9 @@ export default function Pricing() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <p className="text-xl font-bold">${parseFloat(pkg.basePrice).toFixed(2)}</p>
-                      <span className="text-sm text-muted-foreground">/{pkg.frequency === "one_time" ? "one-time" : pkg.frequency}</span>
+                      <span className="text-sm text-muted-foreground">
+                        /{pkg.frequency === "one_time" ? "one-time" : pkg.frequency}
+                      </span>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -1066,7 +1365,9 @@ export default function Pricing() {
                           onCheckedChange={(checked) => handlePackageToggleActive(pkg.id, checked)}
                           data-testid={`switch-package-active-${pkg.id}`}
                         />
-                        <span className="text-sm text-muted-foreground">{pkg.isActive ? "Active" : "Inactive"}</span>
+                        <span className="text-sm text-muted-foreground">
+                          {pkg.isActive ? "Active" : "Inactive"}
+                        </span>
                       </div>
                       <Button
                         variant="ghost"
@@ -1086,7 +1387,8 @@ export default function Pricing() {
               <CardContent className="p-6 text-center">
                 <Package className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  No packages yet. Confirm your pricing above to auto-generate packages, or add one manually.
+                  No packages yet. Confirm your pricing above to auto-generate packages, or add one
+                  manually.
                 </p>
               </CardContent>
             </Card>

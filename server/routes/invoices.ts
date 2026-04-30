@@ -8,14 +8,25 @@ import {
   ensureConnectedCustomer,
 } from "../services/stripe";
 import { computeInvoice } from "../invoice-engine/invoice.compute";
-import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "../invoice-engine/invoice.render";
 import {
-  insertInvoiceSchema,
-  insertInvoiceLineItemSchema,
-} from "@shared/schema";
+  renderInvoice,
+  loadTemplate,
+  loadTheme,
+  getDefaultTemplatePath,
+  getDefaultThemePath,
+} from "../invoice-engine/invoice.render";
+import { insertInvoiceSchema, insertInvoiceLineItemSchema } from "@shared/schema";
 
-import { isAuthenticated, getCompanyContext, getBaseUrl, handleError, auditLog, p, qboAutoSync, buildVisitLineItemsWithAddOns } from "./shared";
-
+import {
+  isAuthenticated,
+  getCompanyContext,
+  getBaseUrl,
+  handleError,
+  auditLog,
+  p,
+  qboAutoSync,
+  buildVisitLineItemsWithAddOns,
+} from "./shared";
 
 export async function registerInvoicesRoutes(app: Express): Promise<void> {
   // ================ Invoice Routes ================
@@ -28,7 +39,9 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       if (req.query.status) filters.status = req.query.status as string;
       const invoicesList = await storage.getInvoices(companyId, filters);
       res.json(invoicesList);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/invoices/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -38,14 +51,23 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       const lineItems = await storage.getInvoiceLineItems(invoice.id);
       res.json({ ...invoice, lineItems });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/invoices", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const suppressNotifications = req.body.suppressNotifications === true;
-      const { lineItems, taxRate, discountType, discountValue, suppressNotifications: _sn2, ...invoiceData } = req.body;
+      const {
+        lineItems,
+        taxRate,
+        discountType,
+        discountValue,
+        suppressNotifications: _sn2,
+        ...invoiceData
+      } = req.body;
 
       if (!invoiceData.contactId || !invoiceData.dueDate) {
         return res.status(400).json({ error: "contactId and dueDate are required" });
@@ -90,7 +112,7 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       const taxAmount = afterDiscount * (parsedTaxRate / 100);
 
       if (company?.passStripeFees) {
-        const feeUnitPrice = Math.round((afterDiscount * 0.029 + 0.30) * 100) / 100;
+        const feeUnitPrice = Math.round((afterDiscount * 0.029 + 0.3) * 100) / 100;
         processedLineItems.push({
           description: "Payment Processing Fee",
           quantity: 1,
@@ -100,7 +122,10 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         subtotal += feeUnitPrice;
       }
 
-      const total = afterDiscount + taxAmount + (company?.passStripeFees ? (Math.round((afterDiscount * 0.029 + 0.30) * 100) / 100) : 0);
+      const total =
+        afterDiscount +
+        taxAmount +
+        (company?.passStripeFees ? Math.round((afterDiscount * 0.029 + 0.3) * 100) / 100 : 0);
 
       const parsed = insertInvoiceSchema.parse({
         ...invoiceData,
@@ -136,15 +161,37 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
       qboAutoSync(companyId, invoice.id, "invoice");
       const { userId: auditUserId } = await getCompanyContext(req);
-      auditLog(companyId, auditUserId, "invoice", invoice.id, "create", { new: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, contactId: invoice.contactId } }, req.ip || undefined);
+      auditLog(
+        companyId,
+        auditUserId,
+        "invoice",
+        invoice.id,
+        "create",
+        {
+          new: {
+            invoiceNumber: invoice.invoiceNumber,
+            total: invoice.total,
+            contactId: invoice.contactId,
+          },
+        },
+        req.ip || undefined
+      );
       if (!suppressNotifications) {
         try {
           const { fireAutomationTrigger } = await import("../services/automation-runner");
-          await fireAutomationTrigger("invoice_created", companyId, { invoiceId: invoice.id, contactId: invoice.contactId, total: invoice.total });
-        } catch (autoErr) { console.error("[automation] invoice_created trigger error:", autoErr); }
+          await fireAutomationTrigger("invoice_created", companyId, {
+            invoiceId: invoice.id,
+            contactId: invoice.contactId,
+            total: invoice.total,
+          });
+        } catch (autoErr) {
+          console.error("[automation] invoice_created trigger error:", autoErr);
+        }
       }
       res.status(201).json({ ...invoice, lineItems: createdLineItems });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/invoices/generate", isAuthenticated, async (req: Request, res: Response) => {
@@ -159,9 +206,19 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
       let billableVisits: any[] = [];
       if (mode === "completed" || contact.invoiceTiming === "after_service") {
-        billableVisits = await storage.getUninvoicedCompletedVisits(companyId, contactId, startDate, endDate);
+        billableVisits = await storage.getUninvoicedCompletedVisits(
+          companyId,
+          contactId,
+          startDate,
+          endDate
+        );
       } else {
-        billableVisits = await storage.getScheduledVisitsForRange(companyId, contactId, startDate, endDate);
+        billableVisits = await storage.getScheduledVisitsForRange(
+          companyId,
+          contactId,
+          startDate,
+          endDate
+        );
       }
 
       if (billableVisits.length === 0) {
@@ -169,24 +226,27 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       }
 
       const plans = await storage.getServicePlans(companyId, { contactId });
-      const planMap = new Map(plans.map(p => [p.id, p]));
+      const planMap = new Map(plans.map((p) => [p.id, p]));
 
       const lineItems = await buildVisitLineItemsWithAddOns(billableVisits, planMap);
 
       const subtotal = lineItems.reduce((sum, li) => sum + parseFloat(li.total), 0);
       const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
-      const invoice = await storage.createInvoiceWithLineItems({
-        companyId,
-        contactId,
-        invoiceNumber,
-        dueDate: endDate,
-        subtotal: subtotal.toFixed(2),
-        tax: "0",
-        total: subtotal.toFixed(2),
-        status: "draft",
-        autoGenerated: true,
-        paymentAttempts: 0,
-      }, lineItems);
+      const invoice = await storage.createInvoiceWithLineItems(
+        {
+          companyId,
+          contactId,
+          invoiceNumber,
+          dueDate: endDate,
+          subtotal: subtotal.toFixed(2),
+          tax: "0",
+          total: subtotal.toFixed(2),
+          status: "draft",
+          autoGenerated: true,
+          paymentAttempts: 0,
+        },
+        lineItems
+      );
 
       for (const v of billableVisits) {
         await storage.updateVisit(v.id, companyId, { invoiceId: invoice.id });
@@ -194,19 +254,42 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
       qboAutoSync(companyId, invoice.id, "invoice");
       const { userId: auditUid } = await getCompanyContext(req);
-      auditLog(companyId, auditUid, "invoice", invoice.id, "create", { new: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, contactId, autoGenerated: true } }, req.ip || undefined);
+      auditLog(
+        companyId,
+        auditUid,
+        "invoice",
+        invoice.id,
+        "create",
+        {
+          new: {
+            invoiceNumber: invoice.invoiceNumber,
+            total: invoice.total,
+            contactId,
+            autoGenerated: true,
+          },
+        },
+        req.ip || undefined
+      );
       const items = await storage.getInvoiceLineItems(invoice.id);
       res.status(201).json({ ...invoice, lineItems: items });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.get("/api/company/uninvoiced-summary", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const summary = await storage.getUninvoicedSummary(companyId);
-      res.json(summary);
-    } catch (err) { handleError(res, err); }
-  });
+  app.get(
+    "/api/company/uninvoiced-summary",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const summary = await storage.getUninvoicedSummary(companyId);
+        res.json(summary);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.get("/api/contacts/:id/visits", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -217,38 +300,70 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
       const result = await storage.getVisitsForContact(companyId, p(req.params.id), limit, offset);
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.get("/api/contacts/:id/uninvoiced-visits", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-      const result = await storage.getUninvoicedVisitsForContact(companyId, p(req.params.id));
-      res.json(result);
-    } catch (err) { handleError(res, err); }
-  });
+  app.get(
+    "/api/contacts/:id/uninvoiced-visits",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        const result = await storage.getUninvoicedVisitsForContact(companyId, p(req.params.id));
+        res.json(result);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
-  app.get("/api/contacts/:id/unsent-invoices", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-      const drafts = await storage.getInvoices(companyId, { contactId: p(req.params.id), status: "draft" });
-      const result = await Promise.all(drafts.map(async (inv) => {
-        const items = await storage.getInvoiceLineItems(inv.id);
-        return { ...inv, lineItems: items };
-      }));
-      res.json({ invoices: result });
-    } catch (err) { handleError(res, err); }
-  });
+  app.get(
+    "/api/contacts/:id/unsent-invoices",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        const drafts = await storage.getInvoices(companyId, {
+          contactId: p(req.params.id),
+          status: "draft",
+        });
+        const result = await Promise.all(
+          drafts.map(async (inv) => {
+            const items = await storage.getInvoiceLineItems(inv.id);
+            return { ...inv, lineItems: items };
+          })
+        );
+        res.json({ invoices: result });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.post("/api/invoices/consolidate", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const { contactId, draftInvoiceIds, lineItems: submittedItems, dueDate, discountType, discountValue, notes } = req.body;
-      if (!contactId || !draftInvoiceIds || !Array.isArray(draftInvoiceIds) || draftInvoiceIds.length === 0) {
+      const {
+        contactId,
+        draftInvoiceIds,
+        lineItems: submittedItems,
+        dueDate,
+        discountType,
+        discountValue,
+        notes,
+      } = req.body;
+      if (
+        !contactId ||
+        !draftInvoiceIds ||
+        !Array.isArray(draftInvoiceIds) ||
+        draftInvoiceIds.length === 0
+      ) {
         return res.status(400).json({ error: "contactId and draftInvoiceIds array required" });
       }
       if (!submittedItems || !Array.isArray(submittedItems) || submittedItems.length === 0) {
@@ -276,12 +391,18 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         };
       });
 
-      let subtotal = allLineItems.reduce((sum: number, item: any) => sum + parseFloat(item.total), 0);
+      let subtotal = allLineItems.reduce(
+        (sum: number, item: any) => sum + parseFloat(item.total),
+        0
+      );
       let totalAmount = subtotal;
       const discVal = parseFloat(discountValue || "0");
-      const discType = (discountType === "percent" || discountType === "percentage") ? "percent"
-        : (discountType === "amount" || discountType === "fixed") ? "amount"
-        : null;
+      const discType =
+        discountType === "percent" || discountType === "percentage"
+          ? "percent"
+          : discountType === "amount" || discountType === "fixed"
+            ? "amount"
+            : null;
       if (discType === "percent" && discVal > 0) {
         totalAmount = subtotal * (1 - discVal / 100);
       } else if (discType === "amount" && discVal > 0) {
@@ -290,29 +411,36 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       if (totalAmount < 0) totalAmount = 0;
 
       const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
-      const dueDateStr = dueDate || (() => {
-        const d = new Date();
-        d.setDate(d.getDate() + 30);
-        return d.toISOString().split("T")[0];
-      })();
+      const dueDateStr =
+        dueDate ||
+        (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 30);
+          return d.toISOString().split("T")[0];
+        })();
 
-      const invoice = await storage.createInvoiceWithLineItems({
-        companyId,
-        contactId,
-        invoiceNumber,
-        dueDate: dueDateStr,
-        subtotal: subtotal.toFixed(2),
-        tax: "0",
-        total: totalAmount.toFixed(2),
-        status: "draft",
-        autoGenerated: false,
-        paymentAttempts: 0,
-        discountType: discType || undefined,
-        discountValue: discVal > 0 ? discVal.toFixed(2) : "0",
-        notes: notes || null,
-      }, allLineItems);
+      const invoice = await storage.createInvoiceWithLineItems(
+        {
+          companyId,
+          contactId,
+          invoiceNumber,
+          dueDate: dueDateStr,
+          subtotal: subtotal.toFixed(2),
+          tax: "0",
+          total: totalAmount.toFixed(2),
+          status: "draft",
+          autoGenerated: false,
+          paymentAttempts: 0,
+          discountType: discType || undefined,
+          discountValue: discVal > 0 ? discVal.toFixed(2) : "0",
+          notes: notes || null,
+        },
+        allLineItems
+      );
 
-      const newVisitIds = new Set(allLineItems.filter((i: any) => i.visitId).map((i: any) => i.visitId));
+      const newVisitIds = new Set(
+        allLineItems.filter((i: any) => i.visitId).map((i: any) => i.visitId)
+      );
 
       for (const draftId of voidedIds) {
         await storage.updateInvoice(draftId, companyId, { status: "voided" as any });
@@ -328,9 +456,15 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         await storage.updateVisit(visitId as string, companyId, { invoiceId: invoice.id });
       }
 
-      auditLog(companyId, userId, "invoice", invoice.id, "update", { action: "consolidated", consolidatedFrom: voidedIds, lineItemCount: allLineItems.length });
+      auditLog(companyId, userId, "invoice", invoice.id, "update", {
+        action: "consolidated",
+        consolidatedFrom: voidedIds,
+        lineItemCount: allLineItems.length,
+      });
       res.json(invoice);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/invoices/from-visits", isAuthenticated, async (req: Request, res: Response) => {
@@ -344,16 +478,21 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
       const plans = await storage.getServicePlans(companyId, { contactId });
-      const planMap = new Map(plans.map(p => [p.id, p]));
-      const contactPlanIds = new Set(plans.map(p => p.id));
+      const planMap = new Map(plans.map((p) => [p.id, p]));
+      const contactPlanIds = new Set(plans.map((p) => p.id));
 
       const allVisits: Visit[] = [];
       for (const vid of visitIds) {
         const v = await storage.getVisit(vid, companyId);
         if (!v) return res.status(400).json({ error: `Visit ${vid} not found` });
-        if (!contactPlanIds.has(v.servicePlanId)) return res.status(400).json({ error: `Visit ${vid} does not belong to this contact` });
-        if (v.status !== "completed") return res.status(400).json({ error: `Visit ${vid} is not completed` });
-        if (v.invoiceId || await storage.isVisitInvoiced(v.id)) return res.status(400).json({ error: `Visit on ${v.scheduledDate} has already been invoiced` });
+        if (!contactPlanIds.has(v.servicePlanId))
+          return res.status(400).json({ error: `Visit ${vid} does not belong to this contact` });
+        if (v.status !== "completed")
+          return res.status(400).json({ error: `Visit ${vid} is not completed` });
+        if (v.invoiceId || (await storage.isVisitInvoiced(v.id)))
+          return res
+            .status(400)
+            .json({ error: `Visit on ${v.scheduledDate} has already been invoiced` });
         allVisits.push(v);
       }
 
@@ -365,24 +504,29 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
       const subtotal = lineItems.reduce((sum, item) => sum + parseFloat(item.total), 0);
       const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
-      const dueDateStr = dueDate || (() => {
-        const d = new Date();
-        d.setDate(d.getDate() + 30);
-        return d.toISOString().split("T")[0];
-      })();
+      const dueDateStr =
+        dueDate ||
+        (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 30);
+          return d.toISOString().split("T")[0];
+        })();
 
-      const invoice = await storage.createInvoiceWithLineItems({
-        companyId,
-        contactId,
-        invoiceNumber,
-        dueDate: dueDateStr,
-        subtotal: subtotal.toFixed(2),
-        tax: "0",
-        total: subtotal.toFixed(2),
-        status: "draft",
-        autoGenerated: false,
-        paymentAttempts: 0,
-      }, lineItems);
+      const invoice = await storage.createInvoiceWithLineItems(
+        {
+          companyId,
+          contactId,
+          invoiceNumber,
+          dueDate: dueDateStr,
+          subtotal: subtotal.toFixed(2),
+          tax: "0",
+          total: subtotal.toFixed(2),
+          status: "draft",
+          autoGenerated: false,
+          paymentAttempts: 0,
+        },
+        lineItems
+      );
 
       for (const visit of allVisits) {
         await storage.updateVisit(visit.id, companyId, { invoiceId: invoice.id });
@@ -390,274 +534,385 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
       qboAutoSync(companyId, invoice.id, "invoice");
       const { userId: auditUid2 } = await getCompanyContext(req);
-      auditLog(companyId, auditUid2, "invoice", invoice.id, "create", { new: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, contactId, visitCount: allVisits.length } }, req.ip || undefined);
+      auditLog(
+        companyId,
+        auditUid2,
+        "invoice",
+        invoice.id,
+        "create",
+        {
+          new: {
+            invoiceNumber: invoice.invoiceNumber,
+            total: invoice.total,
+            contactId,
+            visitCount: allVisits.length,
+          },
+        },
+        req.ip || undefined
+      );
       const items = await storage.getInvoiceLineItems(invoice.id);
       res.status(201).json({ ...invoice, lineItems: items });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/invoices/generate-all-from-uninvoiced", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, userId: auditUserId } = await getCompanyContext(req);
-      const suppressNotifications = req.body.suppressNotifications === true;
-      const { contactIds, sendAfterGenerate, startDate, endDate } = req.body;
+  app.post(
+    "/api/invoices/generate-all-from-uninvoiced",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, userId: auditUserId } = await getCompanyContext(req);
+        const suppressNotifications = req.body.suppressNotifications === true;
+        const { contactIds, sendAfterGenerate, startDate, endDate } = req.body;
 
-      const summary = await storage.getUninvoicedSummary(companyId);
-      if (summary.count === 0) {
-        return res.json({ created: 0, totalDollars: 0, sent: 0, failed: 0, invoices: [] });
-      }
+        const summary = await storage.getUninvoicedSummary(companyId);
+        if (summary.count === 0) {
+          return res.json({ created: 0, totalDollars: 0, sent: 0, failed: 0, invoices: [] });
+        }
 
-      const targetContacts = contactIds && Array.isArray(contactIds) && contactIds.length > 0
-        ? summary.byContact.filter(c => contactIds.includes(c.contactId))
-        : summary.byContact;
+        const targetContacts =
+          contactIds && Array.isArray(contactIds) && contactIds.length > 0
+            ? summary.byContact.filter((c) => contactIds.includes(c.contactId))
+            : summary.byContact;
 
-      if (targetContacts.length === 0) {
-        return res.json({ created: 0, totalDollars: 0, sent: 0, failed: 0, invoices: [] });
-      }
+        if (targetContacts.length === 0) {
+          return res.json({ created: 0, totalDollars: 0, sent: 0, failed: 0, invoices: [] });
+        }
 
-      const dueDate = (() => {
-        const d = new Date();
-        d.setDate(d.getDate() + 30);
-        return d.toISOString().split("T")[0];
-      })();
+        const dueDate = (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 30);
+          return d.toISOString().split("T")[0];
+        })();
 
-      const createdInvoices: any[] = [];
-      let sentCount = 0;
-      let failedCount = 0;
+        const createdInvoices: any[] = [];
+        let sentCount = 0;
+        let failedCount = 0;
 
-      const company = sendAfterGenerate ? await storage.getCompany(companyId) : null;
+        const company = sendAfterGenerate ? await storage.getCompany(companyId) : null;
 
-      for (const contactEntry of targetContacts) {
-        try {
-          const result = await storage.getUninvoicedVisitsForContact(companyId, contactEntry.contactId);
-          let visitsToInvoice = result.visits;
+        for (const contactEntry of targetContacts) {
+          try {
+            const result = await storage.getUninvoicedVisitsForContact(
+              companyId,
+              contactEntry.contactId
+            );
+            let visitsToInvoice = result.visits;
 
-          // Filter by date range when generating by date range
-          if (startDate && typeof startDate === "string") {
-            visitsToInvoice = visitsToInvoice.filter(v => v.scheduledDate >= startDate);
-          }
-          if (endDate && typeof endDate === "string") {
-            visitsToInvoice = visitsToInvoice.filter(v => v.scheduledDate <= endDate);
-          }
+            // Filter by date range when generating by date range
+            if (startDate && typeof startDate === "string") {
+              visitsToInvoice = visitsToInvoice.filter((v) => v.scheduledDate >= startDate);
+            }
+            if (endDate && typeof endDate === "string") {
+              visitsToInvoice = visitsToInvoice.filter((v) => v.scheduledDate <= endDate);
+            }
 
-          if (visitsToInvoice.length === 0) continue;
+            if (visitsToInvoice.length === 0) continue;
 
-          const plans = await storage.getServicePlans(companyId, { contactId: contactEntry.contactId });
-          const planMap = new Map(plans.map(p => [p.id, p]));
+            const plans = await storage.getServicePlans(companyId, {
+              contactId: contactEntry.contactId,
+            });
+            const planMap = new Map(plans.map((p) => [p.id, p]));
 
-          const lineItems = await buildVisitLineItemsWithAddOns(visitsToInvoice, planMap);
-          const subtotal = lineItems.reduce((sum, item) => sum + parseFloat(item.total), 0);
-          const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
+            const lineItems = await buildVisitLineItemsWithAddOns(visitsToInvoice, planMap);
+            const subtotal = lineItems.reduce((sum, item) => sum + parseFloat(item.total), 0);
+            const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
 
-          const invoice = await storage.createInvoiceWithLineItems({
-            companyId,
-            contactId: contactEntry.contactId,
-            invoiceNumber,
-            dueDate,
-            subtotal: subtotal.toFixed(2),
-            tax: "0",
-            total: subtotal.toFixed(2),
-            status: "draft",
-            autoGenerated: true,
-            paymentAttempts: 0,
-          }, lineItems);
+            const invoice = await storage.createInvoiceWithLineItems(
+              {
+                companyId,
+                contactId: contactEntry.contactId,
+                invoiceNumber,
+                dueDate,
+                subtotal: subtotal.toFixed(2),
+                tax: "0",
+                total: subtotal.toFixed(2),
+                status: "draft",
+                autoGenerated: true,
+                paymentAttempts: 0,
+              },
+              lineItems
+            );
 
-          for (const visit of visitsToInvoice) {
-            await storage.updateVisit(visit.id, companyId, { invoiceId: invoice.id });
-          }
+            for (const visit of visitsToInvoice) {
+              await storage.updateVisit(visit.id, companyId, { invoiceId: invoice.id });
+            }
 
-          qboAutoSync(companyId, invoice.id, "invoice");
-          auditLog(companyId, auditUserId, "invoice", invoice.id, "create", { new: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, contactId: contactEntry.contactId, autoGenerated: true, bulk: true } }, req.ip || undefined);
-          createdInvoices.push(invoice);
-
-          if (sendAfterGenerate && !suppressNotifications) {
-            try {
-              const contact = await storage.getContact(contactEntry.contactId, companyId);
-              if (!contact?.email) { failedCount++; continue; }
-
-              const fromAddress = company?.email || "jeremy@scoopilot.com";
-              const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : "";
-              const properties = await storage.getProperties(companyId, contact.id);
-              const serviceAddr = properties.length > 0 ? properties[0] : null;
-              const taxRateNum = parseFloat(invoice.taxRate || "0") / 100;
-              const discountNum = parseFloat(invoice.discountAmount || "0");
-
-              const emailFormattedDueDate = invoice.dueDate
-                ? new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
-                : "";
-
-              const emailBillingAddr = contact.streetAddress ? {
-                line1: contact.streetAddress,
-                line2: contact.address2 || "",
-                city: contact.city || "",
-                state: contact.state || "",
-                zip: contact.zipCode || "",
-              } : null;
-              const emailServiceAddr = serviceAddr ? {
-                line1: serviceAddr.streetAddress || "",
-                line2: "",
-                city: serviceAddr.city || "",
-                state: serviceAddr.state || "",
-                zip: serviceAddr.zipCode || "",
-              } : null;
-              const emailBillingLine = emailBillingAddr ? `${emailBillingAddr.line1} ${emailBillingAddr.city} ${emailBillingAddr.state} ${emailBillingAddr.zip}`.trim() : "";
-              const emailServiceLine = emailServiceAddr ? `${emailServiceAddr.line1} ${emailServiceAddr.city} ${emailServiceAddr.state} ${emailServiceAddr.zip}`.trim() : "";
-              const emailShowServiceAddr = emailServiceAddr && emailServiceLine && emailServiceLine !== emailBillingLine;
-
-              let paymentUrl: string | undefined;
-              if (isStripeConfigured()) {
-                const invoiceTotal = parseFloat(invoice.total);
-                const connectAccountId = company?.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
-                if (invoiceTotal > 0) {
-                  try {
-                    const contactName = `${contact.firstName} ${contact.lastName}`.trim();
-                    const { customerId: resolvedCustId, wasRecreated } = await ensureConnectedCustomer({
-                      currentCustomerId: contact.stripeCustomerId,
-                      stripeAccount: connectAccountId,
-                      email: contact.email || undefined,
-                      name: contactName,
-                      metadata: { contactId: contact.id, companyId },
-                    });
-                    if (wasRecreated) {
-                      await storage.updateContact(contact.id, companyId, { stripeCustomerId: resolvedCustId });
-                    }
-                    const baseUrl = getBaseUrl(req);
-                    const checkoutResult = await createCheckoutSession({
-                      customerId: resolvedCustId,
-                      invoiceId: invoice.id,
-                      invoiceNumber: invoice.invoiceNumber,
-                      amount: invoiceTotal,
-                      successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
-                      cancelUrl: `${baseUrl}/portal`,
-                      stripeConnectAccountId: connectAccountId,
-                      tenantId: companyId,
-                    });
-                    paymentUrl = checkoutResult.url;
-                  } catch {}
-                } else {
-                  // $0 invoice — link to tip page so customers can leave a tip
-                  const baseUrl = getBaseUrl(req);
-                  paymentUrl = `${baseUrl}/invoice/${invoice.id}/pay`;
-                }
-              }
-
-              const invoiceData = {
-                business: { name: company?.name || "", address: company?.address || "", phone: company?.phone || "", website: "", logo: logoUrl },
-                invoice: {
-                  number: invoice.invoiceNumber,
-                  status: invoice.status || "pending",
-                  issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }),
-                  due_date: emailFormattedDueDate,
-                  terms: "Net 30",
-                  service_period: "",
+            qboAutoSync(companyId, invoice.id, "invoice");
+            auditLog(
+              companyId,
+              auditUserId,
+              "invoice",
+              invoice.id,
+              "create",
+              {
+                new: {
+                  invoiceNumber: invoice.invoiceNumber,
+                  total: invoice.total,
+                  contactId: contactEntry.contactId,
+                  autoGenerated: true,
+                  bulk: true,
                 },
-                customer: { name: `${contact.firstName} ${contact.lastName || ""}`.trim() },
-                billing_address: emailBillingAddr,
-                service_address: emailServiceAddr,
-                show_service_address: emailShowServiceAddr ? emailServiceAddr : null,
-                line_items: lineItems.map(li => ({ description: li.description, details: "", qty: li.quantity, unit_price: parseFloat(li.unitPrice), line_total: parseFloat(li.total) })),
-                totals: { subtotal: parseFloat(invoice.subtotal), discount: discountNum, tax_rate: taxRateNum, paid: 0 },
-                visits: undefined as { date: string; time: string; status: string }[] | undefined,
-                notes: "",
-                payment_instructions: "",
-                thank_you: "Thank you for your business!",
-                hasFooter: true,
-                paymentUrl: paymentUrl || "",
-                venmoHandle: company?.venmoHandle || "",
-                venmoHandleOnly: !paymentUrl && !!company?.venmoHandle ? company.venmoHandle : "",
-              };
+              },
+              req.ip || undefined
+            );
+            createdInvoices.push(invoice);
 
-              const computed = computeInvoice(invoiceData);
-              const tpl = loadTemplate(getDefaultTemplatePath());
-              const defaultTheme = loadTheme(getDefaultThemePath());
-              let theme = defaultTheme;
-              if (company?.invoiceTheme) {
-                try { const custom = JSON.parse(company.invoiceTheme); theme = { ...defaultTheme, ...custom }; } catch {}
-              }
-              const renderedHtml = renderInvoice(tpl, theme, computed);
-              const subject = `Invoice ${invoice.invoiceNumber} from ${company?.name || "ScooPilot"}`;
-              const venmoTextLine = company?.venmoHandle ? `\nOr pay via Venmo: @${company.venmoHandle}` : "";
-              const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${lineItems.map(li => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}${venmoTextLine}\n\nThank you for your business!`;
+            if (sendAfterGenerate && !suppressNotifications) {
+              try {
+                const contact = await storage.getContact(contactEntry.contactId, companyId);
+                if (!contact?.email) {
+                  failedCount++;
+                  continue;
+                }
 
-              const msg = await storage.createMessage({
-                companyId,
-                contactId: contact.id,
-                channel: "email",
-                direction: "outbound",
-                status: "queued",
-                fromAddress,
-                toAddress: contact.email,
-                subject,
-                body: textBody,
-                htmlBody: renderedHtml,
-                sentBy: auditUserId,
-                metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
-              });
+                const fromAddress = company?.email || "jeremy@scoopilot.com";
+                const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : "";
+                const properties = await storage.getProperties(companyId, contact.id);
+                const serviceAddr = properties.length > 0 ? properties[0] : null;
+                const taxRateNum = parseFloat(invoice.taxRate || "0") / 100;
+                const discountNum = parseFloat(invoice.discountAmount || "0");
 
-              const sendResult = await sendEmail({
-                companyId,
-                contactId: contact.id,
-                to: contact.email,
-                from: fromAddress,
-                subject,
-                text: textBody,
-                html: renderedHtml,
-                senderName: company?.name || undefined,
-                replyTo: company?.email || undefined,
-              });
+                const emailFormattedDueDate = invoice.dueDate
+                  ? new Date(invoice.dueDate + "T12:00:00").toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "";
 
-              if (sendResult.success) {
-                await storage.updateMessageStatus(msg.id, "sent");
-                await storage.updateInvoice(invoice.id, companyId, { status: "sent" });
-                sentCount++;
-              } else {
-                await storage.updateMessageStatus(msg.id, "failed", sendResult.error);
+                const emailBillingAddr = contact.streetAddress
+                  ? {
+                      line1: contact.streetAddress,
+                      line2: contact.address2 || "",
+                      city: contact.city || "",
+                      state: contact.state || "",
+                      zip: contact.zipCode || "",
+                    }
+                  : null;
+                const emailServiceAddr = serviceAddr
+                  ? {
+                      line1: serviceAddr.streetAddress || "",
+                      line2: "",
+                      city: serviceAddr.city || "",
+                      state: serviceAddr.state || "",
+                      zip: serviceAddr.zipCode || "",
+                    }
+                  : null;
+                const emailBillingLine = emailBillingAddr
+                  ? `${emailBillingAddr.line1} ${emailBillingAddr.city} ${emailBillingAddr.state} ${emailBillingAddr.zip}`.trim()
+                  : "";
+                const emailServiceLine = emailServiceAddr
+                  ? `${emailServiceAddr.line1} ${emailServiceAddr.city} ${emailServiceAddr.state} ${emailServiceAddr.zip}`.trim()
+                  : "";
+                const emailShowServiceAddr =
+                  emailServiceAddr && emailServiceLine && emailServiceLine !== emailBillingLine;
+
+                let paymentUrl: string | undefined;
+                if (isStripeConfigured()) {
+                  const invoiceTotal = parseFloat(invoice.total);
+                  const connectAccountId = company?.stripeConnectOnboarded
+                    ? company.stripeConnectAccountId
+                    : null;
+                  if (invoiceTotal > 0) {
+                    try {
+                      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+                      const { customerId: resolvedCustId, wasRecreated } =
+                        await ensureConnectedCustomer({
+                          currentCustomerId: contact.stripeCustomerId,
+                          stripeAccount: connectAccountId,
+                          email: contact.email || undefined,
+                          name: contactName,
+                          metadata: { contactId: contact.id, companyId },
+                        });
+                      if (wasRecreated) {
+                        await storage.updateContact(contact.id, companyId, {
+                          stripeCustomerId: resolvedCustId,
+                        });
+                      }
+                      const baseUrl = getBaseUrl(req);
+                      const checkoutResult = await createCheckoutSession({
+                        customerId: resolvedCustId,
+                        invoiceId: invoice.id,
+                        invoiceNumber: invoice.invoiceNumber,
+                        amount: invoiceTotal,
+                        successUrl: `${baseUrl}/portal?paid=${invoice.id}`,
+                        cancelUrl: `${baseUrl}/portal`,
+                        stripeConnectAccountId: connectAccountId,
+                        tenantId: companyId,
+                      });
+                      paymentUrl = checkoutResult.url;
+                    } catch {}
+                  } else {
+                    // $0 invoice — link to tip page so customers can leave a tip
+                    const baseUrl = getBaseUrl(req);
+                    paymentUrl = `${baseUrl}/invoice/${invoice.id}/pay`;
+                  }
+                }
+
+                const invoiceData = {
+                  business: {
+                    name: company?.name || "",
+                    address: company?.address || "",
+                    phone: company?.phone || "",
+                    website: "",
+                    logo: logoUrl,
+                  },
+                  invoice: {
+                    number: invoice.invoiceNumber,
+                    status: invoice.status || "pending",
+                    issue_date: new Date(invoice.createdAt).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    }),
+                    due_date: emailFormattedDueDate,
+                    terms: "Net 30",
+                    service_period: "",
+                  },
+                  customer: { name: `${contact.firstName} ${contact.lastName || ""}`.trim() },
+                  billing_address: emailBillingAddr,
+                  service_address: emailServiceAddr,
+                  show_service_address: emailShowServiceAddr ? emailServiceAddr : null,
+                  line_items: lineItems.map((li) => ({
+                    description: li.description,
+                    details: "",
+                    qty: li.quantity,
+                    unit_price: parseFloat(li.unitPrice),
+                    line_total: parseFloat(li.total),
+                  })),
+                  totals: {
+                    subtotal: parseFloat(invoice.subtotal),
+                    discount: discountNum,
+                    tax_rate: taxRateNum,
+                    paid: 0,
+                  },
+                  visits: undefined as { date: string; time: string; status: string }[] | undefined,
+                  notes: "",
+                  payment_instructions: "",
+                  thank_you: "Thank you for your business!",
+                  hasFooter: true,
+                  paymentUrl: paymentUrl || "",
+                  venmoHandle: company?.venmoHandle || "",
+                  venmoHandleOnly: !paymentUrl && !!company?.venmoHandle ? company.venmoHandle : "",
+                };
+
+                const computed = computeInvoice(invoiceData);
+                const tpl = loadTemplate(getDefaultTemplatePath());
+                const defaultTheme = loadTheme(getDefaultThemePath());
+                let theme = defaultTheme;
+                if (company?.invoiceTheme) {
+                  try {
+                    const custom = JSON.parse(company.invoiceTheme);
+                    theme = { ...defaultTheme, ...custom };
+                  } catch {}
+                }
+                const renderedHtml = renderInvoice(tpl, theme, computed);
+                const subject = `Invoice ${invoice.invoiceNumber} from ${company?.name || "ScooPilot"}`;
+                const venmoTextLine = company?.venmoHandle
+                  ? `\nOr pay via Venmo: @${company.venmoHandle}`
+                  : "";
+                const textBody = `Hi ${contact.firstName},\n\nYou have a new invoice from ${company?.name || "ScooPilot"}.\n\nInvoice #: ${invoice.invoiceNumber}\nDue Date: ${invoice.dueDate}\nTotal: $${invoice.total}\n\nItems:\n${lineItems.map((li) => `  - ${li.description}: $${li.total}`).join("\n")}${paymentUrl ? `\n\nPay online: ${paymentUrl}` : ""}${venmoTextLine}\n\nThank you for your business!`;
+
+                const msg = await storage.createMessage({
+                  companyId,
+                  contactId: contact.id,
+                  channel: "email",
+                  direction: "outbound",
+                  status: "queued",
+                  fromAddress,
+                  toAddress: contact.email,
+                  subject,
+                  body: textBody,
+                  htmlBody: renderedHtml,
+                  sentBy: auditUserId,
+                  metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
+                });
+
+                const sendResult = await sendEmail({
+                  companyId,
+                  contactId: contact.id,
+                  to: contact.email,
+                  from: fromAddress,
+                  subject,
+                  text: textBody,
+                  html: renderedHtml,
+                  senderName: company?.name || undefined,
+                  replyTo: company?.email || undefined,
+                });
+
+                if (sendResult.success) {
+                  await storage.updateMessageStatus(msg.id, "sent");
+                  await storage.updateInvoice(invoice.id, companyId, { status: "sent" });
+                  sentCount++;
+                } else {
+                  await storage.updateMessageStatus(msg.id, "failed", sendResult.error);
+                  failedCount++;
+                }
+              } catch (emailErr) {
+                console.error(
+                  `Failed to send invoice email for contact ${contactEntry.contactId}:`,
+                  emailErr
+                );
                 failedCount++;
               }
-            } catch (emailErr) {
-              console.error(`Failed to send invoice email for contact ${contactEntry.contactId}:`, emailErr);
-              failedCount++;
             }
+          } catch (err) {
+            console.error(`Failed to generate invoice for contact ${contactEntry.contactId}:`, err);
           }
-        } catch (err) {
-          console.error(`Failed to generate invoice for contact ${contactEntry.contactId}:`, err);
         }
-      }
 
-      const totalDollars = createdInvoices.reduce((sum, inv) => sum + parseFloat(inv.total || "0"), 0);
-      const response: Record<string, unknown> = { created: createdInvoices.length, totalDollars, invoices: createdInvoices };
-      if (sendAfterGenerate) {
-        response.sent = sentCount;
-        response.failed = failedCount;
+        const totalDollars = createdInvoices.reduce(
+          (sum, inv) => sum + parseFloat(inv.total || "0"),
+          0
+        );
+        const response: Record<string, unknown> = {
+          created: createdInvoices.length,
+          totalDollars,
+          invoices: createdInvoices,
+        };
+        if (sendAfterGenerate) {
+          response.sent = sentCount;
+          response.failed = failedCount;
+        }
+        res.status(201).json(response);
+      } catch (err) {
+        handleError(res, err);
       }
-      res.status(201).json(response);
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
-  app.patch("/api/contacts/:id/billing-preferences", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
+  app.patch(
+    "/api/contacts/:id/billing-preferences",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      const { invoiceTiming, invoiceFrequency, autoInvoiceEnabled } = req.body;
-      const validTimings = ["before_service", "after_service"];
-      const validFrequencies = ["per_service", "per_week", "per_month"];
-      if (invoiceTiming && !validTimings.includes(invoiceTiming)) {
-        return res.status(400).json({ error: "Invalid invoice timing" });
+        const { invoiceTiming, invoiceFrequency, autoInvoiceEnabled } = req.body;
+        const validTimings = ["before_service", "after_service"];
+        const validFrequencies = ["per_service", "per_week", "per_month"];
+        if (invoiceTiming && !validTimings.includes(invoiceTiming)) {
+          return res.status(400).json({ error: "Invalid invoice timing" });
+        }
+        if (invoiceFrequency && !validFrequencies.includes(invoiceFrequency)) {
+          return res.status(400).json({ error: "Invalid invoice frequency" });
+        }
+
+        const updated = await storage.updateContact(p(req.params.id), companyId, {
+          ...(invoiceTiming && { invoiceTiming }),
+          ...(invoiceFrequency && { invoiceFrequency }),
+          ...(typeof autoInvoiceEnabled === "boolean" && { autoInvoiceEnabled }),
+        });
+        res.json(updated);
+      } catch (err) {
+        handleError(res, err);
       }
-      if (invoiceFrequency && !validFrequencies.includes(invoiceFrequency)) {
-        return res.status(400).json({ error: "Invalid invoice frequency" });
-      }
-
-      const updated = await storage.updateContact(p(req.params.id), companyId, {
-        ...(invoiceTiming && { invoiceTiming }),
-        ...(invoiceFrequency && { invoiceFrequency }),
-        ...(typeof autoInvoiceEnabled === "boolean" && { autoInvoiceEnabled }),
-      });
-      res.json(updated);
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
   app.patch("/api/invoices/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -667,8 +922,18 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
       const { lineItems, status: newStatus, ...invoiceUpdates } = req.body;
 
-      const contentFields = ["dueDate", "notes", "taxRate", "discountType", "discountValue", "subtotal", "total", "tax"];
-      const hasContentEdits = (lineItems && Array.isArray(lineItems)) || contentFields.some(f => f in invoiceUpdates);
+      const contentFields = [
+        "dueDate",
+        "notes",
+        "taxRate",
+        "discountType",
+        "discountValue",
+        "subtotal",
+        "total",
+        "tax",
+      ];
+      const hasContentEdits =
+        (lineItems && Array.isArray(lineItems)) || contentFields.some((f) => f in invoiceUpdates);
       const editableStatuses = ["draft", "sent", "pending"];
 
       if (hasContentEdits && !editableStatuses.includes(existing.status)) {
@@ -688,17 +953,24 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       if (invoiceUpdates.paidAt && typeof invoiceUpdates.paidAt === "string") {
         invoiceUpdates.paidAt = new Date(invoiceUpdates.paidAt);
       }
-      if (invoiceUpdates.lastPaymentAttempt && typeof invoiceUpdates.lastPaymentAttempt === "string") {
+      if (
+        invoiceUpdates.lastPaymentAttempt &&
+        typeof invoiceUpdates.lastPaymentAttempt === "string"
+      ) {
         invoiceUpdates.lastPaymentAttempt = new Date(invoiceUpdates.lastPaymentAttempt);
       }
 
       // Guard against empty-string dueDate which would fail the NOT NULL date column
-      if ("dueDate" in invoiceUpdates && (invoiceUpdates.dueDate === "" || invoiceUpdates.dueDate === null || invoiceUpdates.dueDate === undefined)) {
+      if (
+        "dueDate" in invoiceUpdates &&
+        (invoiceUpdates.dueDate === "" ||
+          invoiceUpdates.dueDate === null ||
+          invoiceUpdates.dueDate === undefined)
+      ) {
         delete invoiceUpdates.dueDate;
       }
 
       if (lineItems && Array.isArray(lineItems)) {
-
         await storage.deleteInvoiceLineItems(p(req.params.id));
 
         let subtotal = 0;
@@ -720,7 +992,9 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
         const taxRate = parseFloat(invoiceUpdates.taxRate ?? existing.taxRate ?? "0") || 0;
         const discountType = invoiceUpdates.discountType ?? existing.discountType;
-        const discountVal = Math.abs(parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0") || 0);
+        const discountVal = Math.abs(
+          parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0") || 0
+        );
         let discountAmount = 0;
         if (discountType === "percent") {
           discountAmount = subtotal * (discountVal / 100);
@@ -738,11 +1012,17 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         invoiceUpdates.discountValue = discountVal.toFixed(2);
         invoiceUpdates.discountAmount = discountAmount.toFixed(2);
         invoiceUpdates.total = total.toFixed(2);
-      } else if ("taxRate" in invoiceUpdates || "discountType" in invoiceUpdates || "discountValue" in invoiceUpdates) {
+      } else if (
+        "taxRate" in invoiceUpdates ||
+        "discountType" in invoiceUpdates ||
+        "discountValue" in invoiceUpdates
+      ) {
         const subtotal = parseFloat(existing.subtotal ?? "0") || 0;
         const taxRate = parseFloat(invoiceUpdates.taxRate ?? existing.taxRate ?? "0") || 0;
         const discountType = invoiceUpdates.discountType ?? existing.discountType;
-        const discountVal = Math.abs(parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0") || 0);
+        const discountVal = Math.abs(
+          parseFloat(invoiceUpdates.discountValue ?? existing.discountValue ?? "0") || 0
+        );
         let discountAmount = 0;
         if (discountType === "percent") {
           discountAmount = subtotal * (discountVal / 100);
@@ -768,9 +1048,22 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         qboAutoSync(companyId, invoice.id, "payment");
       }
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "invoice", p(req.params.id), "update", { old: { status: existing.status, total: existing.total }, new: { status: invoice.status, total: invoice.total } }, req.ip || undefined);
+      auditLog(
+        companyId,
+        userId,
+        "invoice",
+        p(req.params.id),
+        "update",
+        {
+          old: { status: existing.status, total: existing.total },
+          new: { status: invoice.status, total: invoice.total },
+        },
+        req.ip || undefined
+      );
       res.json({ ...invoice, lineItems: updatedLineItems });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/invoices/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -778,12 +1071,28 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const invoice = await storage.getInvoice(p(req.params.id), companyId);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-      if (invoice.status === "paid") return res.status(400).json({ error: "Cannot delete a paid invoice" });
+      if (invoice.status === "paid")
+        return res.status(400).json({ error: "Cannot delete a paid invoice" });
       await storage.deleteInvoice(p(req.params.id), companyId);
       const { userId } = await getCompanyContext(req);
-      auditLog(companyId, userId, "invoice", p(req.params.id), "delete", { deleted: { invoiceNumber: invoice.invoiceNumber, total: invoice.total, status: invoice.status } }, req.ip || undefined);
+      auditLog(
+        companyId,
+        userId,
+        "invoice",
+        p(req.params.id),
+        "delete",
+        {
+          deleted: {
+            invoiceNumber: invoice.invoiceNumber,
+            total: invoice.total,
+            status: invoice.status,
+          },
+        },
+        req.ip || undefined
+      );
       res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
-
 }

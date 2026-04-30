@@ -9,7 +9,11 @@ export interface IpRiskResult {
   skipped: boolean;
 }
 
-function extractIp(req: { headers: Record<string, string | string[] | undefined>; ip?: string; socket?: { remoteAddress?: string } }): string {
+function extractIp(req: {
+  headers: Record<string, string | string[] | undefined>;
+  ip?: string;
+  socket?: { remoteAddress?: string };
+}): string {
   const forwarded = req.headers["x-forwarded-for"];
   if (forwarded) {
     const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(",")[0].trim();
@@ -18,7 +22,11 @@ function extractIp(req: { headers: Record<string, string | string[] | undefined>
   return req.ip || req.socket?.remoteAddress || "";
 }
 
-export function getClientIp(req: { headers: Record<string, string | string[] | undefined>; ip?: string; socket?: { remoteAddress?: string } }): string {
+export function getClientIp(req: {
+  headers: Record<string, string | string[] | undefined>;
+  ip?: string;
+  socket?: { remoteAddress?: string };
+}): string {
   return extractIp(req);
 }
 
@@ -38,7 +46,7 @@ export async function checkIpRisk(ip: string): Promise<IpRiskResult> {
     const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
     if (!res.ok) return base;
 
-    const data = await res.json() as Record<string, unknown>;
+    const data = (await res.json()) as Record<string, unknown>;
     const entry = data[ip] as Record<string, string> | undefined;
     if (!entry) return base;
 
@@ -61,9 +69,11 @@ export async function getCountryCode(ip: string, cfHeader?: string): Promise<str
   }
   if (!ip || PRIVATE_IP.test(ip)) return null;
   try {
-    const res = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`http://ip-api.com/json/${ip}?fields=countryCode`, {
+      signal: AbortSignal.timeout(3000),
+    });
     if (!res.ok) return null;
-    const data = await res.json() as { countryCode?: string };
+    const data = (await res.json()) as { countryCode?: string };
     return data.countryCode?.toUpperCase() || null;
   } catch {
     return null;

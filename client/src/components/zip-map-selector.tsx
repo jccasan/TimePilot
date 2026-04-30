@@ -6,13 +6,15 @@ const ESRI_ZIP_URL =
   "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_ZIP_Code_Areas_anaylsis/FeatureServer/0/query";
 
 const COLOR_UNSEL = "#4b9e5f";
-const COLOR_SEL   = "#16a34a";
+const COLOR_SEL = "#16a34a";
 const COLOR_HOVER = "#bbf7d0";
-const MILES_TO_M  = 1609.34;
+const MILES_TO_M = 1609.34;
 const DEFAULT_ZOOM = 11;
 const FALLBACK: L.LatLngExpression = [38.5, -97];
 
-function isZip(s: string) { return /^\d{5}$/.test(s); }
+function isZip(s: string) {
+  return /^\d{5}$/.test(s);
+}
 
 async function geocodeAddress(address: string): Promise<L.LatLngExpression | null> {
   try {
@@ -29,13 +31,16 @@ async function geocodeAddress(address: string): Promise<L.LatLngExpression | nul
 function addOsmLayer(map: L.Map) {
   L.tileLayer("/api/map/tiles/{z}/{x}/{y}", {
     maxZoom: 19,
-    attribution: "© <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
+    attribution:
+      "© <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors",
   }).addTo(map);
 }
 
-
 async function fetchZipPolygonsInViewport(
-  w: number, s: number, e: number, n: number
+  w: number,
+  s: number,
+  e: number,
+  n: number
 ): Promise<GeoJSON.FeatureCollection> {
   const p = new URLSearchParams({
     geometry: `${w},${s},${e},${n}`,
@@ -51,7 +56,9 @@ async function fetchZipPolygonsInViewport(
   try {
     const r = await fetch(`${ESRI_ZIP_URL}?${p}`);
     return await r.json();
-  } catch { return { type: "FeatureCollection", features: [] }; }
+  } catch {
+    return { type: "FeatureCollection", features: [] };
+  }
 }
 
 // ─── ZIP Map ──────────────────────────────────────────────────────────────────
@@ -64,14 +71,17 @@ type ZipMapProps = {
 
 export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef       = useRef<L.Map | null>(null);
-  const layersRef    = useRef<Map<string, L.GeoJSON>>(new Map());
-  const selectedRef  = useRef<Set<string>>(new Set());
-  const loadingRef   = useRef(false);
+  const mapRef = useRef<L.Map | null>(null);
+  const layersRef = useRef<Map<string, L.GeoJSON>>(new Map());
+  const selectedRef = useRef<Set<string>>(new Set());
+  const loadingRef = useRef(false);
 
   const [selectedZips, setSelectedZips] = useState<string[]>(() => {
     const initial = value
-      ? value.split(",").map(z => z.trim()).filter(isZip)
+      ? value
+          .split(",")
+          .map((z) => z.trim())
+          .filter(isZip)
       : [];
     selectedRef.current = new Set(initial);
     return initial;
@@ -101,17 +111,21 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
       try {
         const b = mapRef.current.getBounds();
         const geo = await fetchZipPolygonsInViewport(
-          b.getWest(), b.getSouth(), b.getEast(), b.getNorth()
+          b.getWest(),
+          b.getSouth(),
+          b.getEast(),
+          b.getNorth()
         );
         if (cancelled) return;
-        geo.features.forEach(feat => {
+        geo.features.forEach((feat) => {
           if (!mapRef.current) return;
           const zip = (feat.properties as any)?.ZIP_CODE as string;
           if (!zip || !isZip(zip) || layersRef.current.has(zip)) return;
           const isSel = selectedRef.current.has(zip);
           const layer = L.geoJSON(feat as any, {
             style: {
-              color: "#15803d", weight: 1.5,
+              color: "#15803d",
+              weight: 1.5,
               fillColor: isSel ? COLOR_SEL : COLOR_UNSEL,
               fillOpacity: isSel ? 0.45 : 0.12,
             },
@@ -136,11 +150,14 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
             syncSelected(next);
           });
           const ring =
-            feat.geometry.type === "Polygon" ? feat.geometry.coordinates[0] :
-            feat.geometry.type === "MultiPolygon" ? feat.geometry.coordinates[0][0] : null;
+            feat.geometry.type === "Polygon"
+              ? feat.geometry.coordinates[0]
+              : feat.geometry.type === "MultiPolygon"
+                ? feat.geometry.coordinates[0][0]
+                : null;
           if (ring?.length) {
-            const xs = (ring as number[][]).map(c => c[0]);
-            const ys = (ring as number[][]).map(c => c[1]);
+            const xs = (ring as number[][]).map((c) => c[0]);
+            const ys = (ring as number[][]).map((c) => c[1]);
             const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
             const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
             L.marker([cy, cx], {
@@ -175,10 +192,16 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
       const container = el as HTMLElement;
 
       // Step 1: Wait for a non-zero layout
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         function check() {
-          if (cancelled) { resolve(); return; }
-          if (container.clientWidth > 0 && container.clientHeight > 0) { resolve(); return; }
+          if (cancelled) {
+            resolve();
+            return;
+          }
+          if (container.clientWidth > 0 && container.clientHeight > 0) {
+            resolve();
+            return;
+          }
           rafId = requestAnimationFrame(check);
         }
         check();
@@ -244,11 +267,7 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
         className="relative border border-border rounded-md"
         style={{ height: 340, overflow: "hidden" }}
       >
-        <div
-          ref={containerRef}
-          style={{ width: "100%", height: "100%" }}
-          data-testid="zip-map"
-        />
+        <div ref={containerRef} style={{ width: "100%", height: "100%" }} data-testid="zip-map" />
         {loading && (
           <div className="absolute top-2 right-2 z-[1000] bg-white/90 text-xs text-muted-foreground px-2 py-1 rounded shadow">
             Loading ZIPs…
@@ -294,10 +313,10 @@ type RadiusMapProps = {
 
 export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef       = useRef<L.Map | null>(null);
-  const circleRef    = useRef<L.Circle | null>(null);
-  const centerRef    = useRef<L.LatLngExpression>(FALLBACK);
-  const radiusRef    = useRef(radiusMiles);
+  const mapRef = useRef<L.Map | null>(null);
+  const circleRef = useRef<L.Circle | null>(null);
+  const centerRef = useRef<L.LatLngExpression>(FALLBACK);
+  const radiusRef = useRef(radiusMiles);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -313,10 +332,16 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
       const container = el as HTMLElement;
 
       // Step 1: Wait for container to have real dimensions
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         function check() {
-          if (cancelled) { resolve(); return; }
-          if (container.clientWidth > 0 && container.clientHeight > 0) { resolve(); return; }
+          if (cancelled) {
+            resolve();
+            return;
+          }
+          if (container.clientWidth > 0 && container.clientHeight > 0) {
+            resolve();
+            return;
+          }
           rafId = requestAnimationFrame(check);
         }
         check();
@@ -340,8 +365,10 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
 
       const circle = L.circle(centerRef.current, {
         radius: radiusRef.current * MILES_TO_M,
-        color: "#15803d", fillColor: "#16a34a",
-        fillOpacity: 0.2, weight: 2,
+        color: "#15803d",
+        fillColor: "#16a34a",
+        fillOpacity: 0.2,
+        weight: 2,
       }).addTo(map);
       circleRef.current = circle;
       map.fitBounds(circle.getBounds(), { padding: [24, 24], animate: false });
@@ -359,7 +386,11 @@ export function RadiusMapSelector({ radiusMiles, addressHint }: RadiusMapProps) 
       cancelAnimationFrame(rafId);
       timers.forEach(clearTimeout);
       ro?.disconnect();
-      if (map) { map.remove(); mapRef.current = null; circleRef.current = null; }
+      if (map) {
+        map.remove();
+        mapRef.current = null;
+        circleRef.current = null;
+      }
     };
   }, []);
 

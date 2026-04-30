@@ -19,105 +19,120 @@ const WELCOME_TOUR: TourDefinition = {
     {
       target: '[data-testid="button-sidebar-toggle"]',
       title: "Navigation",
-      content: "Open the sidebar to access all sections of ScooPilot. Your customers, routes, invoices, and more are just a click away.",
+      content:
+        "Open the sidebar to access all sections of ScooPilot. Your customers, routes, invoices, and more are just a click away.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-dashboard"]',
       title: "Dashboard",
-      content: "Your command center. See today's visits, revenue, pending invoices, and client requests all in one place.",
+      content:
+        "Your command center. See today's visits, revenue, pending invoices, and client requests all in one place.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-contacts"]',
       title: "Contacts",
-      content: "Manage all your clients here. Add contacts, set service statuses, track properties, and view full service history.",
+      content:
+        "Manage all your clients here. Add contacts, set service statuses, track properties, and view full service history.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-pipeline"]',
       title: "Pipeline",
-      content: "Track your leads through every stage — from first contact to signed client — on a visual Kanban board.",
+      content:
+        "Track your leads through every stage — from first contact to signed client — on a visual Kanban board.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-quotes---proposals"]',
       title: "Quotes & Proposals",
-      content: "Create professional service quotes and send them to prospects. When they accept, convert the quote directly into an active job.",
+      content:
+        "Create professional service quotes and send them to prospects. When they accept, convert the quote directly into an active job.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-messages"]',
       title: "Messages",
-      content: "All your SMS and email conversations in one inbox. Reply to clients, view automated messages, and see full conversation history.",
+      content:
+        "All your SMS and email conversations in one inbox. Reply to clients, view automated messages, and see full conversation history.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-scheduling"]',
       title: "Scheduling",
-      content: "Your all-in-one scheduling hub. Create one-time or recurring jobs, assign team members, set time windows, and manage your service calendar. Visits are generated automatically when you add a job.",
+      content:
+        "Your all-in-one scheduling hub. Create one-time or recurring jobs, assign team members, set time windows, and manage your service calendar. Visits are generated automatically when you add a job.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-routes"]',
       title: "Routes",
-      content: "Build efficient routes with drag-and-drop. See driving distances, assign techs, optimize stop order, and complete visits with proof photos or the No Gate option.",
+      content:
+        "Build efficient routes with drag-and-drop. See driving distances, assign techs, optimize stop order, and complete visits with proof photos or the No Gate option.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-invoices"]',
       title: "Invoices",
-      content: "Create, send, and track invoices with a live revenue dashboard. Use the Generate button to bill clients for completed visits, batch-send or charge all outstanding invoices at once, and monitor autopay health from the Billing Health tab.",
+      content:
+        "Create, send, and track invoices with a live revenue dashboard. Use the Generate button to bill clients for completed visits, batch-send or charge all outstanding invoices at once, and monitor autopay health from the Billing Health tab.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-live-field-map"]',
       title: "Live Field Map",
-      content: "See your technicians' live locations and stop statuses on a map in real time. Great for dispatching and monitoring your crew throughout the day.",
+      content:
+        "See your technicians' live locations and stop statuses on a map in real time. Great for dispatching and monitoring your crew throughout the day.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-reports---analytics"]',
       title: "Reports & Analytics",
-      content: "Dig into service reports, revenue trends, visit history, and team performance. Export data or view charts to understand your business at a glance.",
+      content:
+        "Dig into service reports, revenue trends, visit history, and team performance. Export data or view charts to understand your business at a glance.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-profitability"]',
       title: "Profitability",
-      content: "See which customers and routes are making you money and which ones are costing you. Make data-driven pricing decisions.",
+      content:
+        "See which customers and routes are making you money and which ones are costing you. Make data-driven pricing decisions.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-route-profit-maps"]',
       title: "Route Profit Maps",
-      content: "Visualize profitability on a map. See which neighborhoods are worth growing and where you should raise prices.",
+      content:
+        "Visualize profitability on a map. See which neighborhoods are worth growing and where you should raise prices.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-pricing-tools"]',
       title: "Pricing Tools",
-      content: "Calculate accurate prices based on your real costs and test pricing changes before rolling them out. Know your margins on every job.",
+      content:
+        "Calculate accurate prices based on your real costs and test pricing changes before rolling them out. Know your margins on every job.",
       placement: "right",
       disableBeacon: true,
     },
     {
       target: '[data-testid="link-settings"]',
       title: "Settings",
-      content: "Configure your company profile, connect Stripe, manage your team, set up automation rules, configure service zones, and manage API keys and webhooks.",
+      content:
+        "Configure your company profile, connect Stripe, manage your team, set up automation rules, configure service zones, and manage API keys and webhooks.",
       placement: "right",
       disableBeacon: true,
     },
@@ -133,28 +148,32 @@ const WHATS_NEW_TOURS: TourDefinition[] = [
       {
         target: '[data-testid="link-scheduling"]',
         title: "Unified Scheduling",
-        content: "Jobs and scheduling are now combined in one place. Create jobs directly from the Scheduling page -- visits are generated automatically. No extra steps needed.",
+        content:
+          "Jobs and scheduling are now combined in one place. Create jobs directly from the Scheduling page -- visits are generated automatically. No extra steps needed.",
         placement: "right",
         disableBeacon: true,
       },
       {
         target: '[data-testid="link-route-profit-maps"]',
         title: "Route Profit Maps",
-        content: "Visualize which neighborhoods are profitable on a map. Identify areas where you should grow or raise prices.",
+        content:
+          "Visualize which neighborhoods are profitable on a map. Identify areas where you should grow or raise prices.",
         placement: "right",
         disableBeacon: true,
       },
       {
         target: '[data-testid="link-pricing-simulator"]',
         title: "Pricing Simulator",
-        content: "Test pricing changes before you make them. See how adjustments affect your revenue and margins across your entire customer base.",
+        content:
+          "Test pricing changes before you make them. See how adjustments affect your revenue and margins across your entire customer base.",
         placement: "right",
         disableBeacon: true,
       },
       {
         target: '[data-testid="button-rover-open"]',
         title: "Meet Rover",
-        content: "Look for the green 'Ask Rover' button. Rover is your AI assistant -- ask about any feature, look up business data, or submit trouble tickets. Drag the button to reposition it.",
+        content:
+          "Look for the green 'Ask Rover' button. Rover is your AI assistant -- ask about any feature, look up business data, or submit trouble tickets. Drag the button to reposition it.",
         placement: "left",
         disableBeacon: true,
       },
@@ -168,28 +187,32 @@ const WHATS_NEW_TOURS: TourDefinition[] = [
       {
         target: '[data-testid="link-invoices"]',
         title: "Invoice Revenue Dashboard",
-        content: "The Invoices page now has a live revenue dashboard at the top — see This Week's revenue, Outstanding, Overdue, and Collected totals at a glance. Invoices are grouped into sections (Overdue, Unpaid, Draft, Paid) for faster scanning.",
+        content:
+          "The Invoices page now has a live revenue dashboard at the top — see This Week's revenue, Outstanding, Overdue, and Collected totals at a glance. Invoices are grouped into sections (Overdue, Unpaid, Draft, Paid) for faster scanning.",
         placement: "right",
         disableBeacon: true,
       },
       {
         target: '[data-testid="link-invoices"]',
         title: "Batch Invoice Actions",
-        content: "No more clicking into each invoice one by one. Select multiple invoices and use Send All, Charge All (autopay), or Mark Paid to process your whole outstanding list in seconds.",
+        content:
+          "No more clicking into each invoice one by one. Select multiple invoices and use Send All, Charge All (autopay), or Mark Paid to process your whole outstanding list in seconds.",
         placement: "right",
         disableBeacon: true,
       },
       {
         target: '[data-testid="link-routes"]',
         title: "No Gate Visit Completion",
-        content: "When completing a visit, check 'No gate' to mark it done without a proof photo — perfect for properties without a gate or for logging past visits. The customer notification is adjusted automatically.",
+        content:
+          "When completing a visit, check 'No gate' to mark it done without a proof photo — perfect for properties without a gate or for logging past visits. The customer notification is adjusted automatically.",
         placement: "right",
         disableBeacon: true,
       },
       {
         target: '[data-testid="link-command-center"]',
         title: "Command Center",
-        content: "Admins now have a real-time Command Center showing all active routes, technician locations, and today's visit status across the entire team. Available under Operations in the sidebar.",
+        content:
+          "Admins now have a real-time Command Center showing all active routes, technician locations, and today's visit status across the entire team. Available under Operations in the sidebar.",
         placement: "right",
         disableBeacon: true,
       },
@@ -203,21 +226,24 @@ const WHATS_NEW_TOURS: TourDefinition[] = [
       {
         target: '[data-testid="link-invoices"]',
         title: "Generate Invoices from Completed Work",
-        content: "The new Generate button on the Invoices page lets you bill any client for their completed, uninvoiced visits in seconds. Filter by date range — this month, last month, or a custom window — pick which visits to include, and create the invoice with one click. Use the Uninvoiced tab to quickly spot clients ready to bill.",
+        content:
+          "The new Generate button on the Invoices page lets you bill any client for their completed, uninvoiced visits in seconds. Filter by date range — this month, last month, or a custom window — pick which visits to include, and create the invoice with one click. Use the Uninvoiced tab to quickly spot clients ready to bill.",
         placement: "right",
         disableBeacon: true,
       },
       {
         target: '[data-testid="link-invoices"]',
         title: "Billing Health Dashboard",
-        content: "The new Billing Health tab on the Invoices page shows your full autopay picture in one place: which clients are enrolled, who's missing a payment method, upcoming scheduled charges, and any failed payments — all with quick-action buttons to fix issues immediately.",
+        content:
+          "The new Billing Health tab on the Invoices page shows your full autopay picture in one place: which clients are enrolled, who's missing a payment method, upcoming scheduled charges, and any failed payments — all with quick-action buttons to fix issues immediately.",
         placement: "right",
         disableBeacon: true,
       },
       {
         target: '[data-testid="link-profitability"]',
         title: "Calculation Workbook — See Your Math",
-        content: "Every property on the Profitability page now shows a full Calculation Workbook: a step-by-step breakdown of exactly how the price was derived — service time, travel time, labor cost, travel cost, supplies, and overhead per visit. Know your true margin on every job.",
+        content:
+          "Every property on the Profitability page now shows a full Calculation Workbook: a step-by-step breakdown of exactly how the price was derived — service time, travel time, labor cost, travel cost, supplies, and overhead per visit. Know your true margin on every job.",
         placement: "right",
         disableBeacon: true,
       },
@@ -277,7 +303,9 @@ export function useFeatureTour() {
   const [activeTourId, setActiveTourId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
-  const { data: tourStatus, isSuccess: isTourStatusLoaded } = useQuery<{ completions: Record<string, string> }>({
+  const { data: tourStatus, isSuccess: isTourStatusLoaded } = useQuery<{
+    completions: Record<string, string>;
+  }>({
     queryKey: ["/api/tours/status"],
     enabled: !!user,
   });
@@ -298,7 +326,9 @@ export function useFeatureTour() {
     if (sidebar) {
       const isCollapsed = sidebar.getAttribute("data-state") === "collapsed";
       if (isCollapsed) {
-        const trigger = document.querySelector('[data-testid="button-sidebar-toggle"]') as HTMLElement;
+        const trigger = document.querySelector(
+          '[data-testid="button-sidebar-toggle"]'
+        ) as HTMLElement;
         if (trigger) trigger.click();
       }
     }
@@ -307,7 +337,7 @@ export function useFeatureTour() {
   }, []);
 
   const getUnseenTours = useCallback((): TourDefinition[] => {
-    return ALL_TOURS.filter(t => {
+    return ALL_TOURS.filter((t) => {
       const completed = completions[t.id];
       if (!completed) return true;
       const completedVersion = completions[`${t.id}_version`];
@@ -317,28 +347,34 @@ export function useFeatureTour() {
 
   const hasCompletedWelcome = !!completions["welcome"];
 
-  const handleCallback = useCallback((data: CallBackProps) => {
-    const { status, action, type } = data;
-    if (type === EVENTS.TARGET_NOT_FOUND) {
-      const sidebar = document.querySelector('[data-sidebar="sidebar"]');
-      const isCollapsed = sidebar?.getAttribute("data-state") === "collapsed";
-      if (isCollapsed) {
-        const sidebarTrigger = document.querySelector('[data-testid="button-sidebar-toggle"]') as HTMLElement;
-        if (sidebarTrigger) sidebarTrigger.click();
+  const handleCallback = useCallback(
+    (data: CallBackProps) => {
+      const { status, action, type } = data;
+      if (type === EVENTS.TARGET_NOT_FOUND) {
+        const sidebar = document.querySelector('[data-sidebar="sidebar"]');
+        const isCollapsed = sidebar?.getAttribute("data-state") === "collapsed";
+        if (isCollapsed) {
+          const sidebarTrigger = document.querySelector(
+            '[data-testid="button-sidebar-toggle"]'
+          ) as HTMLElement;
+          if (sidebarTrigger) sidebarTrigger.click();
+        }
       }
-    }
-    const isFinished = status === STATUS.FINISHED || status === STATUS.SKIPPED || action === ACTIONS.CLOSE;
-    if (isFinished) {
-      setIsRunning(false);
-      if (activeTourId) {
-        const tour = ALL_TOURS.find(t => t.id === activeTourId);
-        completeMutation.mutate({ tourId: activeTourId, version: tour?.version || "1.0" });
+      const isFinished =
+        status === STATUS.FINISHED || status === STATUS.SKIPPED || action === ACTIONS.CLOSE;
+      if (isFinished) {
+        setIsRunning(false);
+        if (activeTourId) {
+          const tour = ALL_TOURS.find((t) => t.id === activeTourId);
+          completeMutation.mutate({ tourId: activeTourId, version: tour?.version || "1.0" });
+        }
+        setActiveTourId(null);
       }
-      setActiveTourId(null);
-    }
-  }, [activeTourId, completeMutation]);
+    },
+    [activeTourId, completeMutation]
+  );
 
-  const activeTour = ALL_TOURS.find(t => t.id === activeTourId);
+  const activeTour = ALL_TOURS.find((t) => t.id === activeTourId);
 
   return {
     activeTour,

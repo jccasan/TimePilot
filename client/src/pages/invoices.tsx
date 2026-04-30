@@ -2,7 +2,13 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Invoice, Contact, ServicePricingItem, InvoicePayment, InvoiceLineItem } from "@shared/schema";
+import type {
+  Invoice,
+  Contact,
+  ServicePricingItem,
+  InvoicePayment,
+  InvoiceLineItem,
+} from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +49,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, FileText, Mail, Trash2, Zap, Printer, CreditCard, ExternalLink, Palette, RotateCcw, Pencil, Save, Loader2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, Clock, CheckCircle2, ChevronDown, ChevronRight, SendHorizonal, RefreshCw, Bell, Settings, X, History, Eye, ShieldCheck, Users, Calendar, AlertCircle, Activity } from "lucide-react";
+import {
+  Plus,
+  FileText,
+  Mail,
+  Trash2,
+  Zap,
+  Printer,
+  CreditCard,
+  ExternalLink,
+  Palette,
+  RotateCcw,
+  Pencil,
+  Save,
+  Loader2,
+  AlertTriangle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  TrendingUp,
+  Clock,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  SendHorizonal,
+  RefreshCw,
+  Bell,
+  Settings,
+  X,
+  History,
+  Eye,
+  ShieldCheck,
+  Users,
+  Calendar,
+  AlertCircle,
+  Activity,
+} from "lucide-react";
 import { useLocation } from "wouter";
 import {
   DropdownMenu,
@@ -52,16 +93,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ClientInfoPopover } from "@/components/client-info-popover";
-import { GenerateInvoiceDialog, GenerateByDateRangeDialog } from "@/components/generate-invoice-dialog";
+import {
+  GenerateInvoiceDialog,
+  GenerateByDateRangeDialog,
+} from "@/components/generate-invoice-dialog";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
 
@@ -106,7 +145,13 @@ function formatCents(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
-function PaymentHistorySection({ invoiceId, invoiceTotal }: { invoiceId: string; invoiceTotal: number }) {
+function PaymentHistorySection({
+  invoiceId,
+  invoiceTotal,
+}: {
+  invoiceId: string;
+  invoiceTotal: number;
+}) {
   const { data: payments, isLoading } = useQuery<InvoicePayment[]>({
     queryKey: ["/api/invoices", invoiceId, "payments"],
     enabled: !!invoiceId,
@@ -136,7 +181,10 @@ function PaymentHistorySection({ invoiceId, invoiceTotal }: { invoiceId: string;
       </CardHeader>
       <CardContent className="p-3 pt-0">
         {!payments || payments.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-3" data-testid="text-no-payments">
+          <p
+            className="text-sm text-muted-foreground text-center py-3"
+            data-testid="text-no-payments"
+          >
             No payments recorded
           </p>
         ) : (
@@ -154,25 +202,43 @@ function PaymentHistorySection({ invoiceId, invoiceTotal }: { invoiceId: string;
               <TableBody>
                 {payments.map((payment) => (
                   <TableRow key={payment.id} data-testid={`row-payment-${payment.id}`}>
-                    <TableCell className="text-xs py-2" data-testid={`text-payment-date-${payment.id}`}>
+                    <TableCell
+                      className="text-xs py-2"
+                      data-testid={`text-payment-date-${payment.id}`}
+                    >
                       {formatPaymentDate(payment.paidAt)}
                     </TableCell>
-                    <TableCell className="text-xs py-2 text-right" data-testid={`text-payment-amount-${payment.id}`}>
+                    <TableCell
+                      className="text-xs py-2 text-right"
+                      data-testid={`text-payment-amount-${payment.id}`}
+                    >
                       ${formatCents(payment.amountCents)}
                     </TableCell>
-                    <TableCell className="text-xs py-2" data-testid={`text-payment-method-${payment.id}`}>
+                    <TableCell
+                      className="text-xs py-2"
+                      data-testid={`text-payment-method-${payment.id}`}
+                    >
                       {payment.method}
                     </TableCell>
-                    <TableCell className="text-xs py-2" data-testid={`text-payment-source-${payment.id}`}>
+                    <TableCell
+                      className="text-xs py-2"
+                      data-testid={`text-payment-source-${payment.id}`}
+                    >
                       {payment.source === "imported" ? (
-                        <Badge variant="secondary" data-testid={`badge-imported-payment-${payment.id}`}>
+                        <Badge
+                          variant="secondary"
+                          data-testid={`badge-imported-payment-${payment.id}`}
+                        >
                           Imported (non-Stripe)
                         </Badge>
                       ) : (
                         payment.source
                       )}
                     </TableCell>
-                    <TableCell className="text-xs py-2" data-testid={`text-payment-reference-${payment.id}`}>
+                    <TableCell
+                      className="text-xs py-2"
+                      data-testid={`text-payment-reference-${payment.id}`}
+                    >
                       {payment.reference || "—"}
                     </TableCell>
                   </TableRow>
@@ -181,7 +247,10 @@ function PaymentHistorySection({ invoiceId, invoiceTotal }: { invoiceId: string;
             </Table>
 
             {balanceRemainingCents > 0 && (
-              <div className="flex flex-wrap justify-between gap-1 mt-3 pt-2 border-t text-sm" data-testid="payment-balance-remaining">
+              <div
+                className="flex flex-wrap justify-between gap-1 mt-3 pt-2 border-t text-sm"
+                data-testid="payment-balance-remaining"
+              >
                 <span className="text-muted-foreground">Balance Remaining:</span>
                 <span className="font-semibold text-orange-600 dark:text-orange-400">
                   ${formatCents(balanceRemainingCents)}
@@ -189,7 +258,10 @@ function PaymentHistorySection({ invoiceId, invoiceTotal }: { invoiceId: string;
               </div>
             )}
 
-            <div className="flex flex-wrap justify-between gap-1 mt-1 text-sm" data-testid="payment-total-paid">
+            <div
+              className="flex flex-wrap justify-between gap-1 mt-1 text-sm"
+              data-testid="payment-total-paid"
+            >
               <span className="text-muted-foreground">Total Paid:</span>
               <span className="font-semibold text-green-600 dark:text-green-400">
                 ${formatCents(totalPaidCents)}
@@ -237,7 +309,7 @@ function CollectionsPanel({
   const contactReminderLogs = useMemo(() => {
     if (!reminderLogsData?.logs || !contact?.id) return [];
     return reminderLogsData.logs
-      .filter(l => l.contactId === contact.id && l.reminderType.startsWith("invoice"))
+      .filter((l) => l.contactId === contact.id && l.reminderType.startsWith("invoice"))
       .slice(0, 5);
   }, [reminderLogsData, contact?.id]);
 
@@ -246,7 +318,10 @@ function CollectionsPanel({
   const isFailed = invoice.status === "failed";
 
   return (
-    <Card data-testid="collections-panel" className={isOverdue ? "border-red-200 dark:border-red-900" : ""}>
+    <Card
+      data-testid="collections-panel"
+      className={isOverdue ? "border-red-200 dark:border-red-900" : ""}
+    >
       <CardHeader className="p-3 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Bell className="h-4 w-4 text-muted-foreground" />
@@ -257,10 +332,15 @@ function CollectionsPanel({
         {contact && (
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              {hasAutopay
-                ? <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1"><CreditCard className="h-3 w-3" /> Autopay enabled</span>
-                : <span className="text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> No autopay</span>
-              }
+              {hasAutopay ? (
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                  <CreditCard className="h-3 w-3" /> Autopay enabled
+                </span>
+              ) : (
+                <span className="text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" /> No autopay
+                </span>
+              )}
             </span>
             {contact.email && <span>{contact.email}</span>}
           </div>
@@ -274,7 +354,11 @@ function CollectionsPanel({
             disabled={sendReminderPending || (!contact?.email && !contact?.phone)}
             data-testid="button-send-payment-reminder"
           >
-            {sendReminderPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Mail className="mr-1 h-3.5 w-3.5" />}
+            {sendReminderPending ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Mail className="mr-1 h-3.5 w-3.5" />
+            )}
             Send Reminder
           </Button>
           {stripeConfigured && hasAutopay && (
@@ -284,9 +368,17 @@ function CollectionsPanel({
               onClick={onRetryCharge}
               disabled={retryChargePending}
               data-testid="button-retry-charge"
-              className={isFailed ? "border-red-400 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950" : ""}
+              className={
+                isFailed
+                  ? "border-red-400 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950"
+                  : ""
+              }
             >
-              {retryChargePending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CreditCard className="mr-1 h-3.5 w-3.5" />}
+              {retryChargePending ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CreditCard className="mr-1 h-3.5 w-3.5" />
+              )}
               {isFailed ? "Retry Charge" : "Charge Card"}
             </Button>
           )}
@@ -298,14 +390,26 @@ function CollectionsPanel({
               <History className="h-3 w-3" /> Recent Reminders
             </p>
             <div className="space-y-1">
-              {contactReminderLogs.map(log => (
-                <div key={log.id} className="text-xs flex items-center justify-between gap-2 py-0.5" data-testid={`reminder-log-${log.id}`}>
-                  <span className="text-muted-foreground truncate flex-1">{log.messagePreview?.substring(0, 60)}…</span>
-                  <Badge variant="outline" className={`shrink-0 text-[10px] px-1.5 py-0 h-4 ${log.deliveryStatus === "sent" ? "border-green-400 text-green-700 dark:text-green-400" : "border-red-400 text-red-600"}`}>
+              {contactReminderLogs.map((log) => (
+                <div
+                  key={log.id}
+                  className="text-xs flex items-center justify-between gap-2 py-0.5"
+                  data-testid={`reminder-log-${log.id}`}
+                >
+                  <span className="text-muted-foreground truncate flex-1">
+                    {log.messagePreview?.substring(0, 60)}…
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={`shrink-0 text-[10px] px-1.5 py-0 h-4 ${log.deliveryStatus === "sent" ? "border-green-400 text-green-700 dark:text-green-400" : "border-red-400 text-red-600"}`}
+                  >
                     {log.channel} · {log.deliveryStatus}
                   </Badge>
                   <span className="text-muted-foreground shrink-0 tabular-nums">
-                    {new Date(log.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    {new Date(log.sentAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    })}
                   </span>
                 </div>
               ))}
@@ -314,7 +418,9 @@ function CollectionsPanel({
         )}
 
         {contactReminderLogs.length === 0 && (
-          <p className="text-xs text-muted-foreground italic">No reminder history for this client.</p>
+          <p className="text-xs text-muted-foreground italic">
+            No reminder history for this client.
+          </p>
         )}
       </CardContent>
     </Card>
@@ -322,22 +428,37 @@ function CollectionsPanel({
 }
 
 function UninvoicedVisitBreakdown({ contactId }: { contactId: string }) {
-  const { data, isLoading } = useQuery<{ visits: { id: string; scheduledDate: string; servicePlanName: string; pricePerVisit: string; propertyAddress: string }[]; totalDollars: number }>({
+  const { data, isLoading } = useQuery<{
+    visits: {
+      id: string;
+      scheduledDate: string;
+      servicePlanName: string;
+      pricePerVisit: string;
+      propertyAddress: string;
+    }[];
+    totalDollars: number;
+  }>({
     queryKey: ["/api/contacts", contactId, "uninvoiced-visits"],
-    queryFn: () => apiRequest("GET", `/api/contacts/${contactId}/uninvoiced-visits`).then(r => r.json()),
+    queryFn: () =>
+      apiRequest("GET", `/api/contacts/${contactId}/uninvoiced-visits`).then((r) => r.json()),
   });
 
   if (isLoading) {
     return (
       <div className="px-4 pb-3 space-y-1.5">
-        {[1, 2].map(i => <Skeleton key={i} className="h-7 w-full" />)}
+        {[1, 2].map((i) => (
+          <Skeleton key={i} className="h-7 w-full" />
+        ))}
       </div>
     );
   }
 
   if (!data || data.visits.length === 0) {
     return (
-      <p className="px-4 pb-3 text-xs text-muted-foreground" data-testid={`text-no-uninvoiced-visits-${contactId}`}>
+      <p
+        className="px-4 pb-3 text-xs text-muted-foreground"
+        data-testid={`text-no-uninvoiced-visits-${contactId}`}
+      >
         No visit details available.
       </p>
     );
@@ -346,7 +467,7 @@ function UninvoicedVisitBreakdown({ contactId }: { contactId: string }) {
   return (
     <div className="px-4 pb-3 pt-0 border-t mt-0" data-testid={`breakdown-uninvoiced-${contactId}`}>
       <div className="mt-2 space-y-1">
-        {data.visits.map(visit => (
+        {data.visits.map((visit) => (
           <div
             key={visit.id}
             className="flex items-center justify-between text-xs text-muted-foreground py-1"
@@ -356,10 +477,14 @@ function UninvoicedVisitBreakdown({ contactId }: { contactId: string }) {
               <span className="font-medium text-foreground shrink-0">{visit.scheduledDate}</span>
               <span className="truncate hidden sm:inline">{visit.servicePlanName}</span>
               {visit.propertyAddress && visit.propertyAddress !== "Unknown" && (
-                <span className="truncate text-muted-foreground/70 hidden md:inline">{visit.propertyAddress}</span>
+                <span className="truncate text-muted-foreground/70 hidden md:inline">
+                  {visit.propertyAddress}
+                </span>
               )}
             </div>
-            <span className="font-medium text-foreground shrink-0 ml-3">${parseFloat(visit.pricePerVisit).toFixed(2)}</span>
+            <span className="font-medium text-foreground shrink-0 ml-3">
+              ${parseFloat(visit.pricePerVisit).toFixed(2)}
+            </span>
           </div>
         ))}
       </div>
@@ -376,7 +501,12 @@ interface BillingHealthData {
   failedPayments: number;
   upcomingChargesTotal: number;
   upcomingChargesCustomers: number;
-  upcomingCharges: Array<{ date: string; customers: number; totalCents: number; invoiceIds: string[] }>;
+  upcomingCharges: Array<{
+    date: string;
+    customers: number;
+    totalCents: number;
+    invoiceIds: string[];
+  }>;
   misconfigurations: Array<{ contactId: string; contactName: string; issue: string }>;
 }
 
@@ -390,9 +520,15 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
   const [, navigate] = useLocation();
   const [showUpcoming, setShowUpcoming] = useState(false);
   const [showAutopayList, setShowAutopayList] = useState(false);
-  const [miscFilter, setMiscFilter] = useState<"all" | "no_payment_method" | "failed_charge" | "no_billing_rule">("all");
+  const [miscFilter, setMiscFilter] = useState<
+    "all" | "no_payment_method" | "failed_charge" | "no_billing_rule"
+  >("all");
 
-  const { data: health, isLoading, refetch } = useQuery<BillingHealthData>({
+  const {
+    data: health,
+    isLoading,
+    refetch,
+  } = useQuery<BillingHealthData>({
     queryKey: ["/api/billing/health"],
   });
 
@@ -401,12 +537,19 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
       return apiRequest("POST", "/api/billing/charge-by-date", { date });
     },
     onSuccess: (_data, date) => {
-      toast({ title: "Charges initiated", description: `Batch charge for ${formatDateLabel(date)} started.` });
+      toast({
+        title: "Charges initiated",
+        description: `Batch charge for ${formatDateLabel(date)} started.`,
+      });
       refetch();
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to initiate batch charges.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to initiate batch charges.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -418,12 +561,19 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
       }
     },
     onSuccess: () => {
-      toast({ title: "All charges initiated", description: "Batch charges for all upcoming dates started." });
+      toast({
+        title: "All charges initiated",
+        description: "Batch charges for all upcoming dates started.",
+      });
       refetch();
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to initiate all charges.", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to initiate all charges.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -436,7 +586,10 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
       }
     },
     onSuccess: () => {
-      toast({ title: "Retrying failed payments", description: "All failed invoices are being retried." });
+      toast({
+        title: "Retrying failed payments",
+        description: "All failed invoices are being retried.",
+      });
       refetch();
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
     },
@@ -445,10 +598,11 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
     },
   });
 
-  const filteredMisconfigs = health?.misconfigurations.filter(m => {
-    if (miscFilter === "all") return true;
-    return m.issue === miscFilter;
-  }) ?? [];
+  const filteredMisconfigs =
+    health?.misconfigurations.filter((m) => {
+      if (miscFilter === "all") return true;
+      return m.issue === miscFilter;
+    }) ?? [];
 
   const issueLabel: Record<string, string> = {
     no_payment_method: "Autopay on, no payment method",
@@ -460,7 +614,9 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 w-full" />)}
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-28 w-full" />
+          ))}
         </div>
         <Skeleton className="h-40 w-full" />
       </div>
@@ -475,14 +631,16 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
         <Card
           className="cursor-pointer hover:border-primary/50 transition-colors"
           data-testid="card-autopay-customers"
-          onClick={() => setShowAutopayList(v => !v)}
+          onClick={() => setShowAutopayList((v) => !v)}
         >
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-muted-foreground font-medium">Autopay Customers</p>
                 <p className="text-3xl font-bold mt-1">{health.autopayCustomers}</p>
-                <p className="text-xs text-muted-foreground mt-1">{health.autopayPercent}% adoption · {health.totalCustomers} total</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {health.autopayPercent}% adoption · {health.totalCustomers} total
+                </p>
               </div>
               <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
                 <ShieldCheck className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -493,7 +651,10 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
                 size="sm"
                 variant="outline"
                 className="mt-3 w-full text-xs h-7"
-                onClick={(e) => { e.stopPropagation(); setShowAutopayList(v => !v); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAutopayList((v) => !v);
+                }}
                 data-testid="button-view-autopay-list"
               >
                 {showAutopayList ? "Collapse" : "View All"}
@@ -514,8 +675,12 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
                 <p className="text-3xl font-bold mt-1">{health.missingPaymentMethod}</p>
                 <p className="text-xs text-muted-foreground mt-1">autopay on, no card</p>
               </div>
-              <div className={`p-2 rounded-lg ${health.missingPaymentMethod > 0 ? "bg-amber-100 dark:bg-amber-900/30" : "bg-muted"}`}>
-                <Users className={`h-5 w-5 ${health.missingPaymentMethod > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`} />
+              <div
+                className={`p-2 rounded-lg ${health.missingPaymentMethod > 0 ? "bg-amber-100 dark:bg-amber-900/30" : "bg-muted"}`}
+              >
+                <Users
+                  className={`h-5 w-5 ${health.missingPaymentMethod > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}
+                />
               </div>
             </div>
             {health.missingPaymentMethod > 0 && (
@@ -523,7 +688,10 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
                 size="sm"
                 variant="outline"
                 className="mt-3 w-full text-xs h-7"
-                onClick={(e) => { e.stopPropagation(); setMiscFilter("no_payment_method"); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMiscFilter("no_payment_method");
+                }}
                 data-testid="button-fix-missing-payment"
               >
                 Fix Now
@@ -535,14 +703,23 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
         <Card
           className="cursor-pointer hover:border-primary/50 transition-colors"
           data-testid="card-upcoming-charges"
-          onClick={() => setShowUpcoming(v => !v)}
+          onClick={() => setShowUpcoming((v) => !v)}
         >
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-muted-foreground font-medium">Upcoming Charges (7d)</p>
-                <p className="text-3xl font-bold mt-1">${(health.upcomingChargesTotal / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                <p className="text-xs text-muted-foreground mt-1">across {health.upcomingChargesCustomers} customer{health.upcomingChargesCustomers !== 1 ? "s" : ""}</p>
+                <p className="text-3xl font-bold mt-1">
+                  $
+                  {(health.upcomingChargesTotal / 100).toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  across {health.upcomingChargesCustomers} customer
+                  {health.upcomingChargesCustomers !== 1 ? "s" : ""}
+                </p>
               </div>
               <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                 <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
@@ -553,7 +730,10 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
                 size="sm"
                 variant="outline"
                 className="mt-3 w-full text-xs h-7"
-                onClick={(e) => { e.stopPropagation(); setShowUpcoming(v => !v); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowUpcoming((v) => !v);
+                }}
                 data-testid="button-review-upcoming"
               >
                 {showUpcoming ? "Collapse" : "Review"}
@@ -574,8 +754,12 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
                 <p className="text-3xl font-bold mt-1">{health.failedPayments}</p>
                 <p className="text-xs text-muted-foreground mt-1">need attention</p>
               </div>
-              <div className={`p-2 rounded-lg ${health.failedPayments > 0 ? "bg-red-100 dark:bg-red-900/30" : "bg-muted"}`}>
-                <AlertCircle className={`h-5 w-5 ${health.failedPayments > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} />
+              <div
+                className={`p-2 rounded-lg ${health.failedPayments > 0 ? "bg-red-100 dark:bg-red-900/30" : "bg-muted"}`}
+              >
+                <AlertCircle
+                  className={`h-5 w-5 ${health.failedPayments > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                />
               </div>
             </div>
             {health.failedPayments > 0 && (
@@ -583,11 +767,18 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
                 size="sm"
                 variant="outline"
                 className="mt-3 w-full text-xs h-7 border-red-300 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"
-                onClick={(e) => { e.stopPropagation(); retryAllMutation.mutate(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  retryAllMutation.mutate();
+                }}
                 disabled={retryAllMutation.isPending}
                 data-testid="button-retry-all-failed"
               >
-                {retryAllMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+                {retryAllMutation.isPending ? (
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-1 h-3 w-3" />
+                )}
                 Retry All
               </Button>
             )}
@@ -598,12 +789,18 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
       {showAutopayList && health.autopayContacts && health.autopayContacts.length > 0 && (
         <Card data-testid="card-autopay-list">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Autopay Customers ({health.autopayContacts.length})</CardTitle>
+            <CardTitle className="text-base">
+              Autopay Customers ({health.autopayContacts.length})
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y max-h-64 overflow-y-auto">
-              {health.autopayContacts.map(c => (
-                <div key={c.id} className="px-4 py-2 flex items-center justify-between hover:bg-muted/50" data-testid={`row-autopay-contact-${c.id}`}>
+              {health.autopayContacts.map((c) => (
+                <div
+                  key={c.id}
+                  className="px-4 py-2 flex items-center justify-between hover:bg-muted/50"
+                  data-testid={`row-autopay-contact-${c.id}`}
+                >
                   <span className="text-sm">{c.name}</span>
                   <Button
                     size="sm"
@@ -633,7 +830,11 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
                 disabled={runAllMutation.isPending}
                 data-testid="button-run-all-charges"
               >
-                {runAllMutation.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Zap className="mr-1 h-3.5 w-3.5" />}
+                {runAllMutation.isPending ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Zap className="mr-1 h-3.5 w-3.5" />
+                )}
                 Run All
               </Button>
             </div>
@@ -654,7 +855,11 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
                     <TableCell className="font-medium">{formatDateLabel(row.date)}</TableCell>
                     <TableCell className="text-center">{row.customers}</TableCell>
                     <TableCell className="text-right font-semibold">
-                      ${(row.totalCents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      $
+                      {(row.totalCents / 100).toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -664,7 +869,9 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
                         disabled={chargeByDateMutation.isPending}
                         data-testid={`button-run-now-${row.date}`}
                       >
-                        {chargeByDateMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                        {chargeByDateMutation.isPending ? (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        ) : null}
                         Run Now
                       </Button>
                     </TableCell>
@@ -683,30 +890,45 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
               <AlertTriangle className="h-4 w-4 text-amber-500" />
               Billing Misconfigurations
               {filteredMisconfigs.length > 0 && (
-                <Badge variant="secondary" className="ml-1">{filteredMisconfigs.length}</Badge>
+                <Badge variant="secondary" className="ml-1">
+                  {filteredMisconfigs.length}
+                </Badge>
               )}
             </CardTitle>
             <div className="flex flex-wrap gap-1.5">
-              {(["all", "no_payment_method", "failed_charge", "no_billing_rule"] as const).map(f => (
-                <Button
-                  key={f}
-                  size="sm"
-                  variant={miscFilter === f ? "default" : "outline"}
-                  className="h-7 text-xs"
-                  onClick={() => setMiscFilter(f)}
-                  data-testid={`button-misc-filter-${f}`}
-                >
-                  {f === "all" ? "All Issues" : f === "no_payment_method" ? "Missing Card" : f === "failed_charge" ? "Failed Charge" : "No Rule"}
-                </Button>
-              ))}
+              {(["all", "no_payment_method", "failed_charge", "no_billing_rule"] as const).map(
+                (f) => (
+                  <Button
+                    key={f}
+                    size="sm"
+                    variant={miscFilter === f ? "default" : "outline"}
+                    className="h-7 text-xs"
+                    onClick={() => setMiscFilter(f)}
+                    data-testid={`button-misc-filter-${f}`}
+                  >
+                    {f === "all"
+                      ? "All Issues"
+                      : f === "no_payment_method"
+                        ? "Missing Card"
+                        : f === "failed_charge"
+                          ? "Failed Charge"
+                          : "No Rule"}
+                  </Button>
+                )
+              )}
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           {filteredMisconfigs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground" data-testid="text-no-misconfigs">
+            <div
+              className="flex flex-col items-center justify-center py-10 text-muted-foreground"
+              data-testid="text-no-misconfigs"
+            >
               <Activity className="h-8 w-8 mb-2 opacity-40" />
-              <p className="text-sm">{miscFilter === "all" ? "No billing issues found" : "No issues of this type"}</p>
+              <p className="text-sm">
+                {miscFilter === "all" ? "No billing issues found" : "No issues of this type"}
+              </p>
             </div>
           ) : (
             <Table>
@@ -719,7 +941,10 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
               </TableHeader>
               <TableBody>
                 {filteredMisconfigs.map((m, idx) => (
-                  <TableRow key={`${m.contactId}-${m.issue}-${idx}`} data-testid={`row-misconfig-${m.contactId}`}>
+                  <TableRow
+                    key={`${m.contactId}-${m.issue}-${idx}`}
+                    data-testid={`row-misconfig-${m.contactId}`}
+                  >
                     <TableCell className="font-medium">{m.contactName || "Unknown"}</TableCell>
                     <TableCell>
                       <Badge
@@ -781,7 +1006,15 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
   );
 }
 
-const VALID_TAB_VALUES = ["all", "uninvoiced", "unpaid", "overdue", "paid", "failed", "billing-health"];
+const VALID_TAB_VALUES = [
+  "all",
+  "uninvoiced",
+  "unpaid",
+  "overdue",
+  "paid",
+  "failed",
+  "billing-health",
+];
 
 function getInitialTab(): string {
   const params = new URLSearchParams(window.location.search);
@@ -812,7 +1045,6 @@ export default function Invoices() {
   const [loadingUninvoiced, setLoadingUninvoiced] = useState(false);
   const [draftInvoiceIds, setDraftInvoiceIds] = useState<string[]>([]);
 
-
   const [editMode, setEditMode] = useState(false);
   const [editLineItems, setEditLineItems] = useState<LineItem[]>([]);
   const [editDueDate, setEditDueDate] = useState("");
@@ -829,28 +1061,41 @@ export default function Invoices() {
   type SortDir = "asc" | "desc";
   const [sortField, setSortField] = useState<SortField>(() => {
     const saved = localStorage.getItem("scoopilot_inv_sort_field");
-    const valid: SortField[] = ["invoiceNumber", "contact", "dueDate", "total", "status", "createdAt"];
-    return (valid.includes(saved as SortField) ? saved as SortField : "createdAt");
+    const valid: SortField[] = [
+      "invoiceNumber",
+      "contact",
+      "dueDate",
+      "total",
+      "status",
+      "createdAt",
+    ];
+    return valid.includes(saved as SortField) ? (saved as SortField) : "createdAt";
   });
-  const [sortDir, setSortDir] = useState<SortDir>(() =>
-    (localStorage.getItem("scoopilot_inv_sort_dir") as SortDir) || "desc"
+  const [sortDir, setSortDir] = useState<SortDir>(
+    () => (localStorage.getItem("scoopilot_inv_sort_dir") as SortDir) || "desc"
   );
 
   useEffect(() => {
-    try { localStorage.setItem("scoopilot_inv_status_filter", statusFilter); } catch {}
+    try {
+      localStorage.setItem("scoopilot_inv_status_filter", statusFilter);
+    } catch {}
   }, [statusFilter]);
 
   useEffect(() => {
-    try { localStorage.setItem("scoopilot_inv_sort_field", sortField); } catch {}
+    try {
+      localStorage.setItem("scoopilot_inv_sort_field", sortField);
+    } catch {}
   }, [sortField]);
 
   useEffect(() => {
-    try { localStorage.setItem("scoopilot_inv_sort_dir", sortDir); } catch {}
+    try {
+      localStorage.setItem("scoopilot_inv_sort_dir", sortDir);
+    } catch {}
   }, [sortDir]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortField(field);
       setSortDir("asc");
@@ -863,7 +1108,7 @@ export default function Invoices() {
 
   const toggleUninvoicedSort = (field: UninvoicedSortField) => {
     if (uninvoicedSortField === field) {
-      setUninvoicedSortDir(d => d === "asc" ? "desc" : "asc");
+      setUninvoicedSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setUninvoicedSortField(field);
       setUninvoicedSortDir(field === "name" ? "asc" : "desc");
@@ -878,24 +1123,37 @@ export default function Invoices() {
       if (token) headers["Authorization"] = `Bearer ${token}`;
       if (statusFilter === "unpaid") {
         const [draft, sent, pending] = await Promise.all([
-          fetch("/api/invoices?status=draft", { credentials: "include", headers }).then(r => r.ok ? r.json() : []),
-          fetch("/api/invoices?status=sent", { credentials: "include", headers }).then(r => r.ok ? r.json() : []),
-          fetch("/api/invoices?status=pending", { credentials: "include", headers }).then(r => r.ok ? r.json() : []),
+          fetch("/api/invoices?status=draft", { credentials: "include", headers }).then((r) =>
+            r.ok ? r.json() : []
+          ),
+          fetch("/api/invoices?status=sent", { credentials: "include", headers }).then((r) =>
+            r.ok ? r.json() : []
+          ),
+          fetch("/api/invoices?status=pending", { credentials: "include", headers }).then((r) =>
+            r.ok ? r.json() : []
+          ),
         ]);
         const now = new Date();
         const combined = [...draft, ...sent, ...pending];
-        return combined.filter((inv: Invoice) => !(inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now));
+        return combined.filter(
+          (inv: Invoice) => !(inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now)
+        );
       }
       if (statusFilter === "overdue") {
         const r = await fetch("/api/invoices", { credentials: "include", headers });
         if (!r.ok) throw new Error("Failed to fetch invoices");
         const all: Invoice[] = await r.json();
         const now = new Date();
-        return all.filter((inv: Invoice) =>
-          inv.status !== "paid" && inv.status !== "voided" && inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now
+        return all.filter(
+          (inv: Invoice) =>
+            inv.status !== "paid" &&
+            inv.status !== "voided" &&
+            inv.dueDate &&
+            new Date(inv.dueDate + "T23:59:59") < now
         );
       }
-      const queryParams = statusFilter !== "all" && statusFilter !== "uninvoiced" ? `?status=${statusFilter}` : "";
+      const queryParams =
+        statusFilter !== "all" && statusFilter !== "uninvoiced" ? `?status=${statusFilter}` : "";
       const r = await fetch(`/api/invoices${queryParams}`, { credentials: "include", headers });
       if (!r.ok) throw new Error("Failed to fetch invoices");
       const all = await r.json();
@@ -921,7 +1179,7 @@ export default function Invoices() {
     queryKey: ["/api/company/uninvoiced-summary"],
   });
 
-  const activePricing = useMemo(() => pricing?.filter(p => p.isActive) || [], [pricing]);
+  const activePricing = useMemo(() => pricing?.filter((p) => p.isActive) || [], [pricing]);
 
   const { data: allInvoicesForStats } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices"],
@@ -951,8 +1209,8 @@ export default function Invoices() {
       const total = Number(inv.total) || 0;
       const isPaid = inv.status === "paid";
       const isVoided = inv.status === "voided";
-      const isOverdue = inv.dueDate && !isPaid && !isVoided &&
-        new Date(inv.dueDate + "T23:59:59") < now;
+      const isOverdue =
+        inv.dueDate && !isPaid && !isVoided && new Date(inv.dueDate + "T23:59:59") < now;
 
       if (isPaid) {
         if (inv.paidAt && new Date(inv.paidAt) >= weekStart) {
@@ -970,7 +1228,10 @@ export default function Invoices() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    overdue: true, unpaid: true, draft: true, paid: false,
+    overdue: true,
+    unpaid: true,
+    draft: true,
+    paid: false,
   });
   const [confirmSendAll, setConfirmSendAll] = useState(false);
   const [confirmChargeAll, setConfirmChargeAll] = useState(false);
@@ -979,7 +1240,9 @@ export default function Invoices() {
   const [selectedUninvoicedIds, setSelectedUninvoicedIds] = useState<Set<string>>(new Set());
   const [expandedUninvoicedIds, setExpandedUninvoicedIds] = useState<Set<string>>(new Set());
   const [previewSheetOpen, setPreviewSheetOpen] = useState(false);
-  const [generateDialogContactId, setGenerateDialogContactId] = useState<string | undefined>(undefined);
+  const [generateDialogContactId, setGenerateDialogContactId] = useState<string | undefined>(
+    undefined
+  );
   const [generateByDateRangeOpen, setGenerateByDateRangeOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
   const [editInvoiceReminders, setEditInvoiceReminders] = useState<{
@@ -989,9 +1252,21 @@ export default function Invoices() {
   } | null>(null);
   const [preDueDaysInput, setPreDueDaysInput] = useState("");
 
-  const subtotal = useMemo(() => lineItems.reduce((sum, li) => sum + (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0), 0), [lineItems]);
+  const subtotal = useMemo(
+    () =>
+      lineItems.reduce(
+        (sum, li) => sum + (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0),
+        0
+      ),
+    [lineItems]
+  );
   const parsedDiscountValue = parseFloat(discountValue) || 0;
-  const discountAmount = discountType === "percent" ? subtotal * (Math.abs(parsedDiscountValue) / 100) : discountType === "amount" ? Math.abs(parsedDiscountValue) : 0;
+  const discountAmount =
+    discountType === "percent"
+      ? subtotal * (Math.abs(parsedDiscountValue) / 100)
+      : discountType === "amount"
+        ? Math.abs(parsedDiscountValue)
+        : 0;
   const afterDiscount = Math.max(0, subtotal - discountAmount);
   const parsedTaxRate = parseFloat(taxRate) || 0;
   const taxAmount = afterDiscount * (parsedTaxRate / 100);
@@ -1047,7 +1322,9 @@ export default function Invoices() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({
+        predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
       const desc = data?.paymentUrl
         ? "Invoice emailed with a payment link."
         : "Invoice emailed to the client.";
@@ -1064,11 +1341,16 @@ export default function Invoices() {
       return res.json();
     },
     onSuccess: (data: { status: string }) => {
-      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({
+        predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits"),
+      });
       if (data.status === "paid") {
         toast({ title: "Payment successful", description: "Invoice charged to card on file." });
       } else {
@@ -1116,7 +1398,10 @@ export default function Invoices() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company/reminder-settings"] });
-      toast({ title: "Reminder settings saved", description: "Invoice reminder schedule updated." });
+      toast({
+        title: "Reminder settings saved",
+        description: "Invoice reminder schedule updated.",
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Error saving settings", description: error.message, variant: "destructive" });
@@ -1133,7 +1418,11 @@ export default function Invoices() {
       toast({ title: "Reminder sent", description: `Payment reminder sent via ${channel}.` });
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to send reminder", description: error.message, variant: "destructive" });
+      toast({
+        title: "Failed to send reminder",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -1147,7 +1436,7 @@ export default function Invoices() {
         await apiRequest("POST", "/api/invoices/consolidate", {
           contactId,
           draftInvoiceIds,
-          lineItems: lineItems.map(li => ({
+          lineItems: lineItems.map((li) => ({
             description: li.description,
             quantity: parseInt(li.quantity) || 1,
             unitPrice: li.unitPrice,
@@ -1162,7 +1451,7 @@ export default function Invoices() {
           contactId,
           dueDate,
           status: invoiceStatus,
-          lineItems: lineItems.map(li => ({
+          lineItems: lineItems.map((li) => ({
             description: li.description,
             quantity: parseInt(li.quantity) || 1,
             unitPrice: li.unitPrice,
@@ -1176,14 +1465,20 @@ export default function Invoices() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({
+        predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
-      const msg = draftInvoiceIds.length > 0
-        ? `Consolidated ${draftInvoiceIds.length} draft invoice${draftInvoiceIds.length !== 1 ? "s" : ""} into one.`
-        : "New invoice has been created.";
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits"),
+      });
+      const msg =
+        draftInvoiceIds.length > 0
+          ? `Consolidated ${draftInvoiceIds.length} draft invoice${draftInvoiceIds.length !== 1 ? "s" : ""} into one.`
+          : "New invoice has been created.";
       toast({ title: "Invoice created", description: msg });
       resetCreateForm();
       setCreateDialogOpen(false);
@@ -1193,13 +1488,17 @@ export default function Invoices() {
     },
   });
 
-
   const markPaidMutation = useMutation({
     mutationFn: async (invoiceId: string) => {
-      await apiRequest("PATCH", `/api/invoices/${invoiceId}`, { status: "paid", paidAt: new Date().toISOString() });
+      await apiRequest("PATCH", `/api/invoices/${invoiceId}`, {
+        status: "paid",
+        paidAt: new Date().toISOString(),
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({
+        predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       toast({ title: "Invoice updated", description: "Invoice marked as paid." });
@@ -1214,10 +1513,12 @@ export default function Invoices() {
       await apiRequest("DELETE", `/api/invoices/${invoiceId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ predicate: (query) => {
-        const key = query.queryKey[0] as string;
-        return key?.startsWith("/api/invoices") || key?.startsWith("/api/contacts");
-      }});
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0] as string;
+          return key?.startsWith("/api/invoices") || key?.startsWith("/api/contacts");
+        },
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
@@ -1229,15 +1530,26 @@ export default function Invoices() {
   });
 
   const generateAllMutation = useMutation({
-    mutationFn: async ({ contactIds, sendAfterGenerate }: { contactIds: string[] | null; sendAfterGenerate?: boolean }) => {
+    mutationFn: async ({
+      contactIds,
+      sendAfterGenerate,
+    }: {
+      contactIds: string[] | null;
+      sendAfterGenerate?: boolean;
+    }) => {
       const body: Record<string, unknown> = {};
       if (contactIds) body.contactIds = contactIds;
       if (sendAfterGenerate) body.sendAfterGenerate = true;
       const res = await apiRequest("POST", "/api/invoices/generate-all-from-uninvoiced", body);
       return res.json();
     },
-    onSuccess: (data: { created: number; totalDollars: number; sent?: number; failed?: number }, variables) => {
-      queryClient.invalidateQueries({ predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+    onSuccess: (
+      data: { created: number; totalDollars: number; sent?: number; failed?: number },
+      variables
+    ) => {
+      queryClient.invalidateQueries({
+        predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
@@ -1245,13 +1557,17 @@ export default function Invoices() {
       setGenerateAllContactIds(null);
       setSelectedUninvoicedIds(new Set());
       if (data.created > 0) {
-        const dollarStr = data.totalDollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const dollarStr = data.totalDollars.toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
         if (variables.sendAfterGenerate) {
           const sentN = data.sent ?? 0;
           const failedN = data.failed ?? 0;
-          const sentDesc = failedN > 0
-            ? `${data.created} invoice${data.created !== 1 ? "s" : ""} created, ${sentN} sent, ${failedN} failed to send`
-            : `${data.created} invoice${data.created !== 1 ? "s" : ""} created and sent to ${sentN} customer${sentN !== 1 ? "s" : ""}`;
+          const sentDesc =
+            failedN > 0
+              ? `${data.created} invoice${data.created !== 1 ? "s" : ""} created, ${sentN} sent, ${failedN} failed to send`
+              : `${data.created} invoice${data.created !== 1 ? "s" : ""} created and sent to ${sentN} customer${sentN !== 1 ? "s" : ""}`;
           toast({ title: `$${dollarStr} generated and sent`, description: sentDesc });
         } else {
           toast({
@@ -1272,29 +1588,55 @@ export default function Invoices() {
 
   async function batchSend(ids: string[]) {
     setBatchPending(true);
-    let sent = 0; let failed = 0;
+    let sent = 0;
+    let failed = 0;
     try {
-      await Promise.all(ids.map(id =>
-        apiRequest("POST", `/api/invoices/${id}/send-email`).then(() => { sent++; }).catch(() => { failed++; })
-      ));
-      queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+      await Promise.all(
+        ids.map((id) =>
+          apiRequest("POST", `/api/invoices/${id}/send-email`)
+            .then(() => {
+              sent++;
+            })
+            .catch(() => {
+              failed++;
+            })
+        )
+      );
+      queryClient.invalidateQueries({
+        predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
       const total = sent + failed;
-      toast({ title: failed === 0 ? `${sent} invoice${sent !== 1 ? "s" : ""} sent` : `${sent} of ${total} invoices sent`, description: failed > 0 ? `${failed} failed.` : undefined });
+      toast({
+        title:
+          failed === 0
+            ? `${sent} invoice${sent !== 1 ? "s" : ""} sent`
+            : `${sent} of ${total} invoices sent`,
+        description: failed > 0 ? `${failed} failed.` : undefined,
+      });
       setSelectedIds(new Set());
-    } finally { setBatchPending(false); }
+    } finally {
+      setBatchPending(false);
+    }
   }
 
   async function batchCharge(ids: string[]) {
     setBatchPending(true);
     try {
       if (isDemo) {
-        await new Promise(r => setTimeout(r, 1200));
-        const eligible = autopayEligibleInvoices.filter(inv => ids.includes(inv.id));
+        await new Promise((r) => setTimeout(r, 1200));
+        const eligible = autopayEligibleInvoices.filter((inv) => ids.includes(inv.id));
         const totalAmount = eligible.reduce((sum, inv) => sum + Number(inv.total), 0);
-        await Promise.all(eligible.map(inv =>
-          apiRequest("PATCH", `/api/invoices/${inv.id}`, { status: "paid", paidAt: new Date().toISOString() }).catch(() => {})
-        ));
-        queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+        await Promise.all(
+          eligible.map((inv) =>
+            apiRequest("PATCH", `/api/invoices/${inv.id}`, {
+              status: "paid",
+              paidAt: new Date().toISOString(),
+            }).catch(() => {})
+          )
+        );
+        queryClient.invalidateQueries({
+          predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices"),
+        });
         queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
         queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
         toast({
@@ -1304,43 +1646,74 @@ export default function Invoices() {
         setSelectedIds(new Set());
         return;
       }
-      let charged = 0; let failed = 0;
-      await Promise.all(ids.map(id =>
-        apiRequest("POST", `/api/invoices/${id}/charge`).then(() => { charged++; }).catch(() => { failed++; })
-      ));
-      queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+      let charged = 0;
+      let failed = 0;
+      await Promise.all(
+        ids.map((id) =>
+          apiRequest("POST", `/api/invoices/${id}/charge`)
+            .then(() => {
+              charged++;
+            })
+            .catch(() => {
+              failed++;
+            })
+        )
+      );
+      queryClient.invalidateQueries({
+        predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       const total = charged + failed;
-      toast({ title: failed === 0 ? `${charged} invoice${charged !== 1 ? "s" : ""} charged` : `${charged} of ${total} invoices charged`, description: failed > 0 ? `${failed} failed.` : undefined });
+      toast({
+        title:
+          failed === 0
+            ? `${charged} invoice${charged !== 1 ? "s" : ""} charged`
+            : `${charged} of ${total} invoices charged`,
+        description: failed > 0 ? `${failed} failed.` : undefined,
+      });
       setSelectedIds(new Set());
-    } finally { setBatchPending(false); }
+    } finally {
+      setBatchPending(false);
+    }
   }
 
   async function batchMarkPaid(ids: string[]) {
     setBatchPending(true);
     let marked = 0;
     try {
-      await Promise.all(ids.map(id =>
-        apiRequest("PATCH", `/api/invoices/${id}`, { status: "paid", paidAt: new Date().toISOString() })
-          .then(() => { marked++; }).catch(() => {})
-      ));
-      queryClient.invalidateQueries({ predicate: q => (q.queryKey[0] as string)?.startsWith("/api/invoices") });
+      await Promise.all(
+        ids.map((id) =>
+          apiRequest("PATCH", `/api/invoices/${id}`, {
+            status: "paid",
+            paidAt: new Date().toISOString(),
+          })
+            .then(() => {
+              marked++;
+            })
+            .catch(() => {})
+        )
+      );
+      queryClient.invalidateQueries({
+        predicate: (q) => (q.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       toast({ title: `Marked ${marked} invoice${marked !== 1 ? "s" : ""} as paid` });
       setSelectedIds(new Set());
-    } finally { setBatchPending(false); }
+    } finally {
+      setBatchPending(false);
+    }
   }
 
   function toggleSelectAll(invoiceList: Invoice[]) {
-    if (invoiceList.every(inv => selectedIds.has(inv.id))) {
+    if (invoiceList.every((inv) => selectedIds.has(inv.id))) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(invoiceList.map(inv => inv.id)));
+      setSelectedIds(new Set(invoiceList.map((inv) => inv.id)));
     }
   }
 
   function toggleSelectOne(id: string) {
-    setSelectedIds(prev => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -1348,9 +1721,21 @@ export default function Invoices() {
     });
   }
 
-  const editSubtotal = useMemo(() => editLineItems.reduce((sum, li) => sum + (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0), 0), [editLineItems]);
+  const editSubtotal = useMemo(
+    () =>
+      editLineItems.reduce(
+        (sum, li) => sum + (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0),
+        0
+      ),
+    [editLineItems]
+  );
   const editParsedDiscountValue = parseFloat(editDiscountValue) || 0;
-  const editDiscountAmount = editDiscountType === "percent" ? editSubtotal * (Math.abs(editParsedDiscountValue) / 100) : editDiscountType === "amount" ? Math.abs(editParsedDiscountValue) : 0;
+  const editDiscountAmount =
+    editDiscountType === "percent"
+      ? editSubtotal * (Math.abs(editParsedDiscountValue) / 100)
+      : editDiscountType === "amount"
+        ? Math.abs(editParsedDiscountValue)
+        : 0;
   const editAfterDiscount = Math.max(0, editSubtotal - editDiscountAmount);
   const editParsedTaxRate = parseFloat(editTaxRate) || 0;
   const editTaxAmount = editAfterDiscount * (editParsedTaxRate / 100);
@@ -1358,13 +1743,15 @@ export default function Invoices() {
 
   function enterEditMode() {
     if (!selectedInvoice) return;
-    setEditLineItems((selectedInvoice.lineItems || []).map((li: InvoiceLineItem) => ({
-      description: li.description || "",
-      quantity: String(li.quantity || 1),
-      unitPrice: String(li.unitPrice || "0"),
-      servicePricingId: li.servicePricingId || undefined,
-      visitId: li.visitId || undefined,
-    })));
+    setEditLineItems(
+      (selectedInvoice.lineItems || []).map((li: InvoiceLineItem) => ({
+        description: li.description || "",
+        quantity: String(li.quantity || 1),
+        unitPrice: String(li.unitPrice || "0"),
+        servicePricingId: li.servicePricingId || undefined,
+        visitId: li.visitId || undefined,
+      }))
+    );
     setEditDueDate(selectedInvoice.dueDate || "");
     setEditTaxRate(String(selectedInvoice.taxRate || "0"));
     setEditDiscountType(selectedInvoice.discountType || "");
@@ -1382,7 +1769,7 @@ export default function Invoices() {
         discountType: editDiscountType || null,
         discountValue: editDiscountValue === "" ? "0" : editDiscountValue,
         notes: editNotes || null,
-        lineItems: editLineItems.map(li => ({
+        lineItems: editLineItems.map((li) => ({
           description: li.description,
           quantity: parseInt(li.quantity) || 1,
           unitPrice: li.unitPrice,
@@ -1394,7 +1781,9 @@ export default function Invoices() {
       return res.json();
     },
     onSuccess: (data: InvoiceWithLineItems) => {
-      queryClient.invalidateQueries({ predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices") });
+      queryClient.invalidateQueries({
+        predicate: (query) => (query.queryKey[0] as string)?.startsWith("/api/invoices"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       setSelectedInvoice(data);
@@ -1432,7 +1821,10 @@ export default function Invoices() {
 
       const [unsentRes, uninvoicedRes] = await Promise.all([
         fetch(`/api/contacts/${newContactId}/unsent-invoices`, { credentials: "include", headers }),
-        fetch(`/api/contacts/${newContactId}/uninvoiced-visits`, { credentials: "include", headers }),
+        fetch(`/api/contacts/${newContactId}/uninvoiced-visits`, {
+          credentials: "include",
+          headers,
+        }),
       ]);
 
       const consolidatedItems: LineItem[] = [];
@@ -1473,31 +1865,45 @@ export default function Invoices() {
       setLineItems(consolidatedItems);
 
       if (!unsentRes.ok && !uninvoicedRes.ok) {
-        toast({ title: "Could not load billing data", description: "You can still add items manually.", variant: "destructive" });
+        toast({
+          title: "Could not load billing data",
+          description: "You can still add items manually.",
+          variant: "destructive",
+        });
       }
     } catch (err) {
       console.error("Failed to fetch billing data:", err);
-      toast({ title: "Could not load billing data", description: "You can still add items manually.", variant: "destructive" });
+      toast({
+        title: "Could not load billing data",
+        description: "You can still add items manually.",
+        variant: "destructive",
+      });
     } finally {
       setLoadingUninvoiced(false);
     }
   }
 
   function addServiceItem(pricingItem: ServicePricingItem) {
-    setLineItems([...lineItems, {
-      description: pricingItem.name,
-      quantity: "1",
-      unitPrice: pricingItem.basePrice,
-      servicePricingId: pricingItem.id,
-    }]);
+    setLineItems([
+      ...lineItems,
+      {
+        description: pricingItem.name,
+        quantity: "1",
+        unitPrice: pricingItem.basePrice,
+        servicePricingId: pricingItem.id,
+      },
+    ]);
   }
 
   function addCustomLineItem() {
-    setLineItems([...lineItems, {
-      description: "",
-      quantity: "1",
-      unitPrice: "0",
-    }]);
+    setLineItems([
+      ...lineItems,
+      {
+        description: "",
+        quantity: "1",
+        unitPrice: "0",
+      },
+    ]);
   }
 
   function updateLineItem(index: number, updates: Partial<LineItem>) {
@@ -1520,7 +1926,11 @@ export default function Invoices() {
       setSelectedInvoice(data);
       setDetailDialogOpen(true);
     } catch {
-      toast({ title: "Error", description: "Failed to load invoice details", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to load invoice details",
+        variant: "destructive",
+      });
     }
   }
 
@@ -1534,7 +1944,9 @@ export default function Invoices() {
 
   const contactMap = useMemo(() => {
     const map: Record<string, Contact> = {};
-    contacts?.forEach(c => { map[c.id] = c; });
+    contacts?.forEach((c) => {
+      map[c.id] = c;
+    });
     return map;
   }, [contacts]);
 
@@ -1544,7 +1956,9 @@ export default function Invoices() {
       let cmp = 0;
       switch (sortField) {
         case "invoiceNumber":
-          cmp = (a.invoiceNumber || "").localeCompare(b.invoiceNumber || "", undefined, { numeric: true });
+          cmp = (a.invoiceNumber || "").localeCompare(b.invoiceNumber || "", undefined, {
+            numeric: true,
+          });
           break;
         case "contact": {
           const ca = contactMap[a.contactId];
@@ -1580,7 +1994,11 @@ export default function Invoices() {
       >
         {children}
         {sortField === field ? (
-          sortDir === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+          sortDir === "asc" ? (
+            <ArrowUp className="h-3.5 w-3.5" />
+          ) : (
+            <ArrowDown className="h-3.5 w-3.5" />
+          )
         ) : (
           <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
         )}
@@ -1596,9 +2014,18 @@ export default function Invoices() {
     const draft: Invoice[] = [];
     const paid: Invoice[] = [];
     for (const inv of sortedInvoices) {
-      if (inv.status === "paid") { paid.push(inv); continue; }
-      if (inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now) { overdue.push(inv); continue; }
-      if (inv.status === "draft") { draft.push(inv); continue; }
+      if (inv.status === "paid") {
+        paid.push(inv);
+        continue;
+      }
+      if (inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now) {
+        overdue.push(inv);
+        continue;
+      }
+      if (inv.status === "draft") {
+        draft.push(inv);
+        continue;
+      }
       unpaid.push(inv);
     }
     return { overdue, unpaid, draft, paid };
@@ -1606,14 +2033,17 @@ export default function Invoices() {
 
   const allUnpaidInvoices = useMemo(() => {
     if (!allInvoicesForStats) return [];
-    return allInvoicesForStats.filter(inv => inv.status === "draft");
+    return allInvoicesForStats.filter((inv) => inv.status === "draft");
   }, [allInvoicesForStats]);
 
   const tabBadges = useMemo(() => {
-    if (!allInvoicesForStats) return { unpaid: { count: 0, total: 0 }, overdue: { count: 0, total: 0 } };
+    if (!allInvoicesForStats)
+      return { unpaid: { count: 0, total: 0 }, overdue: { count: 0, total: 0 } };
     const now = new Date();
-    let unpaidCount = 0; let unpaidTotal = 0;
-    let overdueCount = 0; let overdueTotal = 0;
+    let unpaidCount = 0;
+    let unpaidTotal = 0;
+    let overdueCount = 0;
+    let overdueTotal = 0;
     for (const inv of allInvoicesForStats) {
       if (inv.status === "voided" || inv.status === "paid") continue;
       const total = Number(inv.total) || 0;
@@ -1650,19 +2080,25 @@ export default function Invoices() {
   const autopayEligibleInvoices = useMemo(() => {
     if (!allInvoicesForStats || !contacts) return [];
     if (isDemo) {
-      return allInvoicesForStats.filter(inv => ["draft", "pending", "sent"].includes(inv.status));
+      return allInvoicesForStats.filter((inv) => ["draft", "pending", "sent"].includes(inv.status));
     }
-    const contactsWithAutopay = new Set(contacts.filter(c => c.autoPayEnabled && c.stripeCustomerId).map(c => c.id));
-    return allInvoicesForStats.filter(inv =>
-      ["pending", "sent"].includes(inv.status) && contactsWithAutopay.has(inv.contactId)
+    const contactsWithAutopay = new Set(
+      contacts.filter((c) => c.autoPayEnabled && c.stripeCustomerId).map((c) => c.id)
+    );
+    return allInvoicesForStats.filter(
+      (inv) => ["pending", "sent"].includes(inv.status) && contactsWithAutopay.has(inv.contactId)
     );
   }, [allInvoicesForStats, contacts, isDemo]);
 
   function renderInvoiceRows(list: Invoice[], testPrefix?: string) {
     return list.map((invoice) => {
       const contact = contactMap[invoice.contactId];
-      const hasAutopay = !!(contact?.stripeCustomerId);
-      const isOverdue = invoice.dueDate && invoice.status !== "paid" && invoice.status !== "voided" && new Date(invoice.dueDate + "T23:59:59") < new Date();
+      const hasAutopay = !!contact?.stripeCustomerId;
+      const isOverdue =
+        invoice.dueDate &&
+        invoice.status !== "paid" &&
+        invoice.status !== "voided" &&
+        new Date(invoice.dueDate + "T23:59:59") < new Date();
       return (
         <TableRow
           key={invoice.id}
@@ -1670,7 +2106,7 @@ export default function Invoices() {
           className={`cursor-pointer ${isOverdue ? "bg-red-50/60 dark:bg-red-950/20" : ""} ${selectedIds.has(invoice.id) ? "bg-muted/40" : ""}`}
           onClick={() => viewInvoiceDetail(invoice.id)}
         >
-          <TableCell className="pl-3" onClick={e => e.stopPropagation()}>
+          <TableCell className="pl-3" onClick={(e) => e.stopPropagation()}>
             <Checkbox
               checked={selectedIds.has(invoice.id)}
               onCheckedChange={() => toggleSelectOne(invoice.id)}
@@ -1681,26 +2117,42 @@ export default function Invoices() {
             <div className="flex items-center gap-2">
               {isOverdue && <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />}
               {invoice.invoiceNumber}
-              {invoice.autoGenerated && <Badge variant="outline" className="text-xs">Auto</Badge>}
+              {invoice.autoGenerated && (
+                <Badge variant="outline" className="text-xs">
+                  Auto
+                </Badge>
+              )}
             </div>
           </TableCell>
           <TableCell>
             <div className="flex items-center gap-1.5">
               {contact ? (
                 <ClientInfoPopover contactId={contact.id}>
-                  <span className="hover:underline">{contact.firstName} {contact.lastName}</span>
+                  <span className="hover:underline">
+                    {contact.firstName} {contact.lastName}
+                  </span>
                 </ClientInfoPopover>
-              ) : <span className="text-muted-foreground">Unknown</span>}
+              ) : (
+                <span className="text-muted-foreground">Unknown</span>
+              )}
               {hasAutopay && (
-                <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400 hidden sm:inline-flex" title="Card on file">
-                  <CreditCard className="h-2.5 w-2.5 mr-0.5" />Autopay
+                <Badge
+                  variant="outline"
+                  className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400 hidden sm:inline-flex"
+                  title="Card on file"
+                >
+                  <CreditCard className="h-2.5 w-2.5 mr-0.5" />
+                  Autopay
                 </Badge>
               )}
             </div>
           </TableCell>
-          <TableCell className="text-muted-foreground">{new Date(invoice.createdAt).toLocaleDateString()}</TableCell>
+          <TableCell className="text-muted-foreground">
+            {new Date(invoice.createdAt).toLocaleDateString()}
+          </TableCell>
           <TableCell className={isOverdue ? "text-red-600 dark:text-red-400 font-medium" : ""}>
-            {invoice.dueDate}{isOverdue ? " (Overdue)" : ""}
+            {invoice.dueDate}
+            {isOverdue ? " (Overdue)" : ""}
           </TableCell>
           <TableCell className="font-semibold">${Number(invoice.total).toFixed(2)}</TableCell>
           <TableCell>
@@ -1708,24 +2160,40 @@ export default function Invoices() {
               {invoiceStatusLabels[invoice.status] || invoice.status}
             </Badge>
           </TableCell>
-          <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-end gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8"
-                onClick={() => { setPreviewInvoiceId(invoice.id); setPreviewDialogOpen(true); }}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  setPreviewInvoiceId(invoice.id);
+                  setPreviewDialogOpen(true);
+                }}
                 title="Preview invoice"
               >
                 <Printer className="h-4 w-4" />
               </Button>
               {invoice.status !== "paid" && stripeConfig?.configured && (
                 <>
-                  <Button variant="ghost" size="icon" className="h-8 w-8"
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
                     onClick={() => chargeMutation.mutate(invoice.id)}
                     disabled={chargeMutation.isPending}
                     title="Charge card on file"
                   >
-                    {chargeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                    {chargeMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-4 w-4" />
+                    )}
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8"
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
                     onClick={() => checkoutMutation.mutate(invoice.id)}
                     disabled={checkoutMutation.isPending}
                     title="Send to Stripe Checkout"
@@ -1735,7 +2203,10 @@ export default function Invoices() {
                 </>
               )}
               {invoice.status !== "paid" && (
-                <Button variant="ghost" size="icon" className="h-8 w-8"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   onClick={() => markPaidMutation.mutate(invoice.id)}
                   disabled={markPaidMutation.isPending}
                   title="Mark as paid"
@@ -1744,18 +2215,26 @@ export default function Invoices() {
                 </Button>
               )}
               {invoice.status !== "paid" && (
-                <Button variant="default" size="sm" className="h-8"
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="h-8"
                   onClick={() => sendEmailMutation.mutate(invoice.id)}
                   disabled={sendEmailMutation.isPending}
                 >
-                  {sendEmailMutation.isPending && sendEmailMutation.variables === invoice.id
-                    ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                    : <Mail className="mr-1 h-4 w-4" />}
+                  {sendEmailMutation.isPending && sendEmailMutation.variables === invoice.id ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="mr-1 h-4 w-4" />
+                  )}
                   Send
                 </Button>
               )}
               {invoice.status !== "paid" && (
-                <Button variant="ghost" size="icon" className="h-8 w-8"
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   onClick={() => setInvoiceToDelete(invoice.id)}
                   disabled={deleteMutation.isPending}
                   title="Delete invoice"
@@ -1770,25 +2249,26 @@ export default function Invoices() {
     });
   }
 
-  function renderGroupedSection(
-    label: string,
-    list: Invoice[],
-    key: string,
-    headerClass: string,
-  ) {
+  function renderGroupedSection(label: string, list: Invoice[], key: string, headerClass: string) {
     const sectionTotal = list.reduce((s, inv) => s + Number(inv.total), 0);
     const isExpanded = expandedSections[key] !== false;
     return (
       <div key={key} className="rounded-md border overflow-hidden" data-testid={`section-${key}`}>
         <div
           className={`flex items-center justify-between px-4 py-2 cursor-pointer select-none ${headerClass}`}
-          onClick={() => setExpandedSections(s => ({ ...s, [key]: !isExpanded }))}
+          onClick={() => setExpandedSections((s) => ({ ...s, [key]: !isExpanded }))}
           data-testid={`section-header-${key}`}
         >
           <div className="flex items-center gap-2">
-            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
             <span className="font-semibold text-sm">{label}</span>
-            <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal">{list.length}</Badge>
+            <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal">
+              {list.length}
+            </Badge>
           </div>
           <span className="text-sm font-medium">${sectionTotal.toFixed(2)}</span>
         </div>
@@ -1798,12 +2278,20 @@ export default function Invoices() {
               <TableRow>
                 <TableHead className="w-10 pl-3">
                   <Checkbox
-                    checked={list.every(inv => selectedIds.has(inv.id))}
+                    checked={list.every((inv) => selectedIds.has(inv.id))}
                     onCheckedChange={() => {
-                      if (list.every(inv => selectedIds.has(inv.id))) {
-                        setSelectedIds(prev => { const next = new Set(prev); list.forEach(inv => next.delete(inv.id)); return next; });
+                      if (list.every((inv) => selectedIds.has(inv.id))) {
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          list.forEach((inv) => next.delete(inv.id));
+                          return next;
+                        });
                       } else {
-                        setSelectedIds(prev => { const next = new Set(prev); list.forEach(inv => next.add(inv.id)); return next; });
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          list.forEach((inv) => next.add(inv.id));
+                          return next;
+                        });
                       }
                     }}
                     aria-label={`Select all ${label} invoices`}
@@ -1818,13 +2306,13 @@ export default function Invoices() {
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
-              {renderInvoiceRows(list, key)}
-            </TableBody>
+            <TableBody>{renderInvoiceRows(list, key)}</TableBody>
           </Table>
         )}
         {isExpanded && list.length === 0 && (
-          <div className="py-6 text-center text-sm text-muted-foreground">No {label.toLowerCase()} invoices.</div>
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            No {label.toLowerCase()} invoices.
+          </div>
         )}
       </div>
     );
@@ -1834,7 +2322,9 @@ export default function Invoices() {
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold" data-testid="text-invoices-heading">Invoices</h1>
+          <h1 className="text-2xl font-bold" data-testid="text-invoices-heading">
+            Invoices
+          </h1>
           <LearnHowButton
             tutorialId="tutorial_invoice_creation"
             onStart={startTutorial}
@@ -1849,13 +2339,23 @@ export default function Invoices() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => {
-                if (invoiceTheme) setEditTheme({ ...invoiceTheme });
-                setThemeDialogOpen(true);
-              }} data-testid="button-customize-template">
-                <Palette className="mr-1 h-4 w-4" /> Customize Template
-              </Button>
-          <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) resetCreateForm(); }}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (invoiceTheme) setEditTheme({ ...invoiceTheme });
+              setThemeDialogOpen(true);
+            }}
+            data-testid="button-customize-template"
+          >
+            <Palette className="mr-1 h-4 w-4" /> Customize Template
+          </Button>
+          <Dialog
+            open={createDialogOpen}
+            onOpenChange={(open) => {
+              setCreateDialogOpen(open);
+              if (!open) resetCreateForm();
+            }}
+          >
             <DialogTrigger asChild>
               <Button data-testid="button-create-invoice">
                 <Plus className="mr-1 h-4 w-4" /> Create Invoice
@@ -1864,31 +2364,45 @@ export default function Invoices() {
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Invoice</DialogTitle>
-                <DialogDescription>Select a customer to auto-load their unsent draft invoices and uninvoiced work into one combined invoice.</DialogDescription>
+                <DialogDescription>
+                  Select a customer to auto-load their unsent draft invoices and uninvoiced work
+                  into one combined invoice.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Contact</Label>
                     <Select value={contactId} onValueChange={handleContactSelect}>
-                      <SelectTrigger data-testid="select-invoice-contact"><SelectValue placeholder="Select contact" /></SelectTrigger>
+                      <SelectTrigger data-testid="select-invoice-contact">
+                        <SelectValue placeholder="Select contact" />
+                      </SelectTrigger>
                       <SelectContent>
                         {contacts?.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName}</SelectItem>
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.firstName} {c.lastName}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
                     <Label>Due Date</Label>
-                    <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} data-testid="input-due-date" />
+                    <Input
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      data-testid="input-due-date"
+                    />
                   </div>
                 </div>
 
                 <div>
                   <Label>Status</Label>
                   <Select value={invoiceStatus} onValueChange={setInvoiceStatus}>
-                    <SelectTrigger data-testid="select-invoice-status"><SelectValue /></SelectTrigger>
+                    <SelectTrigger data-testid="select-invoice-status">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="draft">Draft</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
@@ -1899,14 +2413,21 @@ export default function Invoices() {
                 <div>
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                     <Label className="text-sm font-medium">Line Items</Label>
-                    <Button variant="default" size="sm" onClick={addCustomLineItem} data-testid="button-add-custom-item">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={addCustomLineItem}
+                      data-testid="button-add-custom-item"
+                    >
                       <Plus className="mr-1 h-3 w-3" /> Add Custom Charge
                     </Button>
                   </div>
 
                   {activePricing.length > 0 && (
                     <div className="mb-3">
-                      <p className="text-xs text-muted-foreground mb-1">Or add from service catalog:</p>
+                      <p className="text-xs text-muted-foreground mb-1">
+                        Or add from service catalog:
+                      </p>
                       <div className="flex flex-wrap gap-1">
                         {activePricing.map((p) => (
                           <Button
@@ -1924,20 +2445,31 @@ export default function Invoices() {
                   )}
 
                   {draftInvoiceIds.length > 0 && (
-                    <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md p-3 text-sm text-blue-800 dark:text-blue-200" data-testid="consolidation-banner">
-                      Consolidating {draftInvoiceIds.length} unsent draft invoice{draftInvoiceIds.length !== 1 ? "s" : ""} into one. The old drafts will be voided when you create this invoice.
+                    <div
+                      className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md p-3 text-sm text-blue-800 dark:text-blue-200"
+                      data-testid="consolidation-banner"
+                    >
+                      Consolidating {draftInvoiceIds.length} unsent draft invoice
+                      {draftInvoiceIds.length !== 1 ? "s" : ""} into one. The old drafts will be
+                      voided when you create this invoice.
                     </div>
                   )}
 
                   {loadingUninvoiced ? (
-                    <div className="flex items-center justify-center py-4 gap-2" data-testid="loading-uninvoiced">
+                    <div
+                      className="flex items-center justify-center py-4 gap-2"
+                      data-testid="loading-uninvoiced"
+                    >
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <p className="text-sm text-muted-foreground">Loading billing data...</p>
                     </div>
                   ) : lineItems.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-line-items">
+                    <p
+                      className="text-sm text-muted-foreground text-center py-4"
+                      data-testid="text-no-line-items"
+                    >
                       {contactId
-                        ? "No unsent drafts or uninvoiced work found. Use \"Add Custom Charge\" for any item, or pick from your service catalog."
+                        ? 'No unsent drafts or uninvoiced work found. Use "Add Custom Charge" for any item, or pick from your service catalog.'
                         : "Select a contact to auto-load unsent invoices, or add items manually."}
                     </p>
                   ) : (
@@ -1950,7 +2482,9 @@ export default function Invoices() {
                                 <Label className="text-xs">Description</Label>
                                 <Input
                                   value={li.description}
-                                  onChange={e => updateLineItem(idx, { description: e.target.value })}
+                                  onChange={(e) =>
+                                    updateLineItem(idx, { description: e.target.value })
+                                  }
                                   placeholder="e.g., Extra buckets, trip fee, supplies"
                                   data-testid={`input-line-desc-${idx}`}
                                 />
@@ -1961,7 +2495,9 @@ export default function Invoices() {
                                   type="number"
                                   min="1"
                                   value={li.quantity}
-                                  onChange={e => updateLineItem(idx, { quantity: e.target.value })}
+                                  onChange={(e) =>
+                                    updateLineItem(idx, { quantity: e.target.value })
+                                  }
                                   data-testid={`input-line-qty-${idx}`}
                                 />
                               </div>
@@ -1971,17 +2507,30 @@ export default function Invoices() {
                                   type="number"
                                   step="0.01"
                                   value={li.unitPrice}
-                                  onChange={e => updateLineItem(idx, { unitPrice: e.target.value })}
+                                  onChange={(e) =>
+                                    updateLineItem(idx, { unitPrice: e.target.value })
+                                  }
                                   data-testid={`input-line-price-${idx}`}
                                 />
                               </div>
                               <div className="w-24 text-right">
                                 <Label className="text-xs">Total</Label>
-                                <p className="font-medium text-sm leading-9" data-testid={`text-line-total-${idx}`}>
-                                  ${((parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0)).toFixed(2)}
+                                <p
+                                  className="font-medium text-sm leading-9"
+                                  data-testid={`text-line-total-${idx}`}
+                                >
+                                  $
+                                  {(
+                                    (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0)
+                                  ).toFixed(2)}
                                 </p>
                               </div>
-                              <Button variant="ghost" size="icon" onClick={() => removeLineItem(idx)} data-testid={`button-remove-line-${idx}`}>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeLineItem(idx)}
+                                data-testid={`button-remove-line-${idx}`}
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
@@ -2000,14 +2549,19 @@ export default function Invoices() {
                       step="0.01"
                       min="0"
                       value={taxRate}
-                      onChange={e => setTaxRate(e.target.value)}
+                      onChange={(e) => setTaxRate(e.target.value)}
                       data-testid="input-tax-rate"
                     />
                   </div>
                   <div>
                     <Label>Discount Type</Label>
-                    <Select value={discountType || "none"} onValueChange={v => setDiscountType(v === "none" ? "" : v)}>
-                      <SelectTrigger data-testid="select-discount-type"><SelectValue /></SelectTrigger>
+                    <Select
+                      value={discountType || "none"}
+                      onValueChange={(v) => setDiscountType(v === "none" ? "" : v)}
+                    >
+                      <SelectTrigger data-testid="select-discount-type">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>
                         <SelectItem value="percent">Percent (%)</SelectItem>
@@ -2022,7 +2576,7 @@ export default function Invoices() {
                       step="0.01"
                       min="0"
                       value={discountValue}
-                      onChange={e => setDiscountValue(e.target.value)}
+                      onChange={(e) => setDiscountValue(e.target.value)}
                       disabled={!discountType}
                       data-testid="input-discount-value"
                     />
@@ -2038,7 +2592,12 @@ export default function Invoices() {
                     {discountAmount > 0 && (
                       <div className="flex flex-wrap justify-between gap-1 text-sm">
                         <span className="text-muted-foreground">Discount:</span>
-                        <span className="text-red-600 dark:text-red-400" data-testid="text-calc-discount">-${discountAmount.toFixed(2)}</span>
+                        <span
+                          className="text-red-600 dark:text-red-400"
+                          data-testid="text-calc-discount"
+                        >
+                          -${discountAmount.toFixed(2)}
+                        </span>
                       </div>
                     )}
                     {taxAmount > 0 && (
@@ -2056,11 +2615,17 @@ export default function Invoices() {
 
                 <Button
                   onClick={() => createMutation.mutate()}
-                  disabled={createMutation.isPending || !contactId || !dueDate || lineItems.length === 0}
+                  disabled={
+                    createMutation.isPending || !contactId || !dueDate || lineItems.length === 0
+                  }
                   className="w-full"
                   data-testid="button-submit-invoice"
                 >
-                  {createMutation.isPending ? "Creating..." : draftInvoiceIds.length > 0 ? "Consolidate & Create Invoice" : "Create Invoice"}
+                  {createMutation.isPending
+                    ? "Creating..."
+                    : draftInvoiceIds.length > 0
+                      ? "Consolidate & Create Invoice"
+                      : "Create Invoice"}
                 </Button>
               </div>
             </DialogContent>
@@ -2073,9 +2638,18 @@ export default function Invoices() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">This Week</p>
-                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400" data-testid="stat-this-week-revenue">
-                  ${revenueDashboard.thisWeekRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                  This Week
+                </p>
+                <p
+                  className="text-2xl font-bold text-emerald-600 dark:text-emerald-400"
+                  data-testid="stat-this-week-revenue"
+                >
+                  $
+                  {revenueDashboard.thisWeekRevenue.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
                 </p>
               </div>
               <TrendingUp className="h-8 w-8 text-emerald-500 opacity-70" />
@@ -2086,9 +2660,18 @@ export default function Invoices() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Outstanding</p>
-                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="stat-outstanding-balance">
-                  ${revenueDashboard.outstandingBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                  Outstanding
+                </p>
+                <p
+                  className="text-2xl font-bold text-amber-600 dark:text-amber-400"
+                  data-testid="stat-outstanding-balance"
+                >
+                  $
+                  {revenueDashboard.outstandingBalance.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
                 </p>
               </div>
               <Clock className="h-8 w-8 text-amber-500 opacity-70" />
@@ -2099,9 +2682,18 @@ export default function Invoices() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Overdue</p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400" data-testid="stat-overdue-amount">
-                  ${revenueDashboard.overdueAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                  Overdue
+                </p>
+                <p
+                  className="text-2xl font-bold text-red-600 dark:text-red-400"
+                  data-testid="stat-overdue-amount"
+                >
+                  $
+                  {revenueDashboard.overdueAmount.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
                 </p>
               </div>
               <AlertTriangle className="h-8 w-8 text-red-500 opacity-70" />
@@ -2112,9 +2704,18 @@ export default function Invoices() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Collected This Week</p>
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400" data-testid="stat-collected-week">
-                  ${revenueDashboard.collectedThisWeek.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                  Collected This Week
+                </p>
+                <p
+                  className="text-2xl font-bold text-blue-600 dark:text-blue-400"
+                  data-testid="stat-collected-week"
+                >
+                  $
+                  {revenueDashboard.collectedThisWeek.toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
                 </p>
               </div>
               <CheckCircle2 className="h-8 w-8 text-blue-500 opacity-70" />
@@ -2123,7 +2724,10 @@ export default function Invoices() {
         </Card>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg border border-border bg-card" data-testid="persistent-batch-actions">
+      <div
+        className="flex flex-wrap items-center gap-2 p-3 rounded-lg border border-border bg-card"
+        data-testid="persistent-batch-actions"
+      >
         <div className="flex items-center">
           <Button
             variant="default"
@@ -2151,14 +2755,21 @@ export default function Invoices() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem
-                onClick={() => { setTimeout(() => { setGenerateDialogContactId(undefined); setGenerateDialogOpen(true); }, 0); }}
+                onClick={() => {
+                  setTimeout(() => {
+                    setGenerateDialogContactId(undefined);
+                    setGenerateDialogOpen(true);
+                  }, 0);
+                }}
                 data-testid="dropdown-generate-by-customer"
               >
                 <FileText className="mr-2 h-4 w-4" />
                 Generate by Customer
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => { setTimeout(() => setGenerateByDateRangeOpen(true), 0); }}
+                onClick={() => {
+                  setTimeout(() => setGenerateByDateRangeOpen(true), 0);
+                }}
                 data-testid="dropdown-generate-by-date"
               >
                 <Clock className="mr-2 h-4 w-4" />
@@ -2170,13 +2781,17 @@ export default function Invoices() {
                 onClick={() => {
                   if (selectedUninvoicedIds.size > 0) {
                     const ids = Array.from(selectedUninvoicedIds);
-                    setTimeout(() => { setGenerateAllContactIds(ids); setConfirmGenerateAll(true); }, 0);
+                    setTimeout(() => {
+                      setGenerateAllContactIds(ids);
+                      setConfirmGenerateAll(true);
+                    }, 0);
                   }
                 }}
                 data-testid="dropdown-generate-selected"
               >
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                Generate Selected {selectedUninvoicedIds.size > 0 ? `(${selectedUninvoicedIds.size})` : ""}
+                Generate Selected{" "}
+                {selectedUninvoicedIds.size > 0 ? `(${selectedUninvoicedIds.size})` : ""}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -2212,7 +2827,11 @@ export default function Invoices() {
             Charge Autopay
             {autopayEligibleInvoices.length > 0 && (
               <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0 h-4">
-                ${autopayEligibleInvoices.reduce((s, inv) => s + Number(inv.total), 0).toLocaleString("en-US", { maximumFractionDigits: 0 })} · {autopayEligibleInvoices.length}
+                $
+                {autopayEligibleInvoices
+                  .reduce((s, inv) => s + Number(inv.total), 0)
+                  .toLocaleString("en-US", { maximumFractionDigits: 0 })}{" "}
+                · {autopayEligibleInvoices.length}
               </Badge>
             )}
           </Button>
@@ -2223,10 +2842,14 @@ export default function Invoices() {
           size="sm"
           onClick={() => {
             const currentSettings = companyReminderSettings?.invoiceReminderSettings;
-            const defaults = currentSettings || { preDueDays: [7, 2, 1, 0], overdueIntervalDays: 2, maxReminders: 10 };
+            const defaults = currentSettings || {
+              preDueDays: [7, 2, 1, 0],
+              overdueIntervalDays: 2,
+              maxReminders: 10,
+            };
             setEditInvoiceReminders(defaults);
             setPreDueDaysInput(defaults.preDueDays.join(", "));
-            setAutomationOpen(v => !v);
+            setAutomationOpen((v) => !v);
           }}
           data-testid="button-toggle-automation"
           className="ml-auto"
@@ -2235,11 +2858,16 @@ export default function Invoices() {
           Automation
         </Button>
 
-        {(batchPending || generateAllMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
+        {(batchPending || generateAllMutation.isPending) && (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        )}
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-muted/70 border border-border" data-testid="batch-action-bar">
+        <div
+          className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-muted/70 border border-border"
+          data-testid="batch-action-bar"
+        >
           <span className="text-sm font-medium">{selectedIds.size} selected</span>
           <div className="flex flex-wrap items-center gap-2 ml-2">
             <Button
@@ -2292,7 +2920,8 @@ export default function Invoices() {
           <DialogHeader>
             <DialogTitle>Send {allUnpaidInvoices.length} Draft Invoices?</DialogTitle>
             <DialogDescription>
-              This will email all {allUnpaidInvoices.length} draft invoice{allUnpaidInvoices.length !== 1 ? "s" : ""} to their respective clients.
+              This will email all {allUnpaidInvoices.length} draft invoice
+              {allUnpaidInvoices.length !== 1 ? "s" : ""} to their respective clients.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-2 mt-2">
@@ -2300,15 +2929,21 @@ export default function Invoices() {
               className="flex-1"
               onClick={() => {
                 setConfirmSendAll(false);
-                batchSend(allUnpaidInvoices.map(inv => inv.id));
+                batchSend(allUnpaidInvoices.map((inv) => inv.id));
               }}
               disabled={batchPending}
               data-testid="button-confirm-send-all"
             >
-              {batchPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <SendHorizonal className="mr-1 h-4 w-4" />}
+              {batchPending ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <SendHorizonal className="mr-1 h-4 w-4" />
+              )}
               Send All
             </Button>
-            <Button variant="outline" onClick={() => setConfirmSendAll(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setConfirmSendAll(false)}>
+              Cancel
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -2318,7 +2953,8 @@ export default function Invoices() {
           <DialogHeader>
             <DialogTitle>Charge {autopayEligibleInvoices.length} Autopay Invoices?</DialogTitle>
             <DialogDescription>
-              This will attempt to charge {autopayEligibleInvoices.length} autopay-enabled invoice{autopayEligibleInvoices.length !== 1 ? "s" : ""} to the cards on file.
+              This will attempt to charge {autopayEligibleInvoices.length} autopay-enabled invoice
+              {autopayEligibleInvoices.length !== 1 ? "s" : ""} to the cards on file.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-2 mt-2">
@@ -2326,46 +2962,96 @@ export default function Invoices() {
               className="flex-1"
               onClick={() => {
                 setConfirmChargeAll(false);
-                batchCharge(autopayEligibleInvoices.map(inv => inv.id));
+                batchCharge(autopayEligibleInvoices.map((inv) => inv.id));
               }}
               disabled={batchPending}
               data-testid="button-confirm-charge-all"
             >
-              {batchPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <CreditCard className="mr-1 h-4 w-4" />}
+              {batchPending ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <CreditCard className="mr-1 h-4 w-4" />
+              )}
               Charge All
             </Button>
-            <Button variant="outline" onClick={() => setConfirmChargeAll(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setConfirmChargeAll(false)}>
+              Cancel
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={confirmGenerateAll} onOpenChange={(open) => { if (!open) { setConfirmGenerateAll(false); setGenerateAllContactIds(null); } }}>
+      <Dialog
+        open={confirmGenerateAll}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmGenerateAll(false);
+            setGenerateAllContactIds(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-md" data-testid="dialog-confirm-generate-all">
           <DialogHeader>
             <DialogTitle>
-              Generate {generateAllContactIds ? generateAllContactIds.length : uninvoicedSummary?.byContact.length ?? 0} invoice{(generateAllContactIds ? generateAllContactIds.length : uninvoicedSummary?.byContact.length ?? 0) !== 1 ? "s" : ""}?
+              Generate{" "}
+              {generateAllContactIds
+                ? generateAllContactIds.length
+                : (uninvoicedSummary?.byContact.length ?? 0)}{" "}
+              invoice
+              {(generateAllContactIds
+                ? generateAllContactIds.length
+                : (uninvoicedSummary?.byContact.length ?? 0)) !== 1
+                ? "s"
+                : ""}
+              ?
             </DialogTitle>
             <DialogDescription>
-              This will create invoices totaling ${
-                generateAllContactIds
-                  ? (uninvoicedSummary?.byContact.filter(c => generateAllContactIds.includes(c.contactId)).reduce((s, c) => s + c.totalDollars, 0) ?? 0).toFixed(2)
-                  : uninvoicedSummary?.totalDollars.toFixed(2) ?? "0.00"
-              } for {generateAllContactIds ? generateAllContactIds.length : uninvoicedSummary?.byContact.length ?? 0} customer{(generateAllContactIds ? generateAllContactIds.length : uninvoicedSummary?.byContact.length ?? 0) !== 1 ? "s" : ""} based on their completed work.
+              This will create invoices totaling $
+              {generateAllContactIds
+                ? (
+                    uninvoicedSummary?.byContact
+                      .filter((c) => generateAllContactIds.includes(c.contactId))
+                      .reduce((s, c) => s + c.totalDollars, 0) ?? 0
+                  ).toFixed(2)
+                : (uninvoicedSummary?.totalDollars.toFixed(2) ?? "0.00")}{" "}
+              for{" "}
+              {generateAllContactIds
+                ? generateAllContactIds.length
+                : (uninvoicedSummary?.byContact.length ?? 0)}{" "}
+              customer
+              {(generateAllContactIds
+                ? generateAllContactIds.length
+                : (uninvoicedSummary?.byContact.length ?? 0)) !== 1
+                ? "s"
+                : ""}{" "}
+              based on their completed work.
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-sm">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-            <p>These visits will be marked as invoiced and removed from this view. This cannot be undone without voiding the invoices.</p>
+            <p>
+              These visits will be marked as invoiced and removed from this view. This cannot be
+              undone without voiding the invoices.
+            </p>
           </div>
           <div className="flex flex-col gap-2 mt-2">
             <div className="flex gap-2">
               <Button
                 className="flex-1"
-                onClick={() => generateAllMutation.mutate({ contactIds: generateAllContactIds, sendAfterGenerate: true })}
+                onClick={() =>
+                  generateAllMutation.mutate({
+                    contactIds: generateAllContactIds,
+                    sendAfterGenerate: true,
+                  })
+                }
                 disabled={generateAllMutation.isPending}
                 data-testid="button-confirm-generate-and-send"
               >
-                {generateAllMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <SendHorizonal className="mr-1 h-4 w-4" />}
+                {generateAllMutation.isPending ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <SendHorizonal className="mr-1 h-4 w-4" />
+                )}
                 Generate &amp; Send
               </Button>
               <Button
@@ -2375,11 +3061,23 @@ export default function Invoices() {
                 disabled={generateAllMutation.isPending}
                 data-testid="button-confirm-generate-all"
               >
-                {generateAllMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Zap className="mr-1 h-4 w-4" />}
+                {generateAllMutation.isPending ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="mr-1 h-4 w-4" />
+                )}
                 Generate Only
               </Button>
             </div>
-            <Button variant="ghost" onClick={() => { setConfirmGenerateAll(false); setGenerateAllContactIds(null); }} data-testid="button-cancel-generate-all" className="w-full">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setConfirmGenerateAll(false);
+                setGenerateAllContactIds(null);
+              }}
+              data-testid="button-cancel-generate-all"
+              className="w-full"
+            >
               Cancel
             </Button>
           </div>
@@ -2387,7 +3085,11 @@ export default function Invoices() {
       </Dialog>
 
       <Sheet open={previewSheetOpen} onOpenChange={setPreviewSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto" data-testid="sheet-preview-uninvoiced">
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-lg overflow-y-auto"
+          data-testid="sheet-preview-uninvoiced"
+        >
           <SheetHeader>
             <SheetTitle>Invoice Preview</SheetTitle>
           </SheetHeader>
@@ -2395,23 +3097,37 @@ export default function Invoices() {
             {uninvoicedSummary && uninvoicedSummary.count > 0 ? (
               <>
                 <div className="text-sm text-muted-foreground border-b pb-3 mb-3">
-                  <span className="font-semibold text-foreground">{uninvoicedSummary.count}</span> visits · Total: <span className="font-semibold text-foreground">${uninvoicedSummary.totalDollars.toFixed(2)}</span>
+                  <span className="font-semibold text-foreground">{uninvoicedSummary.count}</span>{" "}
+                  visits · Total:{" "}
+                  <span className="font-semibold text-foreground">
+                    ${uninvoicedSummary.totalDollars.toFixed(2)}
+                  </span>
                 </div>
                 {sortedUninvoicedByContact.map((entry) => {
-                  const contact = contacts?.find(c => c.id === entry.contactId);
+                  const contact = contacts?.find((c) => c.id === entry.contactId);
                   const hasAutopay = !!(contact?.autoPayEnabled && contact?.stripeCustomerId);
                   return (
-                    <div key={entry.contactId} className="flex items-start justify-between gap-3 p-3 rounded-md border" data-testid={`preview-row-${entry.contactId}`}>
+                    <div
+                      key={entry.contactId}
+                      className="flex items-start justify-between gap-3 p-3 rounded-md border"
+                      data-testid={`preview-row-${entry.contactId}`}
+                    >
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="font-medium">{entry.contactName}</p>
                           {hasAutopay && (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400">
-                              <CreditCard className="h-2.5 w-2.5 mr-0.5" />Autopay
+                            <Badge
+                              variant="outline"
+                              className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400"
+                            >
+                              <CreditCard className="h-2.5 w-2.5 mr-0.5" />
+                              Autopay
                             </Badge>
                           )}
                         </div>
-                        <p className="text-sm text-muted-foreground">{entry.count} visit{entry.count !== 1 ? "s" : ""}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {entry.count} visit{entry.count !== 1 ? "s" : ""}
+                        </p>
                       </div>
                       <span className="font-semibold">${entry.totalDollars.toFixed(2)}</span>
                     </div>
@@ -2445,11 +3161,20 @@ export default function Invoices() {
                 <Bell className="h-4 w-4 text-muted-foreground" />
                 Invoice Auto-Reminder Rules
               </CardTitle>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setAutomationOpen(false)} data-testid="button-close-automation">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setAutomationOpen(false)}
+                data-testid="button-close-automation"
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Control when automatic payment reminders are sent to clients with outstanding invoices.</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Control when automatic payment reminders are sent to clients with outstanding
+              invoices.
+            </p>
           </CardHeader>
           <CardContent className="p-4 pt-0 space-y-4">
             {editInvoiceReminders && (
@@ -2459,11 +3184,13 @@ export default function Invoices() {
                     <Label className="text-xs">Pre-Due Reminder Days</Label>
                     <Input
                       value={preDueDaysInput}
-                      onChange={e => setPreDueDaysInput(e.target.value)}
+                      onChange={(e) => setPreDueDaysInput(e.target.value)}
                       placeholder="e.g., 7, 2, 1, 0"
                       data-testid="input-pre-due-days"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">Days before due date (comma-separated)</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Days before due date (comma-separated)
+                    </p>
                   </div>
                   <div>
                     <Label className="text-xs">Overdue Interval (days)</Label>
@@ -2471,10 +3198,17 @@ export default function Invoices() {
                       type="number"
                       min="1"
                       value={editInvoiceReminders.overdueIntervalDays}
-                      onChange={e => setEditInvoiceReminders({ ...editInvoiceReminders, overdueIntervalDays: parseInt(e.target.value) || 2 })}
+                      onChange={(e) =>
+                        setEditInvoiceReminders({
+                          ...editInvoiceReminders,
+                          overdueIntervalDays: parseInt(e.target.value) || 2,
+                        })
+                      }
                       data-testid="input-overdue-interval"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">How often to remind after overdue</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      How often to remind after overdue
+                    </p>
                   </div>
                   <div>
                     <Label className="text-xs">Max Reminders</Label>
@@ -2483,34 +3217,59 @@ export default function Invoices() {
                       min="1"
                       max="30"
                       value={editInvoiceReminders.maxReminders}
-                      onChange={e => setEditInvoiceReminders({ ...editInvoiceReminders, maxReminders: parseInt(e.target.value) || 10 })}
+                      onChange={(e) =>
+                        setEditInvoiceReminders({
+                          ...editInvoiceReminders,
+                          maxReminders: parseInt(e.target.value) || 10,
+                        })
+                      }
                       data-testid="input-max-reminders"
                     />
-                    <p className="text-xs text-muted-foreground mt-1">Stop sending after this many</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Stop sending after this many
+                    </p>
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     onClick={() => {
-                      const days = preDueDaysInput.split(",").map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 0);
+                      const days = preDueDaysInput
+                        .split(",")
+                        .map((s) => parseInt(s.trim()))
+                        .filter((n) => !isNaN(n) && n >= 0);
                       if (days.length === 0) {
-                        toast({ title: "Invalid days", description: "Enter at least one day value.", variant: "destructive" });
+                        toast({
+                          title: "Invalid days",
+                          description: "Enter at least one day value.",
+                          variant: "destructive",
+                        });
                         return;
                       }
-                      saveReminderSettingsMutation.mutate({ ...editInvoiceReminders, preDueDays: days });
+                      saveReminderSettingsMutation.mutate({
+                        ...editInvoiceReminders,
+                        preDueDays: days,
+                      });
                     }}
                     disabled={saveReminderSettingsMutation.isPending}
                     data-testid="button-save-reminder-settings"
                   >
-                    {saveReminderSettingsMutation.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1 h-3.5 w-3.5" />}
+                    {saveReminderSettingsMutation.isPending ? (
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Save className="mr-1 h-3.5 w-3.5" />
+                    )}
                     Save Settings
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const defaults = companyReminderSettings?.invoiceReminderSettings || { preDueDays: [7, 2, 1, 0], overdueIntervalDays: 2, maxReminders: 10 };
+                      const defaults = companyReminderSettings?.invoiceReminderSettings || {
+                        preDueDays: [7, 2, 1, 0],
+                        overdueIntervalDays: 2,
+                        maxReminders: 10,
+                      };
                       setEditInvoiceReminders(defaults);
                       setPreDueDaysInput(defaults.preDueDays.join(", "));
                     }}
@@ -2525,15 +3284,30 @@ export default function Invoices() {
         </Card>
       )}
 
-      <Tabs value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setSelectedIds(new Set()); }}>
+      <Tabs
+        value={statusFilter}
+        onValueChange={(v) => {
+          setStatusFilter(v);
+          setSelectedIds(new Set());
+        }}
+      >
         <TabsList className="flex-wrap">
-          <TabsTrigger value="all" data-testid="tab-invoice-all">All</TabsTrigger>
-          <TabsTrigger value="uninvoiced" data-testid="tab-invoice-uninvoiced">Uninvoiced</TabsTrigger>
+          <TabsTrigger value="all" data-testid="tab-invoice-all">
+            All
+          </TabsTrigger>
+          <TabsTrigger value="uninvoiced" data-testid="tab-invoice-uninvoiced">
+            Uninvoiced
+          </TabsTrigger>
           <TabsTrigger value="unpaid" data-testid="tab-invoice-unpaid">
             Unpaid
             {tabBadges.unpaid.count > 0 && (
               <span className="ml-1.5 text-xs font-normal opacity-80">
-                ({tabBadges.unpaid.count} · ${tabBadges.unpaid.total.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })})
+                ({tabBadges.unpaid.count} · $
+                {tabBadges.unpaid.total.toLocaleString("en-US", {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
+                )
               </span>
             )}
           </TabsTrigger>
@@ -2541,13 +3315,26 @@ export default function Invoices() {
             Overdue
             {tabBadges.overdue.count > 0 && (
               <span className="ml-1.5 text-xs font-normal opacity-80">
-                ({tabBadges.overdue.count} · ${tabBadges.overdue.total.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })})
+                ({tabBadges.overdue.count} · $
+                {tabBadges.overdue.total.toLocaleString("en-US", {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
+                )
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="paid" data-testid="tab-invoice-paid">Paid</TabsTrigger>
-          <TabsTrigger value="failed" data-testid="tab-invoice-failed">Failed</TabsTrigger>
-          <TabsTrigger value="billing-health" data-testid="tab-invoice-billing-health" className="flex items-center gap-1.5">
+          <TabsTrigger value="paid" data-testid="tab-invoice-paid">
+            Paid
+          </TabsTrigger>
+          <TabsTrigger value="failed" data-testid="tab-invoice-failed">
+            Failed
+          </TabsTrigger>
+          <TabsTrigger
+            value="billing-health"
+            data-testid="tab-invoice-billing-health"
+            className="flex items-center gap-1.5"
+          >
             <ShieldCheck className="h-3.5 w-3.5" />
             Billing Health
           </TabsTrigger>
@@ -2566,16 +3353,22 @@ export default function Invoices() {
         <div className="space-y-3">
           {uninvoicedLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
             </div>
           ) : uninvoicedSummary && uninvoicedSummary.count > 0 ? (
             <>
-              <Card className="border-2 border-primary/20 bg-primary/5" data-testid="card-uninvoiced-cta">
+              <Card
+                className="border-2 border-primary/20 bg-primary/5"
+                data-testid="card-uninvoiced-cta"
+              >
                 <CardContent className="p-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div data-testid="text-uninvoiced-total">
                       <p className="text-base font-semibold text-foreground">
-                        {uninvoicedSummary.count} completed visit{uninvoicedSummary.count !== 1 ? "s" : ""} ready to invoice
+                        {uninvoicedSummary.count} completed visit
+                        {uninvoicedSummary.count !== 1 ? "s" : ""} ready to invoice
                       </p>
                       <p className="text-2xl font-bold text-primary mt-0.5">
                         Total: ${uninvoicedSummary.totalDollars.toFixed(2)}
@@ -2613,10 +3406,17 @@ export default function Invoices() {
                   </div>
                 </CardContent>
               </Card>
-              <div className="flex items-center gap-1.5 flex-wrap" data-testid="uninvoiced-sort-controls">
+              <div
+                className="flex items-center gap-1.5 flex-wrap"
+                data-testid="uninvoiced-sort-controls"
+              >
                 <span className="text-xs text-muted-foreground mr-1">Sort by:</span>
                 {(["amount", "visits", "name"] as const).map((field) => {
-                  const labels: Record<string, string> = { amount: "Amount", visits: "Visit Count", name: "Name" };
+                  const labels: Record<string, string> = {
+                    amount: "Amount",
+                    visits: "Visit Count",
+                    name: "Name",
+                  };
                   const active = uninvoicedSortField === field;
                   return (
                     <Button
@@ -2629,7 +3429,11 @@ export default function Invoices() {
                     >
                       {labels[field]}
                       {active ? (
-                        uninvoicedSortDir === "asc" ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />
+                        uninvoicedSortDir === "asc" ? (
+                          <ArrowUp className="ml-1 h-3 w-3" />
+                        ) : (
+                          <ArrowDown className="ml-1 h-3 w-3" />
+                        )
                       ) : (
                         <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" />
                       )}
@@ -2638,17 +3442,21 @@ export default function Invoices() {
                 })}
               </div>
               {sortedUninvoicedByContact.map((entry) => {
-                const contact = contacts?.find(c => c.id === entry.contactId);
+                const contact = contacts?.find((c) => c.id === entry.contactId);
                 const hasAutopay = !!(contact?.autoPayEnabled && contact?.stripeCustomerId);
                 const isSelected = selectedUninvoicedIds.has(entry.contactId);
                 const isExpanded = expandedUninvoicedIds.has(entry.contactId);
                 return (
-                  <Card key={entry.contactId} data-testid={`card-uninvoiced-${entry.contactId}`} className={isSelected ? "border-primary/40 bg-primary/5" : ""}>
+                  <Card
+                    key={entry.contactId}
+                    data-testid={`card-uninvoiced-${entry.contactId}`}
+                    className={isSelected ? "border-primary/40 bg-primary/5" : ""}
+                  >
                     <CardContent className="flex items-center gap-3 p-4">
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={(checked) => {
-                          setSelectedUninvoicedIds(prev => {
+                          setSelectedUninvoicedIds((prev) => {
                             const next = new Set(prev);
                             if (checked) next.add(entry.contactId);
                             else next.delete(entry.contactId);
@@ -2660,17 +3468,26 @@ export default function Invoices() {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="font-medium" data-testid={`text-uninvoiced-name-${entry.contactId}`}>{entry.contactName}</p>
+                          <p
+                            className="font-medium"
+                            data-testid={`text-uninvoiced-name-${entry.contactId}`}
+                          >
+                            {entry.contactName}
+                          </p>
                           {hasAutopay && (
-                            <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400">
-                              <CreditCard className="h-2.5 w-2.5 mr-0.5" />Autopay
+                            <Badge
+                              variant="outline"
+                              className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400"
+                            >
+                              <CreditCard className="h-2.5 w-2.5 mr-0.5" />
+                              Autopay
                             </Badge>
                           )}
                         </div>
                         <button
                           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mt-0.5 cursor-pointer"
                           onClick={() => {
-                            setExpandedUninvoicedIds(prev => {
+                            setExpandedUninvoicedIds((prev) => {
                               const next = new Set(prev);
                               if (next.has(entry.contactId)) next.delete(entry.contactId);
                               else next.add(entry.contactId);
@@ -2681,8 +3498,13 @@ export default function Invoices() {
                           aria-expanded={isExpanded}
                           aria-label={`${isExpanded ? "Collapse" : "Expand"} visit details for ${entry.contactName}`}
                         >
-                          {isExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
-                          {entry.count} visit{entry.count !== 1 ? "s" : ""} · ${entry.totalDollars.toFixed(2)}
+                          {isExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                          )}
+                          {entry.count} visit{entry.count !== 1 ? "s" : ""} · $
+                          {entry.totalDollars.toFixed(2)}
                         </button>
                       </div>
                       <Button
@@ -2702,7 +3524,10 @@ export default function Invoices() {
                 );
               })}
               {selectedUninvoicedIds.size > 0 && (
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/70 border" data-testid="uninvoiced-batch-bar">
+                <div
+                  className="flex items-center gap-2 p-3 rounded-lg bg-muted/70 border"
+                  data-testid="uninvoiced-batch-bar"
+                >
                   <span className="text-sm font-medium">{selectedUninvoicedIds.size} selected</span>
                   <Button
                     size="sm"
@@ -2713,7 +3538,8 @@ export default function Invoices() {
                     disabled={generateAllMutation.isPending}
                     data-testid="button-generate-selected"
                   >
-                    <Zap className="mr-1 h-3.5 w-3.5" /> Generate Selected ({selectedUninvoicedIds.size})
+                    <Zap className="mr-1 h-3.5 w-3.5" /> Generate Selected (
+                    {selectedUninvoicedIds.size})
                   </Button>
                   <Button
                     size="sm"
@@ -2728,7 +3554,10 @@ export default function Invoices() {
             </>
           ) : (
             <Card>
-              <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-no-uninvoiced">
+              <CardContent
+                className="p-6 text-center text-muted-foreground"
+                data-testid="text-no-uninvoiced"
+              >
                 All completed visits have been invoiced.
               </CardContent>
             </Card>
@@ -2736,20 +3565,30 @@ export default function Invoices() {
         </div>
       ) : statusFilter === "all" && sortedInvoices.length > 0 ? (
         <div className="space-y-3">
-          {groupedInvoices.overdue.length > 0 && renderGroupedSection(
-            "Overdue", groupedInvoices.overdue, "overdue",
-            "bg-red-50/80 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-b"
-          )}
-          {groupedInvoices.draft.length > 0 && renderGroupedSection(
-            "Draft", groupedInvoices.draft, "draft",
-            "bg-muted/40 text-muted-foreground border-b"
-          )}
+          {groupedInvoices.overdue.length > 0 &&
+            renderGroupedSection(
+              "Overdue",
+              groupedInvoices.overdue,
+              "overdue",
+              "bg-red-50/80 dark:bg-red-950/30 text-red-700 dark:text-red-300 border-b"
+            )}
+          {groupedInvoices.draft.length > 0 &&
+            renderGroupedSection(
+              "Draft",
+              groupedInvoices.draft,
+              "draft",
+              "bg-muted/40 text-muted-foreground border-b"
+            )}
           {renderGroupedSection(
-            "Unpaid / Sent", groupedInvoices.unpaid, "unpaid",
+            "Unpaid / Sent",
+            groupedInvoices.unpaid,
+            "unpaid",
             "bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-b"
           )}
           {renderGroupedSection(
-            "Paid", groupedInvoices.paid, "paid",
+            "Paid",
+            groupedInvoices.paid,
+            "paid",
             "bg-emerald-50/40 dark:bg-emerald-950/10 text-emerald-700 dark:text-emerald-400 border-b"
           )}
         </div>
@@ -2760,7 +3599,10 @@ export default function Invoices() {
               <TableRow>
                 <TableHead className="w-10 pl-3">
                   <Checkbox
-                    checked={sortedInvoices.length > 0 && sortedInvoices.every(inv => selectedIds.has(inv.id))}
+                    checked={
+                      sortedInvoices.length > 0 &&
+                      sortedInvoices.every((inv) => selectedIds.has(inv.id))
+                    }
                     onCheckedChange={() => toggleSelectAll(sortedInvoices)}
                     data-testid="checkbox-select-all"
                     aria-label="Select all invoices"
@@ -2778,8 +3620,12 @@ export default function Invoices() {
             <TableBody>
               {sortedInvoices.map((invoice) => {
                 const contact = contactMap[invoice.contactId];
-                const hasAutopay = !!(contact?.stripeCustomerId);
-                const isOverdue = invoice.dueDate && invoice.status !== "paid" && invoice.status !== "voided" && new Date(invoice.dueDate + "T23:59:59") < new Date();
+                const hasAutopay = !!contact?.stripeCustomerId;
+                const isOverdue =
+                  invoice.dueDate &&
+                  invoice.status !== "paid" &&
+                  invoice.status !== "voided" &&
+                  new Date(invoice.dueDate + "T23:59:59") < new Date();
                 return (
                   <TableRow
                     key={invoice.id}
@@ -2787,7 +3633,7 @@ export default function Invoices() {
                     className={`cursor-pointer ${isOverdue ? "bg-red-50/60 dark:bg-red-950/20" : ""} ${selectedIds.has(invoice.id) ? "bg-muted/40" : ""}`}
                     onClick={() => viewInvoiceDetail(invoice.id)}
                   >
-                    <TableCell className="pl-3" onClick={e => e.stopPropagation()}>
+                    <TableCell className="pl-3" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={selectedIds.has(invoice.id)}
                         onCheckedChange={() => toggleSelectOne(invoice.id)}
@@ -2795,12 +3641,17 @@ export default function Invoices() {
                         aria-label={`Select invoice ${invoice.invoiceNumber}`}
                       />
                     </TableCell>
-                    <TableCell className="font-medium" data-testid={`text-invoice-number-${invoice.id}`}>
+                    <TableCell
+                      className="font-medium"
+                      data-testid={`text-invoice-number-${invoice.id}`}
+                    >
                       <div className="flex items-center gap-2">
                         {isOverdue && <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />}
                         {invoice.invoiceNumber}
                         {invoice.autoGenerated && (
-                          <Badge variant="outline" className="text-xs">Auto</Badge>
+                          <Badge variant="outline" className="text-xs">
+                            Auto
+                          </Badge>
                         )}
                       </div>
                     </TableCell>
@@ -2808,12 +3659,22 @@ export default function Invoices() {
                       <div className="flex items-center gap-1.5">
                         {contact ? (
                           <ClientInfoPopover contactId={contact.id}>
-                            <span className="hover:underline">{contact.firstName} {contact.lastName}</span>
+                            <span className="hover:underline">
+                              {contact.firstName} {contact.lastName}
+                            </span>
                           </ClientInfoPopover>
-                        ) : <span className="text-muted-foreground">Unknown</span>}
+                        ) : (
+                          <span className="text-muted-foreground">Unknown</span>
+                        )}
                         {hasAutopay && (
-                          <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400 hidden sm:inline-flex" data-testid={`badge-autopay-${invoice.id}`} title="Card on file">
-                            <CreditCard className="h-2.5 w-2.5 mr-0.5" />Autopay
+                          <Badge
+                            variant="outline"
+                            className="text-xs px-1.5 py-0 h-5 font-normal border-emerald-400 text-emerald-700 dark:text-emerald-400 hidden sm:inline-flex"
+                            data-testid={`badge-autopay-${invoice.id}`}
+                            title="Card on file"
+                          >
+                            <CreditCard className="h-2.5 w-2.5 mr-0.5" />
+                            Autopay
                           </Badge>
                         )}
                       </div>
@@ -2821,18 +3682,28 @@ export default function Invoices() {
                     <TableCell className="text-muted-foreground">
                       {new Date(invoice.createdAt).toLocaleDateString()}
                     </TableCell>
-                    <TableCell className={isOverdue ? "text-red-600 dark:text-red-400 font-medium" : ""}>
-                      {invoice.dueDate}{isOverdue ? " (Overdue)" : ""}
+                    <TableCell
+                      className={isOverdue ? "text-red-600 dark:text-red-400 font-medium" : ""}
+                    >
+                      {invoice.dueDate}
+                      {isOverdue ? " (Overdue)" : ""}
                     </TableCell>
-                    <TableCell className="font-semibold" data-testid={`text-invoice-total-${invoice.id}`}>
+                    <TableCell
+                      className="font-semibold"
+                      data-testid={`text-invoice-total-${invoice.id}`}
+                    >
                       ${Number(invoice.total).toFixed(2)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className={invoiceStatusColors[invoice.status] || ""} data-testid={`badge-invoice-status-${invoice.id}`}>
+                      <Badge
+                        variant="secondary"
+                        className={invoiceStatusColors[invoice.status] || ""}
+                        data-testid={`badge-invoice-status-${invoice.id}`}
+                      >
                         {invoiceStatusLabels[invoice.status] || invoice.status}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
@@ -2895,9 +3766,12 @@ export default function Invoices() {
                             disabled={sendEmailMutation.isPending}
                             data-testid={`button-email-invoice-${invoice.id}`}
                           >
-                            {sendEmailMutation.isPending && sendEmailMutation.variables === invoice.id
-                              ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                              : <Mail className="mr-1 h-4 w-4" />}
+                            {sendEmailMutation.isPending &&
+                            sendEmailMutation.variables === invoice.id ? (
+                              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Mail className="mr-1 h-4 w-4" />
+                            )}
                             Send
                           </Button>
                         )}
@@ -2924,7 +3798,10 @@ export default function Invoices() {
         </div>
       ) : (
         <Card>
-          <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-no-invoices">
+          <CardContent
+            className="p-6 text-center text-muted-foreground"
+            data-testid="text-no-invoices"
+          >
             No invoices found. Create your first invoice or auto-generate from completed services.
           </CardContent>
         </Card>
@@ -2950,16 +3827,21 @@ export default function Invoices() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={themeDialogOpen} onOpenChange={(open) => {
-        setThemeDialogOpen(open);
-        if (open && invoiceTheme) {
-          setEditTheme({ ...invoiceTheme });
-        }
-      }}>
+      <Dialog
+        open={themeDialogOpen}
+        onOpenChange={(open) => {
+          setThemeDialogOpen(open);
+          if (open && invoiceTheme) {
+            setEditTheme({ ...invoiceTheme });
+          }
+        }}
+      >
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle data-testid="text-theme-title">Customize Invoice Template</DialogTitle>
-            <DialogDescription>Adjust colors, fonts, and styling for your invoice template</DialogDescription>
+            <DialogDescription>
+              Adjust colors, fonts, and styling for your invoice template
+            </DialogDescription>
           </DialogHeader>
           {editTheme && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2972,13 +3854,17 @@ export default function Invoices() {
                       <input
                         type="color"
                         value={editTheme.primaryColor}
-                        onChange={e => setEditTheme({ ...editTheme, primaryColor: e.target.value })}
+                        onChange={(e) =>
+                          setEditTheme({ ...editTheme, primaryColor: e.target.value })
+                        }
                         className="h-9 w-12 rounded-md border cursor-pointer"
                         data-testid="input-theme-primary"
                       />
                       <Input
                         value={editTheme.primaryColor}
-                        onChange={e => setEditTheme({ ...editTheme, primaryColor: e.target.value })}
+                        onChange={(e) =>
+                          setEditTheme({ ...editTheme, primaryColor: e.target.value })
+                        }
                         className="font-mono text-xs"
                       />
                     </div>
@@ -2989,13 +3875,17 @@ export default function Invoices() {
                       <input
                         type="color"
                         value={editTheme.accentColor}
-                        onChange={e => setEditTheme({ ...editTheme, accentColor: e.target.value })}
+                        onChange={(e) =>
+                          setEditTheme({ ...editTheme, accentColor: e.target.value })
+                        }
                         className="h-9 w-12 rounded-md border cursor-pointer"
                         data-testid="input-theme-accent"
                       />
                       <Input
                         value={editTheme.accentColor}
-                        onChange={e => setEditTheme({ ...editTheme, accentColor: e.target.value })}
+                        onChange={(e) =>
+                          setEditTheme({ ...editTheme, accentColor: e.target.value })
+                        }
                         className="font-mono text-xs"
                       />
                     </div>
@@ -3006,13 +3896,13 @@ export default function Invoices() {
                       <input
                         type="color"
                         value={editTheme.textColor}
-                        onChange={e => setEditTheme({ ...editTheme, textColor: e.target.value })}
+                        onChange={(e) => setEditTheme({ ...editTheme, textColor: e.target.value })}
                         className="h-9 w-12 rounded-md border cursor-pointer"
                         data-testid="input-theme-text"
                       />
                       <Input
                         value={editTheme.textColor}
-                        onChange={e => setEditTheme({ ...editTheme, textColor: e.target.value })}
+                        onChange={(e) => setEditTheme({ ...editTheme, textColor: e.target.value })}
                         className="font-mono text-xs"
                       />
                     </div>
@@ -3023,13 +3913,13 @@ export default function Invoices() {
                       <input
                         type="color"
                         value={editTheme.mutedColor}
-                        onChange={e => setEditTheme({ ...editTheme, mutedColor: e.target.value })}
+                        onChange={(e) => setEditTheme({ ...editTheme, mutedColor: e.target.value })}
                         className="h-9 w-12 rounded-md border cursor-pointer"
                         data-testid="input-theme-muted"
                       />
                       <Input
                         value={editTheme.mutedColor}
-                        onChange={e => setEditTheme({ ...editTheme, mutedColor: e.target.value })}
+                        onChange={(e) => setEditTheme({ ...editTheme, mutedColor: e.target.value })}
                         className="font-mono text-xs"
                       />
                     </div>
@@ -3040,13 +3930,17 @@ export default function Invoices() {
                       <input
                         type="color"
                         value={editTheme.borderColor}
-                        onChange={e => setEditTheme({ ...editTheme, borderColor: e.target.value })}
+                        onChange={(e) =>
+                          setEditTheme({ ...editTheme, borderColor: e.target.value })
+                        }
                         className="h-9 w-12 rounded-md border cursor-pointer"
                         data-testid="input-theme-border"
                       />
                       <Input
                         value={editTheme.borderColor}
-                        onChange={e => setEditTheme({ ...editTheme, borderColor: e.target.value })}
+                        onChange={(e) =>
+                          setEditTheme({ ...editTheme, borderColor: e.target.value })
+                        }
                         className="font-mono text-xs"
                       />
                     </div>
@@ -3057,13 +3951,17 @@ export default function Invoices() {
                       <input
                         type="color"
                         value={editTheme.backgroundColor}
-                        onChange={e => setEditTheme({ ...editTheme, backgroundColor: e.target.value })}
+                        onChange={(e) =>
+                          setEditTheme({ ...editTheme, backgroundColor: e.target.value })
+                        }
                         className="h-9 w-12 rounded-md border cursor-pointer"
                         data-testid="input-theme-bg"
                       />
                       <Input
                         value={editTheme.backgroundColor}
-                        onChange={e => setEditTheme({ ...editTheme, backgroundColor: e.target.value })}
+                        onChange={(e) =>
+                          setEditTheme({ ...editTheme, backgroundColor: e.target.value })
+                        }
                         className="font-mono text-xs"
                       />
                     </div>
@@ -3074,13 +3972,13 @@ export default function Invoices() {
                       <input
                         type="color"
                         value={editTheme.cardColor}
-                        onChange={e => setEditTheme({ ...editTheme, cardColor: e.target.value })}
+                        onChange={(e) => setEditTheme({ ...editTheme, cardColor: e.target.value })}
                         className="h-9 w-12 rounded-md border cursor-pointer"
                         data-testid="input-theme-card"
                       />
                       <Input
                         value={editTheme.cardColor}
-                        onChange={e => setEditTheme({ ...editTheme, cardColor: e.target.value })}
+                        onChange={(e) => setEditTheme({ ...editTheme, cardColor: e.target.value })}
                         className="font-mono text-xs"
                       />
                     </div>
@@ -3091,7 +3989,13 @@ export default function Invoices() {
                 <div>
                   <Label className="text-xs">Font Family</Label>
                   <Select
-                    value={editTheme.fontFamily.includes("Georgia") ? "georgia" : editTheme.fontFamily.includes("Roboto") ? "roboto" : "inter"}
+                    value={
+                      editTheme.fontFamily.includes("Georgia")
+                        ? "georgia"
+                        : editTheme.fontFamily.includes("Roboto")
+                          ? "roboto"
+                          : "inter"
+                    }
                     onValueChange={(val) => {
                       const fonts: Record<string, string> = {
                         inter: "'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",
@@ -3101,7 +4005,9 @@ export default function Invoices() {
                       if (fonts[val]) setEditTheme({ ...editTheme, fontFamily: fonts[val] });
                     }}
                   >
-                    <SelectTrigger data-testid="select-theme-font"><SelectValue /></SelectTrigger>
+                    <SelectTrigger data-testid="select-theme-font">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="inter">Inter (Default)</SelectItem>
                       <SelectItem value="roboto">Roboto</SelectItem>
@@ -3110,7 +4016,7 @@ export default function Invoices() {
                   </Select>
                   <Input
                     value={editTheme.fontFamily}
-                    onChange={e => setEditTheme({ ...editTheme, fontFamily: e.target.value })}
+                    onChange={(e) => setEditTheme({ ...editTheme, fontFamily: e.target.value })}
                     className="mt-1 font-mono text-xs"
                     data-testid="input-theme-font-raw"
                   />
@@ -3123,7 +4029,9 @@ export default function Invoices() {
                       min="0"
                       max="24"
                       value={editTheme.borderRadius}
-                      onChange={e => setEditTheme({ ...editTheme, borderRadius: parseInt(e.target.value) || 0 })}
+                      onChange={(e) =>
+                        setEditTheme({ ...editTheme, borderRadius: parseInt(e.target.value) || 0 })
+                      }
                       data-testid="input-theme-radius"
                     />
                   </div>
@@ -3134,7 +4042,9 @@ export default function Invoices() {
                       min="24"
                       max="120"
                       value={editTheme.logoSize}
-                      onChange={e => setEditTheme({ ...editTheme, logoSize: parseInt(e.target.value) || 56 })}
+                      onChange={(e) =>
+                        setEditTheme({ ...editTheme, logoSize: parseInt(e.target.value) || 56 })
+                      }
                       data-testid="input-theme-logo-size"
                     />
                   </div>
@@ -3142,7 +4052,7 @@ export default function Invoices() {
                     <Label className="text-xs">Show Logo</Label>
                     <Select
                       value={editTheme.showLogo === false ? "hide" : "show"}
-                      onValueChange={v => setEditTheme({ ...editTheme, showLogo: v === "show" })}
+                      onValueChange={(v) => setEditTheme({ ...editTheme, showLogo: v === "show" })}
                     >
                       <SelectTrigger data-testid="select-theme-show-logo">
                         <SelectValue />
@@ -3157,7 +4067,12 @@ export default function Invoices() {
                     <Label className="text-xs">Logo Position</Label>
                     <Select
                       value={editTheme.logoPosition || "left"}
-                      onValueChange={v => setEditTheme({ ...editTheme, logoPosition: v as "left" | "center" | "right" })}
+                      onValueChange={(v) =>
+                        setEditTheme({
+                          ...editTheme,
+                          logoPosition: v as "left" | "center" | "right",
+                        })
+                      }
                     >
                       <SelectTrigger data-testid="select-theme-logo-position">
                         <SelectValue />
@@ -3212,7 +4127,9 @@ export default function Invoices() {
                     }}
                   >
                     <p className="font-bold text-base">Your Business Name</p>
-                    <p style={{ opacity: 0.8 }} className="text-xs">123 Main St | (555) 123-4567</p>
+                    <p style={{ opacity: 0.8 }} className="text-xs">
+                      123 Main St | (555) 123-4567
+                    </p>
                   </div>
                   <div
                     className="p-3 mb-3"
@@ -3223,7 +4140,9 @@ export default function Invoices() {
                     }}
                   >
                     <p className="font-semibold mb-1">Invoice #INV-001</p>
-                    <p style={{ color: editTheme.mutedColor }} className="text-xs">Due: March 15, 2026</p>
+                    <p style={{ color: editTheme.mutedColor }} className="text-xs">
+                      Due: March 15, 2026
+                    </p>
                   </div>
                   <table className="w-full text-xs mb-3" style={{ borderCollapse: "collapse" }}>
                     <thead>
@@ -3257,8 +4176,12 @@ export default function Invoices() {
                       borderRadius: `${editTheme.borderRadius}px`,
                     }}
                   >
-                    <p style={{ color: editTheme.mutedColor }} className="text-xs">Subtotal: $215.00</p>
-                    <p className="font-bold" style={{ color: editTheme.accentColor }}>Total: $215.00</p>
+                    <p style={{ color: editTheme.mutedColor }} className="text-xs">
+                      Subtotal: $215.00
+                    </p>
+                    <p className="font-bold" style={{ color: editTheme.accentColor }}>
+                      Total: $215.00
+                    </p>
                   </div>
                 </div>
               </div>
@@ -3267,24 +4190,40 @@ export default function Invoices() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={detailDialogOpen} onOpenChange={(open) => { setDetailDialogOpen(open); if (!open) setEditMode(false); }}>
+      <Dialog
+        open={detailDialogOpen}
+        onOpenChange={(open) => {
+          setDetailDialogOpen(open);
+          if (!open) setEditMode(false);
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center justify-between gap-2">
               <DialogTitle className="flex flex-wrap items-center gap-2">
                 Invoice {selectedInvoice?.invoiceNumber}
                 {selectedInvoice?.source === "imported" && (
-                  <Badge variant="secondary" data-testid="badge-imported-invoice">Imported</Badge>
+                  <Badge variant="secondary" data-testid="badge-imported-invoice">
+                    Imported
+                  </Badge>
                 )}
               </DialogTitle>
-              {selectedInvoice && !editMode && ["draft", "sent", "pending"].includes(selectedInvoice.status) && (
-                <Button size="sm" onClick={enterEditMode} data-testid="button-edit-invoice-header">
-                  <Pencil className="mr-1 h-3 w-3" /> Edit Invoice
-                </Button>
-              )}
+              {selectedInvoice &&
+                !editMode &&
+                ["draft", "sent", "pending"].includes(selectedInvoice.status) && (
+                  <Button
+                    size="sm"
+                    onClick={enterEditMode}
+                    data-testid="button-edit-invoice-header"
+                  >
+                    <Pencil className="mr-1 h-3 w-3" /> Edit Invoice
+                  </Button>
+                )}
             </div>
             <DialogDescription>
-              {editMode ? "Edit invoice details, line items, and pricing" : "Invoice details and line items"}
+              {editMode
+                ? "Edit invoice details, line items, and pricing"
+                : "Invoice details and line items"}
             </DialogDescription>
           </DialogHeader>
           {selectedInvoice && (
@@ -3294,7 +4233,10 @@ export default function Invoices() {
                   <span className="text-muted-foreground">Contact: </span>
                   {contactMap[selectedInvoice.contactId] ? (
                     <ClientInfoPopover contactId={selectedInvoice.contactId}>
-                      <span>{contactMap[selectedInvoice.contactId].firstName} {contactMap[selectedInvoice.contactId].lastName}</span>
+                      <span>
+                        {contactMap[selectedInvoice.contactId].firstName}{" "}
+                        {contactMap[selectedInvoice.contactId].lastName}
+                      </span>
                     </ClientInfoPopover>
                   ) : (
                     <span>Unknown</span>
@@ -3302,7 +4244,10 @@ export default function Invoices() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Status: </span>
-                  <Badge variant="secondary" className={invoiceStatusColors[selectedInvoice.status] || ""}>
+                  <Badge
+                    variant="secondary"
+                    className={invoiceStatusColors[selectedInvoice.status] || ""}
+                  >
                     {invoiceStatusLabels[selectedInvoice.status] || selectedInvoice.status}
                   </Badge>
                 </div>
@@ -3310,7 +4255,12 @@ export default function Invoices() {
                   {editMode ? (
                     <div>
                       <Label className="text-xs text-muted-foreground">Due Date</Label>
-                      <Input type="date" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} data-testid="input-edit-due-date" />
+                      <Input
+                        type="date"
+                        value={editDueDate}
+                        onChange={(e) => setEditDueDate(e.target.value)}
+                        data-testid="input-edit-due-date"
+                      />
                     </div>
                   ) : (
                     <>
@@ -3331,20 +4281,46 @@ export default function Invoices() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <Label className="text-sm font-medium">Line Items</Label>
                     <div className="flex gap-1">
-                      <Button variant="default" size="sm" onClick={() => setEditLineItems([...editLineItems, { description: "", quantity: "1", unitPrice: "0" }])} data-testid="button-edit-add-line">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() =>
+                          setEditLineItems([
+                            ...editLineItems,
+                            { description: "", quantity: "1", unitPrice: "0" },
+                          ])
+                        }
+                        data-testid="button-edit-add-line"
+                      >
                         <Plus className="mr-1 h-3 w-3" /> Add Custom Charge
                       </Button>
                       {activePricing.length > 0 && (
-                        <Select onValueChange={(pId) => {
-                          const p = activePricing.find(x => x.id === pId);
-                          if (p) setEditLineItems([...editLineItems, { description: p.name, quantity: "1", unitPrice: p.basePrice, servicePricingId: p.id }]);
-                        }}>
-                          <SelectTrigger className="w-auto h-8 text-xs" data-testid="select-edit-add-service">
+                        <Select
+                          onValueChange={(pId) => {
+                            const p = activePricing.find((x) => x.id === pId);
+                            if (p)
+                              setEditLineItems([
+                                ...editLineItems,
+                                {
+                                  description: p.name,
+                                  quantity: "1",
+                                  unitPrice: p.basePrice,
+                                  servicePricingId: p.id,
+                                },
+                              ]);
+                          }}
+                        >
+                          <SelectTrigger
+                            className="w-auto h-8 text-xs"
+                            data-testid="select-edit-add-service"
+                          >
                             <SelectValue placeholder="From catalog" />
                           </SelectTrigger>
                           <SelectContent>
-                            {activePricing.map(p => (
-                              <SelectItem key={p.id} value={p.id}>{p.name} (${parseFloat(p.basePrice).toFixed(2)})</SelectItem>
+                            {activePricing.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.name} (${parseFloat(p.basePrice).toFixed(2)})
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -3352,16 +4328,26 @@ export default function Invoices() {
                     </div>
                   </div>
                   {editLineItems.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-3">No line items yet. Use "Add Custom Charge" for any item, or pick from your service catalog.</p>
+                    <p className="text-sm text-muted-foreground text-center py-3">
+                      No line items yet. Use "Add Custom Charge" for any item, or pick from your
+                      service catalog.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {editLineItems.map((li, idx) => (
-                        <div key={idx} className="flex flex-wrap items-end gap-2 p-2 border rounded-lg">
+                        <div
+                          key={idx}
+                          className="flex flex-wrap items-end gap-2 p-2 border rounded-lg"
+                        >
                           <div className="flex-1 min-w-[120px]">
                             <Label className="text-xs">Description</Label>
                             <Input
                               value={li.description}
-                              onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], description: e.target.value }; setEditLineItems(u); }}
+                              onChange={(e) => {
+                                const u = [...editLineItems];
+                                u[idx] = { ...u[idx], description: e.target.value };
+                                setEditLineItems(u);
+                              }}
                               placeholder="e.g., Extra buckets, trip fee, supplies"
                               data-testid={`input-edit-line-desc-${idx}`}
                             />
@@ -3369,26 +4355,48 @@ export default function Invoices() {
                           <div className="w-20">
                             <Label className="text-xs">Qty</Label>
                             <Input
-                              type="number" min="1"
+                              type="number"
+                              min="1"
                               value={li.quantity}
-                              onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], quantity: e.target.value }; setEditLineItems(u); }}
+                              onChange={(e) => {
+                                const u = [...editLineItems];
+                                u[idx] = { ...u[idx], quantity: e.target.value };
+                                setEditLineItems(u);
+                              }}
                               data-testid={`input-edit-line-qty-${idx}`}
                             />
                           </div>
                           <div className="w-28">
                             <Label className="text-xs">Price</Label>
                             <Input
-                              type="number" step="0.01"
+                              type="number"
+                              step="0.01"
                               value={li.unitPrice}
-                              onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], unitPrice: e.target.value }; setEditLineItems(u); }}
+                              onChange={(e) => {
+                                const u = [...editLineItems];
+                                u[idx] = { ...u[idx], unitPrice: e.target.value };
+                                setEditLineItems(u);
+                              }}
                               data-testid={`input-edit-line-price-${idx}`}
                             />
                           </div>
                           <div className="w-20 text-right">
                             <Label className="text-xs">Total</Label>
-                            <p className="font-medium text-sm leading-9">${((parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0)).toFixed(2)}</p>
+                            <p className="font-medium text-sm leading-9">
+                              $
+                              {(
+                                (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0)
+                              ).toFixed(2)}
+                            </p>
                           </div>
-                          <Button variant="ghost" size="icon" onClick={() => setEditLineItems(editLineItems.filter((_, i) => i !== idx))} data-testid={`button-edit-remove-line-${idx}`}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              setEditLineItems(editLineItems.filter((_, i) => i !== idx))
+                            }
+                            data-testid={`button-edit-remove-line-${idx}`}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -3399,12 +4407,24 @@ export default function Invoices() {
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <Label className="text-xs">Tax Rate (%)</Label>
-                      <Input type="number" step="0.01" min="0" value={editTaxRate} onChange={e => setEditTaxRate(e.target.value)} data-testid="input-edit-tax-rate" />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editTaxRate}
+                        onChange={(e) => setEditTaxRate(e.target.value)}
+                        data-testid="input-edit-tax-rate"
+                      />
                     </div>
                     <div>
                       <Label className="text-xs">Discount Type</Label>
-                      <Select value={editDiscountType || "none"} onValueChange={v => setEditDiscountType(v === "none" ? "" : v)}>
-                        <SelectTrigger data-testid="select-edit-discount-type"><SelectValue /></SelectTrigger>
+                      <Select
+                        value={editDiscountType || "none"}
+                        onValueChange={(v) => setEditDiscountType(v === "none" ? "" : v)}
+                      >
+                        <SelectTrigger data-testid="select-edit-discount-type">
+                          <SelectValue />
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">None</SelectItem>
                           <SelectItem value="percent">Percent (%)</SelectItem>
@@ -3414,13 +4434,27 @@ export default function Invoices() {
                     </div>
                     <div>
                       <Label className="text-xs">Discount Value</Label>
-                      <Input type="number" step="0.01" min="0" value={editDiscountValue} onChange={e => setEditDiscountValue(e.target.value)} disabled={!editDiscountType} data-testid="input-edit-discount-value" />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editDiscountValue}
+                        onChange={(e) => setEditDiscountValue(e.target.value)}
+                        disabled={!editDiscountType}
+                        data-testid="input-edit-discount-value"
+                      />
                     </div>
                   </div>
 
                   <div>
                     <Label className="text-xs">Notes / Memo</Label>
-                    <Textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Add notes for this invoice..." rows={2} data-testid="input-edit-notes" />
+                    <Textarea
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      placeholder="Add notes for this invoice..."
+                      rows={2}
+                      data-testid="input-edit-notes"
+                    />
                   </div>
 
                   <Card>
@@ -3432,7 +4466,9 @@ export default function Invoices() {
                       {editDiscountAmount > 0 && (
                         <div className="flex flex-wrap justify-between gap-1">
                           <span className="text-muted-foreground">Discount:</span>
-                          <span className="text-red-600 dark:text-red-400">-${editDiscountAmount.toFixed(2)}</span>
+                          <span className="text-red-600 dark:text-red-400">
+                            -${editDiscountAmount.toFixed(2)}
+                          </span>
                         </div>
                       )}
                       {editTaxAmount > 0 && (
@@ -3449,10 +4485,22 @@ export default function Invoices() {
                   </Card>
 
                   <div className="flex gap-2">
-                    <Button onClick={() => updateInvoiceMutation.mutate()} disabled={updateInvoiceMutation.isPending || editLineItems.length === 0} className="flex-1" data-testid="button-save-invoice-edit">
-                      <Save className="mr-1 h-4 w-4" /> {updateInvoiceMutation.isPending ? "Saving..." : "Save Changes"}
+                    <Button
+                      onClick={() => updateInvoiceMutation.mutate()}
+                      disabled={updateInvoiceMutation.isPending || editLineItems.length === 0}
+                      className="flex-1"
+                      data-testid="button-save-invoice-edit"
+                    >
+                      <Save className="mr-1 h-4 w-4" />{" "}
+                      {updateInvoiceMutation.isPending ? "Saving..." : "Save Changes"}
                     </Button>
-                    <Button variant="outline" onClick={() => setEditMode(false)} data-testid="button-cancel-edit">Cancel</Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setEditMode(false)}
+                      data-testid="button-cancel-edit"
+                    >
+                      Cancel
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -3462,9 +4510,15 @@ export default function Invoices() {
                       <h4 className="font-medium text-sm mb-2">Line Items</h4>
                       <div className="space-y-1">
                         {selectedInvoice.lineItems.map((li: InvoiceLineItem, idx: number) => (
-                          <div key={idx} className="flex flex-wrap justify-between gap-2 text-sm py-1 border-b last:border-0">
+                          <div
+                            key={idx}
+                            className="flex flex-wrap justify-between gap-2 text-sm py-1 border-b last:border-0"
+                          >
                             <span>{li.description}</span>
-                            <span>{li.quantity} x ${Number(li.unitPrice).toFixed(2)} = ${Number(li.total).toFixed(2)}</span>
+                            <span>
+                              {li.quantity} x ${Number(li.unitPrice).toFixed(2)} = $
+                              {Number(li.total).toFixed(2)}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -3487,14 +4541,22 @@ export default function Invoices() {
                       {Number(selectedInvoice.discountAmount) > 0 && (
                         <div className="flex flex-wrap justify-between gap-1">
                           <span className="text-muted-foreground">
-                            Discount ({selectedInvoice.discountType === "percent" ? `${selectedInvoice.discountValue}%` : `$${Number(selectedInvoice.discountValue).toFixed(2)}`}):
+                            Discount (
+                            {selectedInvoice.discountType === "percent"
+                              ? `${selectedInvoice.discountValue}%`
+                              : `$${Number(selectedInvoice.discountValue).toFixed(2)}`}
+                            ):
                           </span>
-                          <span className="text-red-600 dark:text-red-400">-${Number(selectedInvoice.discountAmount).toFixed(2)}</span>
+                          <span className="text-red-600 dark:text-red-400">
+                            -${Number(selectedInvoice.discountAmount).toFixed(2)}
+                          </span>
                         </div>
                       )}
                       {Number(selectedInvoice.tax) > 0 && (
                         <div className="flex flex-wrap justify-between gap-1">
-                          <span className="text-muted-foreground">Tax ({selectedInvoice.taxRate}%):</span>
+                          <span className="text-muted-foreground">
+                            Tax ({selectedInvoice.taxRate}%):
+                          </span>
                           <span>${Number(selectedInvoice.tax).toFixed(2)}</span>
                         </div>
                       )}
@@ -3514,8 +4576,12 @@ export default function Invoices() {
                     <CollectionsPanel
                       invoice={selectedInvoice}
                       contact={contactMap[selectedInvoice.contactId]}
-                      onSendReminder={() => sendPaymentReminderMutation.mutate(selectedInvoice.contactId)}
-                      onRetryCharge={() => { chargeMutation.mutate(selectedInvoice.id); }}
+                      onSendReminder={() =>
+                        sendPaymentReminderMutation.mutate(selectedInvoice.contactId)
+                      }
+                      onRetryCharge={() => {
+                        chargeMutation.mutate(selectedInvoice.id);
+                      }}
                       sendReminderPending={sendPaymentReminderMutation.isPending}
                       retryChargePending={chargeMutation.isPending}
                       stripeConfigured={!!stripeConfig?.configured}
@@ -3523,31 +4589,69 @@ export default function Invoices() {
                   )}
 
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => {
-                      setDetailDialogOpen(false);
-                      setPreviewInvoiceId(selectedInvoice.id);
-                      setPreviewDialogOpen(true);
-                    }} data-testid="button-detail-preview">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setDetailDialogOpen(false);
+                        setPreviewInvoiceId(selectedInvoice.id);
+                        setPreviewDialogOpen(true);
+                      }}
+                      data-testid="button-detail-preview"
+                    >
                       <Printer className="mr-1 h-3 w-3" /> Preview
                     </Button>
                     {selectedInvoice.status !== "paid" && stripeConfig?.configured && (
                       <>
-                        <Button size="sm" variant="outline" onClick={() => { chargeMutation.mutate(selectedInvoice.id); setDetailDialogOpen(false); }} disabled={chargeMutation.isPending}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            chargeMutation.mutate(selectedInvoice.id);
+                            setDetailDialogOpen(false);
+                          }}
+                          disabled={chargeMutation.isPending}
+                        >
                           <CreditCard className="mr-1 h-3 w-3" /> Charge Now
                         </Button>
-                        <Button size="sm" variant="outline" onClick={() => { checkoutMutation.mutate(selectedInvoice.id); }} disabled={checkoutMutation.isPending}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            checkoutMutation.mutate(selectedInvoice.id);
+                          }}
+                          disabled={checkoutMutation.isPending}
+                        >
                           <ExternalLink className="mr-1 h-3 w-3" /> Payment Link
                         </Button>
                       </>
                     )}
                     {selectedInvoice.status !== "paid" && (
-                      <Button size="sm" variant="outline" onClick={() => { markPaidMutation.mutate(selectedInvoice.id); setDetailDialogOpen(false); }}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          markPaidMutation.mutate(selectedInvoice.id);
+                          setDetailDialogOpen(false);
+                        }}
+                      >
                         Mark as Paid
                       </Button>
                     )}
                     {selectedInvoice.status !== "paid" && (
-                      <Button size="sm" variant="default" onClick={() => sendEmailMutation.mutate(selectedInvoice.id)} disabled={sendEmailMutation.isPending} data-testid="button-send-invoice-email">
-                        {sendEmailMutation.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Mail className="mr-1 h-3 w-3" />} Send to Client
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => sendEmailMutation.mutate(selectedInvoice.id)}
+                        disabled={sendEmailMutation.isPending}
+                        data-testid="button-send-invoice-email"
+                      >
+                        {sendEmailMutation.isPending ? (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        ) : (
+                          <Mail className="mr-1 h-3 w-3" />
+                        )}{" "}
+                        Send to Client
                       </Button>
                     )}
                   </div>
@@ -3573,7 +4677,12 @@ export default function Invoices() {
         onOpenChange={setGenerateByDateRangeOpen}
       />
 
-      <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => { if (!open) setInvoiceToDelete(null); }}>
+      <AlertDialog
+        open={!!invoiceToDelete}
+        onOpenChange={(open) => {
+          if (!open) setInvoiceToDelete(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete invoice?</AlertDialogTitle>

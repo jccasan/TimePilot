@@ -37,12 +37,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Upload,
   FileText,
@@ -143,12 +138,17 @@ interface ImportRun {
   completedAt: string | null;
 }
 
-
 function formatDollars(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-function TransferResultView({ importResult, onReset }: { importResult: CompetitorImportResult; onReset: () => void }) {
+function TransferResultView({
+  importResult,
+  onReset,
+}: {
+  importResult: CompetitorImportResult;
+  onReset: () => void;
+}) {
   const [bulkSetupOpen, setBulkSetupOpen] = useState(false);
 
   return (
@@ -161,19 +161,27 @@ function TransferResultView({ importResult, onReset }: { importResult: Competito
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
                 <p className="text-muted-foreground">Source</p>
-                <p className="font-medium" data-testid="text-result-platform">{importResult.platformLabel}</p>
+                <p className="font-medium" data-testid="text-result-platform">
+                  {importResult.platformLabel}
+                </p>
               </div>
               <div>
                 <p className="text-muted-foreground">Imported</p>
-                <p className="font-medium text-green-600" data-testid="text-result-imported">{importResult.imported}</p>
+                <p className="font-medium text-green-600" data-testid="text-result-imported">
+                  {importResult.imported}
+                </p>
               </div>
               <div>
                 <p className="text-muted-foreground">Updated</p>
-                <p className="font-medium text-blue-600" data-testid="text-result-updated">{importResult.updated}</p>
+                <p className="font-medium text-blue-600" data-testid="text-result-updated">
+                  {importResult.updated}
+                </p>
               </div>
               <div>
                 <p className="text-muted-foreground">Skipped</p>
-                <p className="font-medium text-muted-foreground" data-testid="text-result-skipped">{importResult.skipped}</p>
+                <p className="font-medium text-muted-foreground" data-testid="text-result-skipped">
+                  {importResult.skipped}
+                </p>
               </div>
             </div>
           </div>
@@ -187,10 +195,14 @@ function TransferResultView({ importResult, onReset }: { importResult: Competito
           <AlertDescription>
             <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
               {importResult.errors.slice(0, 20).map((err, i) => (
-                <li key={i}>Row {err.row}: {err.message}</li>
+                <li key={i}>
+                  Row {err.row}: {err.message}
+                </li>
               ))}
               {importResult.errors.length > 20 && (
-                <li className="text-muted-foreground">...and {importResult.errors.length - 20} more</li>
+                <li className="text-muted-foreground">
+                  ...and {importResult.errors.length - 20} more
+                </li>
               )}
             </ul>
           </AlertDescription>
@@ -203,10 +215,13 @@ function TransferResultView({ importResult, onReset }: { importResult: Competito
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <CalendarClock className="h-4 w-4 text-primary" />
-                <span className="font-semibold text-sm">Finish Setup — Schedule Your New Clients</span>
+                <span className="font-semibold text-sm">
+                  Finish Setup — Schedule Your New Clients
+                </span>
               </div>
               <p className="text-sm text-muted-foreground">
-                Create service plans and assign stops to routes for the {importResult.imported} clients you just imported. This takes just a few clicks.
+                Create service plans and assign stops to routes for the {importResult.imported}{" "}
+                clients you just imported. This takes just a few clicks.
               </p>
             </div>
             <Button onClick={() => setBulkSetupOpen(true)} data-testid="button-finish-setup">
@@ -234,7 +249,9 @@ function TransferResultView({ importResult, onReset }: { importResult: Competito
 function TransferTab() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<"select" | "upload" | "preview" | "running" | "result">("select");
+  const [step, setStep] = useState<"select" | "upload" | "preview" | "running" | "result">(
+    "select"
+  );
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [csvText, setCsvText] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
@@ -274,34 +291,47 @@ function TransferTab() {
       setActiveJobId(data.jobId);
       setStep("running");
       queryClient.invalidateQueries({ queryKey: ["/api/imports"] });
-      toast({ title: "Import started", description: `Processing ${data.totalRows} rows in the background.` });
+      toast({
+        title: "Import started",
+        description: `Processing ${data.totalRows} rows in the background.`,
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Transfer failed", description: error.message, variant: "destructive" });
     },
   });
 
-  const handleFile = useCallback((file: File) => {
-    if (!file.name.endsWith(".csv")) {
-      toast({ title: "Invalid file", description: "Please upload a CSV file.", variant: "destructive" });
-      return;
-    }
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      setCsvText(text);
-      detectMutation.mutate(text);
-    };
-    reader.readAsText(file);
-  }, [selectedPlatform]);
+  const handleFile = useCallback(
+    (file: File) => {
+      if (!file.name.endsWith(".csv")) {
+        toast({
+          title: "Invalid file",
+          description: "Please upload a CSV file.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setFileName(file.name);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        setCsvText(text);
+        detectMutation.mutate(text);
+      };
+      reader.readAsText(file);
+    },
+    [selectedPlatform]
+  );
 
-  const handleDrop = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const file = (e as any).dataTransfer?.files?.[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+  const handleDrop = useCallback(
+    (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const file = (e as any).dataTransfer?.files?.[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
 
   const handleDragOver = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -312,10 +342,13 @@ function TransferTab() {
     setIsDragOver(false);
   }, []);
 
-  const handleFileInput = useCallback((e: any) => {
-    const file = e.target?.files?.[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+  const handleFileInput = useCallback(
+    (e: any) => {
+      const file = e.target?.files?.[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
 
   const resetAll = () => {
     setStep("select");
@@ -340,7 +373,8 @@ function TransferTab() {
           <ArrowRightLeft className="h-4 w-4" />
           <AlertTitle>Transfer Your Data</AlertTitle>
           <AlertDescription>
-            Select the software you are coming from, then upload the customer CSV export. We will automatically detect columns and map your data into ScooPilot.
+            Select the software you are coming from, then upload the customer CSV export. We will
+            automatically detect columns and map your data into ScooPilot.
           </AlertDescription>
         </Alert>
 
@@ -352,13 +386,22 @@ function TransferTab() {
           >
             <CardHeader className="text-center pb-2">
               <div className="mx-auto w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-2">
-                <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">S&G</span>
+                <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+                  S&G
+                </span>
               </div>
               <CardTitle className="text-base">Sweep & Go</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
-              <p className="text-xs text-muted-foreground">Import customers from Sweep & Go CSV export</p>
-              <Button variant="ghost" size="sm" className="mt-3" data-testid="button-select-sweepandgo">
+              <p className="text-xs text-muted-foreground">
+                Import customers from Sweep & Go CSV export
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-3"
+                data-testid="button-select-sweepandgo"
+              >
                 Select <ArrowRight className="h-3 w-3 ml-1" />
               </Button>
             </CardContent>
@@ -395,7 +438,9 @@ function TransferTab() {
               <CardTitle className="text-base">Other / Auto-detect</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
-              <p className="text-xs text-muted-foreground">Upload any customer CSV and we will detect the format</p>
+              <p className="text-xs text-muted-foreground">
+                Upload any customer CSV and we will detect the format
+              </p>
               <Button variant="ghost" size="sm" className="mt-3" data-testid="button-select-auto">
                 Select <ArrowRight className="h-3 w-3 ml-1" />
               </Button>
@@ -432,7 +477,8 @@ function TransferTab() {
             <FileSpreadsheet className="h-4 w-4" />
             <AlertTitle>Sweep & Go Export</AlertTitle>
             <AlertDescription>
-              In Sweep & Go, go to Customers, then click Export to download your customer list as CSV. Upload that file here.
+              In Sweep & Go, go to Customers, then click Export to download your customer list as
+              CSV. Upload that file here.
             </AlertDescription>
           </Alert>
         )}
@@ -442,7 +488,8 @@ function TransferTab() {
             <FileSpreadsheet className="h-4 w-4" />
             <AlertTitle>Jobber Export</AlertTitle>
             <AlertDescription>
-              In Jobber, go to Clients, click the gear icon, then Export to CSV. Upload that file here.
+              In Jobber, go to Clients, click the gear icon, then Export to CSV. Upload that file
+              here.
             </AlertDescription>
           </Alert>
         )}
@@ -481,7 +528,7 @@ function TransferTab() {
   }
 
   if (step === "preview" && detectResult) {
-    const hasErrors = detectResult.errors.some(e => e.row === 0);
+    const hasErrors = detectResult.errors.some((e) => e.row === 0);
     const fieldLabels: Record<string, string> = {
       firstName: "First Name",
       lastName: "Last Name",
@@ -509,8 +556,12 @@ function TransferTab() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-3">
             <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
-            <span className="text-sm font-medium" data-testid="text-transfer-file-name">{fileName}</span>
-            <Badge variant="outline" data-testid="badge-detected-platform">{detectResult.platformLabel}</Badge>
+            <span className="text-sm font-medium" data-testid="text-transfer-file-name">
+              {fileName}
+            </span>
+            <Badge variant="outline" data-testid="badge-detected-platform">
+              {detectResult.platformLabel}
+            </Badge>
           </div>
           <Button variant="ghost" size="sm" onClick={resetAll} data-testid="button-reset-transfer">
             Start over
@@ -524,7 +575,9 @@ function TransferTab() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold" data-testid="text-total-contacts">{detectResult.totalRows}</p>
+              <p className="text-2xl font-bold" data-testid="text-total-contacts">
+                {detectResult.totalRows}
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -534,8 +587,10 @@ function TransferTab() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold" data-testid="text-with-email">
-                {detectResult.preview.filter(c => c.email).length}
-                {detectResult.totalRows > 10 && <span className="text-sm text-muted-foreground font-normal">+</span>}
+                {detectResult.preview.filter((c) => c.email).length}
+                {detectResult.totalRows > 10 && (
+                  <span className="text-sm text-muted-foreground font-normal">+</span>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -546,8 +601,10 @@ function TransferTab() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold" data-testid="text-with-address">
-                {detectResult.preview.filter(c => c.streetAddress).length}
-                {detectResult.totalRows > 10 && <span className="text-sm text-muted-foreground font-normal">+</span>}
+                {detectResult.preview.filter((c) => c.streetAddress).length}
+                {detectResult.totalRows > 10 && (
+                  <span className="text-sm text-muted-foreground font-normal">+</span>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -572,7 +629,11 @@ function TransferTab() {
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
               {Object.entries(detectResult.fieldMapping).map(([field, csvCol]) => (
-                <div key={field} className="flex items-center gap-2 text-sm p-2 rounded-md bg-muted/50" data-testid={`mapping-${field}`}>
+                <div
+                  key={field}
+                  className="flex items-center gap-2 text-sm p-2 rounded-md bg-muted/50"
+                  data-testid={`mapping-${field}`}
+                >
                   <span className="text-muted-foreground truncate">{csvCol}</span>
                   <ArrowRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                   <span className="font-medium">{fieldLabels[field] || field}</span>
@@ -589,7 +650,9 @@ function TransferTab() {
             <AlertDescription>
               <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
                 {detectResult.warnings.map((warn, i) => (
-                  <li key={i} data-testid={`text-transfer-warning-${i}`}>{warn}</li>
+                  <li key={i} data-testid={`text-transfer-warning-${i}`}>
+                    {warn}
+                  </li>
                 ))}
               </ul>
             </AlertDescription>
@@ -597,18 +660,24 @@ function TransferTab() {
         )}
 
         {detectResult.errors.length > 0 && (
-          <Alert variant={hasErrors ? "destructive" : "default"} data-testid="alert-transfer-errors">
+          <Alert
+            variant={hasErrors ? "destructive" : "default"}
+            data-testid="alert-transfer-errors"
+          >
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Issues ({detectResult.errors.length})</AlertTitle>
             <AlertDescription>
               <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
                 {detectResult.errors.slice(0, 20).map((err, i) => (
                   <li key={i} data-testid={`text-transfer-error-${i}`}>
-                    {err.row > 0 ? `Row ${err.row}: ` : ""}{err.message}
+                    {err.row > 0 ? `Row ${err.row}: ` : ""}
+                    {err.message}
                   </li>
                 ))}
                 {detectResult.errors.length > 20 && (
-                  <li className="text-muted-foreground">...and {detectResult.errors.length - 20} more</li>
+                  <li className="text-muted-foreground">
+                    ...and {detectResult.errors.length - 20} more
+                  </li>
                 )}
               </ul>
             </AlertDescription>
@@ -618,7 +687,9 @@ function TransferTab() {
         {detectResult.preview.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Preview (first {Math.min(detectResult.preview.length, 10)})</CardTitle>
+              <CardTitle className="text-base">
+                Preview (first {Math.min(detectResult.preview.length, 10)})
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
@@ -641,16 +712,24 @@ function TransferTab() {
                           {contact.firstName} {contact.lastName}
                         </TableCell>
                         <TableCell className="text-xs">{contact.email || "---"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{contact.phone || "---"}</TableCell>
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {contact.phone || "---"}
+                        </TableCell>
                         <TableCell className="text-xs">
                           {contact.streetAddress
                             ? `${contact.streetAddress}, ${contact.city}`
                             : "---"}
                         </TableCell>
                         <TableCell>{contact.numberOfDogs ?? "---"}</TableCell>
-                        <TableCell className="capitalize text-xs">{contact.serviceDay || "---"}</TableCell>
+                        <TableCell className="capitalize text-xs">
+                          {contact.serviceDay || "---"}
+                        </TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className="text-xs capitalize" data-testid={`badge-contact-status-${i}`}>
+                          <Badge
+                            variant="secondary"
+                            className="text-xs capitalize"
+                            data-testid={`badge-contact-status-${i}`}
+                          >
                             {contact.status}
                           </Badge>
                         </TableCell>
@@ -716,7 +795,10 @@ function TransferTab() {
           onComplete={(job) => {
             queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
             if (job.status === "completed") {
-              toast({ title: "Transfer complete", description: `${job.importedRows} contacts imported.` });
+              toast({
+                title: "Transfer complete",
+                description: `${job.importedRows} contacts imported.`,
+              });
               // Store result for the next step
               setImportResult({
                 importRunId: job.id,
@@ -738,12 +820,7 @@ function TransferTab() {
   }
 
   if (step === "result" && importResult) {
-    return (
-      <TransferResultView
-        importResult={importResult}
-        onReset={resetAll}
-      />
-    );
+    return <TransferResultView importResult={importResult} onReset={resetAll} />;
   }
 
   return null;
@@ -763,7 +840,9 @@ function InvoicesTab() {
 
   const parseMutation = useMutation({
     mutationFn: async (text: string) => {
-      const res = await apiRequest("POST", "/api/migrations/sweepandgo/parse-invoices", { csvText: text });
+      const res = await apiRequest("POST", "/api/migrations/sweepandgo/parse-invoices", {
+        csvText: text,
+      });
       return res.json() as Promise<ParsedInvoicePreview>;
     },
     onSuccess: (data) => {
@@ -787,7 +866,10 @@ function InvoicesTab() {
     onSuccess: (data) => {
       setActiveJobId(data.jobId);
       queryClient.invalidateQueries({ queryKey: ["/api/imports"] });
-      toast({ title: "Import started", description: `Processing ${data.totalRows} rows in the background.` });
+      toast({
+        title: "Import started",
+        description: `Processing ${data.totalRows} rows in the background.`,
+      });
     },
     onError: (error: Error) => {
       toast({ title: "Import failed", description: error.message, variant: "destructive" });
@@ -796,7 +878,11 @@ function InvoicesTab() {
 
   const handleFile = useCallback((file: File) => {
     if (!file.name.endsWith(".csv")) {
-      toast({ title: "Invalid file", description: "Please upload a CSV file.", variant: "destructive" });
+      toast({
+        title: "Invalid file",
+        description: "Please upload a CSV file.",
+        variant: "destructive",
+      });
       return;
     }
     setFileName(file.name);
@@ -809,12 +895,15 @@ function InvoicesTab() {
     reader.readAsText(file);
   }, []);
 
-  const handleDrop = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const file = (e as any).dataTransfer?.files?.[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+  const handleDrop = useCallback(
+    (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const file = (e as any).dataTransfer?.files?.[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
 
   const handleDragOver = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -825,10 +914,13 @@ function InvoicesTab() {
     setIsDragOver(false);
   }, []);
 
-  const handleFileInput = useCallback((e: any) => {
-    const file = e.target?.files?.[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+  const handleFileInput = useCallback(
+    (e: any) => {
+      const file = e.target?.files?.[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
 
   const resetState = () => {
     setCsvText(null);
@@ -841,14 +933,19 @@ function InvoicesTab() {
   if (activeJobId) {
     return (
       <div className="space-y-6">
-        <div className="text-sm font-medium text-muted-foreground">Importing invoices from Sweep & Go</div>
+        <div className="text-sm font-medium text-muted-foreground">
+          Importing invoices from Sweep & Go
+        </div>
         <ImportJobProgress
           jobId={activeJobId}
           label="Importing invoices"
           onComplete={(job) => {
             queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
             if (job.status === "completed") {
-              toast({ title: "Import complete", description: `${job.importedRows} invoices imported.` });
+              toast({
+                title: "Import complete",
+                description: `${job.importedRows} invoices imported.`,
+              });
             }
           }}
           onReset={resetState}
@@ -896,9 +993,16 @@ function InvoicesTab() {
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
-              <span className="text-sm font-medium" data-testid="text-file-name">{fileName}</span>
+              <span className="text-sm font-medium" data-testid="text-file-name">
+                {fileName}
+              </span>
             </div>
-            <Button variant="ghost" size="sm" onClick={resetState} data-testid="button-reset-upload">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetState}
+              data-testid="button-reset-upload"
+            >
               Upload different file
             </Button>
           </div>
@@ -909,7 +1013,9 @@ function InvoicesTab() {
                 <CardTitle className="text-sm font-medium">Total Invoices</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold" data-testid="text-total-invoices">{preview.summary.total}</p>
+                <p className="text-2xl font-bold" data-testid="text-total-invoices">
+                  {preview.summary.total}
+                </p>
               </CardContent>
             </Card>
             {Object.entries(preview.summary.byStatus).map(([status, count]) => (
@@ -918,7 +1024,9 @@ function InvoicesTab() {
                   <CardTitle className="text-sm font-medium capitalize">{status}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-2xl font-bold" data-testid={`text-status-${status}`}>{count}</p>
+                  <p className="text-2xl font-bold" data-testid={`text-status-${status}`}>
+                    {count}
+                  </p>
                 </CardContent>
               </Card>
             ))}
@@ -927,7 +1035,9 @@ function InvoicesTab() {
                 <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold" data-testid="text-total-amount">{formatDollars(preview.summary.totalAmount)}</p>
+                <p className="text-2xl font-bold" data-testid="text-total-amount">
+                  {formatDollars(preview.summary.totalAmount)}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -935,7 +1045,9 @@ function InvoicesTab() {
                 <CardTitle className="text-sm font-medium">Total Paid</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold" data-testid="text-total-paid">{formatDollars(preview.summary.totalPaid)}</p>
+                <p className="text-2xl font-bold" data-testid="text-total-paid">
+                  {formatDollars(preview.summary.totalPaid)}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -947,7 +1059,9 @@ function InvoicesTab() {
               <AlertDescription>
                 <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
                   {preview.errors.map((err, i) => (
-                    <li key={i} data-testid={`text-error-${i}`}>Row {err.row}: {err.message}</li>
+                    <li key={i} data-testid={`text-error-${i}`}>
+                      Row {err.row}: {err.message}
+                    </li>
                   ))}
                 </ul>
               </AlertDescription>
@@ -961,7 +1075,9 @@ function InvoicesTab() {
               <AlertDescription>
                 <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
                   {preview.warnings.map((warn, i) => (
-                    <li key={i} data-testid={`text-warning-${i}`}>{warn}</li>
+                    <li key={i} data-testid={`text-warning-${i}`}>
+                      {warn}
+                    </li>
                   ))}
                 </ul>
               </AlertDescription>
@@ -992,7 +1108,9 @@ function InvoicesTab() {
                           <TableCell className="font-mono text-xs">{inv.invoiceNumber}</TableCell>
                           <TableCell>
                             <div>{inv.contactName || "---"}</div>
-                            <div className="text-xs text-muted-foreground">{inv.contactEmail || ""}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {inv.contactEmail || ""}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <Badge
@@ -1024,7 +1142,9 @@ function InvoicesTab() {
                   onCheckedChange={(v) => setAllowDuplicates(!!v)}
                   data-testid="checkbox-allow-duplicates"
                 />
-                <Label htmlFor="allow-duplicates" className="text-sm">Allow duplicates (import even if external ID already exists)</Label>
+                <Label htmlFor="allow-duplicates" className="text-sm">
+                  Allow duplicates (import even if external ID already exists)
+                </Label>
               </div>
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -1033,7 +1153,9 @@ function InvoicesTab() {
                   onCheckedChange={(v) => setIncludeInReminders(!!v)}
                   data-testid="checkbox-include-reminders"
                 />
-                <Label htmlFor="include-reminders" className="text-sm">Include unpaid invoices in payment reminders</Label>
+                <Label htmlFor="include-reminders" className="text-sm">
+                  Include unpaid invoices in payment reminders
+                </Label>
               </div>
               <Button
                 onClick={() => importMutation.mutate()}
@@ -1062,7 +1184,9 @@ function InvoicesTab() {
                     <p className="font-medium mt-2">Errors:</p>
                     <ul className="list-disc pl-4 space-y-1">
                       {importResult.errors.map((err, i) => (
-                        <li key={i}>Row {err.row}: {err.message}</li>
+                        <li key={i}>
+                          Row {err.row}: {err.message}
+                        </li>
                       ))}
                     </ul>
                   </div>
@@ -1089,7 +1213,7 @@ const DOCUMENT_CATEGORIES = [
   "Other",
 ] as const;
 
-type DocumentCategory = typeof DOCUMENT_CATEGORIES[number];
+type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
 
 interface PendingDocument {
   id: string;
@@ -1138,7 +1262,7 @@ function ContactCombobox({
   testId: string;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = contacts.find(c => c.id === value);
+  const selected = contacts.find((c) => c.id === value);
   const label = selected
     ? `${selected.firstName} ${selected.lastName}${selected.email ? ` (${selected.email})` : ""}`
     : "None";
@@ -1164,27 +1288,39 @@ function ContactCombobox({
           </DialogHeader>
           <Command>
             <div className="px-2 pb-2">
-              <CommandInput placeholder="Search contacts…" autoFocus data-testid={`${testId}-search`} />
+              <CommandInput
+                placeholder="Search contacts…"
+                autoFocus
+                data-testid={`${testId}-search`}
+              />
             </div>
             <CommandList className="max-h-72 overflow-y-auto px-2 pb-2">
               <CommandEmpty>No contacts found.</CommandEmpty>
               <CommandGroup>
                 <CommandItem
                   value="__none__"
-                  onSelect={() => { onChange(""); setOpen(false); }}
+                  onSelect={() => {
+                    onChange("");
+                    setOpen(false);
+                  }}
                 >
                   <Check className={`mr-2 h-4 w-4 ${!value ? "opacity-100" : "opacity-0"}`} />
                   None
                 </CommandItem>
-                {contacts.map(c => {
+                {contacts.map((c) => {
                   const display = `${c.firstName} ${c.lastName}${c.email ? ` (${c.email})` : ""}`;
                   return (
                     <CommandItem
                       key={c.id}
                       value={display}
-                      onSelect={() => { onChange(c.id); setOpen(false); }}
+                      onSelect={() => {
+                        onChange(c.id);
+                        setOpen(false);
+                      }}
                     >
-                      <Check className={`mr-2 h-4 w-4 ${value === c.id ? "opacity-100" : "opacity-0"}`} />
+                      <Check
+                        className={`mr-2 h-4 w-4 ${value === c.id ? "opacity-100" : "opacity-0"}`}
+                      />
                       {display}
                     </CommandItem>
                   );
@@ -1218,7 +1354,13 @@ function DocumentsTab() {
 
   const { data: contacts } = useQuery<ContactOption[]>({
     queryKey: ["/api/contacts"],
-    select: (data: ContactOption[]) => data.map(c => ({ id: c.id, firstName: c.firstName, lastName: c.lastName, email: c.email ?? null })),
+    select: (data: ContactOption[]) =>
+      data.map((c) => ({
+        id: c.id,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        email: c.email ?? null,
+      })),
   });
 
   const { data: savedDocs, refetch: refetchDocs } = useQuery<SavedDocument[]>({
@@ -1226,31 +1368,59 @@ function DocumentsTab() {
   });
 
   const classifyMutation = useMutation({
-    mutationFn: async ({ docId, fileName, mimeType }: { docId: string; fileName: string; mimeType: string }) => {
+    mutationFn: async ({
+      docId,
+      fileName,
+      mimeType,
+    }: {
+      docId: string;
+      fileName: string;
+      mimeType: string;
+    }) => {
       const res = await apiRequest("POST", "/api/documents/classify", { fileName, mimeType });
-      return { docId, ...(await res.json() as { category: string }) };
+      return { docId, ...((await res.json()) as { category: string }) };
     },
     onSuccess: ({ docId, category }) => {
-      setPendingDocs(prev => prev.map(d =>
-        d.id === docId ? { ...d, classifying: false, category: (DOCUMENT_CATEGORIES.includes(category as DocumentCategory) ? category : "Other") as DocumentCategory } : d
-      ));
+      setPendingDocs((prev) =>
+        prev.map((d) =>
+          d.id === docId
+            ? {
+                ...d,
+                classifying: false,
+                category: (DOCUMENT_CATEGORIES.includes(category as DocumentCategory)
+                  ? category
+                  : "Other") as DocumentCategory,
+              }
+            : d
+        )
+      );
     },
     onError: (_err, { docId }) => {
-      setPendingDocs(prev => prev.map(d =>
-        d.id === docId ? { ...d, classifying: false, category: "Other" } : d
-      ));
+      setPendingDocs((prev) =>
+        prev.map((d) => (d.id === docId ? { ...d, classifying: false, category: "Other" } : d))
+      );
     },
   });
 
   const addFiles = useCallback((files: File[]) => {
-    const allowed = files.filter(f => {
+    const allowed = files.filter((f) => {
       const ext = f.name.toLowerCase();
-      return ext.endsWith(".pdf") || ext.endsWith(".docx") || ext.endsWith(".jpg") || ext.endsWith(".jpeg") || ext.endsWith(".png");
+      return (
+        ext.endsWith(".pdf") ||
+        ext.endsWith(".docx") ||
+        ext.endsWith(".jpg") ||
+        ext.endsWith(".jpeg") ||
+        ext.endsWith(".png")
+      );
     });
     if (allowed.length < files.length) {
-      toast({ title: "Some files skipped", description: "Only PDF, DOCX, JPG, and PNG files are supported.", variant: "destructive" });
+      toast({
+        title: "Some files skipped",
+        description: "Only PDF, DOCX, JPG, and PNG files are supported.",
+        variant: "destructive",
+      });
     }
-    const newDocs: PendingDocument[] = allowed.map(file => ({
+    const newDocs: PendingDocument[] = allowed.map((file) => ({
       id: `${Date.now()}-${Math.random()}`,
       file,
       category: "",
@@ -1261,36 +1431,42 @@ function DocumentsTab() {
       saved: false,
       objectPath: null,
     }));
-    setPendingDocs(prev => [...prev, ...newDocs]);
+    setPendingDocs((prev) => [...prev, ...newDocs]);
     for (const doc of newDocs) {
       classifyMutation.mutate({ docId: doc.id, fileName: doc.file.name, mimeType: doc.file.type });
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length) addFiles(files);
-  }, [addFiles]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length) addFiles(files);
+    },
+    [addFiles]
+  );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
   }, []);
 
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length) addFiles(files);
-    e.target.value = "";
-  }, [addFiles]);
+  const handleFileInput = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      if (files.length) addFiles(files);
+      e.target.value = "";
+    },
+    [addFiles]
+  );
 
   const updateDoc = (id: string, patch: Partial<PendingDocument>) => {
-    setPendingDocs(prev => prev.map(d => d.id === id ? { ...d, ...patch } : d));
+    setPendingDocs((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)));
   };
 
   const removeDoc = (id: string) => {
-    setPendingDocs(prev => prev.filter(d => d.id !== id));
+    setPendingDocs((prev) => prev.filter((d) => d.id !== id));
   };
 
   const saveDoc = async (doc: PendingDocument) => {
@@ -1329,8 +1505,8 @@ function DocumentsTab() {
     }
   };
 
-  const unsavedDocs = pendingDocs.filter(d => !d.saved);
-  const savedPendingDocs = pendingDocs.filter(d => d.saved);
+  const unsavedDocs = pendingDocs.filter((d) => !d.saved);
+  const savedPendingDocs = pendingDocs.filter((d) => d.saved);
 
   return (
     <div className="space-y-6">
@@ -1338,13 +1514,16 @@ function DocumentsTab() {
         <FolderOpen className="h-4 w-4" />
         <AlertTitle>Import Documents</AlertTitle>
         <AlertDescription>
-          Upload PDF, DOCX, JPG, or PNG files from Jobber or Sweep & Go. AI will suggest a category for each file based on its name and type.
+          Upload PDF, DOCX, JPG, or PNG files from Jobber or Sweep & Go. AI will suggest a category
+          for each file based on its name and type.
         </AlertDescription>
       </Alert>
 
       <div
         className={`border-2 border-dashed rounded-md p-10 text-center cursor-pointer transition-colors ${
-          isDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/40"
+          isDragOver
+            ? "border-primary bg-primary/5"
+            : "border-muted-foreground/25 hover:border-primary/40"
         }`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -1363,20 +1542,29 @@ function DocumentsTab() {
         />
         <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
         <p className="text-sm font-medium">Drop files here or click to browse</p>
-        <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, JPG, PNG — multiple files supported</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          PDF, DOCX, JPG, PNG — multiple files supported
+        </p>
       </div>
 
       {unsavedDocs.length > 0 && (
         <div className="space-y-3">
-          <p className="text-sm font-medium text-muted-foreground">{unsavedDocs.length} file{unsavedDocs.length !== 1 ? "s" : ""} ready to import</p>
-          {unsavedDocs.map(doc => (
+          <p className="text-sm font-medium text-muted-foreground">
+            {unsavedDocs.length} file{unsavedDocs.length !== 1 ? "s" : ""} ready to import
+          </p>
+          {unsavedDocs.map((doc) => (
             <Card key={doc.id} data-testid={`card-document-${doc.id}`}>
               <CardContent className="pt-4 pb-4">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
                     <div className="mt-0.5 flex-shrink-0">{fileIcon(doc.file)}</div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate" data-testid={`text-doc-name-${doc.id}`}>{doc.file.name}</p>
+                      <p
+                        className="text-sm font-medium truncate"
+                        data-testid={`text-doc-name-${doc.id}`}
+                      >
+                        {doc.file.name}
+                      </p>
                       <p className="text-xs text-muted-foreground">{formatBytes(doc.file.size)}</p>
 
                       <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1393,14 +1581,25 @@ function DocumentsTab() {
                           ) : (
                             <Select
                               value={doc.category}
-                              onValueChange={(val) => updateDoc(doc.id, { category: val as DocumentCategory })}
+                              onValueChange={(val) =>
+                                updateDoc(doc.id, { category: val as DocumentCategory })
+                              }
                             >
-                              <SelectTrigger data-testid={`select-category-${doc.id}`} className="h-9">
+                              <SelectTrigger
+                                data-testid={`select-category-${doc.id}`}
+                                className="h-9"
+                              >
                                 <SelectValue placeholder="Select type…" />
                               </SelectTrigger>
                               <SelectContent>
-                                {DOCUMENT_CATEGORIES.map(cat => (
-                                  <SelectItem key={cat} value={cat} data-testid={`option-category-${cat}`}>{cat}</SelectItem>
+                                {DOCUMENT_CATEGORIES.map((cat) => (
+                                  <SelectItem
+                                    key={cat}
+                                    value={cat}
+                                    data-testid={`option-category-${cat}`}
+                                  >
+                                    {cat}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -1408,7 +1607,9 @@ function DocumentsTab() {
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-muted-foreground">Link to Contact (optional)</label>
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Link to Contact (optional)
+                          </label>
                           <ContactCombobox
                             value={doc.contactId}
                             onChange={(val) => updateDoc(doc.id, { contactId: val })}
@@ -1418,7 +1619,9 @@ function DocumentsTab() {
                         </div>
 
                         <div className="space-y-1 sm:col-span-2">
-                          <label className="text-xs font-medium text-muted-foreground">Notes (optional)</label>
+                          <label className="text-xs font-medium text-muted-foreground">
+                            Notes (optional)
+                          </label>
                           <Textarea
                             value={doc.notes}
                             onChange={(e) => updateDoc(doc.id, { notes: e.target.value })}
@@ -1461,7 +1664,10 @@ function DocumentsTab() {
       {savedPendingDocs.length > 0 && (
         <Alert>
           <CheckCircle2 className="h-4 w-4" />
-          <AlertTitle>{savedPendingDocs.length} document{savedPendingDocs.length !== 1 ? "s" : ""} imported successfully</AlertTitle>
+          <AlertTitle>
+            {savedPendingDocs.length} document{savedPendingDocs.length !== 1 ? "s" : ""} imported
+            successfully
+          </AlertTitle>
           <AlertDescription>They now appear in the import history below.</AlertDescription>
         </Alert>
       )}
@@ -1470,7 +1676,9 @@ function DocumentsTab() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Previously Imported Documents</CardTitle>
-            <CardDescription>{savedDocs.length} document{savedDocs.length !== 1 ? "s" : ""} on file</CardDescription>
+            <CardDescription>
+              {savedDocs.length} document{savedDocs.length !== 1 ? "s" : ""} on file
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -1487,10 +1695,14 @@ function DocumentsTab() {
                 <TableBody>
                   {savedDocs.map((doc) => (
                     <TableRow key={doc.id} data-testid={`row-saved-doc-${doc.id}`}>
-                      <TableCell className="text-sm font-medium max-w-[160px] truncate">{doc.fileName}</TableCell>
+                      <TableCell className="text-sm font-medium max-w-[160px] truncate">
+                        {doc.fileName}
+                      </TableCell>
                       <TableCell>
                         {doc.documentCategory ? (
-                          <Badge variant="secondary" className="text-xs">{doc.documentCategory}</Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            {doc.documentCategory}
+                          </Badge>
                         ) : (
                           <span className="text-muted-foreground text-xs">—</span>
                         )}
@@ -1498,7 +1710,9 @@ function DocumentsTab() {
                       <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">
                         {doc.contactName || "—"}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">{doc.notes || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">
+                        {doc.notes || "—"}
+                      </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : "—"}
                       </TableCell>
@@ -1522,13 +1736,17 @@ function ContactsTab() {
         <Users className="h-4 w-4" />
         <AlertTitle>Contact Import</AlertTitle>
         <AlertDescription>
-          Use the AI-assisted import wizard to map and import contacts from CSV files. Column mappings will be automatically suggested based on your file headers.
+          Use the AI-assisted import wizard to map and import contacts from CSV files. Column
+          mappings will be automatically suggested based on your file headers.
         </AlertDescription>
       </Alert>
       <ImportWizard
         targetSchema="contacts"
         onComplete={(result) => {
-          toast({ title: "Import Complete", description: `Successfully imported ${result.importedRows} contacts` });
+          toast({
+            title: "Import Complete",
+            description: `Successfully imported ${result.importedRows} contacts`,
+          });
           queryClient.invalidateQueries({ queryKey: ["/api/imports"] });
         }}
         onCancel={() => {}}
@@ -1585,12 +1803,20 @@ function ImportHistory() {
           {(imports || []).map((run) => (
             <TableRow key={run.id} data-testid={`row-import-${run.id}`}>
               <TableCell>
-                <Badge variant="secondary" className="text-xs">{run.type}</Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {run.type}
+                </Badge>
               </TableCell>
               <TableCell className="text-sm">{run.fileName || "---"}</TableCell>
               <TableCell>
                 <Badge
-                  variant={run.status === "completed" ? "default" : run.status === "failed" ? "destructive" : "secondary"}
+                  variant={
+                    run.status === "completed"
+                      ? "default"
+                      : run.status === "failed"
+                        ? "destructive"
+                        : "secondary"
+                  }
                   className="text-xs"
                 >
                   {run.status}
@@ -1605,19 +1831,28 @@ function ImportHistory() {
           {(docImports || []).map((doc) => (
             <TableRow key={doc.id} data-testid={`row-import-doc-${doc.id}`}>
               <TableCell>
-                <Badge variant="outline" className="text-xs">Document</Badge>
+                <Badge variant="outline" className="text-xs">
+                  Document
+                </Badge>
               </TableCell>
               <TableCell className="text-sm">
                 <div className="max-w-[180px]">
                   <p className="truncate font-medium">{doc.fileName}</p>
                   {doc.contactName && (
-                    <p className="truncate text-xs text-muted-foreground" data-testid={`text-doc-contact-${doc.id}`}>{doc.contactName}</p>
+                    <p
+                      className="truncate text-xs text-muted-foreground"
+                      data-testid={`text-doc-contact-${doc.id}`}
+                    >
+                      {doc.contactName}
+                    </p>
                   )}
                 </div>
               </TableCell>
               <TableCell>
                 {doc.documentCategory ? (
-                  <Badge variant="secondary" className="text-xs">{doc.documentCategory}</Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    {doc.documentCategory}
+                  </Badge>
                 ) : (
                   <span className="text-muted-foreground text-xs">—</span>
                 )}
@@ -1639,9 +1874,12 @@ export default function MigrationPage() {
     <div className="h-full overflow-y-auto">
       <div className="max-w-5xl mx-auto p-6 space-y-8">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Data Migration</h1>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">
+            Data Migration
+          </h1>
           <p className="text-muted-foreground mt-1" data-testid="text-page-description">
-            Transfer your customers from Sweep & Go, Jobber, or other platforms. Upload CSV exports to migrate contacts, properties, invoices, and payment history into ScooPilot.
+            Transfer your customers from Sweep & Go, Jobber, or other platforms. Upload CSV exports
+            to migrate contacts, properties, invoices, and payment history into ScooPilot.
           </p>
         </div>
 

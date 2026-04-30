@@ -4,7 +4,6 @@ import { sendEmail } from "../services/email";
 
 import { isAdmin, handleError, p, escapeHtml } from "./shared";
 
-
 export async function registerErrorReportingRoutes(app: Express): Promise<void> {
   // ================ Error Reporting ================
 
@@ -30,17 +29,22 @@ export async function registerErrorReportingRoutes(app: Express): Promise<void> 
 
   type ErrorSeverity = "low" | "medium" | "high" | "critical";
 
-  function classifyErrorSeverity(message: string, errorType: "react" | "js" | "api"): ErrorSeverity {
+  function classifyErrorSeverity(
+    message: string,
+    errorType: "react" | "js" | "api"
+  ): ErrorSeverity {
     const msg = message.toLowerCase();
 
     // Critical: app-breaking crashes or security/payment related
     if (errorType === "react") return "critical";
     if (msg.includes("chunkloaderror") || msg.includes("loading chunk")) return "critical";
-    if (msg.includes("payment") || msg.includes("stripe") || msg.includes("billing")) return "critical";
+    if (msg.includes("payment") || msg.includes("stripe") || msg.includes("billing"))
+      return "critical";
     if (msg.includes("unauthorized") || msg.includes("403") || msg.includes("401")) return "high";
 
     // High: data loss risk or persistent functional failures
-    if (errorType === "api" && (msg.includes("500") || msg.includes("internal server"))) return "high";
+    if (errorType === "api" && (msg.includes("500") || msg.includes("internal server")))
+      return "high";
     if (msg.includes("cannot read properties") || msg.includes("is not a function")) return "high";
     if (msg.includes("typeerror") || msg.includes("referenceerror")) return "high";
     if (msg.includes("failed to fetch") || msg.includes("networkerror")) return "high";
@@ -74,13 +78,18 @@ export async function registerErrorReportingRoutes(app: Express): Promise<void> 
 
   app.post("/api/errors/report", async (req: Request, res: Response) => {
     try {
-      const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+      const ip =
+        (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+        req.socket.remoteAddress ||
+        "unknown";
       if (!checkErrorReportRateLimit(ip)) {
         return res.status(429).json({ error: "Too many error reports" });
       }
       const { message, stack, errorType, pageUrl, userId, companyId, userAgent } = req.body;
-      if (!message || typeof message !== "string") return res.status(400).json({ error: "message required" });
-      const safeType: "react" | "js" | "api" = (errorType === "react" || errorType === "js" || errorType === "api") ? errorType : "js";
+      if (!message || typeof message !== "string")
+        return res.status(400).json({ error: "message required" });
+      const safeType: "react" | "js" | "api" =
+        errorType === "react" || errorType === "js" || errorType === "api" ? errorType : "js";
       const severity = classifyErrorSeverity(message, safeType);
 
       const report = await storage.createErrorReport({
@@ -118,10 +127,14 @@ export async function registerErrorReportingRoutes(app: Express): Promise<void> 
               <div style="color:#858585;font-size:11px;margin-bottom:4px;">MESSAGE</div>
               <div style="background:#1e1e1e;padding:10px;border-radius:4px;color:#f44747;font-size:13px;">${escapeHtml(message)}</div>
             </div>
-            ${stack ? `<div>
+            ${
+              stack
+                ? `<div>
               <div style="color:#858585;font-size:11px;margin-bottom:4px;">STACK TRACE</div>
               <pre style="background:#1e1e1e;padding:10px;border-radius:4px;color:#ce9178;font-size:12px;overflow-x:auto;white-space:pre-wrap;">${escapeHtml(stack.slice(0, 3000))}</pre>
-            </div>` : ""}
+            </div>`
+                : ""
+            }
             <div style="margin-top:16px;">
               <a href="https://app.scoopilot.com/admin/errors" style="background:#0e639c;color:white;padding:8px 16px;border-radius:4px;text-decoration:none;font-size:13px;">View in Admin Terminal →</a>
             </div>
@@ -147,7 +160,7 @@ export async function registerErrorReportingRoutes(app: Express): Promise<void> 
         limit: limit ? parseInt(String(limit)) : 50,
         offset: offset ? parseInt(String(offset)) : 0,
       });
-      const fixTasks = await Promise.all(reports.map(r => storage.getErrorFixTask(r.id)));
+      const fixTasks = await Promise.all(reports.map((r) => storage.getErrorFixTask(r.id)));
       const result = reports.map((r, i) => ({ ...r, fixTask: fixTasks[i] || null }));
       res.json(result);
     } catch (err) {
@@ -188,9 +201,14 @@ export async function registerErrorReportingRoutes(app: Express): Promise<void> 
     try {
       const { message, status } = req.body;
       const validStatuses = ["open", "acknowledged", "resolved"];
-      if (!message || typeof message !== "string") return res.status(400).json({ error: "message is required" });
-      if (!status || !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status" });
-      const updated = await storage.bulkUpdateErrorReportStatus(message, status as "open" | "acknowledged" | "resolved");
+      if (!message || typeof message !== "string")
+        return res.status(400).json({ error: "message is required" });
+      if (!status || !validStatuses.includes(status))
+        return res.status(400).json({ error: "Invalid status" });
+      const updated = await storage.bulkUpdateErrorReportStatus(
+        message,
+        status as "open" | "acknowledged" | "resolved"
+      );
       res.json({ updated });
     } catch (err) {
       handleError(res, err);
@@ -212,7 +230,8 @@ export async function registerErrorReportingRoutes(app: Express): Promise<void> 
     try {
       const { status } = req.body;
       const validStatuses = ["open", "acknowledged", "resolved"];
-      if (!status || !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status" });
+      if (!status || !validStatuses.includes(status))
+        return res.status(400).json({ error: "Invalid status" });
       const report = await storage.updateErrorReport(p(req.params.id), { status });
       if (status === "resolved") {
         const fixTask = await storage.getErrorFixTask(p(req.params.id));
@@ -226,35 +245,44 @@ export async function registerErrorReportingRoutes(app: Express): Promise<void> 
     }
   });
 
-  app.patch("/api/admin/error-reports/:id/fix-task", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const { status } = req.body;
-      const validStatuses = ["open", "done"];
-      if (!status || !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status" });
-      const report = await storage.getErrorReport(p(req.params.id));
-      if (!report) return res.status(404).json({ error: "Not found" });
-      const fixTask = await storage.getErrorFixTask(report.id);
-      if (!fixTask) return res.status(404).json({ error: "Fix task not found" });
-      const updated = await storage.updateErrorFixTask(fixTask.id, { status });
-      res.json(updated);
-    } catch (err) {
-      handleError(res, err);
+  app.patch(
+    "/api/admin/error-reports/:id/fix-task",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { status } = req.body;
+        const validStatuses = ["open", "done"];
+        if (!status || !validStatuses.includes(status))
+          return res.status(400).json({ error: "Invalid status" });
+        const report = await storage.getErrorReport(p(req.params.id));
+        if (!report) return res.status(404).json({ error: "Not found" });
+        const fixTask = await storage.getErrorFixTask(report.id);
+        if (!fixTask) return res.status(404).json({ error: "Fix task not found" });
+        const updated = await storage.updateErrorFixTask(fixTask.id, { status });
+        res.json(updated);
+      } catch (err) {
+        handleError(res, err);
+      }
     }
-  });
+  );
 
-  app.post("/api/admin/error-reports/:id/fix-task", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const report = await storage.getErrorReport(p(req.params.id));
-      if (!report) return res.status(404).json({ error: "Not found" });
-      const existing = await storage.getErrorFixTask(report.id);
-      if (existing) return res.status(409).json({ error: "Fix task already exists", fixTask: existing });
-      const title = req.body.title || `Fix: ${report.message.slice(0, 80)}`;
-      const fixTask = await storage.createErrorFixTask({ errorReportId: report.id, title });
-      await storage.updateErrorReport(report.id, { status: "acknowledged" });
-      res.json(fixTask);
-    } catch (err) {
-      handleError(res, err);
+  app.post(
+    "/api/admin/error-reports/:id/fix-task",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const report = await storage.getErrorReport(p(req.params.id));
+        if (!report) return res.status(404).json({ error: "Not found" });
+        const existing = await storage.getErrorFixTask(report.id);
+        if (existing)
+          return res.status(409).json({ error: "Fix task already exists", fixTask: existing });
+        const title = req.body.title || `Fix: ${report.message.slice(0, 80)}`;
+        const fixTask = await storage.createErrorFixTask({ errorReportId: report.id, title });
+        await storage.updateErrorReport(report.id, { status: "acknowledged" });
+        res.json(fixTask);
+      } catch (err) {
+        handleError(res, err);
+      }
     }
-  });
-
+  );
 }

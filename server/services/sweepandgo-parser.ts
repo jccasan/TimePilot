@@ -1,4 +1,10 @@
-import { parseCSV, parseCurrency, parseCurrencyCents, parseDate, mapInvoiceStatus } from "./import-transforms";
+import {
+  parseCSV,
+  parseCurrency,
+  parseCurrencyCents,
+  parseDate,
+  mapInvoiceStatus,
+} from "./import-transforms";
 
 export interface ParsedInvoice {
   externalId: string;
@@ -47,10 +53,27 @@ export interface InvoiceParseResult {
 }
 
 const HEADER_MAP: Record<string, string[]> = {
-  invoiceNumber: ["invoice number", "invoice #", "invoice no", "inv #", "inv no", "invoice_number", "invoicenumber", "number"],
+  invoiceNumber: [
+    "invoice number",
+    "invoice #",
+    "invoice no",
+    "inv #",
+    "inv no",
+    "invoice_number",
+    "invoicenumber",
+    "number",
+  ],
   customerEmail: ["customer email", "email", "e-mail", "client email", "customer_email"],
   customerName: ["customer name", "client name", "customer", "client", "name", "customer_name"],
-  issuedDate: ["invoice date", "date", "issued date", "issue date", "created date", "invoice_date", "issued_date"],
+  issuedDate: [
+    "invoice date",
+    "date",
+    "issued date",
+    "issue date",
+    "created date",
+    "invoice_date",
+    "issued_date",
+  ],
   dueDate: ["due date", "payment due", "due_date"],
   status: ["status", "invoice status", "payment status", "invoice_status"],
   description: ["description", "line item", "service", "item", "service description"],
@@ -158,7 +181,12 @@ export function parseSweepAndGoInvoices(csvText: string): InvoiceParseResult {
       const unitPrice = parseCurrency(rawUnitPrice) || 0;
       const lineTotal = parseCurrency(rawLineTotal) || quantity * unitPrice;
 
-      existingInvoice.lineItems.push({ description: description || "Service", quantity, unitPrice, total: lineTotal });
+      existingInvoice.lineItems.push({
+        description: description || "Service",
+        quantity,
+        unitPrice,
+        total: lineTotal,
+      });
     }
 
     const rawTax = get("tax");

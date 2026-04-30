@@ -23,11 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Upload,
   FileText,
@@ -96,7 +92,10 @@ interface ImportWizardProps {
   onCancel: () => void;
 }
 
-const SCHEMA_FIELDS: Record<string, { field: string; label: string; required: boolean; sensitive: boolean }[]> = {
+const SCHEMA_FIELDS: Record<
+  string,
+  { field: string; label: string; required: boolean; sensitive: boolean }[]
+> = {
   contacts: [
     { field: "firstName", label: "First Name", required: true, sensitive: false },
     { field: "lastName", label: "Last Name", required: true, sensitive: false },
@@ -200,20 +199,32 @@ function parseCSVClient(text: string): { headers: string[]; rows: string[][] } {
 function ConfidenceBadge({ confidence }: { confidence: number }) {
   if (confidence > 0.9) {
     return (
-      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800" data-testid="badge-confidence-high">
+      <Badge
+        variant="outline"
+        className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
+        data-testid="badge-confidence-high"
+      >
         {Math.round(confidence * 100)}%
       </Badge>
     );
   }
   if (confidence >= 0.75) {
     return (
-      <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800" data-testid="badge-confidence-medium">
+      <Badge
+        variant="outline"
+        className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-800"
+        data-testid="badge-confidence-medium"
+      >
         {Math.round(confidence * 100)}%
       </Badge>
     );
   }
   return (
-    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800" data-testid="badge-confidence-low">
+    <Badge
+      variant="outline"
+      className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800"
+      data-testid="badge-confidence-low"
+    >
       {Math.round(confidence * 100)}%
     </Badge>
   );
@@ -239,7 +250,11 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
   const targetFields = SCHEMA_FIELDS[targetSchema] || [];
 
   const aiMapMutation = useMutation({
-    mutationFn: async (data: { headers: string[]; sampleRows: string[][]; targetSchema: string }) => {
+    mutationFn: async (data: {
+      headers: string[];
+      sampleRows: string[][];
+      targetSchema: string;
+    }) => {
       const res = await apiRequest("POST", "/api/imports/ai-map", data);
       return res.json() as Promise<MappingResult>;
     },
@@ -428,7 +443,9 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
               {step > i + 1 ? <Check className="w-3.5 h-3.5" /> : <span>{i + 1}</span>}
               <span className="hidden sm:inline">{label}</span>
             </div>
-            {i < stepLabels.length - 1 && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+            {i < stepLabels.length - 1 && (
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            )}
           </div>
         ))}
       </div>
@@ -441,7 +458,8 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
               Upload CSV File
             </CardTitle>
             <CardDescription>
-              Drag and drop your CSV file or click to browse. We'll analyze the columns and suggest mappings.
+              Drag and drop your CSV file or click to browse. We'll analyze the columns and suggest
+              mappings.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -476,7 +494,9 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
               ) : fileName ? (
                 <div className="flex flex-col items-center gap-3">
                   <FileText className="w-10 h-10 text-primary" />
-                  <p className="font-medium" data-testid="text-filename">{fileName}</p>
+                  <p className="font-medium" data-testid="text-filename">
+                    {fileName}
+                  </p>
                   <p className="text-sm text-muted-foreground">
                     {csvRows.length} rows, {csvHeaders.length} columns detected
                   </p>
@@ -490,7 +510,10 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
               )}
             </div>
             {aiMapMutation.isError && (
-              <div className="mt-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2" data-testid="text-upload-error">
+              <div
+                className="mt-4 p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2"
+                data-testid="text-upload-error"
+              >
                 <XCircle className="w-4 h-4 flex-shrink-0" />
                 Failed to analyze file. Please try again.
               </div>
@@ -538,7 +561,9 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm">{tf.label}</span>
                         {tf.required && (
-                          <Badge variant="secondary" className="text-xs">Required</Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            Required
+                          </Badge>
                         )}
                         {needsWarning && (
                           <Tooltip>
@@ -553,7 +578,10 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                           </Tooltip>
                         )}
                         {needsManual && (
-                          <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800 text-xs">
+                          <Badge
+                            variant="outline"
+                            className="bg-red-50 text-red-600 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800 text-xs"
+                          >
                             Manual selection needed
                           </Badge>
                         )}
@@ -567,7 +595,10 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                           setUserMappings({ ...userMappings, [tf.field]: val });
                         }}
                       >
-                        <SelectTrigger className="w-[200px]" data-testid={`select-mapping-${tf.field}`}>
+                        <SelectTrigger
+                          className="w-[200px]"
+                          data-testid={`select-mapping-${tf.field}`}
+                        >
                           <SelectValue placeholder="Select column..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -618,11 +649,11 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                       {TRANSFORM_OPTIONS.filter(
                         (o) => !fieldTransforms.some((ft) => ft.type === o.type)
                       ).length > 0 && (
-                        <Select
-                          onValueChange={(val) => addTransform(tf.field, val)}
-                          value=""
-                        >
-                          <SelectTrigger className="w-[160px]" data-testid={`select-add-transform-${tf.field}`}>
+                        <Select onValueChange={(val) => addTransform(tf.field, val)} value="">
+                          <SelectTrigger
+                            className="w-[160px]"
+                            data-testid={`select-add-transform-${tf.field}`}
+                          >
                             <SelectValue placeholder="Add transform..." />
                           </SelectTrigger>
                           <SelectContent>
@@ -667,7 +698,8 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
           <CardHeader>
             <CardTitle>Review Rows</CardTitle>
             <CardDescription>
-              Showing first {Math.min(50, previewRows.length)} rows. Edit invalid cells or skip rows.
+              Showing first {Math.min(50, previewRows.length)} rows. Edit invalid cells or skip
+              rows.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -685,15 +717,30 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                 <span data-testid="text-skipped-count">{skippedCount} skipped</span>
               </div>
               <div className="flex-1" />
-              <Button variant="outline" size="sm" onClick={() => applyBulkFix("trim")} data-testid="button-fix-trim">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => applyBulkFix("trim")}
+                data-testid="button-fix-trim"
+              >
                 <Scissors className="w-3.5 h-3.5 mr-1.5" />
                 Trim All
               </Button>
-              <Button variant="outline" size="sm" onClick={() => applyBulkFix("normalize_phone")} data-testid="button-fix-phone">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => applyBulkFix("normalize_phone")}
+                data-testid="button-fix-phone"
+              >
                 <Phone className="w-3.5 h-3.5 mr-1.5" />
                 Fix Phones
               </Button>
-              <Button variant="outline" size="sm" onClick={() => applyBulkFix("standardize_dates")} data-testid="button-fix-dates">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => applyBulkFix("standardize_dates")}
+                data-testid="button-fix-dates"
+              >
                 <Calendar className="w-3.5 h-3.5 mr-1.5" />
                 Fix Dates
               </Button>
@@ -727,18 +774,27 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                             data-testid={`checkbox-skip-${row.rowIndex}`}
                           />
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-xs">{row.rowIndex + 1}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {row.rowIndex + 1}
+                        </TableCell>
                         {getMappingsArray().map((m) => {
                           const cellKey = `${row.rowIndex}:${m.internalField}`;
                           const hasError = row.errors.some((e) => e.field === m.internalField);
                           const editedValue = editedCells[cellKey];
-                          const displayValue = editedValue !== undefined ? editedValue : String(row.transformed[m.internalField] ?? "");
+                          const displayValue =
+                            editedValue !== undefined
+                              ? editedValue
+                              : String(row.transformed[m.internalField] ?? "");
                           const isEditing = editingCell === cellKey;
 
                           return (
                             <TableCell
                               key={m.internalField}
-                              className={hasError && editedValue === undefined ? "bg-red-50 dark:bg-red-950/40" : ""}
+                              className={
+                                hasError && editedValue === undefined
+                                  ? "bg-red-50 dark:bg-red-950/40"
+                                  : ""
+                              }
                             >
                               {isEditing ? (
                                 <Input
@@ -750,7 +806,11 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === "Enter") {
-                                      handleCellEdit(row.rowIndex, m.internalField, (e.target as HTMLInputElement).value);
+                                      handleCellEdit(
+                                        row.rowIndex,
+                                        m.internalField,
+                                        (e.target as HTMLInputElement).value
+                                      );
                                       setEditingCell(null);
                                     }
                                     if (e.key === "Escape") {
@@ -767,7 +827,9 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                                   title={displayValue}
                                   data-testid={`cell-${row.rowIndex}-${m.internalField}`}
                                 >
-                                  {displayValue || <span className="text-muted-foreground italic">empty</span>}
+                                  {displayValue || (
+                                    <span className="text-muted-foreground italic">empty</span>
+                                  )}
                                   {hasError && editedValue === undefined && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
@@ -777,7 +839,10 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                                       </TooltipTrigger>
                                       <TooltipContent>
                                         <p className="text-xs">
-                                          {row.errors.find((e) => e.field === m.internalField)?.message}
+                                          {
+                                            row.errors.find((e) => e.field === m.internalField)
+                                              ?.message
+                                          }
                                         </p>
                                       </TooltipContent>
                                     </Tooltip>
@@ -789,13 +854,21 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                         })}
                         <TableCell>
                           {isSkipped ? (
-                            <Badge variant="secondary" className="text-xs">Skipped</Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              Skipped
+                            </Badge>
                           ) : row.isValid ? (
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800 text-xs">
+                            <Badge
+                              variant="outline"
+                              className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800 text-xs"
+                            >
                               Valid
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800 text-xs">
+                            <Badge
+                              variant="outline"
+                              className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800 text-xs"
+                            >
                               {row.errors.length} error(s)
                             </Badge>
                           )}
@@ -836,19 +909,36 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
               <div className="space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="p-4 rounded-md bg-muted">
-                    <p className="text-2xl font-bold" data-testid="text-total-rows">{csvRows.length}</p>
+                    <p className="text-2xl font-bold" data-testid="text-total-rows">
+                      {csvRows.length}
+                    </p>
                     <p className="text-sm text-muted-foreground">Total Rows</p>
                   </div>
                   <div className="p-4 rounded-md bg-green-50 dark:bg-green-950/30">
-                    <p className="text-2xl font-bold text-green-700 dark:text-green-300" data-testid="text-import-valid">{validCount}</p>
+                    <p
+                      className="text-2xl font-bold text-green-700 dark:text-green-300"
+                      data-testid="text-import-valid"
+                    >
+                      {validCount}
+                    </p>
                     <p className="text-sm text-muted-foreground">Will Import</p>
                   </div>
                   <div className="p-4 rounded-md bg-red-50 dark:bg-red-950/30">
-                    <p className="text-2xl font-bold text-red-700 dark:text-red-300" data-testid="text-import-invalid">{invalidCount}</p>
+                    <p
+                      className="text-2xl font-bold text-red-700 dark:text-red-300"
+                      data-testid="text-import-invalid"
+                    >
+                      {invalidCount}
+                    </p>
                     <p className="text-sm text-muted-foreground">Invalid</p>
                   </div>
                   <div className="p-4 rounded-md bg-muted">
-                    <p className="text-2xl font-bold text-muted-foreground" data-testid="text-import-skipped">{skippedCount}</p>
+                    <p
+                      className="text-2xl font-bold text-muted-foreground"
+                      data-testid="text-import-skipped"
+                    >
+                      {skippedCount}
+                    </p>
                     <p className="text-sm text-muted-foreground">Skipped</p>
                   </div>
                 </div>
@@ -873,7 +963,8 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                     <div className="flex flex-wrap gap-1.5">
                       {userTransforms.map((t) => (
                         <Badge key={`${t.field}-${t.type}`} variant="outline" className="text-xs">
-                          {t.field}: {TRANSFORM_OPTIONS.find((o) => o.type === t.type)?.label || t.type}
+                          {t.field}:{" "}
+                          {TRANSFORM_OPTIONS.find((o) => o.type === t.type)?.label || t.type}
                         </Badge>
                       ))}
                     </div>
@@ -881,7 +972,10 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                 )}
 
                 {applyMutation.isError && (
-                  <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2" data-testid="text-import-error">
+                  <div
+                    className="p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2"
+                    data-testid="text-import-error"
+                  >
                     <XCircle className="w-4 h-4 flex-shrink-0" />
                     Import failed. Please try again.
                   </div>
@@ -921,7 +1015,11 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
             </Button>
           )}
           {step === 2 && (
-            <Button onClick={goToPreview} disabled={previewMutation.isPending} data-testid="button-next-preview">
+            <Button
+              onClick={goToPreview}
+              disabled={previewMutation.isPending}
+              data-testid="button-next-preview"
+            >
               {previewMutation.isPending ? (
                 <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
               ) : null}
@@ -936,7 +1034,11 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
             </Button>
           )}
           {step === 4 && !activeJobId && !importResult && (
-            <Button onClick={handleImport} disabled={applyMutation.isPending || validCount === 0} data-testid="button-import">
+            <Button
+              onClick={handleImport}
+              disabled={applyMutation.isPending || validCount === 0}
+              data-testid="button-import"
+            >
               {applyMutation.isPending ? (
                 <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
               ) : (

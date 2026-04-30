@@ -16,12 +16,15 @@ export interface ImportJobStatus {
   completedAt: string | null;
 }
 
-export function downloadErrorReport(errors: Array<{ row: number; message: string }>, fileName: string) {
+export function downloadErrorReport(
+  errors: Array<{ row: number; message: string }>,
+  fileName: string
+) {
   const csvRows = [
     ["Row", "Error Message"],
-    ...errors.map(e => [String(e.row || ""), e.message.replace(/"/g, '""')]),
+    ...errors.map((e) => [String(e.row || ""), e.message.replace(/"/g, '""')]),
   ];
-  const csvContent = csvRows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+  const csvContent = csvRows.map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -31,7 +34,12 @@ export function downloadErrorReport(errors: Array<{ row: number; message: string
   URL.revokeObjectURL(url);
 }
 
-export function ImportJobProgress({ jobId, label, onComplete, onReset }: {
+export function ImportJobProgress({
+  jobId,
+  label,
+  onComplete,
+  onReset,
+}: {
   jobId: string;
   label?: string;
   onComplete?: (job: ImportJobStatus) => void;
@@ -85,7 +93,9 @@ export function ImportJobProgress({ jobId, label, onComplete, onReset }: {
                 : `Import complete — ${job?.importedRows ?? 0} imported, ${job?.skippedRows ?? 0} skipped`}
           </p>
           {!isDone && (
-            <p className="text-xs text-muted-foreground mt-0.5">This runs in the background — you can leave this page and come back.</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              This runs in the background — you can leave this page and come back.
+            </p>
           )}
         </div>
       </div>
@@ -95,15 +105,21 @@ export function ImportJobProgress({ jobId, label, onComplete, onReset }: {
       <div className="grid grid-cols-3 gap-3 text-sm">
         <div className="rounded-md bg-muted/50 px-3 py-2 text-center">
           <p className="text-xs text-muted-foreground">Imported</p>
-          <p className="font-semibold text-green-600" data-testid="text-progress-imported">{job?.importedRows ?? 0}</p>
+          <p className="font-semibold text-green-600" data-testid="text-progress-imported">
+            {job?.importedRows ?? 0}
+          </p>
         </div>
         <div className="rounded-md bg-muted/50 px-3 py-2 text-center">
           <p className="text-xs text-muted-foreground">Skipped</p>
-          <p className="font-semibold text-muted-foreground" data-testid="text-progress-skipped">{job?.skippedRows ?? 0}</p>
+          <p className="font-semibold text-muted-foreground" data-testid="text-progress-skipped">
+            {job?.skippedRows ?? 0}
+          </p>
         </div>
         <div className="rounded-md bg-muted/50 px-3 py-2 text-center">
           <p className="text-xs text-muted-foreground">Total</p>
-          <p className="font-semibold" data-testid="text-progress-total">{total}</p>
+          <p className="font-semibold" data-testid="text-progress-total">
+            {total}
+          </p>
         </div>
       </div>
 
@@ -114,9 +130,14 @@ export function ImportJobProgress({ jobId, label, onComplete, onReset }: {
           <AlertDescription className="flex flex-col gap-2">
             <ul className="list-disc pl-4 space-y-1 text-sm mt-1">
               {job!.errors!.slice(0, 5).map((e, i) => (
-                <li key={i}>{e.row ? `Row ${e.row}: ` : ""}{e.message}</li>
+                <li key={i}>
+                  {e.row ? `Row ${e.row}: ` : ""}
+                  {e.message}
+                </li>
               ))}
-              {job!.errors!.length > 5 && <li className="text-muted-foreground">…and {job!.errors!.length - 5} more</li>}
+              {job!.errors!.length > 5 && (
+                <li className="text-muted-foreground">…and {job!.errors!.length - 5} more</li>
+              )}
             </ul>
             <Button
               size="sm"

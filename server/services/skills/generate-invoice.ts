@@ -5,10 +5,21 @@ import { sendInvoiceEmail } from "../invoice-email";
 
 async function buildLineItems(
   visits: { id: string; scheduledDate: string; servicePlanId: string }[],
-  planMap: Map<string, { pricePerVisit: string; name?: string | null; serviceName?: string | null; id: string }>
-): Promise<{ visitId: string; description: string; quantity: number; unitPrice: string; total: string }[]> {
+  planMap: Map<
+    string,
+    { pricePerVisit: string; name?: string | null; serviceName?: string | null; id: string }
+  >
+): Promise<
+  { visitId: string; description: string; quantity: number; unitPrice: string; total: string }[]
+> {
   const planAddOnsCache = new Map<string, { name: string; price: string }[]>();
-  const lineItems: { visitId: string; description: string; quantity: number; unitPrice: string; total: string }[] = [];
+  const lineItems: {
+    visitId: string;
+    description: string;
+    quantity: number;
+    unitPrice: string;
+    total: string;
+  }[] = [];
 
   for (const visit of visits) {
     const plan = planMap.get(visit.servicePlanId);
@@ -25,7 +36,10 @@ async function buildLineItems(
     if (plan) {
       if (!planAddOnsCache.has(plan.id)) {
         const addOns = await storage.getServicePlanAddOns(plan.id);
-        planAddOnsCache.set(plan.id, addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })));
+        planAddOnsCache.set(
+          plan.id,
+          addOns.filter((a) => a.isActive).map((a) => ({ name: a.name, price: a.price }))
+        );
       }
       const addOns = planAddOnsCache.get(plan.id) || [];
       for (const addon of addOns) {
@@ -47,17 +61,22 @@ registerSkill({
   name: "generate_invoice",
   description:
     "Generate draft invoice(s) for completed, uninvoiced visits. Supply contactId to invoice a single client, or allPending: true to invoice every client with outstanding uninvoiced work.",
-  parameterSchema: z.object({
-    contactId: z.string().optional(),
-    allPending: z.boolean().optional(),
-    sendAfterGenerate: z.boolean().optional(),
-  }).refine(
-    data => data.contactId || data.allPending,
-    { message: "Provide contactId or set allPending: true" }
-  ),
+  parameterSchema: z
+    .object({
+      contactId: z.string().optional(),
+      allPending: z.boolean().optional(),
+      sendAfterGenerate: z.boolean().optional(),
+    })
+    .refine((data) => data.contactId || data.allPending, {
+      message: "Provide contactId or set allPending: true",
+    }),
 
   async execute(params: Record<string, unknown>, context: SkillContext): Promise<SkillResult> {
-    const { contactId, allPending, sendAfterGenerate } = params as { contactId?: string; allPending?: boolean; sendAfterGenerate?: boolean };
+    const { contactId, allPending, sendAfterGenerate } = params as {
+      contactId?: string;
+      allPending?: boolean;
+      sendAfterGenerate?: boolean;
+    };
     const { companyId } = context;
 
     const dueDate = (() => {
@@ -76,10 +95,10 @@ registerSkill({
     }
 
     const targetContacts = contactId
-      ? summary.byContact.filter(c => c.contactId === contactId)
+      ? summary.byContact.filter((c) => c.contactId === contactId)
       : allPending
-      ? summary.byContact
-      : [];
+        ? summary.byContact
+        : [];
 
     if (targetContacts.length === 0) {
       return {
@@ -99,12 +118,17 @@ registerSkill({
 
     for (const contactEntry of targetContacts) {
       try {
-        const result = await storage.getUninvoicedVisitsForContact(companyId, contactEntry.contactId);
+        const result = await storage.getUninvoicedVisitsForContact(
+          companyId,
+          contactEntry.contactId
+        );
         const visitsToInvoice = result.visits;
         if (visitsToInvoice.length === 0) continue;
 
-        const plans = await storage.getServicePlans(companyId, { contactId: contactEntry.contactId });
-        const planMap = new Map(plans.map(p => [p.id, p]));
+        const plans = await storage.getServicePlans(companyId, {
+          contactId: contactEntry.contactId,
+        });
+        const planMap = new Map(plans.map((p) => [p.id, p]));
 
         const lineItems = await buildLineItems(visitsToInvoice, planMap);
         const subtotal = lineItems.reduce((sum, item) => sum + parseFloat(item.total), 0);
@@ -137,11 +161,16 @@ registerSkill({
               sent++;
             } else {
               sendFailed++;
-              console.error(`[generate_invoice skill] Email failed for invoice ${invoice.id}: ${emailResult.error}`);
+              console.error(
+                `[generate_invoice skill] Email failed for invoice ${invoice.id}: ${emailResult.error}`
+              );
             }
           } catch (emailErr) {
             sendFailed++;
-            console.error(`[generate_invoice skill] Email error for invoice ${invoice.id}:`, emailErr);
+            console.error(
+              `[generate_invoice skill] Email error for invoice ${invoice.id}:`,
+              emailErr
+            );
           }
         }
 
@@ -149,7 +178,10 @@ registerSkill({
         totalCents += Math.round(subtotal * 100);
         created++;
       } catch (err) {
-        console.error(`[generate_invoice skill] Failed for contact ${contactEntry.contactId}:`, err);
+        console.error(
+          `[generate_invoice skill] Failed for contact ${contactEntry.contactId}:`,
+          err
+        );
       }
     }
 

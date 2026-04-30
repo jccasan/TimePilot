@@ -13,9 +13,7 @@
           "title": "fast-xml-parser has stack overflow in XMLBuilder with preserveOrder",
           "url": "https://github.com/advisories/GHSA-fj3w-jwp8-x2g3",
           "severity": "low",
-          "cwe": [
-            "CWE-120"
-          ],
+          "cwe": ["CWE-120"],
           "cvss": {
             "score": 0,
             "vectorString": null
@@ -25,9 +23,7 @@
       ],
       "effects": [],
       "range": "5.0.0 - 5.3.7",
-      "nodes": [
-        "node_modules/fast-xml-parser"
-      ],
+      "nodes": ["node_modules/fast-xml-parser"],
       "fixAvailable": true
     },
     "lodash": {
@@ -42,9 +38,7 @@
           "title": "Lodash has Prototype Pollution Vulnerability in `_.unset` and `_.omit` functions",
           "url": "https://github.com/advisories/GHSA-xxjr-mmjv-4gpg",
           "severity": "moderate",
-          "cwe": [
-            "CWE-1321"
-          ],
+          "cwe": ["CWE-1321"],
           "cvss": {
             "score": 6.5,
             "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
@@ -54,9 +48,7 @@
       ],
       "effects": [],
       "range": "4.0.0 - 4.17.21",
-      "nodes": [
-        "node_modules/lodash"
-      ],
+      "nodes": ["node_modules/lodash"],
       "fixAvailable": true
     },
     "minimatch": {
@@ -71,9 +63,7 @@
           "title": "minimatch has a ReDoS via repeated wildcards with non-matching literal in pattern",
           "url": "https://github.com/advisories/GHSA-3ppc-4f35-3m26",
           "severity": "high",
-          "cwe": [
-            "CWE-1333"
-          ],
+          "cwe": ["CWE-1333"],
           "cvss": {
             "score": 0,
             "vectorString": null
@@ -87,9 +77,7 @@
           "title": "minimatch has ReDoS: matchOne() combinatorial backtracking via multiple non-adjacent GLOBSTAR segments",
           "url": "https://github.com/advisories/GHSA-7r86-cg39-jmmj",
           "severity": "high",
-          "cwe": [
-            "CWE-407"
-          ],
+          "cwe": ["CWE-407"],
           "cvss": {
             "score": 7.5,
             "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
@@ -103,9 +91,7 @@
           "title": "minimatch ReDoS: nested *() extglobs generate catastrophically backtracking regular expressions",
           "url": "https://github.com/advisories/GHSA-23c5-xmqv-rm74",
           "severity": "high",
-          "cwe": [
-            "CWE-1333"
-          ],
+          "cwe": ["CWE-1333"],
           "cvss": {
             "score": 7.5,
             "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
@@ -115,9 +101,7 @@
       ],
       "effects": [],
       "range": "9.0.0 - 9.0.6",
-      "nodes": [
-        "node_modules/minimatch"
-      ],
+      "nodes": ["node_modules/minimatch"],
       "fixAvailable": true
     },
     "qs": {
@@ -132,9 +116,7 @@
           "title": "qs's arrayLimit bypass in comma parsing allows denial of service",
           "url": "https://github.com/advisories/GHSA-w7fw-mjwx-w883",
           "severity": "low",
-          "cwe": [
-            "CWE-20"
-          ],
+          "cwe": ["CWE-20"],
           "cvss": {
             "score": 3.7,
             "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
@@ -144,9 +126,7 @@
       ],
       "effects": [],
       "range": "6.7.0 - 6.14.1",
-      "nodes": [
-        "node_modules/qs"
-      ],
+      "nodes": ["node_modules/qs"],
       "fixAvailable": true
     },
     "rollup": {
@@ -161,9 +141,7 @@
           "title": "Rollup 4 has Arbitrary File Write via Path Traversal",
           "url": "https://github.com/advisories/GHSA-mw96-cpmx-2vgc",
           "severity": "high",
-          "cwe": [
-            "CWE-22"
-          ],
+          "cwe": ["CWE-22"],
           "cvss": {
             "score": 0,
             "vectorString": null
@@ -173,9 +151,7 @@
       ],
       "effects": [],
       "range": "4.0.0 - 4.58.0",
-      "nodes": [
-        "node_modules/rollup"
-      ],
+      "nodes": ["node_modules/rollup"],
       "fixAvailable": true
     }
   },

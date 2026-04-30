@@ -72,7 +72,7 @@ export async function runSkill(
       return {
         success: false,
         message: "Invalid parameters",
-        error: parsed.error.issues.map(i => i.message).join("; "),
+        error: parsed.error.issues.map((i) => i.message).join("; "),
       };
     }
     return await skill.execute(parsed.data, context);

@@ -3,10 +3,7 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { sql, eq } from "drizzle-orm";
 import { contacts } from "@shared/schema";
-import {
-  isStripeConfigured,
-  createStripeCustomer,
-} from "../services/stripe";
+import { isStripeConfigured, createStripeCustomer } from "../services/stripe";
 import {
   TIER_CONFIG,
   insertContactSchema,
@@ -14,13 +11,44 @@ import {
   insertServicePlanSchema,
 } from "@shared/schema";
 
-import { isAuthenticated, getCompanyContext, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, notify, qboAutoSync, createPropertyWithGeocode, getStopOnlyOnlyContactIds, provisionPortalAccess, validateAndResolveAddOns } from "./shared";
-
+import {
+  isAuthenticated,
+  getCompanyContext,
+  getBaseUrl,
+  handleError,
+  sanitizeDecimal,
+  auditLog,
+  p,
+  notify,
+  qboAutoSync,
+  createPropertyWithGeocode,
+  getStopOnlyOnlyContactIds,
+  provisionPortalAccess,
+  validateAndResolveAddOns,
+} from "./shared";
 
 export async function registerContactsRoutes(app: Express): Promise<void> {
   // ================ Contact Routes ================
 
-  const csvContactHeaders = ["firstName", "lastName", "email", "phone", "streetAddress", "address2", "city", "state", "zipCode", "numberOfDogs", "yardSize", "serviceFrequency", "serviceDay", "leadSource", "referralSource", "status", "notes"];
+  const csvContactHeaders = [
+    "firstName",
+    "lastName",
+    "email",
+    "phone",
+    "streetAddress",
+    "address2",
+    "city",
+    "state",
+    "zipCode",
+    "numberOfDogs",
+    "yardSize",
+    "serviceFrequency",
+    "serviceDay",
+    "leadSource",
+    "referralSource",
+    "status",
+    "notes",
+  ];
 
   app.get("/api/contacts/export/csv", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -28,15 +56,21 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const contactsList = await storage.getContacts(companyId);
       const csvRows = [csvContactHeaders.join(",")];
       for (const c of contactsList) {
-        csvRows.push(csvContactHeaders.map(h => {
-          const val = (c as any)[h] ?? "";
-          return `"${String(val).replace(/"/g, '""')}"`;
-        }).join(","));
+        csvRows.push(
+          csvContactHeaders
+            .map((h) => {
+              const val = (c as any)[h] ?? "";
+              return `"${String(val).replace(/"/g, '""')}"`;
+            })
+            .join(",")
+        );
       }
       res.setHeader("Content-Type", "text/csv");
       res.setHeader("Content-Disposition", "attachment; filename=contacts.csv");
       res.send(csvRows.join("\n"));
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/contacts/sample-csv", isAuthenticated, async (_req: Request, res: Response) => {
@@ -63,51 +97,108 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         for (let j = 0; j < line.length; j++) {
           const ch = line[j];
           if (inQuotes) {
-            if (ch === '"' && line[j + 1] === '"') { current += '"'; j++; }
-            else if (ch === '"') { inQuotes = false; }
-            else { current += ch; }
+            if (ch === '"' && line[j + 1] === '"') {
+              current += '"';
+              j++;
+            } else if (ch === '"') {
+              inQuotes = false;
+            } else {
+              current += ch;
+            }
           } else {
-            if (ch === '"') { inQuotes = true; }
-            else if (ch === ',') { result.push(current.trim()); current = ""; }
-            else { current += ch; }
+            if (ch === '"') {
+              inQuotes = true;
+            } else if (ch === ",") {
+              result.push(current.trim());
+              current = "";
+            } else {
+              current += ch;
+            }
           }
         }
         result.push(current.trim());
         return result;
-      }
+      };
 
       const lines = csvText.split(/\r?\n/).filter((l: string) => l.trim());
-      if (lines.length < 2) return res.status(400).json({ error: "CSV must have headers and at least one row" });
+      if (lines.length < 2)
+        return res.status(400).json({ error: "CSV must have headers and at least one row" });
 
       const rawHeaders = parseCsvLine(lines[0]).map((h: string) => h.replace(/"/g, "").trim());
 
       const knownFields = new Set(csvContactHeaders);
       const headerAliases: Record<string, string> = {
-        "first name": "firstName", "first_name": "firstName", "firstname": "firstName", "first": "firstName",
-        "last name": "lastName", "last_name": "lastName", "lastname": "lastName", "last": "lastName",
-        "email address": "email", "e-mail": "email", "emailaddress": "email",
-        "phone number": "phone", "phonenumber": "phone", "telephone": "phone", "tel": "phone", "mobile": "phone", "cell": "phone",
-        "street address": "streetAddress", "street_address": "streetAddress", "address": "streetAddress", "address1": "streetAddress", "street": "streetAddress",
-        "address 2": "address2", "apt": "address2", "suite": "address2", "unit": "address2",
-        "zip": "zipCode", "zip_code": "zipCode", "postal": "zipCode", "postal_code": "zipCode", "postalcode": "zipCode", "zipcode": "zipCode",
-        "dogs": "numberOfDogs", "number_of_dogs": "numberOfDogs", "numberof dogs": "numberOfDogs", "num dogs": "numberOfDogs", "# dogs": "numberOfDogs", "numdogs": "numberOfDogs",
-        "yard": "yardSize", "yard_size": "yardSize",
-        "frequency": "serviceFrequency", "service_frequency": "serviceFrequency", "svc frequency": "serviceFrequency",
-        "day": "serviceDay", "service_day": "serviceDay", "svc day": "serviceDay",
-        "lead source": "leadSource", "lead_source": "leadSource", "source": "leadSource",
-        "referral source": "referralSource", "referral_source": "referralSource", "referral": "referralSource", "referred by": "referralSource",
-        "note": "notes", "comment": "notes", "comments": "notes",
+        "first name": "firstName",
+        first_name: "firstName",
+        firstname: "firstName",
+        first: "firstName",
+        "last name": "lastName",
+        last_name: "lastName",
+        lastname: "lastName",
+        last: "lastName",
+        "email address": "email",
+        "e-mail": "email",
+        emailaddress: "email",
+        "phone number": "phone",
+        phonenumber: "phone",
+        telephone: "phone",
+        tel: "phone",
+        mobile: "phone",
+        cell: "phone",
+        "street address": "streetAddress",
+        street_address: "streetAddress",
+        address: "streetAddress",
+        address1: "streetAddress",
+        street: "streetAddress",
+        "address 2": "address2",
+        apt: "address2",
+        suite: "address2",
+        unit: "address2",
+        zip: "zipCode",
+        zip_code: "zipCode",
+        postal: "zipCode",
+        postal_code: "zipCode",
+        postalcode: "zipCode",
+        zipcode: "zipCode",
+        dogs: "numberOfDogs",
+        number_of_dogs: "numberOfDogs",
+        "numberof dogs": "numberOfDogs",
+        "num dogs": "numberOfDogs",
+        "# dogs": "numberOfDogs",
+        numdogs: "numberOfDogs",
+        yard: "yardSize",
+        yard_size: "yardSize",
+        frequency: "serviceFrequency",
+        service_frequency: "serviceFrequency",
+        "svc frequency": "serviceFrequency",
+        day: "serviceDay",
+        service_day: "serviceDay",
+        "svc day": "serviceDay",
+        "lead source": "leadSource",
+        lead_source: "leadSource",
+        source: "leadSource",
+        "referral source": "referralSource",
+        referral_source: "referralSource",
+        referral: "referralSource",
+        "referred by": "referralSource",
+        note: "notes",
+        comment: "notes",
+        comments: "notes",
       };
 
-      const columnMapping: { csvHeader: string; mappedField: string }[] = rawHeaders.map(h => {
+      const columnMapping: { csvHeader: string; mappedField: string }[] = rawHeaders.map((h) => {
         if (knownFields.has(h)) return { csvHeader: h, mappedField: h };
-        const normalized = h.toLowerCase().replace(/[^a-z0-9 #]/g, "").trim();
-        if (headerAliases[normalized]) return { csvHeader: h, mappedField: headerAliases[normalized] };
+        const normalized = h
+          .toLowerCase()
+          .replace(/[^a-z0-9 #]/g, "")
+          .trim();
+        if (headerAliases[normalized])
+          return { csvHeader: h, mappedField: headerAliases[normalized] };
         return { csvHeader: h, mappedField: "" };
       });
 
       const existingSources = await storage.getLeadSources(companyId);
-      const sourceNames = new Set(existingSources.map(s => s.name.toLowerCase()));
+      const sourceNames = new Set(existingSources.map((s) => s.name.toLowerCase()));
 
       const rows: any[] = [];
       const rawRows: string[][] = [];
@@ -116,7 +207,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const newLeadSourceSet = new Set<string>();
 
       for (let i = 1; i < lines.length; i++) {
-        const values = parseCsvLine(lines[i]).map(v => v.replace(/^"|"$/g, ""));
+        const values = parseCsvLine(lines[i]).map((v) => v.replace(/^"|"$/g, ""));
         rawRows.push(values);
         const row: Record<string, string> = {};
         columnMapping.forEach((col, idx) => {
@@ -127,16 +218,20 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
 
         const rowIssues: string[] = [];
         if (!row.firstName) rowIssues.push("Missing first name");
-        
+
         if (row.numberOfDogs && isNaN(parseInt(row.numberOfDogs, 10))) {
           rowIssues.push(`Invalid number of dogs: "${row.numberOfDogs}"`);
         }
 
         if (rowIssues.length > 0) {
-          rowIssues.forEach(msg => issues.push({ row: i + 1, field: "", message: msg }));
+          rowIssues.forEach((msg) => issues.push({ row: i + 1, field: "", message: msg }));
         }
 
-        if (row.leadSource && !sourceNames.has(row.leadSource.toLowerCase()) && !newLeadSourceSet.has(row.leadSource.toLowerCase())) {
+        if (
+          row.leadSource &&
+          !sourceNames.has(row.leadSource.toLowerCase()) &&
+          !newLeadSourceSet.has(row.leadSource.toLowerCase())
+        ) {
           newLeadSources.push(row.leadSource);
           newLeadSourceSet.add(row.leadSource.toLowerCase());
         }
@@ -144,7 +239,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         rows.push(row);
       }
 
-      const validCount = rows.filter(r => r.firstName && r.lastName).length;
+      const validCount = rows.filter((r) => r.firstName && r.lastName).length;
       const invalidCount = rows.length - validCount;
 
       res.json({
@@ -159,29 +254,38 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         rawRows,
         csvHeaders: rawHeaders,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/contacts/import/json", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const { rows } = req.body;
-      if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ error: "No rows provided" });
+      if (!Array.isArray(rows) || rows.length === 0)
+        return res.status(400).json({ error: "No rows provided" });
 
       const _importCompany = await storage.getCompany(companyId);
-      const _importTier = (_importCompany?.subscriptionTier || "tier_1") as keyof typeof TIER_CONFIG;
+      const _importTier = (_importCompany?.subscriptionTier ||
+        "tier_1") as keyof typeof TIER_CONFIG;
       const _importMaxContacts = TIER_CONFIG[_importTier]?.maxContacts ?? null;
       let _importCurrentCount = 0;
       if (_importMaxContacts !== null) {
-        const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(contacts).where(eq(contacts.companyId, companyId));
+        const [{ total }] = await db
+          .select({ total: sql<number>`count(*)` })
+          .from(contacts)
+          .where(eq(contacts.companyId, companyId));
         _importCurrentCount = Number(total);
         if (_importCurrentCount >= _importMaxContacts) {
-          return res.status(400).json({ error: `Contact limit reached (${_importCurrentCount}/${_importMaxContacts}). Upgrade your plan to import more customers.` });
+          return res.status(400).json({
+            error: `Contact limit reached (${_importCurrentCount}/${_importMaxContacts}). Upgrade your plan to import more customers.`,
+          });
         }
       }
 
       const existingSources = await storage.getLeadSources(companyId);
-      const sourceNames = new Set(existingSources.map(s => s.name.toLowerCase()));
+      const sourceNames = new Set(existingSources.map((s) => s.name.toLowerCase()));
       const imported: any[] = [];
       const errors: string[] = [];
       const addedLeadSources: string[] = [];
@@ -241,7 +345,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       }
 
       res.json({ imported: imported.length, errors, addedLeadSources });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/contacts/import/csv", isAuthenticated, async (req: Request, res: Response) => {
@@ -257,30 +363,47 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         for (let j = 0; j < line.length; j++) {
           const ch = line[j];
           if (inQuotes) {
-            if (ch === '"' && line[j + 1] === '"') { current += '"'; j++; }
-            else if (ch === '"') { inQuotes = false; }
-            else { current += ch; }
+            if (ch === '"' && line[j + 1] === '"') {
+              current += '"';
+              j++;
+            } else if (ch === '"') {
+              inQuotes = false;
+            } else {
+              current += ch;
+            }
           } else {
-            if (ch === '"') { inQuotes = true; }
-            else if (ch === ',') { result.push(current.trim()); current = ""; }
-            else { current += ch; }
+            if (ch === '"') {
+              inQuotes = true;
+            } else if (ch === ",") {
+              result.push(current.trim());
+              current = "";
+            } else {
+              current += ch;
+            }
           }
         }
         result.push(current.trim());
         return result;
-      }
+      };
 
       const lines = csvText.split(/\r?\n/).filter((l: string) => l.trim());
-      if (lines.length < 2) return res.status(400).json({ error: "CSV must have headers and at least one row" });
+      if (lines.length < 2)
+        return res.status(400).json({ error: "CSV must have headers and at least one row" });
 
       const _csvImportCompany = await storage.getCompany(companyId);
-      const _csvImportTier = (_csvImportCompany?.subscriptionTier || "tier_1") as keyof typeof TIER_CONFIG;
+      const _csvImportTier = (_csvImportCompany?.subscriptionTier ||
+        "tier_1") as keyof typeof TIER_CONFIG;
       const _csvImportMaxContacts = TIER_CONFIG[_csvImportTier]?.maxContacts ?? null;
       if (_csvImportMaxContacts !== null) {
-        const [{ total }] = await db.select({ total: sql<number>`count(*)` }).from(contacts).where(eq(contacts.companyId, companyId));
+        const [{ total }] = await db
+          .select({ total: sql<number>`count(*)` })
+          .from(contacts)
+          .where(eq(contacts.companyId, companyId));
         const _csvCurrentCount = Number(total);
         if (_csvCurrentCount >= _csvImportMaxContacts) {
-          return res.status(400).json({ error: `Contact limit reached (${_csvCurrentCount}/${_csvImportMaxContacts}). Upgrade your plan to import more customers.` });
+          return res.status(400).json({
+            error: `Contact limit reached (${_csvCurrentCount}/${_csvImportMaxContacts}). Upgrade your plan to import more customers.`,
+          });
         }
       }
 
@@ -290,12 +413,14 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const addedLeadSources: string[] = [];
 
       const existingSources = await storage.getLeadSources(companyId);
-      const sourceNames = new Set(existingSources.map(s => s.name.toLowerCase()));
+      const sourceNames = new Set(existingSources.map((s) => s.name.toLowerCase()));
 
       for (let i = 1; i < lines.length; i++) {
         const values = parseCsvLine(lines[i]);
         const row: any = {};
-        headers.forEach((h: string, idx: number) => { row[h] = values[idx] || ""; });
+        headers.forEach((h: string, idx: number) => {
+          row[h] = values[idx] || "";
+        });
 
         if (!row.firstName) {
           errors.push(`Row ${i + 1}: missing firstName, skipped`);
@@ -349,8 +474,12 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         }
       }
 
-      res.status(201).json({ imported: imported.length, errors, addedLeadSources, contacts: imported });
-    } catch (err) { handleError(res, err); }
+      res
+        .status(201)
+        .json({ imported: imported.length, errors, addedLeadSources, contacts: imported });
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/contacts", isAuthenticated, async (req: Request, res: Response) => {
@@ -373,17 +502,23 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         ORDER BY contact_id, onboarding_completed_at DESC NULLS LAST
       `);
       const onboardingMap = new Map<string, { pending: boolean; completed: boolean }>();
-      for (const row of onboardingRows.rows as { contact_id: string; pending: boolean; completed: boolean }[]) {
+      for (const row of onboardingRows.rows as {
+        contact_id: string;
+        pending: boolean;
+        completed: boolean;
+      }[]) {
         onboardingMap.set(row.contact_id, { pending: !!row.pending, completed: !!row.completed });
       }
 
-      const enriched = contactsList.map(c => ({
+      const enriched = contactsList.map((c) => ({
         ...c,
         isStopOnlyContact: stopOnlyOnlyIds.has(c.id),
         onboardingStatus: onboardingMap.get(c.id) || null,
       }));
       res.json(enriched);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/contacts/unscheduled", isAuthenticated, async (req: Request, res: Response) => {
@@ -392,7 +527,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const importRunId = req.query.importRunId as string | undefined;
 
       const allPlans = await storage.getServicePlans(companyId);
-      const contactsWithPlans = new Set(allPlans.map(p => p.contactId));
+      const contactsWithPlans = new Set(allPlans.map((p) => p.contactId));
 
       const allContacts = await storage.getContacts(companyId);
 
@@ -411,13 +546,13 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       }
 
       const allProperties = await storage.getProperties(companyId);
-      const propertiesByContact = new Map<string, typeof allProperties[0][]>();
+      const propertiesByContact = new Map<string, (typeof allProperties)[0][]>();
       for (const prop of allProperties) {
         if (!propertiesByContact.has(prop.contactId)) propertiesByContact.set(prop.contactId, []);
         propertiesByContact.get(prop.contactId)!.push(prop);
       }
 
-      const unscheduled = allContacts.filter(c => {
+      const unscheduled = allContacts.filter((c) => {
         if (contactsWithPlans.has(c.id)) return false;
         if (importWindowStart) {
           const ct = new Date(c.createdAt);
@@ -427,7 +562,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         return true;
       });
 
-      const result = unscheduled.map(contact => {
+      const result = unscheduled.map((contact) => {
         const contactProps = propertiesByContact.get(contact.id) || [];
         const primaryProperty = contactProps[0] || null;
         const hasProperty = !!primaryProperty;
@@ -459,7 +594,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       });
 
       res.json(result);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -468,7 +605,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       res.json(contact);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/contacts", isAuthenticated, async (req: Request, res: Response) => {
@@ -480,9 +619,14 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const _tier = (_company?.subscriptionTier || "tier_1") as keyof typeof TIER_CONFIG;
       const _maxContacts = TIER_CONFIG[_tier]?.maxContacts ?? null;
       if (_maxContacts !== null) {
-        const [{ total: _contactCount }] = await db.select({ total: sql<number>`count(*)` }).from(contacts).where(eq(contacts.companyId, companyId));
+        const [{ total: _contactCount }] = await db
+          .select({ total: sql<number>`count(*)` })
+          .from(contacts)
+          .where(eq(contacts.companyId, companyId));
         if (Number(_contactCount) >= _maxContacts) {
-          return res.status(400).json({ error: `Contact limit reached (${_contactCount}/${_maxContacts}). Upgrade your plan to add more customers.` });
+          return res.status(400).json({
+            error: `Contact limit reached (${_contactCount}/${_maxContacts}). Upgrade your plan to add more customers.`,
+          });
         }
       }
 
@@ -491,8 +635,13 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const contact = await storage.createContact(parsed);
 
       let propertyCreated = false;
-      const hasFullAddress = !!(contact.streetAddress && contact.city && contact.state && contact.zipCode);
-      const hasPartialAddress = !!(contact.streetAddress) && !hasFullAddress;
+      const hasFullAddress = !!(
+        contact.streetAddress &&
+        contact.city &&
+        contact.state &&
+        contact.zipCode
+      );
+      const hasPartialAddress = !!contact.streetAddress && !hasFullAddress;
 
       if (hasFullAddress) {
         await createPropertyWithGeocode({
@@ -511,7 +660,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       if (contact.email && isStripeConfigured()) {
         try {
           const companyForStripe = await storage.getCompany(companyId);
-          const connectAcct = companyForStripe?.stripeConnectOnboarded ? companyForStripe.stripeConnectAccountId : null;
+          const connectAcct = companyForStripe?.stripeConnectOnboarded
+            ? companyForStripe.stripeConnectAccountId
+            : null;
           const stripeCustomerId = await createStripeCustomer({
             email: contact.email,
             name: `${contact.firstName} ${contact.lastName}`.trim(),
@@ -526,11 +677,22 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       }
 
       if (!suppressNotifications && contact.status === "lead") {
-        notify(companyId, "new_lead", "New Lead", `${contact.firstName} ${contact.lastName} was added as a new lead.`, `/contacts/${contact.id}`);
+        notify(
+          companyId,
+          "new_lead",
+          "New Lead",
+          `${contact.firstName} ${contact.lastName} was added as a new lead.`,
+          `/contacts/${contact.id}`
+        );
         try {
           const { fireAutomationTrigger } = await import("../services/automation-runner");
-          await fireAutomationTrigger("lead_created", companyId, { contactId: contact.id, status: contact.status });
-        } catch (autoErr) { console.error("[automation] lead_created trigger error:", autoErr); }
+          await fireAutomationTrigger("lead_created", companyId, {
+            contactId: contact.id,
+            status: contact.status,
+          });
+        } catch (autoErr) {
+          console.error("[automation] lead_created trigger error:", autoErr);
+        }
       }
 
       if (!suppressNotifications && contact.email && contact.status !== "lead") {
@@ -541,7 +703,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
 
       qboAutoSync(companyId, contact.id, "contact");
       res.status(201).json({ ...contact, _meta: { propertyCreated, hasPartialAddress } });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.patch("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -551,11 +715,21 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       if (!existing) return res.status(404).json({ error: "Contact not found" });
       const validStatuses = ["lead", "estimate", "active", "paused", "cancelled"];
       if (req.body.status && !validStatuses.includes(req.body.status)) {
-        return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+        return res
+          .status(400)
+          .json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
       }
       const { costOverrides: _stripCostOverrides, ...safeBody } = req.body;
       const contact = await storage.updateContact(p(req.params.id), companyId, safeBody);
-      auditLog(companyId, userId, "contact", p(req.params.id), "update", { old: existing, new: contact }, req.ip);
+      auditLog(
+        companyId,
+        userId,
+        "contact",
+        p(req.params.id),
+        "update",
+        { old: existing, new: contact },
+        req.ip
+      );
 
       if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
         const existingProperties = await storage.getProperties(companyId, contact.id);
@@ -586,7 +760,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
 
       qboAutoSync(companyId, contact.id, "contact");
       res.json(contact);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -595,16 +771,27 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const existing = await storage.getContact(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Contact not found" });
       await storage.deleteContact(p(req.params.id), companyId);
-      auditLog(companyId, userId, "contact", p(req.params.id), "delete", { deleted: existing }, req.ip);
+      auditLog(
+        companyId,
+        userId,
+        "contact",
+        p(req.params.id),
+        "delete",
+        { deleted: existing },
+        req.ip
+      );
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/contacts/bulk-update", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const { ids, status, tagId } = req.body;
-      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array is required" });
+      if (!Array.isArray(ids) || ids.length === 0)
+        return res.status(400).json({ error: "ids array is required" });
       let updated = 0;
       for (const id of ids) {
         const existing = await storage.getContact(id, companyId);
@@ -619,50 +806,74 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         }
       }
       res.json({ success: true, updated });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.post("/api/contacts/bulk-update-service-plans", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const { ids, dayOfWeek, frequency } = req.body;
-      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array is required" });
+  app.post(
+    "/api/contacts/bulk-update-service-plans",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const { ids, dayOfWeek, frequency } = req.body;
+        if (!Array.isArray(ids) || ids.length === 0)
+          return res.status(400).json({ error: "ids array is required" });
 
-      const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "tbd"];
-      const validFrequencies = ["weekly", "biweekly", "monthly", "onetime"];
-      if (dayOfWeek && !validDays.includes(dayOfWeek)) return res.status(400).json({ error: "Invalid dayOfWeek" });
-      if (frequency && !validFrequencies.includes(frequency)) return res.status(400).json({ error: "Invalid frequency" });
-      if (!dayOfWeek && !frequency) return res.status(400).json({ error: "At least one of dayOfWeek or frequency is required" });
+        const validDays = [
+          "monday",
+          "tuesday",
+          "wednesday",
+          "thursday",
+          "friday",
+          "saturday",
+          "sunday",
+          "tbd",
+        ];
+        const validFrequencies = ["weekly", "biweekly", "monthly", "onetime"];
+        if (dayOfWeek && !validDays.includes(dayOfWeek))
+          return res.status(400).json({ error: "Invalid dayOfWeek" });
+        if (frequency && !validFrequencies.includes(frequency))
+          return res.status(400).json({ error: "Invalid frequency" });
+        if (!dayOfWeek && !frequency)
+          return res
+            .status(400)
+            .json({ error: "At least one of dayOfWeek or frequency is required" });
 
-      let plansUpdated = 0;
-      for (const contactId of ids) {
-        const contact = await storage.getContact(contactId, companyId);
-        if (!contact) continue;
-        const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
-        for (const plan of plans) {
-          const updates: Record<string, any> = {};
-          if (frequency) updates.frequency = frequency;
-          if (dayOfWeek) {
-            updates.dayOfWeek = dayOfWeek;
-            if (!req.body.keepRoute) {
-              const dayRoutes = await storage.getRoutes(companyId, dayOfWeek);
-              const matchingRoute = dayRoutes.find(r => !r.date);
-              if (matchingRoute) updates.routeId = matchingRoute.id;
+        let plansUpdated = 0;
+        for (const contactId of ids) {
+          const contact = await storage.getContact(contactId, companyId);
+          if (!contact) continue;
+          const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+          for (const plan of plans) {
+            const updates: Record<string, any> = {};
+            if (frequency) updates.frequency = frequency;
+            if (dayOfWeek) {
+              updates.dayOfWeek = dayOfWeek;
+              if (!req.body.keepRoute) {
+                const dayRoutes = await storage.getRoutes(companyId, dayOfWeek);
+                const matchingRoute = dayRoutes.find((r) => !r.date);
+                if (matchingRoute) updates.routeId = matchingRoute.id;
+              }
             }
+            await storage.updateServicePlan(plan.id, companyId, updates as any);
+            plansUpdated++;
           }
-          await storage.updateServicePlan(plan.id, companyId, updates as any);
-          plansUpdated++;
         }
+        res.json({ success: true, plansUpdated });
+      } catch (err) {
+        handleError(res, err);
       }
-      res.json({ success: true, plansUpdated });
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
   app.post("/api/contacts/bulk-delete", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
       const { ids } = req.body;
-      if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids array is required" });
+      if (!Array.isArray(ids) || ids.length === 0)
+        return res.status(400).json({ error: "ids array is required" });
       let deleted = 0;
       for (const id of ids) {
         const existing = await storage.getContact(id, companyId);
@@ -671,7 +882,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         deleted++;
       }
       res.json({ success: true, deleted });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Tag Routes ================
@@ -681,7 +894,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const tagsList = await storage.getTags(companyId);
       res.json(tagsList);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/tags", isAuthenticated, async (req: Request, res: Response) => {
@@ -690,7 +905,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const parsed = insertTagSchema.parse({ ...req.body, companyId });
       const tag = await storage.createTag(parsed);
       res.status(201).json(tag);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/tags/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -698,7 +915,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       await storage.deleteTag(p(req.params.id), companyId);
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ================ Lead Source Routes ================
@@ -708,7 +927,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const sources = await storage.getLeadSources(companyId);
       res.json(sources);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/lead-sources", isAuthenticated, async (req: Request, res: Response) => {
@@ -720,7 +941,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       }
       const source = await storage.createLeadSource({ companyId, name: name.trim() });
       res.status(201).json(source);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.delete("/api/lead-sources/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -728,7 +951,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       await storage.deleteLeadSource(p(req.params.id), companyId);
       res.json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/contacts/:id/tags", isAuthenticated, async (req: Request, res: Response) => {
@@ -739,21 +964,30 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const companyTags = await storage.getTags(companyId);
-      if (!companyTags.find(t => t.id === tagId)) return res.status(404).json({ error: "Tag not found" });
+      if (!companyTags.find((t) => t.id === tagId))
+        return res.status(404).json({ error: "Tag not found" });
       await storage.addTagToContact(p(req.params.id), tagId);
       res.status(201).json({ success: true });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.delete("/api/contacts/:id/tags/:tagId", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-      await storage.removeTagFromContact(p(req.params.id), p(req.params.tagId));
-      res.json({ success: true });
-    } catch (err) { handleError(res, err); }
-  });
+  app.delete(
+    "/api/contacts/:id/tags/:tagId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        await storage.removeTagFromContact(p(req.params.id), p(req.params.tagId));
+        res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.get("/api/contacts/:id/activity", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -764,7 +998,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const offset = parseInt(req.query.offset as string) || 0;
       const logs = await storage.getActivityLogs(companyId, p(req.params.id), limit, offset);
       res.json(logs);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/contacts/:id/tags", isAuthenticated, async (req: Request, res: Response) => {
@@ -774,35 +1010,52 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       const contactTags = await storage.getContactTags(p(req.params.id));
       res.json(contactTags);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
-  app.get("/api/contacts/:id/opportunities", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-      const { getOpportunitiesForContact } = await import("../services/opportunity-engine");
-      const opps = await getOpportunitiesForContact(p(req.params.id), companyId);
-      res.json(opps);
-    } catch (err) { handleError(res, err); }
-  });
-
-  app.patch("/api/contacts/:id/dismiss-opportunity", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const contact = await storage.getContact(p(req.params.id), companyId);
-      if (!contact) return res.status(404).json({ error: "Contact not found" });
-      const { key } = req.body;
-      if (!key || typeof key !== "string") return res.status(400).json({ error: "key is required" });
-      const current: string[] = (contact.dismissedOpportunities as string[] | null) ?? [];
-      if (!current.includes(key)) {
-        const updated = [...current, key];
-        await storage.updateContact(p(req.params.id), companyId, { dismissedOpportunities: updated });
+  app.get(
+    "/api/contacts/:id/opportunities",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        const { getOpportunitiesForContact } = await import("../services/opportunity-engine");
+        const opps = await getOpportunitiesForContact(p(req.params.id), companyId);
+        res.json(opps);
+      } catch (err) {
+        handleError(res, err);
       }
-      res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
+
+  app.patch(
+    "/api/contacts/:id/dismiss-opportunity",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const contact = await storage.getContact(p(req.params.id), companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        const { key } = req.body;
+        if (!key || typeof key !== "string")
+          return res.status(400).json({ error: "key is required" });
+        const current: string[] = (contact.dismissedOpportunities as string[] | null) ?? [];
+        if (!current.includes(key)) {
+          const updated = [...current, key];
+          await storage.updateContact(p(req.params.id), companyId, {
+            dismissedOpportunities: updated,
+          });
+        }
+        res.json({ ok: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.post("/api/contacts/:id/services", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -810,9 +1063,20 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      const { frequency, dayOfWeek, startDate, pricePerVisit, discount, propertyId, serviceName, addOns } = req.body;
+      const {
+        frequency,
+        dayOfWeek,
+        startDate,
+        pricePerVisit,
+        discount,
+        propertyId,
+        serviceName,
+        addOns,
+      } = req.body;
       if (!frequency || !startDate || !pricePerVisit || !propertyId) {
-        return res.status(400).json({ error: "frequency, startDate, pricePerVisit, and propertyId are required" });
+        return res
+          .status(400)
+          .json({ error: "frequency, startDate, pricePerVisit, and propertyId are required" });
       }
 
       const parsed = insertServicePlanSchema.parse({
@@ -829,7 +1093,15 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       });
 
       const plan = await storage.createServicePlan(parsed);
-      auditLog(companyId, userId, "service_plan", plan.id, "create", { new: { contactId: p(req.params.id), frequency, dayOfWeek } }, req.ip || undefined);
+      auditLog(
+        companyId,
+        userId,
+        "service_plan",
+        plan.id,
+        "create",
+        { new: { contactId: p(req.params.id), frequency, dayOfWeek } },
+        req.ip || undefined
+      );
 
       if (contact.status === "lead" || contact.status === "estimate") {
         await storage.updateContact(p(req.params.id), companyId, { status: "active" });
@@ -871,13 +1143,19 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         const anchor = planStart > today ? planStart : today;
         const sixMonthsOut = new Date(anchor);
         sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
-        await generateVisitsForPlans(companyId, [plan.id], anchor.toISOString().split("T")[0], sixMonthsOut.toISOString().split("T")[0]);
+        await generateVisitsForPlans(
+          companyId,
+          [plan.id],
+          anchor.toISOString().split("T")[0],
+          sixMonthsOut.toISOString().split("T")[0]
+        );
       } catch (genErr) {
         console.error("[contact-service] Failed to auto-generate visits:", genErr);
       }
 
       res.status(201).json({ ...plan, addOns: planAddOns });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
-
 }

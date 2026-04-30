@@ -21,7 +21,11 @@ export default function PortalLogin() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      toast({ title: "Required", description: "Please enter your email and password.", variant: "destructive" });
+      toast({
+        title: "Required",
+        description: "Please enter your email and password.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -52,7 +56,11 @@ export default function PortalLogin() {
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotEmail) {
-      toast({ title: "Required", description: "Please enter your email address.", variant: "destructive" });
+      toast({
+        title: "Required",
+        description: "Please enter your email address.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -88,8 +96,7 @@ export default function PortalLogin() {
             <CardDescription>
               {forgotSent
                 ? `If an account exists for ${forgotEmail}, we've sent a password reset link. Check your inbox and spam folder.`
-                : "Enter your email address and we'll send you a link to reset your password."
-              }
+                : "Enter your email address and we'll send you a link to reset your password."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -125,7 +132,12 @@ export default function PortalLogin() {
                     data-testid="input-forgot-email"
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={forgotLoading} data-testid="button-send-reset-link">
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={forgotLoading}
+                  data-testid="button-send-reset-link"
+                >
                   {forgotLoading ? "Sending..." : "Send Reset Link"}
                 </Button>
                 <div className="text-center">
@@ -153,7 +165,9 @@ export default function PortalLogin() {
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl" data-testid="text-portal-login-title">Client Portal</CardTitle>
+          <CardTitle className="text-2xl" data-testid="text-portal-login-title">
+            Client Portal
+          </CardTitle>
           <CardDescription>
             Sign in to view your service schedule, invoices, and manage your account.
           </CardDescription>
@@ -182,7 +196,12 @@ export default function PortalLogin() {
                 data-testid="input-portal-password"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading} data-testid="button-portal-login">
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isLoading}
+              data-testid="button-portal-login"
+            >
               <LogIn className="mr-2 h-4 w-4" />
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>

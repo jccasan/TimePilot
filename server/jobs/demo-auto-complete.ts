@@ -19,7 +19,7 @@ export async function runDemoAutoComplete() {
 
     const companyId = demoRow.rows[0].company_id as string;
     const tz = (demoRow.rows[0].timezone as string) || "America/New_York";
-    const autoCompleteToday = !!(demoRow.rows[0].demo_auto_complete_today);
+    const autoCompleteToday = !!demoRow.rows[0].demo_auto_complete_today;
 
     const now = new Date();
     const companyNow = new Date(now.toLocaleString("en-US", { timeZone: tz }));
@@ -43,7 +43,9 @@ export async function runDemoAutoComplete() {
 
     const count = result.rowCount ?? 0;
     if (count > 0) {
-      console.log(`${tag} Auto-completed ${count} visits for demo company (date: ${targetStr}, today-mode: ${autoCompleteToday})`);
+      console.log(
+        `${tag} Auto-completed ${count} visits for demo company (date: ${targetStr}, today-mode: ${autoCompleteToday})`
+      );
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

@@ -17,12 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -89,7 +84,13 @@ const DAY_LABELS: Record<string, string> = {
   sunday: "Sun",
 };
 
-export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselectedContactIds, title }: Props) {
+export function BulkServicePlanSetup({
+  open,
+  onOpenChange,
+  importRunId,
+  preselectedContactIds,
+  title,
+}: Props) {
   const { toast } = useToast();
   const today = new Date().toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(today);
@@ -110,7 +111,7 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
     enabled: open,
   });
 
-  const eligibleContacts = unscheduled.filter(c => {
+  const eligibleContacts = unscheduled.filter((c) => {
     if (preselectedContactIds && preselectedContactIds.length > 0) {
       return preselectedContactIds.includes(c.id);
     }
@@ -119,13 +120,19 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
 
   useEffect(() => {
     if (open && !initialized && eligibleContacts.length > 0) {
-      setSelectedIds(new Set(eligibleContacts.filter(c => c.hasProperty && c.hasAddress && c.hasFrequency).map(c => c.id)));
+      setSelectedIds(
+        new Set(
+          eligibleContacts
+            .filter((c) => c.hasProperty && c.hasAddress && c.hasFrequency)
+            .map((c) => c.id)
+        )
+      );
       setInitialized(true);
     }
   }, [open, initialized, eligibleContacts]);
 
   const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
+    setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -134,11 +141,13 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
   };
 
   const toggleAll = () => {
-    const eligible = eligibleContacts.filter(c => c.hasProperty && c.hasAddress && c.hasFrequency);
+    const eligible = eligibleContacts.filter(
+      (c) => c.hasProperty && c.hasAddress && c.hasFrequency
+    );
     if (selectedIds.size === eligible.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(eligible.map(c => c.id)));
+      setSelectedIds(new Set(eligible.map((c) => c.id)));
     }
   };
 
@@ -149,9 +158,9 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
   const bulkMutation = useMutation({
     mutationFn: async () => {
       const items = eligibleContacts
-        .filter(c => selectedIds.has(c.id))
-        .filter(c => c.hasProperty && c.propertyId && c.hasFrequency)
-        .map(c => ({
+        .filter((c) => selectedIds.has(c.id))
+        .filter((c) => c.hasProperty && c.propertyId && c.hasFrequency)
+        .map((c) => ({
           contactId: c.id,
           propertyId: c.propertyId!,
           frequency: c.serviceFrequency!,
@@ -192,15 +201,23 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
   const totalPages = Math.ceil(eligibleContacts.length / PAGE_SIZE);
   const pagedContacts = eligibleContacts.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  const selectedAndEligible = eligibleContacts
-    .filter(c => selectedIds.has(c.id) && c.hasProperty && c.propertyId && c.hasFrequency);
+  const selectedAndEligible = eligibleContacts.filter(
+    (c) => selectedIds.has(c.id) && c.hasProperty && c.propertyId && c.hasFrequency
+  );
 
-  const eligibleCount = eligibleContacts.filter(c => c.hasProperty && c.hasAddress && c.hasFrequency).length;
-  const invalidCount = eligibleContacts.filter(c => !c.hasProperty || !c.hasAddress || !c.hasFrequency).length;
+  const eligibleCount = eligibleContacts.filter(
+    (c) => c.hasProperty && c.hasAddress && c.hasFrequency
+  ).length;
+  const invalidCount = eligibleContacts.filter(
+    (c) => !c.hasProperty || !c.hasAddress || !c.hasFrequency
+  ).length;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="dialog-bulk-service-plan">
+      <DialogContent
+        className="max-w-5xl max-h-[90vh] overflow-y-auto"
+        data-testid="dialog-bulk-service-plan"
+      >
         <DialogHeader>
           <DialogTitle data-testid="text-bulk-setup-title">
             {title || "Bulk Create Service Plans"}
@@ -214,10 +231,20 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
               <AlertTitle>Done!</AlertTitle>
               <AlertDescription>
                 <div className="mt-2 space-y-1 text-sm">
-                  <p><strong>{result.created}</strong> service plan{result.created !== 1 ? "s" : ""} created</p>
-                  <p><strong>{result.visitsCreated}</strong> visits scheduled for the next 6 months</p>
+                  <p>
+                    <strong>{result.created}</strong> service plan{result.created !== 1 ? "s" : ""}{" "}
+                    created
+                  </p>
+                  <p>
+                    <strong>{result.visitsCreated}</strong> visits scheduled for the next 6 months
+                  </p>
                   {result.stopsAssigned > 0 && (
-                    <p><strong>{result.stopsAssigned}</strong> stop{result.stopsAssigned !== 1 ? "s" : ""} placed on routes ({result.routesCreated} new route{result.routesCreated !== 1 ? "s" : ""} created)</p>
+                    <p>
+                      <strong>{result.stopsAssigned}</strong> stop
+                      {result.stopsAssigned !== 1 ? "s" : ""} placed on routes (
+                      {result.routesCreated} new route{result.routesCreated !== 1 ? "s" : ""}{" "}
+                      created)
+                    </p>
                   )}
                 </div>
               </AlertDescription>
@@ -230,14 +257,20 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-1">
-                    {result.routeSummary.map(r => (
-                      <div key={r.day} className="flex items-center justify-between text-sm py-1 border-b last:border-0" data-testid={`route-summary-${r.day}`}>
+                    {result.routeSummary.map((r) => (
+                      <div
+                        key={r.day}
+                        className="flex items-center justify-between text-sm py-1 border-b last:border-0"
+                        data-testid={`route-summary-${r.day}`}
+                      >
                         <div className="flex items-center gap-2">
                           <Route className="h-3 w-3 text-muted-foreground" />
                           <span className="font-medium">{r.routeName}</span>
                           <span className="text-muted-foreground capitalize">({r.day})</span>
                         </div>
-                        <Badge variant="secondary">{r.stopsPlaced} stop{r.stopsPlaced !== 1 ? "s" : ""}</Badge>
+                        <Badge variant="secondary">
+                          {r.stopsPlaced} stop{r.stopsPlaced !== 1 ? "s" : ""}
+                        </Badge>
                       </div>
                     ))}
                   </div>
@@ -259,12 +292,17 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
               </Alert>
             )}
 
-            <Button onClick={handleClose} data-testid="button-close-bulk-result">Done</Button>
+            <Button onClick={handleClose} data-testid="button-close-bulk-result">
+              Done
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">
             {isLoading ? (
-              <div className="flex items-center justify-center py-12 gap-2" data-testid="loading-unscheduled">
+              <div
+                className="flex items-center justify-center py-12 gap-2"
+                data-testid="loading-unscheduled"
+              >
                 <Loader2 className="h-5 w-5 animate-spin" />
                 <span className="text-sm text-muted-foreground">Loading contacts...</span>
               </div>
@@ -281,9 +319,13 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                 {invalidCount > 0 && (
                   <Alert data-testid="alert-invalid-contacts">
                     <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>{invalidCount} contact{invalidCount !== 1 ? "s" : ""} cannot be set up automatically</AlertTitle>
+                    <AlertTitle>
+                      {invalidCount} contact{invalidCount !== 1 ? "s" : ""} cannot be set up
+                      automatically
+                    </AlertTitle>
                     <AlertDescription>
-                      These contacts are missing an address or service frequency. Fix them individually to include them.
+                      These contacts are missing an address or service frequency. Fix them
+                      individually to include them.
                     </AlertDescription>
                   </Alert>
                 )}
@@ -300,7 +342,7 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                           id="input-start-date"
                           type="date"
                           value={startDate}
-                          onChange={e => setStartDate(e.target.value)}
+                          onChange={(e) => setStartDate(e.target.value)}
                           className="w-40"
                           data-testid="input-start-date"
                         />
@@ -316,7 +358,7 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                           step="0.01"
                           min="0"
                           value={defaultPrice}
-                          onChange={e => handleDefaultPriceChange(e.target.value)}
+                          onChange={(e) => handleDefaultPriceChange(e.target.value)}
                           className="w-32"
                           data-testid="input-default-price"
                         />
@@ -325,7 +367,7 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                         <Checkbox
                           id="checkbox-auto-assign"
                           checked={autoAssign}
-                          onCheckedChange={v => setAutoAssign(!!v)}
+                          onCheckedChange={(v) => setAutoAssign(!!v)}
                           data-testid="checkbox-auto-assign"
                         />
                         <Label htmlFor="checkbox-auto-assign" className="text-sm cursor-pointer">
@@ -357,8 +399,9 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {pagedContacts.map(contact => {
-                        const canSelect = contact.hasProperty && contact.hasAddress && contact.hasFrequency;
+                      {pagedContacts.map((contact) => {
+                        const canSelect =
+                          contact.hasProperty && contact.hasAddress && contact.hasFrequency;
                         return (
                           <TableRow
                             key={contact.id}
@@ -381,9 +424,15 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                             </TableCell>
                             <TableCell className="text-sm">
                               {contact.streetAddress ? (
-                                <span>{contact.streetAddress}{contact.city ? `, ${contact.city}` : ""}</span>
+                                <span>
+                                  {contact.streetAddress}
+                                  {contact.city ? `, ${contact.city}` : ""}
+                                </span>
                               ) : (
-                                <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:border-amber-600 dark:text-amber-400">
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs border-amber-300 text-amber-700 dark:border-amber-600 dark:text-amber-400"
+                                >
                                   <AlertTriangle className="h-3 w-3 mr-1" />
                                   No address
                                 </Badge>
@@ -391,16 +440,22 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                             </TableCell>
                             <TableCell className="text-sm">
                               {contact.serviceFrequency ? (
-                                FREQUENCY_LABELS[contact.serviceFrequency] || contact.serviceFrequency
+                                FREQUENCY_LABELS[contact.serviceFrequency] ||
+                                contact.serviceFrequency
                               ) : (
-                                <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:border-amber-600 dark:text-amber-400">
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs border-amber-300 text-amber-700 dark:border-amber-600 dark:text-amber-400"
+                                >
                                   <AlertTriangle className="h-3 w-3 mr-1" />
                                   Missing
                                 </Badge>
                               )}
                             </TableCell>
                             <TableCell className="text-sm capitalize">
-                              {contact.serviceDay ? (DAY_LABELS[contact.serviceDay] || contact.serviceDay) : (
+                              {contact.serviceDay ? (
+                                DAY_LABELS[contact.serviceDay] || contact.serviceDay
+                              ) : (
                                 <span className="text-muted-foreground text-xs">TBD</span>
                               )}
                             </TableCell>
@@ -410,7 +465,12 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                                 step="0.01"
                                 min="0"
                                 value={customPrices[contact.id] ?? defaultPrice}
-                                onChange={e => setCustomPrices(prev => ({ ...prev, [contact.id]: e.target.value }))}
+                                onChange={(e) =>
+                                  setCustomPrices((prev) => ({
+                                    ...prev,
+                                    [contact.id]: e.target.value,
+                                  }))
+                                }
                                 className="w-24 h-7 text-sm"
                                 disabled={!canSelect}
                                 data-testid={`input-price-${contact.id}`}
@@ -418,12 +478,20 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                             </TableCell>
                             <TableCell>
                               {contact.issues.length > 0 ? (
-                                <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:border-amber-600 dark:text-amber-400" data-testid={`badge-issues-${contact.id}`}>
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs border-amber-300 text-amber-700 dark:border-amber-600 dark:text-amber-400"
+                                  data-testid={`badge-issues-${contact.id}`}
+                                >
                                   <AlertTriangle className="h-3 w-3 mr-1" />
                                   {contact.issues[0]}
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="text-xs border-green-300 text-green-700 dark:border-green-600 dark:text-green-400" data-testid={`badge-ready-${contact.id}`}>
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs border-green-300 text-green-700 dark:border-green-600 dark:text-green-400"
+                                  data-testid={`badge-ready-${contact.id}`}
+                                >
                                   Ready
                                 </Badge>
                               )}
@@ -436,7 +504,10 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                 </div>
 
                 {totalPages > 1 && (
-                  <div className="flex items-center justify-between gap-2" data-testid="pagination-bulk">
+                  <div
+                    className="flex items-center justify-between gap-2"
+                    data-testid="pagination-bulk"
+                  >
                     <span className="text-xs text-muted-foreground">
                       Page {page + 1} of {totalPages} ({eligibleContacts.length} total)
                     </span>
@@ -444,7 +515,7 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setPage(p => Math.max(0, p - 1))}
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
                         disabled={page === 0}
                         data-testid="button-bulk-prev-page"
                       >
@@ -453,7 +524,7 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                         disabled={page >= totalPages - 1}
                         data-testid="button-bulk-next-page"
                       >
@@ -465,10 +536,15 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
 
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-sm text-muted-foreground" data-testid="text-selection-summary">
-                    {selectedAndEligible.length} of {eligibleCount} eligible contact{eligibleCount !== 1 ? "s" : ""} selected
+                    {selectedAndEligible.length} of {eligibleCount} eligible contact
+                    {eligibleCount !== 1 ? "s" : ""} selected
                   </p>
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleClose} data-testid="button-cancel-bulk">
+                    <Button
+                      variant="outline"
+                      onClick={handleClose}
+                      data-testid="button-cancel-bulk"
+                    >
                       Cancel
                     </Button>
                     <Button
@@ -477,7 +553,9 @@ export function BulkServicePlanSetup({ open, onOpenChange, importRunId, preselec
                       data-testid="button-generate-service-plans"
                     >
                       {bulkMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      Generate {selectedAndEligible.length > 0 ? `${selectedAndEligible.length} ` : ""}Service Plan{selectedAndEligible.length !== 1 ? "s" : ""}
+                      Generate{" "}
+                      {selectedAndEligible.length > 0 ? `${selectedAndEligible.length} ` : ""}
+                      Service Plan{selectedAndEligible.length !== 1 ? "s" : ""}
                     </Button>
                   </div>
                 </div>

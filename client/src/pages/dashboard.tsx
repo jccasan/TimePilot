@@ -4,12 +4,25 @@ import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 function fmt(n: number, decimals = 2): string {
-  return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 }
 function fmtInt(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
-function ResizableCardBody({ storageKey, defaultHeight = 320, minHeight = 120, children }: { storageKey: string; defaultHeight?: number; minHeight?: number; children: ReactNode }) {
+function ResizableCardBody({
+  storageKey,
+  defaultHeight = 320,
+  minHeight = 120,
+  children,
+}: {
+  storageKey: string;
+  defaultHeight?: number;
+  minHeight?: number;
+  children: ReactNode;
+}) {
   const isMobileResize = useIsMobile();
   const [height, setHeight] = useState(() => {
     const saved = localStorage.getItem(`dash-h-${storageKey}`);
@@ -19,31 +32,44 @@ function ResizableCardBody({ storageKey, defaultHeight = 320, minHeight = 120, c
   const startY = useRef(0);
   const startH = useRef(0);
 
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    dragging.current = true;
-    startY.current = e.clientY;
-    startH.current = height;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  }, [height]);
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      dragging.current = true;
+      startY.current = e.clientY;
+      startH.current = height;
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [height]
+  );
 
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragging.current) return;
-    const newH = Math.max(minHeight, startH.current + (e.clientY - startY.current));
-    setHeight(newH);
-  }, [minHeight]);
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragging.current) return;
+      const newH = Math.max(minHeight, startH.current + (e.clientY - startY.current));
+      setHeight(newH);
+    },
+    [minHeight]
+  );
 
-  const onPointerUp = useCallback((e: React.PointerEvent) => {
-    if (!dragging.current) return;
-    dragging.current = false;
-    const finalH = Math.max(minHeight, startH.current + (e.clientY - startY.current));
-    setHeight(finalH);
-    localStorage.setItem(`dash-h-${storageKey}`, String(finalH));
-  }, [storageKey, minHeight]);
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      const finalH = Math.max(minHeight, startH.current + (e.clientY - startY.current));
+      setHeight(finalH);
+      localStorage.setItem(`dash-h-${storageKey}`, String(finalH));
+    },
+    [storageKey, minHeight]
+  );
 
   return (
     <div className="flex flex-col">
-      <div className="overflow-y-auto" style={{ height: isMobileResize ? undefined : height }} data-testid={`scrollable-${storageKey}`}>
+      <div
+        className="overflow-y-auto"
+        style={{ height: isMobileResize ? undefined : height }}
+        data-testid={`scrollable-${storageKey}`}
+      >
         {children}
       </div>
       {!isMobileResize && (
@@ -73,28 +99,54 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  DollarSign, CalendarCheck, AlertTriangle, UserCheck,
-  Plus, Eye, Users, ClipboardList, TrendingUp,
-  FileText, Clock,
-  MessageSquare, Mail, Sliders,
-  CheckCircle, XCircle, MapPin, BarChart3, Activity,
-  StickyNote, Route, GripVertical, X, LayoutGrid,
-  Inbox, ArrowRight, RotateCcw, Cloud, MapPinned,
-  Sun, CloudRain, CloudSnow, CloudLightning, CloudDrizzle,
-  Cloudy, Snowflake, GripHorizontal, Bell, Info, AlertOctagon, List,
+  DollarSign,
+  CalendarCheck,
+  AlertTriangle,
+  UserCheck,
+  Plus,
+  Eye,
+  Users,
+  ClipboardList,
+  TrendingUp,
+  FileText,
+  Clock,
+  MessageSquare,
+  Mail,
+  Sliders,
+  CheckCircle,
+  XCircle,
+  MapPin,
+  BarChart3,
+  Activity,
+  StickyNote,
+  Route,
+  GripVertical,
+  X,
+  LayoutGrid,
+  Inbox,
+  ArrowRight,
+  RotateCcw,
+  Cloud,
+  MapPinned,
+  Sun,
+  CloudRain,
+  CloudSnow,
+  CloudLightning,
+  CloudDrizzle,
+  Cloudy,
+  Snowflake,
+  GripHorizontal,
+  Bell,
+  Info,
+  AlertOctagon,
+  List,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import GuidedSetup from "@/components/guided-setup";
-
 
 type OnboardingStatus = {
   isComplete: boolean;
@@ -275,34 +327,252 @@ const WIDGET_DEFS: {
   minH: number;
   category: "stats" | "insights" | "tools";
 }[] = [
-  { id: "mrr", label: "Monthly Revenue (MRR)", icon: DollarSign, description: "Current monthly recurring revenue", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "month_revenue", label: "Revenue This Month", icon: TrendingUp, description: "Total revenue collected this month", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "requires_invoicing", label: "Requires Invoicing", icon: FileText, description: "Completed visits needing invoices", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "overdue_invoices", label: "Overdue Invoices", icon: AlertTriangle, description: "Invoices past their due date", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "todays_visits", label: "Today's Visits", icon: CalendarCheck, description: "Scheduled visits for today with progress", defaultW: 4, defaultH: 3, minW: 3, minH: 2, category: "stats" },
-  { id: "active_clients", label: "Active Clients", icon: Users, description: "Total active client count", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "service_plans", label: "Jobs", icon: ClipboardList, description: "Active service plan count", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "team_size", label: "Team Size", icon: UserCheck, description: "Active team members", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "texts_sent", label: "SMS Sent", icon: MessageSquare, description: "Text messages sent this month", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "emails_sent", label: "Emails Sent", icon: Mail, description: "Emails sent this month", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "quick_actions", label: "Quick Actions", icon: LayoutGrid, description: "Shortcut buttons to common tasks", defaultW: 4, defaultH: 3, minW: 3, minH: 2, category: "tools" },
-  { id: "recent_activity", label: "Recent Activity", icon: Activity, description: "Latest notifications and events", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
-  { id: "upcoming_visits", label: "Upcoming Visits", icon: CalendarCheck, description: "Visits scheduled for this week", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
-  { id: "revenue_chart", label: "Revenue Chart", icon: BarChart3, description: "6-month revenue trend", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
-  { id: "route_summary", label: "Route Summary", icon: Route, description: "Active routes overview", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "insights" },
-  { id: "quick_notes", label: "Quick Notes", icon: StickyNote, description: "Scratchpad for reminders (synced to account)", defaultW: 4, defaultH: 4, minW: 3, minH: 3, category: "tools" },
-  { id: "current_plan", label: "Current Plan", icon: ClipboardList, description: "Your subscription details", defaultW: 4, defaultH: 2, minW: 3, minH: 2, category: "stats" },
-  { id: "weather_forecast", label: "Weather Forecast", icon: Cloud, description: "5-day weather forecast for your area", defaultW: 6, defaultH: 3, minW: 4, minH: 3, category: "insights" },
-  { id: "route_map_preview", label: "Route Map", icon: MapPinned, description: "Map preview of today's routes", defaultW: 6, defaultH: 5, minW: 4, minH: 4, category: "insights" },
-  { id: "todays_appointments", label: "Today's Appointments", icon: CalendarCheck, description: "Full list of today's visits with status controls", defaultW: 8, defaultH: 5, minW: 6, minH: 4, category: "insights" },
-  { id: "growth_opportunities", label: "Growth Opportunities", icon: TrendingUp, description: "Top clients flagged as upgrade or add-on candidates", defaultW: 6, defaultH: 4, minW: 4, minH: 3, category: "insights" },
+  {
+    id: "mrr",
+    label: "Monthly Revenue (MRR)",
+    icon: DollarSign,
+    description: "Current monthly recurring revenue",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "month_revenue",
+    label: "Revenue This Month",
+    icon: TrendingUp,
+    description: "Total revenue collected this month",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "requires_invoicing",
+    label: "Requires Invoicing",
+    icon: FileText,
+    description: "Completed visits needing invoices",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "overdue_invoices",
+    label: "Overdue Invoices",
+    icon: AlertTriangle,
+    description: "Invoices past their due date",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "todays_visits",
+    label: "Today's Visits",
+    icon: CalendarCheck,
+    description: "Scheduled visits for today with progress",
+    defaultW: 4,
+    defaultH: 3,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "active_clients",
+    label: "Active Clients",
+    icon: Users,
+    description: "Total active client count",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "service_plans",
+    label: "Jobs",
+    icon: ClipboardList,
+    description: "Active service plan count",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "team_size",
+    label: "Team Size",
+    icon: UserCheck,
+    description: "Active team members",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "texts_sent",
+    label: "SMS Sent",
+    icon: MessageSquare,
+    description: "Text messages sent this month",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "emails_sent",
+    label: "Emails Sent",
+    icon: Mail,
+    description: "Emails sent this month",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "quick_actions",
+    label: "Quick Actions",
+    icon: LayoutGrid,
+    description: "Shortcut buttons to common tasks",
+    defaultW: 4,
+    defaultH: 3,
+    minW: 3,
+    minH: 2,
+    category: "tools",
+  },
+  {
+    id: "recent_activity",
+    label: "Recent Activity",
+    icon: Activity,
+    description: "Latest notifications and events",
+    defaultW: 6,
+    defaultH: 4,
+    minW: 4,
+    minH: 3,
+    category: "insights",
+  },
+  {
+    id: "upcoming_visits",
+    label: "Upcoming Visits",
+    icon: CalendarCheck,
+    description: "Visits scheduled for this week",
+    defaultW: 6,
+    defaultH: 4,
+    minW: 4,
+    minH: 3,
+    category: "insights",
+  },
+  {
+    id: "revenue_chart",
+    label: "Revenue Chart",
+    icon: BarChart3,
+    description: "6-month revenue trend",
+    defaultW: 6,
+    defaultH: 4,
+    minW: 4,
+    minH: 3,
+    category: "insights",
+  },
+  {
+    id: "route_summary",
+    label: "Route Summary",
+    icon: Route,
+    description: "Active routes overview",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "insights",
+  },
+  {
+    id: "quick_notes",
+    label: "Quick Notes",
+    icon: StickyNote,
+    description: "Scratchpad for reminders (synced to account)",
+    defaultW: 4,
+    defaultH: 4,
+    minW: 3,
+    minH: 3,
+    category: "tools",
+  },
+  {
+    id: "current_plan",
+    label: "Current Plan",
+    icon: ClipboardList,
+    description: "Your subscription details",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+  },
+  {
+    id: "weather_forecast",
+    label: "Weather Forecast",
+    icon: Cloud,
+    description: "5-day weather forecast for your area",
+    defaultW: 6,
+    defaultH: 3,
+    minW: 4,
+    minH: 3,
+    category: "insights",
+  },
+  {
+    id: "route_map_preview",
+    label: "Route Map",
+    icon: MapPinned,
+    description: "Map preview of today's routes",
+    defaultW: 6,
+    defaultH: 5,
+    minW: 4,
+    minH: 4,
+    category: "insights",
+  },
+  {
+    id: "todays_appointments",
+    label: "Today's Appointments",
+    icon: CalendarCheck,
+    description: "Full list of today's visits with status controls",
+    defaultW: 8,
+    defaultH: 5,
+    minW: 6,
+    minH: 4,
+    category: "insights",
+  },
+  {
+    id: "growth_opportunities",
+    label: "Growth Opportunities",
+    icon: TrendingUp,
+    description: "Top clients flagged as upgrade or add-on candidates",
+    defaultW: 6,
+    defaultH: 4,
+    minW: 4,
+    minH: 3,
+    category: "insights",
+  },
 ];
 
 const DEFAULT_WIDGET_IDS = [
-  "mrr", "month_revenue", "requires_invoicing",
-  "overdue_invoices", "todays_visits", "active_clients",
-  "service_plans", "team_size", "texts_sent",
-  "quick_actions", "emails_sent", "current_plan",
+  "mrr",
+  "month_revenue",
+  "requires_invoicing",
+  "overdue_invoices",
+  "todays_visits",
+  "active_clients",
+  "service_plans",
+  "team_size",
+  "texts_sent",
+  "quick_actions",
+  "emails_sent",
+  "current_plan",
   "growth_opportunities",
 ];
 
@@ -311,7 +581,7 @@ function generateDefaultLayout(widgetIds: string[]): LayoutItem[] {
   let x = 0;
   let y = 0;
   for (const id of widgetIds) {
-    const def = WIDGET_DEFS.find(w => w.id === id);
+    const def = WIDGET_DEFS.find((w) => w.id === id);
     if (!def) continue;
     if (x + def.defaultW > 12) {
       x = 0;
@@ -355,7 +625,9 @@ function ClientRequestsCard() {
   const { data: changeRequests = [], isLoading: crLoading } = useQuery<ChangeRequest[]>({
     queryKey: ["/api/service-change-requests", "pending"],
     queryFn: async () => {
-      const res = await fetch("/api/service-change-requests?status=pending", { credentials: "include" });
+      const res = await fetch("/api/service-change-requests?status=pending", {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to load");
       return res.json();
     },
@@ -364,21 +636,25 @@ function ClientRequestsCard() {
   const { data: portalMessages = [], isLoading: msgLoading } = useQuery<PortalMessage[]>({
     queryKey: ["/api/messages", "inbound", "unread"],
     queryFn: async () => {
-      const res = await fetch("/api/messages?direction=inbound&unread=true", { credentials: "include" });
+      const res = await fetch("/api/messages?direction=inbound&unread=true", {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to load");
       return res.json();
     },
   });
 
-  const { data: cleanupRequests = [], isLoading: cleanupLoading } = useQuery<CleanupNotification[]>({
-    queryKey: ["/api/notifications", "cleanup-requests"],
-    queryFn: async () => {
-      const res = await fetch("/api/notifications?unread=true", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to load");
-      const all: CleanupNotification[] = await res.json();
-      return all.filter((n) => n.title.includes("One-Time Cleanup Request"));
-    },
-  });
+  const { data: cleanupRequests = [], isLoading: cleanupLoading } = useQuery<CleanupNotification[]>(
+    {
+      queryKey: ["/api/notifications", "cleanup-requests"],
+      queryFn: async () => {
+        const res = await fetch("/api/notifications?unread=true", { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to load");
+        const all: CleanupNotification[] = await res.json();
+        return all.filter((n) => n.title.includes("One-Time Cleanup Request"));
+      },
+    }
+  );
 
   const approveMutation = useMutation({
     mutationFn: async ({ id, adminNote }: { id: string; adminNote?: string }) => {
@@ -418,7 +694,10 @@ function ClientRequestsCard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/recent-activity"] });
-      toast({ title: "Accepted", description: "Cleanup request accepted. Schedule the visit from your routes page." });
+      toast({
+        title: "Accepted",
+        description: "Cleanup request accepted. Schedule the visit from your routes page.",
+      });
     },
   });
 
@@ -436,13 +715,28 @@ function ClientRequestsCard() {
   const inboxItems = useMemo<InboxItem[]>(() => {
     const items: InboxItem[] = [];
     for (const cr of changeRequests) {
-      items.push({ kind: "change", id: `cr-${cr.id}`, sortDate: new Date(cr.createdAt).getTime(), data: cr });
+      items.push({
+        kind: "change",
+        id: `cr-${cr.id}`,
+        sortDate: new Date(cr.createdAt).getTime(),
+        data: cr,
+      });
     }
     for (const msg of portalMessages.slice(0, 10)) {
-      items.push({ kind: "message", id: `msg-${msg.id}`, sortDate: new Date(msg.createdAt).getTime(), data: msg });
+      items.push({
+        kind: "message",
+        id: `msg-${msg.id}`,
+        sortDate: new Date(msg.createdAt).getTime(),
+        data: msg,
+      });
     }
     for (const cu of cleanupRequests) {
-      items.push({ kind: "cleanup", id: `cu-${cu.id}`, sortDate: new Date(cu.createdAt).getTime(), data: cu });
+      items.push({
+        kind: "cleanup",
+        id: `cu-${cu.id}`,
+        sortDate: new Date(cu.createdAt).getTime(),
+        data: cu,
+      });
     }
     items.sort((a, b) => b.sortDate - a.sortDate);
     return items;
@@ -479,7 +773,10 @@ function ClientRequestsCard() {
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-requests">
+          <p
+            className="text-sm text-muted-foreground text-center py-4"
+            data-testid="text-no-requests"
+          >
             No pending requests. You're all caught up.
           </p>
         </CardContent>
@@ -494,7 +791,9 @@ function ClientRequestsCard() {
           <div className="flex items-center gap-2">
             <Inbox className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">Client Requests</CardTitle>
-            <Badge variant="secondary" data-testid="badge-request-count">{inboxItems.length}</Badge>
+            <Badge variant="secondary" data-testid="badge-request-count">
+              {inboxItems.length}
+            </Badge>
           </div>
         </div>
       </CardHeader>
@@ -504,11 +803,17 @@ function ClientRequestsCard() {
             if (item.kind === "change") {
               const req = item.data as ChangeRequest;
               return (
-                <div key={item.id} className="border rounded-lg p-3 space-y-2" data-testid={`request-change-${req.id}`}>
+                <div
+                  key={item.id}
+                  className="border rounded-lg p-3 space-y-2"
+                  data-testid={`request-change-${req.id}`}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Sliders className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">{REQUEST_TYPE_LABELS[req.requestType] || req.requestType}</span>
+                      <span className="text-sm font-medium">
+                        {REQUEST_TYPE_LABELS[req.requestType] || req.requestType}
+                      </span>
                     </div>
                     <span className="text-xs text-muted-foreground">
                       {new Date(req.createdAt).toLocaleDateString()}
@@ -516,17 +821,18 @@ function ClientRequestsCard() {
                   </div>
                   <div className="text-sm">
                     <Link href={`/contacts/${req.contactId}`}>
-                      <span className="font-medium text-primary hover:underline cursor-pointer">{req.contactName}</span>
+                      <span className="font-medium text-primary hover:underline cursor-pointer">
+                        {req.contactName}
+                      </span>
                     </Link>
                     {req.currentValue && req.requestedValue && (
                       <span className="text-muted-foreground ml-1">
-                        {req.currentValue} <ArrowRight className="h-3 w-3 inline" /> {req.requestedValue}
+                        {req.currentValue} <ArrowRight className="h-3 w-3 inline" />{" "}
+                        {req.requestedValue}
                       </span>
                     )}
                   </div>
-                  {req.note && (
-                    <p className="text-xs text-muted-foreground italic">"{req.note}"</p>
-                  )}
+                  {req.note && <p className="text-xs text-muted-foreground italic">"{req.note}"</p>}
                   <div className="flex gap-2">
                     <Button
                       size="sm"
@@ -556,7 +862,11 @@ function ClientRequestsCard() {
             if (item.kind === "cleanup") {
               const cu = item.data as CleanupNotification;
               return (
-                <div key={item.id} className="border rounded-lg p-3 space-y-2" data-testid={`request-cleanup-${cu.id}`}>
+                <div
+                  key={item.id}
+                  className="border rounded-lg p-3 space-y-2"
+                  data-testid={`request-cleanup-${cu.id}`}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <CalendarCheck className="h-4 w-4 text-muted-foreground" />
@@ -595,7 +905,11 @@ function ClientRequestsCard() {
 
             const msg = item.data as PortalMessage;
             return (
-              <div key={item.id} className="border rounded-lg p-3 space-y-2" data-testid={`request-message-${msg.id}`}>
+              <div
+                key={item.id}
+                className="border rounded-lg p-3 space-y-2"
+                data-testid={`request-message-${msg.id}`}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <MessageSquare className="h-4 w-4 text-muted-foreground" />
@@ -615,7 +929,9 @@ function ClientRequestsCard() {
                   ) : (
                     <span className="font-medium">{msg.contactName || "Client"}</span>
                   )}
-                  {msg.subject && <span className="text-muted-foreground ml-1">-- {msg.subject}</span>}
+                  {msg.subject && (
+                    <span className="text-muted-foreground ml-1">-- {msg.subject}</span>
+                  )}
                 </div>
                 {msg.body && (
                   <p className="text-xs text-muted-foreground line-clamp-2">{msg.body}</p>
@@ -648,7 +964,10 @@ function ClientRequestsCard() {
         </div>
         <div className="mt-3 pt-2 border-t">
           <Link href="/communications">
-            <span className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1" data-testid="link-view-all-requests">
+            <span
+              className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1"
+              data-testid="link-view-all-requests"
+            >
               View all communications <ArrowRight className="h-3 w-3" />
             </span>
           </Link>
@@ -673,7 +992,11 @@ type SystemMsg = {
 
 function SystemMessagesCard() {
   const { toast } = useToast();
-  const { data: messages = [], isLoading, isError } = useQuery<SystemMsg[]>({
+  const {
+    data: messages = [],
+    isLoading,
+    isError,
+  } = useQuery<SystemMsg[]>({
     queryKey: ["/api/system-messages"],
   });
 
@@ -687,8 +1010,8 @@ function SystemMessagesCard() {
 
   useEffect(() => {
     if (messages.length > 0) {
-      const unread = messages.filter(m => !m.readAt && !markedIds.current.has(m.id));
-      unread.forEach(m => {
+      const unread = messages.filter((m) => !m.readAt && !markedIds.current.has(m.id));
+      unread.forEach((m) => {
         markedIds.current.add(m.id);
         markReadMutation.mutate(m.id);
       });
@@ -726,21 +1049,39 @@ function SystemMessagesCard() {
 
   const severityIcon = (severity: string) => {
     switch (severity) {
-      case "error": return <AlertOctagon className="h-4 w-4 text-destructive shrink-0" />;
-      case "warning": return <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0" />;
-      default: return <Info className="h-4 w-4 text-blue-500 shrink-0" />;
+      case "error":
+        return <AlertOctagon className="h-4 w-4 text-destructive shrink-0" />;
+      case "warning":
+        return <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0" />;
+      default:
+        return <Info className="h-4 w-4 text-blue-500 shrink-0" />;
     }
   };
 
   const severityBadge = (severity: string) => {
     switch (severity) {
-      case "error": return <Badge variant="destructive" className="text-[10px]">Error</Badge>;
-      case "warning": return <Badge className="text-[10px] bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 hover:bg-yellow-100">Warning</Badge>;
-      default: return <Badge variant="secondary" className="text-[10px]">Info</Badge>;
+      case "error":
+        return (
+          <Badge variant="destructive" className="text-[10px]">
+            Error
+          </Badge>
+        );
+      case "warning":
+        return (
+          <Badge className="text-[10px] bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 hover:bg-yellow-100">
+            Warning
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="secondary" className="text-[10px]">
+            Info
+          </Badge>
+        );
     }
   };
 
-  const unreadCount = messages.filter(m => !m.readAt).length;
+  const unreadCount = messages.filter((m) => !m.readAt).length;
 
   return (
     <Card data-testid="widget-system-messages" id="system-messages">
@@ -750,7 +1091,9 @@ function SystemMessagesCard() {
             <Bell className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">System Messages</CardTitle>
             {unreadCount > 0 && (
-              <Badge variant="destructive" className="text-xs" data-testid="badge-system-unread">{unreadCount}</Badge>
+              <Badge variant="destructive" className="text-xs" data-testid="badge-system-unread">
+                {unreadCount}
+              </Badge>
             )}
           </div>
           {messages.length > 0 && (
@@ -769,7 +1112,7 @@ function SystemMessagesCard() {
       </CardHeader>
       <CardContent>
         <div className="space-y-2 max-h-64 overflow-y-auto">
-          {messages.map(msg => (
+          {messages.map((msg) => (
             <div
               key={msg.id}
               className={`border rounded-lg p-3 space-y-1 ${!msg.readAt ? "bg-muted/30" : ""}`}
@@ -830,16 +1173,25 @@ function CommMessageRow({ msg }: { msg: RecentCommMessage }) {
       className={`flex items-start gap-3 py-2.5 px-1 rounded-md transition-colors ${msg.contactId ? "hover:bg-muted/50 cursor-pointer" : ""}`}
       data-testid={`comm-message-${msg.id}`}
     >
-      <div className={`mt-0.5 rounded-full p-1.5 ${msg.direction === "inbound" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-green-100 dark:bg-green-900/30"}`}>
+      <div
+        className={`mt-0.5 rounded-full p-1.5 ${msg.direction === "inbound" ? "bg-blue-100 dark:bg-blue-900/30" : "bg-green-100 dark:bg-green-900/30"}`}
+      >
         {msg.channel === "sms" ? (
-          <MessageSquare className={`h-3.5 w-3.5 ${msg.direction === "inbound" ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"}`} />
+          <MessageSquare
+            className={`h-3.5 w-3.5 ${msg.direction === "inbound" ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"}`}
+          />
         ) : (
-          <Mail className={`h-3.5 w-3.5 ${msg.direction === "inbound" ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"}`} />
+          <Mail
+            className={`h-3.5 w-3.5 ${msg.direction === "inbound" ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"}`}
+          />
         )}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium truncate" data-testid={`text-comm-contact-${msg.id}`}>
+          <span
+            className="text-sm font-medium truncate"
+            data-testid={`text-comm-contact-${msg.id}`}
+          >
             {msg.contactName || (msg.direction === "inbound" ? "Unknown" : "System")}
           </span>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -850,12 +1202,18 @@ function CommMessageRow({ msg }: { msg: RecentCommMessage }) {
             >
               {msg.direction === "inbound" ? "In" : "Out"}
             </Badge>
-            <span className="text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-comm-time-${msg.id}`}>
+            <span
+              className="text-xs text-muted-foreground whitespace-nowrap"
+              data-testid={`text-comm-time-${msg.id}`}
+            >
               {formatRelativeTime(msg.createdAt)}
             </span>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5 truncate" data-testid={`text-comm-preview-${msg.id}`}>
+        <p
+          className="text-xs text-muted-foreground mt-0.5 truncate"
+          data-testid={`text-comm-preview-${msg.id}`}
+        >
           {truncated}
         </p>
       </div>
@@ -890,14 +1248,14 @@ function RecentCommunications() {
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-testid="loading-recent-comms">
-        {[0, 1].map(i => (
+        {[0, 1].map((i) => (
           <Card key={i}>
             <CardHeader className="pb-2">
               <Skeleton className="h-5 w-32" />
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {[0, 1, 2].map(j => (
+                {[0, 1, 2].map((j) => (
                   <div key={j} className="flex gap-3">
                     <Skeleton className="h-8 w-8 rounded-full shrink-0" />
                     <div className="flex-1 space-y-1.5">
@@ -926,7 +1284,13 @@ function RecentCommunications() {
               <MessageSquare className="h-4 w-4 text-primary" />
               <CardTitle className="text-base">Recent SMS</CardTitle>
             </div>
-            <Button asChild variant="ghost" size="sm" className="text-xs h-7" data-testid="link-view-all-sms">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="text-xs h-7"
+              data-testid="link-view-all-sms"
+            >
               <Link href="/communications">View all</Link>
             </Button>
           </div>
@@ -934,13 +1298,18 @@ function RecentCommunications() {
         <ResizableCardBody storageKey="recent-sms" defaultHeight={280} minHeight={100}>
           <div className="px-6">
             {smsList.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-6 text-muted-foreground" data-testid="empty-recent-sms">
+              <div
+                className="flex flex-col items-center justify-center py-6 text-muted-foreground"
+                data-testid="empty-recent-sms"
+              >
                 <MessageSquare className="h-8 w-8 mb-2 opacity-30" />
                 <p className="text-sm">No recent text messages</p>
               </div>
             ) : (
               <div className="divide-y">
-                {smsList.map(msg => <CommMessageRow key={msg.id} msg={msg} />)}
+                {smsList.map((msg) => (
+                  <CommMessageRow key={msg.id} msg={msg} />
+                ))}
               </div>
             )}
           </div>
@@ -954,7 +1323,13 @@ function RecentCommunications() {
               <Mail className="h-4 w-4 text-primary" />
               <CardTitle className="text-base">Recent Emails</CardTitle>
             </div>
-            <Button asChild variant="ghost" size="sm" className="text-xs h-7" data-testid="link-view-all-emails">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="text-xs h-7"
+              data-testid="link-view-all-emails"
+            >
               <Link href="/communications">View all</Link>
             </Button>
           </div>
@@ -962,13 +1337,18 @@ function RecentCommunications() {
         <ResizableCardBody storageKey="recent-emails" defaultHeight={280} minHeight={100}>
           <div className="px-6">
             {emailList.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-6 text-muted-foreground" data-testid="empty-recent-emails">
+              <div
+                className="flex flex-col items-center justify-center py-6 text-muted-foreground"
+                data-testid="empty-recent-emails"
+              >
                 <Mail className="h-8 w-8 mb-2 opacity-30" />
                 <p className="text-sm">No recent emails</p>
               </div>
             ) : (
               <div className="divide-y">
-                {emailList.map(msg => <CommMessageRow key={msg.id} msg={msg} />)}
+                {emailList.map((msg) => (
+                  <CommMessageRow key={msg.id} msg={msg} />
+                ))}
               </div>
             )}
           </div>
@@ -1001,24 +1381,41 @@ function PipelineBar({ data }: { data: PipelineData }) {
     {
       label: "Requires Invoicing",
       count: data.requiresInvoicing.count,
-      value: data.requiresInvoicing.count > 0 ? `$${fmt(data.requiresInvoicing.totalDollars)}` : "All clear",
+      value:
+        data.requiresInvoicing.count > 0
+          ? `$${fmt(data.requiresInvoicing.totalDollars)}`
+          : "All clear",
       href: "/invoices?tab=uninvoiced",
-      color: data.requiresInvoicing.count > 0 ? "bg-orange-500 dark:bg-orange-600" : "bg-green-600 dark:bg-green-700",
-      textColor: data.requiresInvoicing.count > 0 ? "text-orange-700 dark:text-orange-400" : "text-green-700 dark:text-green-400",
-      bgColor: data.requiresInvoicing.count > 0
-        ? "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800"
-        : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800",
+      color:
+        data.requiresInvoicing.count > 0
+          ? "bg-orange-500 dark:bg-orange-600"
+          : "bg-green-600 dark:bg-green-700",
+      textColor:
+        data.requiresInvoicing.count > 0
+          ? "text-orange-700 dark:text-orange-400"
+          : "text-green-700 dark:text-green-400",
+      bgColor:
+        data.requiresInvoicing.count > 0
+          ? "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800"
+          : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800",
     },
     {
       label: "Awaiting Payment",
       count: data.awaitingPayment.count,
       value: data.awaitingPayment.count > 0 ? `$${fmt(data.awaitingPayment.totalDollars)}` : "None",
       href: "/invoices?tab=awaiting",
-      color: data.awaitingPayment.count > 0 ? "bg-amber-500 dark:bg-amber-600" : "bg-green-600 dark:bg-green-700",
-      textColor: data.awaitingPayment.count > 0 ? "text-amber-700 dark:text-amber-400" : "text-green-700 dark:text-green-400",
-      bgColor: data.awaitingPayment.count > 0
-        ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
-        : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800",
+      color:
+        data.awaitingPayment.count > 0
+          ? "bg-amber-500 dark:bg-amber-600"
+          : "bg-green-600 dark:bg-green-700",
+      textColor:
+        data.awaitingPayment.count > 0
+          ? "text-amber-700 dark:text-amber-400"
+          : "text-green-700 dark:text-green-400",
+      bgColor:
+        data.awaitingPayment.count > 0
+          ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+          : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800",
     },
   ];
 
@@ -1121,7 +1518,10 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
       queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/upcoming-visits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/recent-activity"] });
-      queryClient.invalidateQueries({ predicate: (query) => Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits") });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) && query.queryKey.includes("uninvoiced-visits"),
+      });
       toast({ title: "Visit updated" });
     },
     onError: (err: Error) => {
@@ -1153,7 +1553,10 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-6 text-muted-foreground" data-testid="text-no-appointments">
+          <div
+            className="text-center py-6 text-muted-foreground"
+            data-testid="text-no-appointments"
+          >
             <CalendarCheck className="h-8 w-8 mx-auto mb-2 opacity-40" />
             <p>No visits scheduled for today</p>
           </div>
@@ -1162,7 +1565,7 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
     );
   }
 
-  const completedCount = visits.filter(v => v.status === "completed").length;
+  const completedCount = visits.filter((v) => v.status === "completed").length;
   const progress = Math.round((completedCount / visits.length) * 100);
 
   return (
@@ -1199,11 +1602,17 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <Link href={`/contacts/${visit.contactId}`}>
-                          <span className="text-sm font-medium hover:underline cursor-pointer" data-testid={`text-visit-contact-${visit.id}`}>
+                          <span
+                            className="text-sm font-medium hover:underline cursor-pointer"
+                            data-testid={`text-visit-contact-${visit.id}`}
+                          >
                             {visit.contactName}
                           </span>
                         </Link>
-                        <span className="text-xs text-muted-foreground" data-testid={`text-visit-time-${visit.id}`}>
+                        <span
+                          className="text-xs text-muted-foreground"
+                          data-testid={`text-visit-time-${visit.id}`}
+                        >
                           {formatVisitTime(visit)}
                         </span>
                       </div>
@@ -1215,7 +1624,10 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-sm font-medium tabular-nums" data-testid={`text-visit-amount-${visit.id}`}>
+                      <span
+                        className="text-sm font-medium tabular-nums"
+                        data-testid={`text-visit-amount-${visit.id}`}
+                      >
                         ${fmt(visit.amount)}
                       </span>
                       {(visit.status === "scheduled" || visit.status === "in_progress") && (
@@ -1224,7 +1636,9 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
                             size="icon"
                             variant="ghost"
                             className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30"
-                            onClick={() => markVisitMutation.mutate({ visitId: visit.id, status: "completed" })}
+                            onClick={() =>
+                              markVisitMutation.mutate({ visitId: visit.id, status: "completed" })
+                            }
                             disabled={markVisitMutation.isPending}
                             title="Mark complete"
                             data-testid={`button-complete-visit-${visit.id}`}
@@ -1235,7 +1649,9 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
                             size="icon"
                             variant="ghost"
                             className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                            onClick={() => markVisitMutation.mutate({ visitId: visit.id, status: "skipped" })}
+                            onClick={() =>
+                              markVisitMutation.mutate({ visitId: visit.id, status: "skipped" })
+                            }
                             disabled={markVisitMutation.isPending}
                             title="Skip"
                             data-testid={`button-skip-visit-${visit.id}`}
@@ -1253,7 +1669,10 @@ function TodaysAppointments({ visits }: { visits: PipelineVisit[] }) {
         </div>
         <div className="px-4 pb-3 pt-1 border-t mt-2">
           <Link href="/scheduling">
-            <span className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1" data-testid="link-view-all-appointments">
+            <span
+              className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1"
+              data-testid="link-view-all-appointments"
+            >
               View full schedule <ArrowRight className="h-3 w-3" />
             </span>
           </Link>
@@ -1284,7 +1703,10 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
   });
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" data-testid="section-business-performance">
+    <div
+      className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+      data-testid="section-business-performance"
+    >
       <Card data-testid="card-receivables">
         <CardHeader className="pb-1">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -1298,8 +1720,12 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
               ${fmt(data.receivables.total)}
             </div>
             {data.receivables.overdueCount > 0 && (
-              <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5" data-testid="text-overdue-receivables">
-                ${fmt(data.receivables.overdueTotal)} overdue ({data.receivables.overdueCount} invoice{data.receivables.overdueCount !== 1 ? "s" : ""})
+              <p
+                className="text-xs text-orange-600 dark:text-orange-400 mt-0.5"
+                data-testid="text-overdue-receivables"
+              >
+                ${fmt(data.receivables.overdueTotal)} overdue ({data.receivables.overdueCount}{" "}
+                invoice{data.receivables.overdueCount !== 1 ? "s" : ""})
               </p>
             )}
           </div>
@@ -1336,7 +1762,10 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
           )}
           <div className="pt-1 border-t">
             <Link href="/invoices?tab=awaiting">
-              <span className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1" data-testid="link-view-all-receivables">
+              <span
+                className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1"
+                data-testid="link-view-all-receivables"
+              >
                 View all invoices <ArrowRight className="h-3 w-3" />
               </span>
             </Link>
@@ -1387,7 +1816,7 @@ function RevenueChartWidget() {
     return <Skeleton className="h-full w-full" />;
   }
 
-  const maxRevenue = Math.max(...(chartData || []).map(d => d.revenue), 1);
+  const maxRevenue = Math.max(...(chartData || []).map((d) => d.revenue), 1);
 
   return (
     <div className="h-full flex flex-col" data-testid="widget-revenue-chart-content">
@@ -1404,9 +1833,15 @@ function RevenueChartWidget() {
           return (
             <div key={idx} className="flex-1 flex flex-col min-w-0 pb-1">
               {/* Spacer — shrinks as bar grows; value label sits at its bottom */}
-              <div style={{ flex: spaceRatio }} className="flex flex-col justify-end items-center pb-0.5 min-h-0">
+              <div
+                style={{ flex: spaceRatio }}
+                className="flex flex-col justify-end items-center pb-0.5 min-h-0"
+              >
                 <span className="text-[10px] tabular-nums text-muted-foreground truncate w-full text-center">
-                  ${item.revenue >= 1000 ? `${(item.revenue / 1000).toFixed(1)}k` : fmtInt(item.revenue)}
+                  $
+                  {item.revenue >= 1000
+                    ? `${(item.revenue / 1000).toFixed(1)}k`
+                    : fmtInt(item.revenue)}
                 </span>
               </div>
               {/* Bar — grows proportionally with revenue */}
@@ -1416,7 +1851,9 @@ function RevenueChartWidget() {
                 title={`${item.month}: $${fmt(item.revenue)}`}
                 data-testid={`bar-revenue-${idx}`}
               />
-              <span className="text-[10px] text-muted-foreground text-center mt-1">{item.month}</span>
+              <span className="text-[10px] text-muted-foreground text-center mt-1">
+                {item.month}
+              </span>
             </div>
           );
         })}
@@ -1436,7 +1873,10 @@ function RecentActivityWidget() {
 
   if (!activities || activities.length === 0) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-muted-foreground" data-testid="widget-recent-activity-empty">
+      <div
+        className="h-full flex flex-col items-center justify-center text-muted-foreground"
+        data-testid="widget-recent-activity-empty"
+      >
         <Activity className="h-8 w-8 mb-2 opacity-40" />
         <p className="text-sm">No recent activity</p>
       </div>
@@ -1444,20 +1884,32 @@ function RecentActivityWidget() {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden" data-testid="widget-recent-activity-content">
+    <div
+      className="h-full flex flex-col overflow-hidden"
+      data-testid="widget-recent-activity-content"
+    >
       <div className="flex items-center gap-2 mb-2">
         <Activity className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">Recent Activity</span>
       </div>
       <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
         {activities.map((item) => (
-          <div key={item.id} className="flex gap-2 py-1.5 border-b last:border-0" data-testid={`activity-item-${item.id}`}>
+          <div
+            key={item.id}
+            className="flex gap-2 py-1.5 border-b last:border-0"
+            data-testid={`activity-item-${item.id}`}
+          >
             <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium truncate">{item.title}</p>
               <p className="text-[11px] text-muted-foreground truncate">{item.message}</p>
               <p className="text-[10px] text-muted-foreground">
-                {new Date(item.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                {new Date(item.createdAt).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
               </p>
             </div>
           </div>
@@ -1478,7 +1930,10 @@ function UpcomingVisitsWidget() {
 
   if (!visits || visits.length === 0) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-muted-foreground" data-testid="widget-upcoming-visits-empty">
+      <div
+        className="h-full flex flex-col items-center justify-center text-muted-foreground"
+        data-testid="widget-upcoming-visits-empty"
+      >
         <CalendarCheck className="h-8 w-8 mb-2 opacity-40" />
         <p className="text-sm">No upcoming visits this week</p>
       </div>
@@ -1486,14 +1941,21 @@ function UpcomingVisitsWidget() {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden" data-testid="widget-upcoming-visits-content">
+    <div
+      className="h-full flex flex-col overflow-hidden"
+      data-testid="widget-upcoming-visits-content"
+    >
       <div className="flex items-center gap-2 mb-2">
         <CalendarCheck className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">Upcoming Visits</span>
       </div>
       <div className="flex-1 overflow-y-auto space-y-1.5 min-h-0">
         {visits.map((visit) => (
-          <div key={visit.id} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-muted/30" data-testid={`upcoming-visit-${visit.id}`}>
+          <div
+            key={visit.id}
+            className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-muted/30"
+            data-testid={`upcoming-visit-${visit.id}`}
+          >
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium truncate">{visit.contactName}</p>
               <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -1503,7 +1965,11 @@ function UpcomingVisitsWidget() {
             </div>
             <div className="text-right shrink-0">
               <p className="text-xs font-medium">
-                {new Date(visit.scheduledDate + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                {new Date(visit.scheduledDate + "T12:00:00").toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })}
               </p>
             </div>
           </div>
@@ -1541,7 +2007,12 @@ function RouteSummaryWidget() {
           <span className="text-sm font-bold">{stats?.activeUsers ?? 0}</span>
         </div>
         <Link href="/routes">
-          <Button size="sm" variant="outline" className="w-full mt-1" data-testid="button-view-routes-widget">
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full mt-1"
+            data-testid="button-view-routes-widget"
+          >
             <Eye className="h-3.5 w-3.5 mr-1" />
             View Routes
           </Button>
@@ -1557,7 +2028,11 @@ function CommandCenterShortcutWidget() {
     refetchInterval: 30000,
   });
 
-  const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  const today = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
   const total = stats?.todaysVisits ?? 0;
   const completed = stats?.todaysVisitBreakdown?.completed ?? 0;
   const inProgress = stats?.todaysVisitBreakdown?.inProgress ?? 0;
@@ -1569,15 +2044,21 @@ function CommandCenterShortcutWidget() {
     <Card data-testid="card-command-center-shortcut">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-base" data-testid="text-today-ops-title">Today's Operations</CardTitle>
-          <span className="text-xs text-muted-foreground" data-testid="text-today-ops-date">{today}</span>
+          <CardTitle className="text-base" data-testid="text-today-ops-title">
+            Today's Operations
+          </CardTitle>
+          <span className="text-xs text-muted-foreground" data-testid="text-today-ops-date">
+            {today}
+          </span>
         </div>
         <CardDescription>Live visit summary — updates every 30 seconds</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-            {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-16 rounded-lg" />)}
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Skeleton key={i} className="h-16 rounded-lg" />
+            ))}
           </div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
@@ -1585,25 +2066,50 @@ function CommandCenterShortcutWidget() {
               <div className="text-2xl font-bold">{total}</div>
               <div className="text-xs text-muted-foreground mt-1">Appointments</div>
             </div>
-            <div className="text-center p-3 rounded-lg bg-green-50 dark:bg-green-950/30" data-testid="stat-completed-visits">
-              <div className="text-2xl font-bold text-green-700 dark:text-green-400">{completed}</div>
+            <div
+              className="text-center p-3 rounded-lg bg-green-50 dark:bg-green-950/30"
+              data-testid="stat-completed-visits"
+            >
+              <div className="text-2xl font-bold text-green-700 dark:text-green-400">
+                {completed}
+              </div>
               <div className="text-xs text-muted-foreground mt-1">Completed</div>
             </div>
-            <div className="text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30" data-testid="stat-in-progress-visits">
-              <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{inProgress}</div>
+            <div
+              className="text-center p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30"
+              data-testid="stat-in-progress-visits"
+            >
+              <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                {inProgress}
+              </div>
               <div className="text-xs text-muted-foreground mt-1">Active</div>
             </div>
-            <div className="text-center p-3 rounded-lg bg-muted/50" data-testid="stat-scheduled-visits">
+            <div
+              className="text-center p-3 rounded-lg bg-muted/50"
+              data-testid="stat-scheduled-visits"
+            >
               <div className="text-2xl font-bold">{scheduled}</div>
               <div className="text-xs text-muted-foreground mt-1">Pending</div>
             </div>
-            <div className="text-center p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30" data-testid="stat-techs-working">
-              <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">{techsWorking}</div>
+            <div
+              className="text-center p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30"
+              data-testid="stat-techs-working"
+            >
+              <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">
+                {techsWorking}
+              </div>
               <div className="text-xs text-muted-foreground mt-1">Techs Working</div>
             </div>
-            <div className="text-center p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30" data-testid="stat-today-invoiced">
+            <div
+              className="text-center p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30"
+              data-testid="stat-today-invoiced"
+            >
               <div className="text-2xl font-bold text-amber-700 dark:text-amber-400">
-                ${todayInvoiceTotal.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                $
+                {todayInvoiceTotal.toLocaleString("en-US", {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
               </div>
               <div className="text-xs text-muted-foreground mt-1">Invoiced Today</div>
             </div>
@@ -1646,50 +2152,56 @@ function QuickNotesWidget() {
     },
   });
 
-  const handleChange = useCallback((value: string) => {
-    setNotes(value);
-    if (saveTimeout.current) clearTimeout(saveTimeout.current);
-    saveTimeout.current = setTimeout(() => {
-      notesMutation.mutate(value);
-    }, 1000);
-  }, [notesMutation]);
+  const handleChange = useCallback(
+    (value: string) => {
+      setNotes(value);
+      if (saveTimeout.current) clearTimeout(saveTimeout.current);
+      saveTimeout.current = setTimeout(() => {
+        notesMutation.mutate(value);
+      }, 1000);
+    },
+    [notesMutation]
+  );
 
-  const applyFormat = useCallback((type: "bold" | "bullet") => {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const selected = notes.slice(start, end);
+  const applyFormat = useCallback(
+    (type: "bold" | "bullet") => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const selected = notes.slice(start, end);
 
-    let newText = notes;
-    let newCursor = end;
+      let newText = notes;
+      let newCursor = end;
 
-    if (type === "bold") {
-      if (selected) {
-        newText = notes.slice(0, start) + `**${selected}**` + notes.slice(end);
-        newCursor = start + selected.length + 4;
-      } else {
-        newText = notes.slice(0, start) + `****` + notes.slice(end);
-        newCursor = start + 2;
+      if (type === "bold") {
+        if (selected) {
+          newText = notes.slice(0, start) + `**${selected}**` + notes.slice(end);
+          newCursor = start + selected.length + 4;
+        } else {
+          newText = notes.slice(0, start) + `****` + notes.slice(end);
+          newCursor = start + 2;
+        }
+      } else if (type === "bullet") {
+        const lineStart = notes.lastIndexOf("\n", start - 1) + 1;
+        const lineText = notes.slice(lineStart, start);
+        if (lineText.startsWith("• ")) {
+          newText = notes.slice(0, lineStart) + lineText.slice(2) + notes.slice(start);
+          newCursor = start - 2;
+        } else {
+          newText = notes.slice(0, lineStart) + "• " + notes.slice(lineStart);
+          newCursor = start + 2;
+        }
       }
-    } else if (type === "bullet") {
-      const lineStart = notes.lastIndexOf("\n", start - 1) + 1;
-      const lineText = notes.slice(lineStart, start);
-      if (lineText.startsWith("• ")) {
-        newText = notes.slice(0, lineStart) + lineText.slice(2) + notes.slice(start);
-        newCursor = start - 2;
-      } else {
-        newText = notes.slice(0, lineStart) + "• " + notes.slice(lineStart);
-        newCursor = start + 2;
-      }
-    }
 
-    handleChange(newText);
-    setTimeout(() => {
-      ta.focus();
-      ta.setSelectionRange(newCursor, newCursor);
-    }, 0);
-  }, [notes, handleChange]);
+      handleChange(newText);
+      setTimeout(() => {
+        ta.focus();
+        ta.setSelectionRange(newCursor, newCursor);
+      }, 0);
+    },
+    [notes, handleChange]
+  );
 
   return (
     <div className="h-full flex flex-col" data-testid="widget-quick-notes-content">
@@ -1771,7 +2283,11 @@ function getWeatherLabel(code: number | null) {
 }
 
 function WeatherForecastWidget() {
-  const { data, isLoading } = useQuery<{ available: boolean; days?: WeatherDay[]; reason?: string }>({
+  const { data, isLoading } = useQuery<{
+    available: boolean;
+    days?: WeatherDay[];
+    reason?: string;
+  }>({
     queryKey: ["/api/company/weather"],
   });
 
@@ -1796,7 +2312,9 @@ function WeatherForecastWidget() {
           <Cloud className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium">Weather Forecast</span>
         </div>
-        <p className="text-xs text-muted-foreground">{data?.reason || "Set your company address in Settings to see weather."}</p>
+        <p className="text-xs text-muted-foreground">
+          {data?.reason || "Set your company address in Settings to see weather."}
+        </p>
       </div>
     );
   }
@@ -1810,12 +2328,22 @@ function WeatherForecastWidget() {
       <div className="flex-1 flex gap-1 overflow-x-auto">
         {data.days.map((day) => {
           const Icon = getWeatherIcon(day.weatherCode);
-          const dayName = new Date(day.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
+          const dayName = new Date(day.date + "T12:00:00").toLocaleDateString("en-US", {
+            weekday: "short",
+          });
           return (
-            <div key={day.date} className="flex-1 min-w-[60px] flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/30" data-testid={`weather-day-${day.date}`}>
-              <span className="text-[10px] font-medium text-muted-foreground uppercase">{dayName}</span>
+            <div
+              key={day.date}
+              className="flex-1 min-w-[60px] flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/30"
+              data-testid={`weather-day-${day.date}`}
+            >
+              <span className="text-[10px] font-medium text-muted-foreground uppercase">
+                {dayName}
+              </span>
               <Icon className="h-5 w-5 text-primary" />
-              <span className="text-[10px] text-muted-foreground">{getWeatherLabel(day.weatherCode)}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {getWeatherLabel(day.weatherCode)}
+              </span>
               <div className="text-xs font-medium">
                 {day.tempMax !== null ? `${Math.round(day.tempMax)}` : "--"}°
               </div>
@@ -1889,20 +2417,30 @@ function GrowthOpportunitiesWidget() {
           <TrendingUp className="h-4 w-4 text-amber-500" />
           <span className="text-sm font-medium">Growth Opportunities</span>
           {totalCount > 0 && (
-            <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" data-testid="badge-opportunity-count">
+            <Badge
+              variant="secondary"
+              className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+              data-testid="badge-opportunity-count"
+            >
               {totalCount}
             </Badge>
           )}
         </div>
         {totalUplift > 0 && (
-          <span className="text-xs text-green-700 dark:text-green-400 font-medium" data-testid="text-total-uplift">
+          <span
+            className="text-xs text-green-700 dark:text-green-400 font-medium"
+            data-testid="text-total-uplift"
+          >
             ~${totalUplift.toFixed(0)}/mo potential
           </span>
         )}
       </div>
       {contacts.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-xs text-muted-foreground text-center" data-testid="text-no-opportunities">
+          <p
+            className="text-xs text-muted-foreground text-center"
+            data-testid="text-no-opportunities"
+          >
             No open opportunities right now.
           </p>
         </div>
@@ -1916,19 +2454,30 @@ function GrowthOpportunitiesWidget() {
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate" data-testid={`opportunity-name-${c.contactId}`}>
+                    <span
+                      className="text-sm font-medium truncate"
+                      data-testid={`opportunity-name-${c.contactId}`}
+                    >
                       {c.contactName}
                     </span>
                     {c.count > 1 && (
-                      <Badge variant="outline" className="text-[10px] shrink-0">+{c.count - 1} more</Badge>
+                      <Badge variant="outline" className="text-[10px] shrink-0">
+                        +{c.count - 1} more
+                      </Badge>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground truncate mt-0.5" data-testid={`opportunity-label-${c.contactId}`}>
+                  <p
+                    className="text-[11px] text-muted-foreground truncate mt-0.5"
+                    data-testid={`opportunity-label-${c.contactId}`}
+                  >
                     {c.topOpportunity.label}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-xs font-medium text-green-700 dark:text-green-400" data-testid={`opportunity-uplift-${c.contactId}`}>
+                  <p
+                    className="text-xs font-medium text-green-700 dark:text-green-400"
+                    data-testid={`opportunity-uplift-${c.contactId}`}
+                  >
                     ~${c.totalUplift.toFixed(0)}/mo
                   </p>
                   <ArrowRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-auto mt-0.5" />
@@ -2000,9 +2549,7 @@ function RouteMapPreviewWidget() {
             marker.style.backgroundColor = route.color;
             marker.style.border = "2px solid white";
             marker.style.boxShadow = "0 1px 3px rgba(0,0,0,0.3)";
-            new mapboxgl.Marker({ element: marker })
-              .setLngLat([coord.lng, coord.lat])
-              .addTo(map);
+            new mapboxgl.Marker({ element: marker }).setLngLat([coord.lng, coord.lat]).addTo(map);
           });
 
           if (route.coordinates.length >= 2) {
@@ -2013,7 +2560,7 @@ function RouteMapPreviewWidget() {
                 properties: {},
                 geometry: {
                   type: "LineString",
-                  coordinates: route.coordinates.map(c => [c.lng, c.lat]),
+                  coordinates: route.coordinates.map((c) => [c.lng, c.lat]),
                 },
               },
             });
@@ -2064,9 +2611,11 @@ function RouteMapPreviewWidget() {
           <MapPinned className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium">Today's Routes</span>
         </div>
-        <span className="text-xs text-muted-foreground">{mapData?.routes.length || 0} routes, {totalStops} stops</span>
+        <span className="text-xs text-muted-foreground">
+          {mapData?.routes.length || 0} routes, {totalStops} stops
+        </span>
       </div>
-      {(!mapData?.routes.length || !tokenData?.token) ? (
+      {!mapData?.routes.length || !tokenData?.token ? (
         <div className="flex-1 flex items-center justify-center bg-muted/30 rounded-lg">
           <p className="text-xs text-muted-foreground text-center px-4">
             {!tokenData?.token ? "Mapbox token not configured" : "No routes scheduled for today"}
@@ -2076,10 +2625,15 @@ function RouteMapPreviewWidget() {
         <div className="flex-1 relative rounded-lg overflow-hidden border">
           <div ref={mapContainerRef} className="absolute inset-0" />
           <div className="absolute bottom-2 left-2 flex flex-wrap gap-1 z-10">
-            {mapData.routes.map(r => (
-              <div key={r.id} className="flex items-center gap-1 bg-background/90 backdrop-blur-sm rounded px-1.5 py-0.5 text-[10px] shadow-sm">
+            {mapData.routes.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-center gap-1 bg-background/90 backdrop-blur-sm rounded px-1.5 py-0.5 text-[10px] shadow-sm"
+              >
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: r.color }} />
-                <span>{r.name} ({r.stopCount})</span>
+                <span>
+                  {r.name} ({r.stopCount})
+                </span>
               </div>
             ))}
           </div>
@@ -2146,8 +2700,13 @@ function GridWidgetsSection({
           onResizeStart={handleResizeStart}
           margin={[16, 16]}
         >
-          {currentLayout.map(item => (
-            <div key={item.i} className="relative group" style={isMobile ? { touchAction: 'auto' } : undefined} data-testid={`grid-widget-${item.i}`}>
+          {currentLayout.map((item) => (
+            <div
+              key={item.i}
+              className="relative group"
+              style={isMobile ? { touchAction: "auto" } : undefined}
+              data-testid={`grid-widget-${item.i}`}
+            >
               {!isMobile && (
                 <div className="widget-drag-handle absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1 rounded bg-background/80 backdrop-blur-sm border shadow-sm">
                   <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
@@ -2195,7 +2754,11 @@ function WidgetLibraryDrawer({
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="right" className="w-[340px] sm:w-[380px]" data-testid="drawer-widget-library">
+      <SheetContent
+        side="right"
+        className="w-[340px] sm:w-[380px]"
+        data-testid="drawer-widget-library"
+      >
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <LayoutGrid className="h-5 w-5" />
@@ -2207,20 +2770,25 @@ function WidgetLibraryDrawer({
             variant="outline"
             size="sm"
             className="w-full text-xs"
-            onClick={() => { onResetLayout(); onClose(); }}
+            onClick={() => {
+              onResetLayout();
+              onClose();
+            }}
             data-testid="button-reset-layout"
           >
             <RotateCcw className="h-3 w-3 mr-1" />
             Reset to Default Layout
           </Button>
           <div className="border-t pt-4" />
-          {categories.map(cat => {
-            const widgets = WIDGET_DEFS.filter(w => w.category === cat.key);
+          {categories.map((cat) => {
+            const widgets = WIDGET_DEFS.filter((w) => w.category === cat.key);
             return (
               <div key={cat.key}>
-                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 tracking-wider">{cat.label}</h3>
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 tracking-wider">
+                  {cat.label}
+                </h3>
                 <div className="space-y-2">
-                  {widgets.map(widget => {
+                  {widgets.map((widget) => {
                     const isActive = activeWidgetIds.includes(widget.id);
                     const Icon = widget.icon;
                     return (
@@ -2235,7 +2803,9 @@ function WidgetLibraryDrawer({
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-medium truncate">{widget.label}</p>
-                            <p className="text-[11px] text-muted-foreground truncate">{widget.description}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              {widget.description}
+                            </p>
                           </div>
                         </div>
                         {isActive ? (
@@ -2299,7 +2869,11 @@ export default function Dashboard() {
     queryKey: ["/api/company"],
   });
 
-  const { data: pipeline, isLoading: pipelineLoading, isError: pipelineError } = useQuery<PipelineData>({
+  const {
+    data: pipeline,
+    isLoading: pipelineLoading,
+    isError: pipelineError,
+  } = useQuery<PipelineData>({
     queryKey: ["/api/company/pipeline"],
   });
 
@@ -2332,7 +2906,7 @@ export default function Dashboard() {
     return generateDefaultLayout(DEFAULT_WIDGET_IDS);
   }, [localLayout, savedLayout]);
 
-  const activeWidgetIds = useMemo(() => currentLayout.map(l => l.i), [currentLayout]);
+  const activeWidgetIds = useMemo(() => currentLayout.map((l) => l.i), [currentLayout]);
 
   const saveMutation = useMutation({
     mutationFn: async (layout: LayoutItem[]) => {
@@ -2347,29 +2921,35 @@ export default function Dashboard() {
     },
   });
 
-  const debouncedSave = useCallback((layout: LayoutItem[]) => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      saveMutation.mutate(layout);
-    }, 800);
-  }, [saveMutation]);
+  const debouncedSave = useCallback(
+    (layout: LayoutItem[]) => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveMutation.mutate(layout);
+      }, 800);
+    },
+    [saveMutation]
+  );
 
-  const handleLayoutChange = useCallback((_current: any[], allLayouts: { [key: string]: any[] }) => {
-    if (!userInteractedRef.current) return;
-    const lgLayout = allLayouts.lg;
-    if (!lgLayout || lgLayout.length === 0) return;
-    const cleaned: LayoutItem[] = lgLayout.map((item: any) => ({
-      i: item.i,
-      x: item.x,
-      y: item.y,
-      w: item.w,
-      h: item.h,
-      minW: WIDGET_DEFS.find(w => w.id === item.i)?.minW,
-      minH: WIDGET_DEFS.find(w => w.id === item.i)?.minH,
-    }));
-    setLocalLayout(cleaned);
-    debouncedSave(cleaned);
-  }, [debouncedSave]);
+  const handleLayoutChange = useCallback(
+    (_current: any[], allLayouts: { [key: string]: any[] }) => {
+      if (!userInteractedRef.current) return;
+      const lgLayout = allLayouts.lg;
+      if (!lgLayout || lgLayout.length === 0) return;
+      const cleaned: LayoutItem[] = lgLayout.map((item: any) => ({
+        i: item.i,
+        x: item.x,
+        y: item.y,
+        w: item.w,
+        h: item.h,
+        minW: WIDGET_DEFS.find((w) => w.id === item.i)?.minW,
+        minH: WIDGET_DEFS.find((w) => w.id === item.i)?.minH,
+      }));
+      setLocalLayout(cleaned);
+      debouncedSave(cleaned);
+    },
+    [debouncedSave]
+  );
 
   const handleDragStart = useCallback(() => {
     userInteractedRef.current = true;
@@ -2379,35 +2959,41 @@ export default function Dashboard() {
     userInteractedRef.current = true;
   }, []);
 
-  const handleAddWidget = useCallback((id: string) => {
-    if (activeWidgetIds.includes(id)) return;
-    const def = WIDGET_DEFS.find(w => w.id === id);
-    if (!def) return;
-    const maxY = currentLayout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
-    const newItem: LayoutItem = {
-      i: id,
-      x: 0,
-      y: maxY,
-      w: def.defaultW,
-      h: def.defaultH,
-      minW: def.minW,
-      minH: def.minH,
-    };
-    const newLayout = [...currentLayout, newItem];
-    setLocalLayout(newLayout);
-    userInteractedRef.current = true;
-    saveMutation.mutate(newLayout);
-    toast({ title: `${def.label} added to dashboard` });
-  }, [currentLayout, activeWidgetIds, saveMutation, toast]);
+  const handleAddWidget = useCallback(
+    (id: string) => {
+      if (activeWidgetIds.includes(id)) return;
+      const def = WIDGET_DEFS.find((w) => w.id === id);
+      if (!def) return;
+      const maxY = currentLayout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+      const newItem: LayoutItem = {
+        i: id,
+        x: 0,
+        y: maxY,
+        w: def.defaultW,
+        h: def.defaultH,
+        minW: def.minW,
+        minH: def.minH,
+      };
+      const newLayout = [...currentLayout, newItem];
+      setLocalLayout(newLayout);
+      userInteractedRef.current = true;
+      saveMutation.mutate(newLayout);
+      toast({ title: `${def.label} added to dashboard` });
+    },
+    [currentLayout, activeWidgetIds, saveMutation, toast]
+  );
 
-  const handleRemoveWidget = useCallback((id: string) => {
-    const newLayout = currentLayout.filter(item => item.i !== id);
-    setLocalLayout(newLayout.length > 0 ? newLayout : []);
-    userInteractedRef.current = true;
-    saveMutation.mutate(newLayout);
-    const def = WIDGET_DEFS.find(w => w.id === id);
-    toast({ title: `${def?.label || "Widget"} removed from dashboard` });
-  }, [currentLayout, saveMutation, toast]);
+  const handleRemoveWidget = useCallback(
+    (id: string) => {
+      const newLayout = currentLayout.filter((item) => item.i !== id);
+      setLocalLayout(newLayout.length > 0 ? newLayout : []);
+      userInteractedRef.current = true;
+      saveMutation.mutate(newLayout);
+      const def = WIDGET_DEFS.find((w) => w.id === id);
+      toast({ title: `${def?.label || "Widget"} removed from dashboard` });
+    },
+    [currentLayout, saveMutation, toast]
+  );
 
   const handleResetLayout = useCallback(() => {
     const defaultLayout = generateDefaultLayout(DEFAULT_WIDGET_IDS);
@@ -2420,9 +3006,10 @@ export default function Dashboard() {
   const tierKey = stats?.subscriptionTier as keyof typeof TIER_CONFIG | undefined;
   const tierInfo = tierKey ? TIER_CONFIG[tierKey] : null;
 
-  const visitProgress = stats && stats.todaysVisits > 0
-    ? Math.round((stats.todaysVisitBreakdown.completed / stats.todaysVisits) * 100)
-    : 0;
+  const visitProgress =
+    stats && stats.todaysVisits > 0
+      ? Math.round((stats.todaysVisitBreakdown.completed / stats.todaysVisits) * 100)
+      : 0;
 
   const renderWidget = (widgetId: string) => {
     switch (widgetId) {
@@ -2465,7 +3052,10 @@ export default function Dashboard() {
       case "requires_invoicing":
         return (
           <Link href="/invoices?tab=uninvoiced">
-            <Card className="h-full flex flex-col cursor-pointer hover:shadow-md transition-shadow" data-testid="widget-requires-invoicing">
+            <Card
+              className="h-full flex flex-col cursor-pointer hover:shadow-md transition-shadow"
+              data-testid="widget-requires-invoicing"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
                 <CardTitle className="text-sm font-medium">Requires Invoicing</CardTitle>
                 <FileText className="h-4 w-4 text-muted-foreground" />
@@ -2752,11 +3342,16 @@ export default function Dashboard() {
               ) : (
                 <div data-testid="text-plan-info">
                   <div className="flex items-center gap-2">
-                    <span className="text-lg font-bold">{tierInfo?.name ?? stats?.tierName ?? "Unknown"}</span>
-                    <Badge variant="secondary" className="text-[10px]">Active</Badge>
+                    <span className="text-lg font-bold">
+                      {tierInfo?.name ?? stats?.tierName ?? "Unknown"}
+                    </span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      Active
+                    </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    ${fmt(tierInfo?.price ?? 0)}/mo -- Up to {tierInfo?.maxUsers ?? 1} user{(tierInfo?.maxUsers ?? 1) > 1 ? "s" : ""}
+                    ${fmt(tierInfo?.price ?? 0)}/mo -- Up to {tierInfo?.maxUsers ?? 1} user
+                    {(tierInfo?.maxUsers ?? 1) > 1 ? "s" : ""}
                   </p>
                 </div>
               )}
@@ -2785,10 +3380,10 @@ export default function Dashboard() {
   };
 
   const gridLayouts = useMemo(() => {
-    const lgLayout = currentLayout.map(item => ({
+    const lgLayout = currentLayout.map((item) => ({
       ...item,
-      minW: WIDGET_DEFS.find(w => w.id === item.i)?.minW ?? 3,
-      minH: WIDGET_DEFS.find(w => w.id === item.i)?.minH ?? 2,
+      minW: WIDGET_DEFS.find((w) => w.id === item.i)?.minW ?? 3,
+      minH: WIDGET_DEFS.find((w) => w.id === item.i)?.minH ?? 2,
     }));
 
     const smLayout = currentLayout.map((item, idx) => ({
@@ -2829,15 +3424,15 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {onboarding && !onboarding.isComplete && (
-        <GuidedSetup onboarding={onboarding} />
-      )}
+      {onboarding && !onboarding.isComplete && <GuidedSetup onboarding={onboarding} />}
 
       {pipelineLoading ? (
         <div className="space-y-2" data-testid="loading-pipeline">
           <Skeleton className="h-3 w-full rounded-lg" />
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
-            {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20" />)}
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-20" />
+            ))}
           </div>
         </div>
       ) : pipelineError ? (

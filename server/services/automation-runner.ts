@@ -12,7 +12,12 @@ import { automationEventLogs, automationRules } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { makeSystemContext, type SkillResult } from "./skills/index";
 
-export type AutomationTrigger = "lead_created" | "quote_created" | "service_completed" | "payment_failed" | "invoice_created";
+export type AutomationTrigger =
+  | "lead_created"
+  | "quote_created"
+  | "service_completed"
+  | "payment_failed"
+  | "invoice_created";
 
 export type TriggerPayload = Record<string, unknown>;
 
@@ -67,7 +72,11 @@ async function executeRuleAction(
     case "run_skill": {
       const { skillName, ...skillParams } = actionConfig.params ?? {};
       if (!skillName) {
-        return { success: false, message: "run_skill action missing skillName in params", error: "MISSING_SKILL_NAME" };
+        return {
+          success: false,
+          message: "run_skill action missing skillName in params",
+          error: "MISSING_SKILL_NAME",
+        };
       }
       const normalizedParams = skillParams as Record<string, unknown>;
       if (skillName === "generate_invoice") {

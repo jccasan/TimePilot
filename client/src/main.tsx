@@ -9,16 +9,13 @@ window.addEventListener("vite:preloadError", () => {
 
 window.onerror = function (message, _source, _lineno, _colno, error) {
   if (String(message).includes("Unable to preload")) return;
-  reportError(
-    error?.message || String(message),
-    error?.stack,
-    "js"
-  );
+  reportError(error?.message || String(message), error?.stack, "js");
 };
 
 window.onunhandledrejection = function (event) {
   const reason = event.reason;
-  const message = reason instanceof Error ? reason.message : String(reason ?? "Unhandled promise rejection");
+  const message =
+    reason instanceof Error ? reason.message : String(reason ?? "Unhandled promise rejection");
   if (message.includes("Unable to preload")) return;
   const stack = reason instanceof Error ? reason.stack : undefined;
   reportError(message, stack, "js");

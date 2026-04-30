@@ -16,17 +16,23 @@ const statusColors: Record<string, string> = {
 };
 
 const dayLabels: Record<string, string> = {
-  monday: "Mon", tuesday: "Tue", wednesday: "Wed", thursday: "Thu",
-  friday: "Fri", saturday: "Sat", sunday: "Sun", tbd: "TBD",
+  monday: "Mon",
+  tuesday: "Tue",
+  wednesday: "Wed",
+  thursday: "Thu",
+  friday: "Fri",
+  saturday: "Sat",
+  sunday: "Sun",
+  tbd: "TBD",
 };
 
 const frequencyLabels: Record<string, string> = {
   "1_per_week": "1x/wk",
   "2_per_week": "2x/wk",
-  "biweekly": "Bi-weekly",
-  "as_needed": "As needed",
-  "weekly": "Weekly",
-  "monthly": "Monthly",
+  biweekly: "Bi-weekly",
+  as_needed: "As needed",
+  weekly: "Weekly",
+  monthly: "Monthly",
 };
 
 export default function TechClients() {
@@ -39,17 +45,20 @@ export default function TechClients() {
   const filteredContacts = useMemo(() => {
     if (!contacts) return [];
     const term = searchTerm.toLowerCase();
-    return contacts.filter(c =>
-      `${c.firstName} ${c.lastName}`.toLowerCase().includes(term) ||
-      c.streetAddress?.toLowerCase().includes(term) ||
-      c.city?.toLowerCase().includes(term) ||
-      c.phone?.includes(term)
+    return contacts.filter(
+      (c) =>
+        `${c.firstName} ${c.lastName}`.toLowerCase().includes(term) ||
+        c.streetAddress?.toLowerCase().includes(term) ||
+        c.city?.toLowerCase().includes(term) ||
+        c.phone?.includes(term)
     );
   }, [contacts, searchTerm]);
 
   return (
     <div className="p-4 space-y-4 overflow-auto h-full">
-      <h1 className="text-xl font-bold" data-testid="text-tech-clients-heading">Clients</h1>
+      <h1 className="text-xl font-bold" data-testid="text-tech-clients-heading">
+        Clients
+      </h1>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -64,7 +73,9 @@ export default function TechClients() {
 
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
         </div>
       ) : filteredContacts.length > 0 ? (
         <div className="space-y-2">
@@ -75,7 +86,10 @@ export default function TechClients() {
                   <p className="font-medium text-sm" data-testid={`text-client-name-${contact.id}`}>
                     {contact.firstName} {contact.lastName}
                   </p>
-                  <Badge className={`text-[10px] ${statusColors[contact.status] || ""}`} data-testid={`badge-client-status-${contact.id}`}>
+                  <Badge
+                    className={`text-[10px] ${statusColors[contact.status] || ""}`}
+                    data-testid={`badge-client-status-${contact.id}`}
+                  >
                     {contact.status}
                   </Badge>
                 </div>
@@ -94,13 +108,21 @@ export default function TechClients() {
 
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   {contact.phone && (
-                    <a href={`tel:${contact.phone}`} className="flex items-center gap-1 hover:underline" data-testid={`link-client-phone-${contact.id}`}>
+                    <a
+                      href={`tel:${contact.phone}`}
+                      className="flex items-center gap-1 hover:underline"
+                      data-testid={`link-client-phone-${contact.id}`}
+                    >
                       <Phone className="h-3 w-3" />
                       {contact.phone}
                     </a>
                   )}
                   {contact.email && (
-                    <a href={`mailto:${contact.email}`} className="flex items-center gap-1 hover:underline" data-testid={`link-client-email-${contact.id}`}>
+                    <a
+                      href={`mailto:${contact.email}`}
+                      className="flex items-center gap-1 hover:underline"
+                      data-testid={`link-client-email-${contact.id}`}
+                    >
                       <Mail className="h-3 w-3" />
                       {contact.email}
                     </a>
@@ -118,12 +140,17 @@ export default function TechClients() {
                     </span>
                   )}
                   {contact.serviceFrequency && (
-                    <span>{frequencyLabels[contact.serviceFrequency] || contact.serviceFrequency}</span>
+                    <span>
+                      {frequencyLabels[contact.serviceFrequency] || contact.serviceFrequency}
+                    </span>
                   )}
                 </div>
 
                 {contact.notes && (
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2" data-testid={`text-client-notes-${contact.id}`}>
+                  <p
+                    className="text-xs text-muted-foreground mt-1 line-clamp-2"
+                    data-testid={`text-client-notes-${contact.id}`}
+                  >
                     {contact.notes}
                   </p>
                 )}
@@ -133,7 +160,10 @@ export default function TechClients() {
         </div>
       ) : (
         <Card>
-          <CardContent className="p-8 text-center text-muted-foreground" data-testid="text-no-clients">
+          <CardContent
+            className="p-8 text-center text-muted-foreground"
+            data-testid="text-no-clients"
+          >
             {searchTerm ? "No clients matching your search" : "No clients found"}
           </CardContent>
         </Card>

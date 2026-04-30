@@ -3,7 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, Plus, Trash2, Loader2, Percent } from "lucide-react";
@@ -47,7 +53,12 @@ type Props = {
   compact?: boolean;
 };
 
-export function ServiceZoneMap({ zones, onZonesChange, companyAddress: _companyAddress, compact }: Props) {
+export function ServiceZoneMap({
+  zones,
+  onZonesChange,
+  companyAddress: _companyAddress,
+  compact,
+}: Props) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -102,7 +113,7 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress: _companyA
 
     const mapboxgl = (await import("mapbox-gl")).default;
 
-    markersRef.current.forEach(m => m.remove());
+    markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
     for (const zone of zones) {
@@ -122,7 +133,7 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress: _companyA
         el.style.fontWeight = "bold";
         el.style.cursor = "pointer";
         el.textContent = zone.zipCode.slice(-2);
-        el.title = `${zone.zipCode} - ${DAYS.find(d => d.value === zone.dayOfWeek)?.label || "TBD"}`;
+        el.title = `${zone.zipCode} - ${DAYS.find((d) => d.value === zone.dayOfWeek)?.label || "TBD"}`;
 
         const marker = new mapboxgl.Marker({ element: el })
           .setLngLat([zone.longitude, zone.latitude])
@@ -133,12 +144,15 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress: _companyA
     }
 
     if (zones.length > 0) {
-      const validZones = zones.filter(z => z.latitude && z.longitude);
+      const validZones = zones.filter((z) => z.latitude && z.longitude);
       if (validZones.length === 1) {
-        mapRef.current.flyTo({ center: [validZones[0].longitude!, validZones[0].latitude!], zoom: 10 });
+        mapRef.current.flyTo({
+          center: [validZones[0].longitude!, validZones[0].latitude!],
+          zoom: 10,
+        });
       } else if (validZones.length > 1) {
         const bounds = new mapboxgl.LngLatBounds();
-        validZones.forEach(z => bounds.extend([z.longitude!, z.latitude!]));
+        validZones.forEach((z) => bounds.extend([z.longitude!, z.latitude!]));
         mapRef.current.fitBounds(bounds, { padding: 60 });
       }
     }
@@ -151,7 +165,9 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress: _companyA
   const geocodeZip = async (zip: string): Promise<{ lat: number; lng: number } | null> => {
     if (!tokenData?.token) return null;
     try {
-      const resp = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(zip)}.json?country=US&types=postcode&access_token=${tokenData.token}`);
+      const resp = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(zip)}.json?country=US&types=postcode&access_token=${tokenData.token}`
+      );
       const data = await resp.json();
       if (data.features && data.features.length > 0) {
         const [lng, lat] = data.features[0].center;
@@ -167,7 +183,7 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress: _companyA
     const zip = zipInput.trim();
     if (!zip) return;
     if (!/^\d{5}$/.test(zip)) return;
-    if (zones.some(z => z.zipCode === zip)) {
+    if (zones.some((z) => z.zipCode === zip)) {
       setZipInput("");
       return;
     }
@@ -186,16 +202,18 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress: _companyA
   };
 
   const handleRemoveZip = (zipCode: string) => {
-    onZonesChange(zones.filter(z => z.zipCode !== zipCode));
+    onZonesChange(zones.filter((z) => z.zipCode !== zipCode));
   };
 
   const handleDayChange = (zipCode: string, day: string) => {
-    onZonesChange(zones.map(z => z.zipCode === zipCode ? { ...z, dayOfWeek: day } : z));
+    onZonesChange(zones.map((z) => (z.zipCode === zipCode ? { ...z, dayOfWeek: day } : z)));
   };
 
   const handleSurchargeChange = (zipCode: string, value: string) => {
     const num = Math.max(0, Math.min(200, Math.round(Number(value) || 0)));
-    onZonesChange(zones.map(z => z.zipCode === zipCode ? { ...z, priceSurchargePercent: num } : z));
+    onZonesChange(
+      zones.map((z) => (z.zipCode === zipCode ? { ...z, priceSurchargePercent: num } : z))
+    );
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -226,7 +244,11 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress: _companyA
             data-testid="input-zip-code"
           />
         </div>
-        <Button onClick={handleAddZip} disabled={adding || zipInput.length !== 5} data-testid="button-add-zip">
+        <Button
+          onClick={handleAddZip}
+          disabled={adding || zipInput.length !== 5}
+          data-testid="button-add-zip"
+        >
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           Add
         </Button>
@@ -246,17 +268,24 @@ export function ServiceZoneMap({ zones, onZonesChange, companyAddress: _companyA
                   className="h-3 w-3 rounded-full shrink-0"
                   style={{ backgroundColor: DAY_COLORS[zone.dayOfWeek] || DAY_COLORS.tbd }}
                 />
-                <Badge variant="outline" className="font-mono text-xs shrink-0">{zone.zipCode}</Badge>
+                <Badge variant="outline" className="font-mono text-xs shrink-0">
+                  {zone.zipCode}
+                </Badge>
                 <Select
                   value={zone.dayOfWeek}
                   onValueChange={(val) => handleDayChange(zone.zipCode, val)}
                 >
-                  <SelectTrigger className="h-8 flex-1 text-xs" data-testid={`select-day-${zone.zipCode}`}>
+                  <SelectTrigger
+                    className="h-8 flex-1 text-xs"
+                    data-testid={`select-day-${zone.zipCode}`}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {DAYS.map(d => (
-                      <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                    {DAYS.map((d) => (
+                      <SelectItem key={d.value} value={d.value}>
+                        {d.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

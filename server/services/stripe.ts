@@ -40,24 +40,33 @@ export async function createStripeCustomer(params: {
   stripeAccount?: string | null;
 }): Promise<string> {
   const stripe = getStripe();
-  const customer = await stripe.customers.create({
-    email: params.email || undefined,
-    name: params.name,
-    phone: params.phone || undefined,
-    metadata: params.metadata || {},
-  }, reqOpts(params.stripeAccount));
+  const customer = await stripe.customers.create(
+    {
+      email: params.email || undefined,
+      name: params.name,
+      phone: params.phone || undefined,
+      metadata: params.metadata || {},
+    },
+    reqOpts(params.stripeAccount)
+  );
   return customer.id;
 }
 
-export async function createSetupIntent(customerId: string, stripeAccount?: string | null): Promise<{
+export async function createSetupIntent(
+  customerId: string,
+  stripeAccount?: string | null
+): Promise<{
   clientSecret: string;
   setupIntentId: string;
 }> {
   const stripe = getStripe();
-  const setupIntent = await stripe.setupIntents.create({
-    customer: customerId,
-    payment_method_types: ["card"],
-  }, reqOpts(stripeAccount));
+  const setupIntent = await stripe.setupIntents.create(
+    {
+      customer: customerId,
+      payment_method_types: ["card"],
+    },
+    reqOpts(stripeAccount)
+  );
   return {
     clientSecret: setupIntent.client_secret!,
     setupIntentId: setupIntent.id,
@@ -66,10 +75,13 @@ export async function createSetupIntent(customerId: string, stripeAccount?: stri
 
 export async function getCustomerPaymentMethods(customerId: string, stripeAccount?: string | null) {
   const stripe = getStripe();
-  const methods = await stripe.paymentMethods.list({
-    customer: customerId,
-    type: "card",
-  }, reqOpts(stripeAccount));
+  const methods = await stripe.paymentMethods.list(
+    {
+      customer: customerId,
+      type: "card",
+    },
+    reqOpts(stripeAccount)
+  );
   return methods.data.map((pm) => ({
     id: pm.id,
     brand: pm.card?.brand || "unknown",
@@ -124,7 +136,10 @@ export async function createPaymentIntent(params: {
     piParams.automatic_payment_methods = undefined;
   }
 
-  const paymentIntent = await stripe.paymentIntents.create(piParams, reqOpts(params.stripeConnectAccountId));
+  const paymentIntent = await stripe.paymentIntents.create(
+    piParams,
+    reqOpts(params.stripeConnectAccountId)
+  );
   return {
     clientSecret: paymentIntent.client_secret!,
     paymentIntentId: paymentIntent.id,
@@ -147,11 +162,14 @@ export async function chargeInvoiceAutomatically(params: {
 }> {
   const stripe = getStripe();
 
-  const methods = await stripe.paymentMethods.list({
-    customer: params.customerId,
-    type: "card",
-    limit: 1,
-  }, reqOpts(params.stripeConnectAccountId));
+  const methods = await stripe.paymentMethods.list(
+    {
+      customer: params.customerId,
+      type: "card",
+      limit: 1,
+    },
+    reqOpts(params.stripeConnectAccountId)
+  );
 
   if (methods.data.length === 0) {
     return { paymentIntentId: "", status: "no_payment_method", error: "No payment method on file" };
@@ -244,11 +262,17 @@ export async function createCheckoutSession(params: {
     };
   }
 
-  const session = await stripe.checkout.sessions.create(sessionParams, reqOpts(params.stripeConnectAccountId));
+  const session = await stripe.checkout.sessions.create(
+    sessionParams,
+    reqOpts(params.stripeConnectAccountId)
+  );
   return { url: session.url!, sessionId: session.id };
 }
 
-export async function detachPaymentMethod(paymentMethodId: string, stripeAccount?: string | null): Promise<void> {
+export async function detachPaymentMethod(
+  paymentMethodId: string,
+  stripeAccount?: string | null
+): Promise<void> {
   const stripe = getStripe();
   await stripe.paymentMethods.detach(paymentMethodId, reqOpts(stripeAccount));
 }
@@ -265,9 +289,11 @@ export async function isCustomerOnPlatform(customerId: string): Promise<boolean>
 
 export function isStaleCustomerError(err: unknown): boolean {
   const e = err as { type?: string; message?: string };
-  return e?.type === "StripeInvalidRequestError" &&
+  return (
+    e?.type === "StripeInvalidRequestError" &&
     typeof e?.message === "string" &&
-    e.message.toLowerCase().includes("no such customer");
+    e.message.toLowerCase().includes("no such customer")
+  );
 }
 
 export async function ensureConnectedCustomer(params: {
@@ -326,14 +352,23 @@ export async function migrateCustomerToConnectedAccount(params: {
 
   const isPlatform = await isCustomerOnPlatform(params.platformCustomerId);
   if (!isPlatform) {
-    return { newCustomerId: params.platformCustomerId, migratedPaymentMethods: 0, totalPaymentMethods: 0, failedPaymentMethods: [], status: "skipped" };
+    return {
+      newCustomerId: params.platformCustomerId,
+      migratedPaymentMethods: 0,
+      totalPaymentMethods: 0,
+      failedPaymentMethods: [],
+      status: "skipped",
+    };
   }
 
-  const newCustomer = await stripe.customers.create({
-    email: params.email || undefined,
-    name: params.name,
-    metadata: { ...params.metadata, migratedFromPlatform: params.platformCustomerId },
-  }, reqOpts(params.stripeAccount));
+  const newCustomer = await stripe.customers.create(
+    {
+      email: params.email || undefined,
+      name: params.name,
+      metadata: { ...params.metadata, migratedFromPlatform: params.platformCustomerId },
+    },
+    reqOpts(params.stripeAccount)
+  );
 
   const platformMethods = await stripe.paymentMethods.list({
     customer: params.platformCustomerId,
@@ -341,36 +376,67 @@ export async function migrateCustomerToConnectedAccount(params: {
   });
 
   if (platformMethods.data.length === 0) {
-    return { newCustomerId: newCustomer.id, migratedPaymentMethods: 0, totalPaymentMethods: 0, failedPaymentMethods: [], status: "no_methods" };
+    return {
+      newCustomerId: newCustomer.id,
+      migratedPaymentMethods: 0,
+      totalPaymentMethods: 0,
+      failedPaymentMethods: [],
+      status: "no_methods",
+    };
   }
 
   let migratedCount = 0;
   const failedMethods: string[] = [];
   for (const pm of platformMethods.data) {
     try {
-      const cloned = await stripe.paymentMethods.create({
-        payment_method: pm.id,
-      }, reqOpts(params.stripeAccount));
-      await stripe.paymentMethods.attach(cloned.id, {
-        customer: newCustomer.id,
-      }, reqOpts(params.stripeAccount));
+      const cloned = await stripe.paymentMethods.create(
+        {
+          payment_method: pm.id,
+        },
+        reqOpts(params.stripeAccount)
+      );
+      await stripe.paymentMethods.attach(
+        cloned.id,
+        {
+          customer: newCustomer.id,
+        },
+        reqOpts(params.stripeAccount)
+      );
       migratedCount++;
     } catch (cloneErr: any) {
       failedMethods.push(pm.id);
-      console.warn(`[Stripe Migration] Failed to clone payment method ${pm.id}: ${cloneErr.message}`);
+      console.warn(
+        `[Stripe Migration] Failed to clone payment method ${pm.id}: ${cloneErr.message}`
+      );
     }
   }
 
-  const destMethods = await stripe.paymentMethods.list({
-    customer: newCustomer.id,
-    type: "card",
-  }, reqOpts(params.stripeAccount));
+  const destMethods = await stripe.paymentMethods.list(
+    {
+      customer: newCustomer.id,
+      type: "card",
+    },
+    reqOpts(params.stripeAccount)
+  );
   if (destMethods.data.length !== migratedCount) {
-    console.warn(`[Stripe Migration] PM count mismatch for customer ${newCustomer.id}: expected ${migratedCount}, found ${destMethods.data.length}`);
+    console.warn(
+      `[Stripe Migration] PM count mismatch for customer ${newCustomer.id}: expected ${migratedCount}, found ${destMethods.data.length}`
+    );
   }
 
-  const status = migratedCount === platformMethods.data.length ? "migrated" : (migratedCount > 0 ? "partial" : "no_methods");
-  return { newCustomerId: newCustomer.id, migratedPaymentMethods: migratedCount, totalPaymentMethods: platformMethods.data.length, failedPaymentMethods: failedMethods, status };
+  const status =
+    migratedCount === platformMethods.data.length
+      ? "migrated"
+      : migratedCount > 0
+        ? "partial"
+        : "no_methods";
+  return {
+    newCustomerId: newCustomer.id,
+    migratedPaymentMethods: migratedCount,
+    totalPaymentMethods: platformMethods.data.length,
+    failedPaymentMethods: failedMethods,
+    status,
+  };
 }
 
 export async function createConnectAccount(
@@ -485,7 +551,11 @@ export async function retrievePaymentIntentFees(
   if (!charge || typeof charge === "string") return null;
   const bt = charge.balance_transaction as Record<string, unknown> | string | null;
   if (!bt || typeof bt === "string") return null;
-  return { feeCents: bt.fee as number, netCents: bt.net as number, grossCents: bt.amount as number };
+  return {
+    feeCents: bt.fee as number,
+    netCents: bt.net as number,
+    grossCents: bt.amount as number,
+  };
 }
 
 export async function createCustomerPortalSession(params: {
@@ -504,7 +574,12 @@ export async function createCustomerPortalSession(params: {
 // The Billing Meter Events API (stripe.billing.meterEvents.create) is the supported
 // replacement for API version 2026-01-28.clover. Meter event names must match meter
 // definitions configured in the Stripe dashboard.
-export async function createUsageRecord(stripeCustomerId: string, eventName: string, quantity: number, timestamp?: number): Promise<void> {
+export async function createUsageRecord(
+  stripeCustomerId: string,
+  eventName: string,
+  quantity: number,
+  timestamp?: number
+): Promise<void> {
   const stripe = getStripe();
   await stripe.billing.meterEvents.create({
     event_name: eventName,
@@ -516,12 +591,17 @@ export async function createUsageRecord(stripeCustomerId: string, eventName: str
   });
 }
 
-export async function reportMeteredUsageSet(stripeSubscriptionId: string, eventType: string, quantity: number): Promise<void> {
+export async function reportMeteredUsageSet(
+  stripeSubscriptionId: string,
+  eventType: string,
+  quantity: number
+): Promise<void> {
   if (!isStripeConfigured() || !stripeSubscriptionId) return;
   try {
     const stripe = getStripe();
     const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-    const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+    const customerId =
+      typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
     await createUsageRecord(customerId, eventType, quantity);
     console.log(`[Stripe Usage] Set ${eventType} to ${quantity} for customer ${customerId}`);
   } catch (err: unknown) {
@@ -564,25 +644,35 @@ export function validateStripeConfig(): void {
   if (!secretKey) {
     console.warn("[Stripe Config] ⚠ STRIPE_SECRET_KEY is NOT set — Stripe features disabled");
   } else {
-    const mode = secretKey.startsWith("sk_live_") ? "LIVE" : secretKey.startsWith("sk_test_") ? "TEST" : "UNKNOWN";
+    const mode = secretKey.startsWith("sk_live_")
+      ? "LIVE"
+      : secretKey.startsWith("sk_test_")
+        ? "TEST"
+        : "UNKNOWN";
     console.log(`[Stripe Config] ✓ STRIPE_SECRET_KEY present — running in ${mode} mode`);
   }
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.warn("[Stripe Config] ⚠ STRIPE_WEBHOOK_SECRET is NOT set — webhook events will be rejected");
+    console.warn(
+      "[Stripe Config] ⚠ STRIPE_WEBHOOK_SECRET is NOT set — webhook events will be rejected"
+    );
   } else {
     console.log("[Stripe Config] ✓ STRIPE_WEBHOOK_SECRET present");
   }
 
   const connectWebhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
   if (!connectWebhookSecret) {
-    console.warn("[Stripe Config] ⚠ STRIPE_CONNECT_WEBHOOK_SECRET is NOT set — Connect webhook events may not be verified separately");
+    console.warn(
+      "[Stripe Config] ⚠ STRIPE_CONNECT_WEBHOOK_SECRET is NOT set — Connect webhook events may not be verified separately"
+    );
   } else {
     console.log("[Stripe Config] ✓ STRIPE_CONNECT_WEBHOOK_SECRET present (direct charges mode)");
   }
 
-  console.log("[Stripe Config] ℹ Connect mode: DIRECT CHARGES (stripeAccount header + application_fee_amount)");
+  console.log(
+    "[Stripe Config] ℹ Connect mode: DIRECT CHARGES (stripeAccount header + application_fee_amount)"
+  );
 
   const missingPrices: string[] = [];
   const presentPrices: string[] = [];
@@ -595,7 +685,9 @@ export function validateStripeConfig(): void {
   }
 
   if (presentPrices.length > 0) {
-    console.log(`[Stripe Config] ✓ ${presentPrices.length}/${REQUIRED_PRICE_VARS.length} price tier env vars set`);
+    console.log(
+      `[Stripe Config] ✓ ${presentPrices.length}/${REQUIRED_PRICE_VARS.length} price tier env vars set`
+    );
   }
   if (missingPrices.length > 0) {
     console.warn(`[Stripe Config] ⚠ Missing price tier env vars: ${missingPrices.join(", ")}`);
@@ -606,10 +698,12 @@ export function validateStripeConfig(): void {
     "STRIPE_PRICE_VOICE_STARTER",
     "STRIPE_PRICE_VOICE_PRO",
   ];
-  const missingVoice = voicePriceVars.filter(v => !process.env[v]);
-  const presentVoice = voicePriceVars.filter(v => !!process.env[v]);
+  const missingVoice = voicePriceVars.filter((v) => !process.env[v]);
+  const presentVoice = voicePriceVars.filter((v) => !!process.env[v]);
   if (presentVoice.length > 0) {
-    console.log(`[Stripe Config] ✓ ${presentVoice.length}/${voicePriceVars.length} voice plan price env vars set`);
+    console.log(
+      `[Stripe Config] ✓ ${presentVoice.length}/${voicePriceVars.length} voice plan price env vars set`
+    );
   }
   if (missingVoice.length > 0) {
     console.warn(`[Stripe Config] ⚠ Missing voice plan price env vars: ${missingVoice.join(", ")}`);
@@ -619,13 +713,17 @@ export function validateStripeConfig(): void {
     "STRIPE_COUPON_VOICE_STARTER_SUBSCRIBER",
     "STRIPE_COUPON_VOICE_PRO_SUBSCRIBER",
   ];
-  const missingCoupons = voiceCouponVars.filter(v => !process.env[v]);
-  const presentCoupons = voiceCouponVars.filter(v => !!process.env[v]);
+  const missingCoupons = voiceCouponVars.filter((v) => !process.env[v]);
+  const presentCoupons = voiceCouponVars.filter((v) => !!process.env[v]);
   if (presentCoupons.length > 0) {
-    console.log(`[Stripe Config] ✓ ${presentCoupons.length}/${voiceCouponVars.length} voice subscriber coupon env vars set`);
+    console.log(
+      `[Stripe Config] ✓ ${presentCoupons.length}/${voiceCouponVars.length} voice subscriber coupon env vars set`
+    );
   }
   if (missingCoupons.length > 0) {
-    console.warn(`[Stripe Config] ⚠ Missing voice subscriber coupon env vars: ${missingCoupons.join(", ")}`);
+    console.warn(
+      `[Stripe Config] ⚠ Missing voice subscriber coupon env vars: ${missingCoupons.join(", ")}`
+    );
   }
 
   console.log("[Stripe Config] Required webhook events for your Stripe dashboard:");
@@ -636,18 +734,25 @@ export function validateStripeConfig(): void {
 
   console.log("[Telnyx Config] Startup validation");
   const telnyxVars = ["TELNYX_API_KEY", "TELNYX_PHONE_NUMBER", "TELNYX_MESSAGING_PROFILE_ID"];
-  const presentTelnyx = telnyxVars.filter(v => !!process.env[v]);
-  const missingTelnyx = telnyxVars.filter(v => !process.env[v]);
+  const presentTelnyx = telnyxVars.filter((v) => !!process.env[v]);
+  const missingTelnyx = telnyxVars.filter((v) => !process.env[v]);
   if (presentTelnyx.length === telnyxVars.length) {
-    console.log(`[Telnyx Config] ✓ All ${telnyxVars.length} Telnyx env vars set (used as fallback for per-company config)`);
+    console.log(
+      `[Telnyx Config] ✓ All ${telnyxVars.length} Telnyx env vars set (used as fallback for per-company config)`
+    );
   } else if (presentTelnyx.length > 0) {
-    console.log(`[Telnyx Config] ✓ ${presentTelnyx.length}/${telnyxVars.length} Telnyx env vars set`);
-    console.log(`[Telnyx Config] ℹ Missing: ${missingTelnyx.join(", ")} — per-company config required in Settings for these`);
+    console.log(
+      `[Telnyx Config] ✓ ${presentTelnyx.length}/${telnyxVars.length} Telnyx env vars set`
+    );
+    console.log(
+      `[Telnyx Config] ℹ Missing: ${missingTelnyx.join(", ")} — per-company config required in Settings for these`
+    );
   } else {
-    console.log("[Telnyx Config] ℹ No Telnyx env vars set — per-company config required in Settings");
+    console.log(
+      "[Telnyx Config] ℹ No Telnyx env vars set — per-company config required in Settings"
+    );
   }
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
 }
 
 export async function fetchStripePrices(): Promise<Record<string, number>> {
@@ -700,14 +805,21 @@ export function getCachedStripePrices(): Record<string, number> | null {
   return cachedStripePrices;
 }
 
-export async function reportRetellMinutes(stripeCustomerId: string, minutes: number): Promise<void> {
+export async function reportRetellMinutes(
+  stripeCustomerId: string,
+  minutes: number
+): Promise<void> {
   if (!isStripeConfigured() || !stripeCustomerId) return;
   try {
     await createUsageRecord(stripeCustomerId, "voice_minutes_used", minutes);
-    console.log(`[Stripe Usage] Reported ${minutes} voice_minutes_used for customer ${stripeCustomerId}`);
+    console.log(
+      `[Stripe Usage] Reported ${minutes} voice_minutes_used for customer ${stripeCustomerId}`
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[Stripe Usage] Failed to report voice_minutes_used for ${stripeCustomerId}: ${message}`);
+    console.error(
+      `[Stripe Usage] Failed to report voice_minutes_used for ${stripeCustomerId}: ${message}`
+    );
   }
 }
 
@@ -741,7 +853,10 @@ export async function createVoicePlanCheckout(params: {
       },
       {
         key: "phone_or_area_code",
-        label: { type: "custom", custom: "Area code for new number  —OR—  Existing number to port (e.g. +15551234567)" },
+        label: {
+          type: "custom",
+          custom: "Area code for new number  —OR—  Existing number to port (e.g. +15551234567)",
+        },
         type: "text",
         optional: true,
       },
@@ -777,12 +892,17 @@ export async function createVoicePlanCheckout(params: {
   return { url: session.url!, sessionId: session.id };
 }
 
-export async function reportMeteredUsage(stripeSubscriptionId: string, eventType: string, quantity: number): Promise<void> {
+export async function reportMeteredUsage(
+  stripeSubscriptionId: string,
+  eventType: string,
+  quantity: number
+): Promise<void> {
   if (!isStripeConfigured() || !stripeSubscriptionId) return;
   try {
     const stripe = getStripe();
     const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-    const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+    const customerId =
+      typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
     await createUsageRecord(customerId, eventType, quantity);
     console.log(`[Stripe Usage] Reported ${quantity} ${eventType} for customer ${customerId}`);
   } catch (err: unknown) {

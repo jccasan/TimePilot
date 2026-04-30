@@ -4,12 +4,24 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
 import { users, companies } from "@shared/schema";
-import { registerUser, loginUser, getUserById, createPasswordResetToken, resetPasswordWithToken, changePassword, claimOnboardingEmailSend, resetOnboardingEmailSent } from "../services/app-auth";
-import { sendEmail, sendAdminSignupNotification, buildWelcomeEmailContent } from "../services/email";
+import {
+  registerUser,
+  loginUser,
+  getUserById,
+  createPasswordResetToken,
+  resetPasswordWithToken,
+  changePassword,
+  claimOnboardingEmailSend,
+  resetOnboardingEmailSent,
+} from "../services/app-auth";
+import {
+  sendEmail,
+  sendAdminSignupNotification,
+  buildWelcomeEmailContent,
+} from "../services/email";
 import { checkIpRisk, getClientIp, getCountryCode } from "../services/ip-risk";
 
 import { isAuthenticated, handleError, ensureCompanySetup } from "./shared";
-
 
 export async function registerAuthRoutes(app: Express): Promise<void> {
   // ================ Auth Routes ================
@@ -26,14 +38,24 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       ]);
 
       if (ipRisk.isVpn || ipRisk.isProxy) {
-        console.warn(`[Signup] Blocked VPN/proxy signup from ${clientIp} (type: ${ipRisk.isVpn ? "VPN" : "proxy"}, country: ${countryCode ?? "unknown"}, email: ${email})`);
-        return res.status(403).json({ error: "Signups from VPN or proxy connections are not allowed. Please disable your VPN and try again." });
+        console.warn(
+          `[Signup] Blocked VPN/proxy signup from ${clientIp} (type: ${ipRisk.isVpn ? "VPN" : "proxy"}, country: ${countryCode ?? "unknown"}, email: ${email})`
+        );
+        return res.status(403).json({
+          error:
+            "Signups from VPN or proxy connections are not allowed. Please disable your VPN and try again.",
+        });
       }
 
       const detectedCountry = countryCode ?? ipRisk.countryCode;
-      const blockedCountries = (process.env.BLOCKED_SIGNUP_COUNTRIES || "").split(",").map(c => c.trim().toUpperCase()).filter(Boolean);
+      const blockedCountries = (process.env.BLOCKED_SIGNUP_COUNTRIES || "")
+        .split(",")
+        .map((c) => c.trim().toUpperCase())
+        .filter(Boolean);
       if (detectedCountry && blockedCountries.includes(detectedCountry)) {
-        console.warn(`[Signup] Blocked signup from country ${detectedCountry}, IP ${clientIp}, email: ${email}`);
+        console.warn(
+          `[Signup] Blocked signup from country ${detectedCountry}, IP ${clientIp}, email: ${email}`
+        );
         return res.status(403).json({ error: "Signups are not available in your region." });
       }
 
@@ -62,25 +84,36 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       const appUrl = `${protocol}://${host}`;
       const resolvedCompanyName = companyName?.trim() || `${displayName}'s Company`;
 
-      claimOnboardingEmailSend(result.user.id).then(async (claimed) => {
-        if (!claimed) {
-          console.log(`[Register] Onboarding email already sent for ${maskEmail(email)}, skipping.`);
-          return;
-        }
-        try {
-          const _selfSignupWelcome = buildWelcomeEmailContent({ firstName: displayName, companyName: resolvedCompanyName, appUrl });
-          await sendEmail({
-            to: email,
-            subject: _selfSignupWelcome.subject,
-            text: _selfSignupWelcome.text,
-            html: _selfSignupWelcome.html,
-          });
-          console.log(`[Register] Welcome email sent to ${maskEmail(email)}`);
-        } catch (emailErr) {
-          console.error(`[Register] Failed to send welcome email to ${maskEmail(email)}, resetting flag:`, emailErr);
-          await resetOnboardingEmailSent(result.user.id).catch(() => {});
-        }
-      }).catch((err) => console.error("Failed to claim/send welcome email:", err));
+      claimOnboardingEmailSend(result.user.id)
+        .then(async (claimed) => {
+          if (!claimed) {
+            console.log(
+              `[Register] Onboarding email already sent for ${maskEmail(email)}, skipping.`
+            );
+            return;
+          }
+          try {
+            const _selfSignupWelcome = buildWelcomeEmailContent({
+              firstName: displayName,
+              companyName: resolvedCompanyName,
+              appUrl,
+            });
+            await sendEmail({
+              to: email,
+              subject: _selfSignupWelcome.subject,
+              text: _selfSignupWelcome.text,
+              html: _selfSignupWelcome.html,
+            });
+            console.log(`[Register] Welcome email sent to ${maskEmail(email)}`);
+          } catch (emailErr) {
+            console.error(
+              `[Register] Failed to send welcome email to ${maskEmail(email)}, resetting flag:`,
+              emailErr
+            );
+            await resetOnboardingEmailSent(result.user.id).catch(() => {});
+          }
+        })
+        .catch((err) => console.error("Failed to claim/send welcome email:", err));
 
       if (companyInfo && !companyInfo.alreadySetup) {
         sendAdminSignupNotification({
@@ -89,11 +122,15 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
           ownerName: displayName,
           tier: "free_trial",
           source: "Direct Registration",
-        }).catch((err) => console.error("[Signup Notification] Failed during direct registration:", err));
+        }).catch((err) =>
+          console.error("[Signup Notification] Failed during direct registration:", err)
+        );
       }
 
       return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/auth/login", async (req: Request, res: Response) => {
@@ -104,7 +141,11 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         return res.status(401).json({ error: result.error });
       }
       (req.session as any).userId = result.user.id;
-      await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, result.user.id)).execute();
+      await db
+        .update(users)
+        .set({ lastLoginAt: new Date() })
+        .where(eq(users.id, result.user.id))
+        .execute();
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => (err ? reject(err) : resolve()));
       });
@@ -118,9 +159,13 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         console.error("Setup during login failed:", err);
       }
 
-      console.log(`[auth] login success | user=${result.user.id} sid=${req.sessionID.substring(0, 8)}... ua=${(req.headers["user-agent"] || "").substring(0, 80)}`);
+      console.log(
+        `[auth] login success | user=${result.user.id} sid=${req.sessionID.substring(0, 8)}... ua=${(req.headers["user-agent"] || "").substring(0, 80)}`
+      );
       return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/auth/user", isAuthenticated, async (req: Request, res: Response) => {
@@ -133,7 +178,9 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       const role = memberships.length > 0 ? memberships[0].role : "tech";
       const companyId = memberships.length > 0 ? memberships[0].companyId : null;
       return res.json({ ...safeUser, role, companyId });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/auth/logout", (req: Request, res: Response) => {
@@ -144,31 +191,44 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
     });
   });
 
-  app.post("/api/auth/submit-verification-url", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const userId = (req.session as any).userId;
-      const { url } = req.body;
-      if (!url || typeof url !== "string") {
-        return res.status(400).json({ error: "URL is required" });
-      }
-      const trimmed = url.trim();
+  app.post(
+    "/api/auth/submit-verification-url",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
       try {
-        const parsed = new URL(trimmed);
-        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-          return res.status(400).json({ error: "URL must use http or https" });
+        const userId = (req.session as any).userId;
+        const { url } = req.body;
+        if (!url || typeof url !== "string") {
+          return res.status(400).json({ error: "URL is required" });
         }
-      } catch { return res.status(400).json({ error: "Invalid URL format" }); }
-      const memberships = await storage.getCompaniesForUser(userId);
-      if (!memberships.length) return res.status(404).json({ error: "No company found" });
-      const companyId = memberships[0].companyId;
-      const company = await storage.getCompany(companyId);
-      if (!company || company.subscriptionStatus !== "pending_approval") {
-        return res.status(403).json({ error: "Verification URL can only be submitted while account is pending approval" });
+        const trimmed = url.trim();
+        try {
+          const parsed = new URL(trimmed);
+          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            return res.status(400).json({ error: "URL must use http or https" });
+          }
+        } catch {
+          return res.status(400).json({ error: "Invalid URL format" });
+        }
+        const memberships = await storage.getCompaniesForUser(userId);
+        if (!memberships.length) return res.status(404).json({ error: "No company found" });
+        const companyId = memberships[0].companyId;
+        const company = await storage.getCompany(companyId);
+        if (!company || company.subscriptionStatus !== "pending_approval") {
+          return res.status(403).json({
+            error: "Verification URL can only be submitted while account is pending approval",
+          });
+        }
+        await db
+          .update(companies)
+          .set({ verificationUrl: trimmed })
+          .where(eq(companies.id, companyId));
+        res.json({ ok: true });
+      } catch (err) {
+        handleError(res, err);
       }
-      await db.update(companies).set({ verificationUrl: trimmed }).where(eq(companies.id, companyId));
-      res.json({ ok: true });
-    } catch (err) { handleError(res, err); }
-  });
+    }
+  );
 
   app.get("/api/tours/status", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -176,14 +236,17 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ error: "Not found" });
       return res.json({ completions: user.tourCompletions || {} });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/tours/complete", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId;
       const { tourId, version } = req.body;
-      if (!tourId || typeof tourId !== "string") return res.status(400).json({ error: "tourId is required" });
+      if (!tourId || typeof tourId !== "string")
+        return res.status(400).json({ error: "tourId is required" });
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ error: "Not found" });
       const completions = (user.tourCompletions as Record<string, string>) || {};
@@ -193,7 +256,9 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       }
       await db.update(users).set({ tourCompletions: completions }).where(eq(users.id, userId));
       return res.json({ ok: true, completions });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/tutorials/progress", isAuthenticated, async (req: Request, res: Response) => {
@@ -202,7 +267,8 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ error: "Not found" });
       const completions = (user.tourCompletions as Record<string, any>) || {};
-      const progress: Record<string, { currentStep: number; completed: boolean; version: string }> = {};
+      const progress: Record<string, { currentStep: number; completed: boolean; version: string }> =
+        {};
       for (const key of Object.keys(completions)) {
         if (key.endsWith("_progress")) {
           const tutorialId = key.replace("_progress", "");
@@ -213,15 +279,19 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         }
       }
       return res.json({ progress });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/tutorials/progress", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.session as any).userId;
       const { tutorialId, currentStep, completed, version } = req.body;
-      if (!tutorialId || typeof tutorialId !== "string") return res.status(400).json({ error: "tutorialId required" });
-      if (typeof currentStep !== "number") return res.status(400).json({ error: "currentStep required" });
+      if (!tutorialId || typeof tutorialId !== "string")
+        return res.status(400).json({ error: "tutorialId required" });
+      if (typeof currentStep !== "number")
+        return res.status(400).json({ error: "currentStep required" });
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ error: "Not found" });
       const completions = (user.tourCompletions as Record<string, any>) || {};
@@ -237,7 +307,9 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       }
       await db.update(users).set({ tourCompletions: completions }).where(eq(users.id, userId));
       return res.json({ ok: true, progress: completions[progressKey] });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   const resetRateLimits = new Map<string, { count: number; resetAt: number }>();
@@ -260,9 +332,13 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
       const ip = req.ip || req.socket.remoteAddress || "unknown";
       const isProd = process.env.NODE_ENV === "production";
-      if (!checkResetRateLimit(`forgot:${ip}`, isProd ? 5 : 500, 15 * 60 * 1000) ||
-          !checkResetRateLimit(`forgot:${email.toLowerCase()}`, isProd ? 3 : 500, 15 * 60 * 1000)) {
-        return res.json({ message: "If an account exists with that email, a password reset link has been sent." });
+      if (
+        !checkResetRateLimit(`forgot:${ip}`, isProd ? 5 : 500, 15 * 60 * 1000) ||
+        !checkResetRateLimit(`forgot:${email.toLowerCase()}`, isProd ? 3 : 500, 15 * 60 * 1000)
+      ) {
+        return res.json({
+          message: "If an account exists with that email, a password reset link has been sent.",
+        });
       }
 
       const result = await createPasswordResetToken(email);
@@ -303,15 +379,25 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         }
       }
 
-      return res.json({ message: "If an account exists with that email, a password reset link has been sent." });
-    } catch (err) { handleError(res, err); }
+      return res.json({
+        message: "If an account exists with that email, a password reset link has been sent.",
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
     try {
       const { token, password } = req.body;
       const ip = req.ip || req.socket.remoteAddress || "unknown";
-      if (!checkResetRateLimit(`reset:${ip}`, process.env.NODE_ENV === "production" ? 10 : 500, 15 * 60 * 1000)) {
+      if (
+        !checkResetRateLimit(
+          `reset:${ip}`,
+          process.env.NODE_ENV === "production" ? 10 : 500,
+          15 * 60 * 1000
+        )
+      ) {
         return res.status(429).json({ error: "Too many attempts. Please try again later." });
       }
       const result = await resetPasswordWithToken(token, password);
@@ -319,7 +405,9 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: result.error });
       }
       return res.json({ message: "Password has been reset successfully. You can now sign in." });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/auth/change-password", isAuthenticated, async (req: Request, res: Response) => {
@@ -333,7 +421,8 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: result.error });
       }
       return res.json({ message: "Password changed successfully" });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
-
 }

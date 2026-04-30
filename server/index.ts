@@ -18,26 +18,53 @@ declare module "http" {
   }
 }
 
-app.use(helmet({
-  contentSecurityPolicy: process.env.NODE_ENV === "production" ? {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "blob:", "https://*.googleapis.com", "https://*.gstatic.com", "https://*.mapbox.com", "https://*.tile.openstreetmap.org", "https://tile.openstreetmap.org"],
-      connectSrc: ["'self'", "https://api.mapbox.com", "https://*.tiles.mapbox.com", "https://events.mapbox.com", "wss:", "https://services.arcgis.com", "https://nominatim.openstreetmap.org"],
-      workerSrc: ["'self'", "blob:"],
-      childSrc: ["'self'", "blob:"],
-      frameSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      baseUri: ["'self'"],
-    },
-  } : false,
-  crossOriginEmbedderPolicy: false,
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  frameguard: process.env.NODE_ENV === "production" ? { action: "sameorigin" } : false,
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy:
+      process.env.NODE_ENV === "production"
+        ? {
+            directives: {
+              defaultSrc: ["'self'"],
+              scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+              styleSrc: [
+                "'self'",
+                "'unsafe-inline'",
+                "https://fonts.googleapis.com",
+                "https://unpkg.com",
+              ],
+              fontSrc: ["'self'", "https://fonts.gstatic.com"],
+              imgSrc: [
+                "'self'",
+                "data:",
+                "blob:",
+                "https://*.googleapis.com",
+                "https://*.gstatic.com",
+                "https://*.mapbox.com",
+                "https://*.tile.openstreetmap.org",
+                "https://tile.openstreetmap.org",
+              ],
+              connectSrc: [
+                "'self'",
+                "https://api.mapbox.com",
+                "https://*.tiles.mapbox.com",
+                "https://events.mapbox.com",
+                "wss:",
+                "https://services.arcgis.com",
+                "https://nominatim.openstreetmap.org",
+              ],
+              workerSrc: ["'self'", "blob:"],
+              childSrc: ["'self'", "blob:"],
+              frameSrc: ["'self'"],
+              objectSrc: ["'none'"],
+              baseUri: ["'self'"],
+            },
+          }
+        : false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    frameguard: process.env.NODE_ENV === "production" ? { action: "sameorigin" } : false,
+  })
+);
 
 app.use((req, res, next) => {
   if (req.path.startsWith("/signup/") || req.path.startsWith("/api/public/")) {
@@ -47,33 +74,39 @@ app.use((req, res, next) => {
   next();
 });
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",")
-  : [];
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : [];
 
-app.use("/api/public", cors({
-  origin: true,
-  credentials: false,
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type"],
-}));
+app.use(
+  "/api/public",
+  cors({
+    origin: true,
+    credentials: false,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"],
+  })
+);
 
-app.use(cors({
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    if (!origin || allowedOrigins.length === 0) {
-      callback(null, true);
-      return;
-    }
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, false);
-    }
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
+app.use(
+  cors({
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void
+    ) => {
+      if (!origin || allowedOrigins.length === 0) {
+        callback(null, true);
+        return;
+      }
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -112,7 +145,7 @@ app.use(
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
-  }),
+  })
 );
 
 app.use(express.urlencoded({ extended: false, limit: "10mb" }));
@@ -195,19 +228,21 @@ function setupSession(app: express.Express) {
 
   app.set("trust proxy", 1);
   const isProduction = process.env.NODE_ENV === "production";
-  app.use(session({
-    secret: process.env.SESSION_SECRET!,
-    store: sessionStore,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: true,
-      maxAge: sessionTtl,
-      sameSite: isProduction ? "lax" : "none" as any,
-      path: "/",
-    },
-  }));
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET!,
+      store: sessionStore,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: true,
+        maxAge: sessionTtl,
+        sameSite: isProduction ? "lax" : ("none" as any),
+        path: "/",
+      },
+    })
+  );
 }
 
 async function applyAdminCredentialMigration() {
@@ -217,31 +252,40 @@ async function applyAdminCredentialMigration() {
 
     const targetEmail = "jeremy@doocrewva.com";
 
-    const check = await pool.query("SELECT id, email FROM users WHERE email = 'jeremy@scoopilot.com' OR email = 'jeremy@doocrewva.com'");
+    const check = await pool.query(
+      "SELECT id, email FROM users WHERE email = 'jeremy@scoopilot.com' OR email = 'jeremy@doocrewva.com'"
+    );
     if (check.rows.length > 0) {
       const row = check.rows[0];
       if (row.email === "jeremy@scoopilot.com") {
-        await pool.query(
-          "UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2",
-          [targetEmail, row.id]
-        );
+        await pool.query("UPDATE users SET email = $1, updated_at = NOW() WHERE id = $2", [
+          targetEmail,
+          row.id,
+        ]);
         console.log("[Migration] Tenant email migrated to doocrewva.com");
       } else {
         console.log("[Migration] Tenant credentials already up to date");
       }
     }
 
-    const adminTarget = await pool.query("SELECT id FROM admin_users WHERE email = $1", [targetEmail]);
+    const adminTarget = await pool.query("SELECT id FROM admin_users WHERE email = $1", [
+      targetEmail,
+    ]);
     if (adminTarget.rows.length > 0) {
-      await pool.query("DELETE FROM admin_users WHERE email = 'jeremy@scoopilot.com' AND id != $1", [adminTarget.rows[0].id]);
+      await pool.query(
+        "DELETE FROM admin_users WHERE email = 'jeremy@scoopilot.com' AND id != $1",
+        [adminTarget.rows[0].id]
+      );
       console.log("[Migration] Platform admin credentials already up to date");
     } else {
-      const adminOld = await pool.query("SELECT id FROM admin_users WHERE email = 'jeremy@scoopilot.com'");
+      const adminOld = await pool.query(
+        "SELECT id FROM admin_users WHERE email = 'jeremy@scoopilot.com'"
+      );
       if (adminOld.rows.length > 0) {
-        await pool.query(
-          "UPDATE admin_users SET email = $1 WHERE id = $2",
-          [targetEmail, adminOld.rows[0].id]
-        );
+        await pool.query("UPDATE admin_users SET email = $1 WHERE id = $2", [
+          targetEmail,
+          adminOld.rows[0].id,
+        ]);
         console.log("[Migration] Platform admin email migrated");
       }
     }
@@ -265,12 +309,15 @@ async function syncSubscriptionTiers() {
     const { TIER_CONFIG } = await import("@shared/schema");
     const { Pool } = await import("pg");
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    const { rows } = await pool.query<SubscriptionTierRow>("SELECT tier_key, name, max_users, price, is_active FROM subscription_tiers");
+    const { rows } = await pool.query<SubscriptionTierRow>(
+      "SELECT tier_key, name, max_users, price, is_active FROM subscription_tiers"
+    );
     if (rows.length > 0) {
       for (const [key, cfg] of Object.entries(TIER_CONFIG)) {
         const existing = rows.find((r) => r.tier_key === key);
         if (existing) {
-          const needsUpdate = existing.name !== cfg.name ||
+          const needsUpdate =
+            existing.name !== cfg.name ||
             existing.max_users !== cfg.maxUsers ||
             parseFloat(existing.price) !== cfg.price ||
             existing.is_active !== cfg.visible;
@@ -284,7 +331,9 @@ async function syncSubscriptionTiers() {
       }
       console.log("[Migration] Subscription tiers synced with TIER_CONFIG");
     } else {
-      console.log("[Migration] No subscription_tiers rows to sync (will be seeded on first admin access)");
+      console.log(
+        "[Migration] No subscription_tiers rows to sync (will be seeded on first admin access)"
+      );
     }
     await pool.end();
   } catch (err) {
@@ -311,7 +360,9 @@ async function ensureCompanyColumns() {
       ALTER TABLE routes ADD COLUMN IF NOT EXISTS last_optimized_at TIMESTAMP;
       ALTER TABLE routes ADD COLUMN IF NOT EXISTS optimized_stop_hash VARCHAR(64);
     `);
-    console.log("[Migration] routes optimization columns (last_optimized_at, optimized_stop_hash) verified");
+    console.log(
+      "[Migration] routes optimization columns (last_optimized_at, optimized_stop_hash) verified"
+    );
     await pool.query(`
       DO $$ BEGIN
         ALTER TYPE automation_trigger ADD VALUE IF NOT EXISTS 'quote_created';
@@ -571,7 +622,9 @@ async function repairDuplicateStopOrders() {
           AND sp.route_id IS NOT NULL
           AND sp.is_active = true
       `);
-      console.log(`[Migration] Repaired stop_order for ${repaired} stops across routes with duplicates/gaps`);
+      console.log(
+        `[Migration] Repaired stop_order for ${repaired} stops across routes with duplicates/gaps`
+      );
     } else {
       console.log("[Migration] Stop order integrity check passed — no repairs needed");
     }
@@ -593,7 +646,9 @@ async function ensureCanadaMarketColumns() {
         ADD COLUMN IF NOT EXISTS tax_rate_percent DECIMAL(5,2),
         ADD COLUMN IF NOT EXISTS custom_max_users INTEGER;
     `);
-    console.log("[Migration] Canada market columns (country, currency, tax_rate_percent, custom_max_users) verified");
+    console.log(
+      "[Migration] Canada market columns (country, currency, tax_rate_percent, custom_max_users) verified"
+    );
   } catch (err) {
     console.error("[Migration] Failed to ensure Canada market columns:", err);
   } finally {
@@ -670,10 +725,14 @@ async function migrateServicePlansToAgreementsAndJobs() {
       CREATE INDEX IF NOT EXISTS idx_jao_job ON job_add_ons(job_id);
     `);
 
-    await pool.query(`ALTER TABLE visits ADD COLUMN IF NOT EXISTS job_id VARCHAR REFERENCES jobs(id) ON DELETE SET NULL`);
+    await pool.query(
+      `ALTER TABLE visits ADD COLUMN IF NOT EXISTS job_id VARCHAR REFERENCES jobs(id) ON DELETE SET NULL`
+    );
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_visits_job ON visits(job_id)`);
 
-    await pool.query(`ALTER TABLE vacation_holds ADD COLUMN IF NOT EXISTS agreement_id VARCHAR REFERENCES agreements(id) ON DELETE SET NULL`);
+    await pool.query(
+      `ALTER TABLE vacation_holds ADD COLUMN IF NOT EXISTS agreement_id VARCHAR REFERENCES agreements(id) ON DELETE SET NULL`
+    );
 
     const unmigrated = await pool.query(`
       SELECT sp.id FROM service_plans sp
@@ -681,21 +740,32 @@ async function migrateServicePlansToAgreementsAndJobs() {
       WHERE a.id IS NULL
     `);
 
-    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_agreements_sp_id ON agreements(service_plan_id) WHERE service_plan_id IS NOT NULL`);
-    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_sp_id ON jobs(service_plan_id) WHERE service_plan_id IS NOT NULL`);
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_agreements_sp_id ON agreements(service_plan_id) WHERE service_plan_id IS NOT NULL`
+    );
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_sp_id ON jobs(service_plan_id) WHERE service_plan_id IS NOT NULL`
+    );
 
     if (unmigrated.rows.length > 0) {
-      interface SpIdRow { id: string }
+      interface SpIdRow {
+        id: string;
+      }
       const spIds = (unmigrated.rows as SpIdRow[]).map((r) => r.id);
-      console.log(`[Migration] Backfilling ${spIds.length} unmigrated service_plans → agreements + jobs...`);
+      console.log(
+        `[Migration] Backfilling ${spIds.length} unmigrated service_plans → agreements + jobs...`
+      );
 
-      await pool.query(`
+      await pool.query(
+        `
         INSERT INTO agreements (id, company_id, contact_id, frequency, price_per_visit, is_active, paused_at, start_date, end_date, ends_after_count, ends_after_unit, estimate_id, service_plan_id, created_at, updated_at)
         SELECT gen_random_uuid(), company_id, contact_id, frequency, price_per_visit, is_active, paused_at, start_date, end_date, ends_after_count, ends_after_unit, estimate_id, id, created_at, updated_at
         FROM service_plans
         WHERE id = ANY($1)
         ON CONFLICT DO NOTHING
-      `, [spIds]);
+      `,
+        [spIds]
+      );
 
       console.log(`[Migration] Backfilled ${spIds.length} agreements`);
     }
@@ -707,18 +777,23 @@ async function migrateServicePlansToAgreementsAndJobs() {
       WHERE j.id IS NULL
     `);
     if (missingJobs.rows.length > 0) {
-      interface SpIdRow { id: string }
+      interface SpIdRow {
+        id: string;
+      }
       const spIds = (missingJobs.rows as SpIdRow[]).map((r) => r.id);
       console.log(`[Migration] Backfilling ${spIds.length} missing jobs...`);
 
-      await pool.query(`
+      await pool.query(
+        `
         INSERT INTO jobs (id, company_id, agreement_id, property_id, route_id, stop_order, day_of_week, service_name, job_type, job_status, start_time, end_time, anytime, visit_instructions, assigned_user_id, is_stop_only, service_plan_id, created_at, updated_at)
         SELECT gen_random_uuid(), sp.company_id, a.id, sp.property_id, sp.route_id, sp.stop_order, sp.day_of_week, sp.service_name, sp.job_type, sp.job_status, sp.start_time, sp.end_time, sp.anytime, sp.visit_instructions, sp.assigned_user_id, sp.is_stop_only, sp.id, sp.created_at, sp.updated_at
         FROM service_plans sp
         JOIN agreements a ON a.service_plan_id = sp.id
         WHERE sp.id = ANY($1)
         ON CONFLICT DO NOTHING
-      `, [spIds]);
+      `,
+        [spIds]
+      );
 
       console.log(`[Migration] Backfilled ${spIds.length} jobs`);
     }
@@ -776,7 +851,9 @@ async function migrateServicePlansToAgreementsAndJobs() {
     await pool.query(`ALTER TABLE routes ADD COLUMN IF NOT EXISTS date DATE`);
     await pool.query(`ALTER TABLE routes ALTER COLUMN day_of_week DROP NOT NULL`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_routes_date ON routes(company_id, date)`);
-    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_routes_company_date ON routes(company_id, date) WHERE date IS NOT NULL`);
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_routes_company_date ON routes(company_id, date) WHERE date IS NOT NULL`
+    );
     console.log("[Migration] routes date column and index verified");
   } catch (err) {
     console.error("[Migration] Failed to add date column to routes:", err);
@@ -792,8 +869,12 @@ async function migrateServicePlansToAgreementsAndJobs() {
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
       )
     `);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ba_company ON business_assessments(company_id)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ba_created ON business_assessments(company_id, created_at)`);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_ba_company ON business_assessments(company_id)`
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_ba_created ON business_assessments(company_id, created_at)`
+    );
     console.log("[Migration] business_assessments table verified");
   } catch (err) {
     console.error("[Migration] Failed to create business_assessments table:", err);
@@ -804,7 +885,9 @@ async function migrateServicePlansToAgreementsAndJobs() {
 
 async function seedExtraDemoContacts(pool: any, companyId: string) {
   try {
-    const routeRes = await pool.query("SELECT id FROM routes WHERE company_id = $1 ORDER BY name", [companyId]);
+    const routeRes = await pool.query("SELECT id FROM routes WHERE company_id = $1 ORDER BY name", [
+      companyId,
+    ]);
     if (routeRes.rows.length === 0) {
       console.log("[Migration] No routes found for demo company, skipping extra contacts");
       return;
@@ -812,222 +895,222 @@ async function seedExtraDemoContacts(pool: any, companyId: string) {
     const routeIds = routeRes.rows.map((r: any) => r.id);
 
     const extraContacts: [string, string, string, string, string][] = [
-      ['Anthony', 'Rivera', 'anthony.r@example.com', '(540) 555-2001', 'active'],
-      ['Samantha', 'Cole', 'samantha.c@example.com', '(540) 555-2002', 'active'],
-      ['Douglas', 'Fleming', 'douglas.f@example.com', '(540) 555-2003', 'active'],
-      ['Whitney', 'Pearson', 'whitney.p@example.com', '(540) 555-2004', 'active'],
-      ['Victor', 'Garrett', 'victor.g@example.com', '(540) 555-2005', 'active'],
-      ['Natalie', 'Burton', 'natalie.b@example.com', '(540) 555-2006', 'active'],
-      ['Sean', 'Morales', 'sean.m@example.com', '(540) 555-2007', 'active'],
-      ['Erica', 'Hampton', 'erica.h@example.com', '(540) 555-2008', 'active'],
-      ['Philip', 'Doyle', 'philip.d@example.com', '(540) 555-2009', 'active'],
-      ['Cassandra', 'Weaver', 'cassandra.w@example.com', '(540) 555-2010', 'active'],
-      ['Troy', 'McIntyre', 'troy.m@example.com', '(540) 555-2011', 'active'],
-      ['Gloria', 'Sutton', 'gloria.s@example.com', '(540) 555-2012', 'active'],
-      ['Russell', 'Cobb', 'russell.c@example.com', '(540) 555-2013', 'active'],
-      ['Veronica', 'Holt', 'veronica.h@example.com', '(540) 555-2014', 'active'],
-      ['Craig', 'Lindsey', 'craig.l@example.com', '(540) 555-2015', 'active'],
-      ['Monica', 'Vaughn', 'monica.v@example.com', '(540) 555-2016', 'active'],
-      ['Keith', 'Barber', 'keith.b@example.com', '(540) 555-2017', 'active'],
-      ['Stephanie', 'Lowe', 'stephanie.l@example.com', '(540) 555-2018', 'active'],
-      ['Dennis', 'Walters', 'dennis.w@example.com', '(540) 555-2019', 'active'],
-      ['Amber', 'Dalton', 'amber.d@example.com', '(540) 555-2020', 'active'],
-      ['Randy', 'Espinoza', 'randy.e@example.com', '(540) 555-2021', 'active'],
-      ['Crystal', 'Phelps', 'crystal.p@example.com', '(540) 555-2022', 'active'],
-      ['Joel', 'Compton', 'joel.c@example.com', '(540) 555-2023', 'active'],
-      ['Leslie', 'Gaines', 'leslie.g@example.com', '(540) 555-2024', 'active'],
-      ['Travis', 'Woodard', 'travis.w@example.com', '(540) 555-2025', 'active'],
-      ['Courtney', 'Buckley', 'courtney.b@example.com', '(540) 555-2026', 'active'],
-      ['Gerald', 'Maxwell', 'gerald.m@example.com', '(540) 555-2027', 'active'],
-      ['Vanessa', 'Pratt', 'vanessa.p@example.com', '(540) 555-2028', 'active'],
-      ['Darren', 'Cannon', 'darren.c@example.com', '(540) 555-2029', 'active'],
-      ['Alicia', 'Rowe', 'alicia.r@example.com', '(540) 555-2030', 'active'],
-      ['Curtis', 'Pollard', 'curtis.p@example.com', '(540) 555-2031', 'active'],
-      ['Brianna', 'Farrell', 'brianna.f@example.com', '(540) 555-2032', 'active'],
-      ['Lance', 'Ingram', 'lance.i@example.com', '(540) 555-2033', 'active'],
-      ['Jasmine', 'Huff', 'jasmine.h@example.com', '(540) 555-2034', 'active'],
-      ['Wayne', 'Strickland', 'wayne.s@example.com', '(540) 555-2035', 'active'],
-      ['Sharon', 'Callahan', 'sharon.c@example.com', '(540) 555-2036', 'active'],
-      ['Terrence', 'Knox', 'terrence.k@example.com', '(540) 555-2037', 'active'],
-      ['Kathryn', 'Malone', 'kathryn.m@example.com', '(540) 555-2038', 'active'],
-      ['Mitchell', 'Brock', 'mitchell.b@example.com', '(540) 555-2039', 'active'],
-      ['Carmen', 'Wyatt', 'carmen.w@example.com', '(540) 555-2040', 'active'],
-      ['Evan', 'Shaffer', 'evan.s@example.com', '(540) 555-2041', 'active'],
-      ['Lorraine', 'Juarez', 'lorraine.j@example.com', '(540) 555-2042', 'active'],
-      ['Blake', 'Finley', 'blake.f@example.com', '(540) 555-2043', 'active'],
-      ['Pamela', 'Norris', 'pamela.n@example.com', '(540) 555-2044', 'active'],
-      ['Albert', 'Rocha', 'albert.r@example.com', '(540) 555-2045', 'active'],
-      ['Renee', 'Pace', 'renee.p@example.com', '(540) 555-2046', 'active'],
-      ['Martin', 'Hendricks', 'martin.h@example.com', '(540) 555-2047', 'active'],
-      ['Allison', 'Spence', 'allison.s@example.com', '(540) 555-2048', 'active'],
-      ['Scott', 'Gilmore', 'scott.g@example.com', '(540) 555-2049', 'active'],
-      ['Bethany', 'Estes', 'bethany.e@example.com', '(540) 555-2050', 'active'],
-      ['Jordan', 'Melton', 'jordan.m@example.com', '(540) 555-2051', 'active'],
-      ['Theresa', 'Ochoa', 'theresa.o@example.com', '(540) 555-2052', 'active'],
-      ['Marcus', 'Penn', 'marcus.penn@example.com', '(540) 555-2053', 'active'],
-      ['Bridget', 'Swanson', 'bridget.s@example.com', '(540) 555-2054', 'active'],
-      ['Franklin', 'Mejia', 'franklin.m@example.com', '(540) 555-2055', 'active'],
-      ['Rosa', 'Odom', 'rosa.o@example.com', '(540) 555-2056', 'active'],
-      ['Neil', 'Greer', 'neil.g@example.com', '(540) 555-2057', 'active'],
-      ['Dianne', 'Bates', 'dianne.b@example.com', '(540) 555-2058', 'active'],
-      ['Cody', 'Waller', 'cody.w@example.com', '(540) 555-2059', 'active'],
-      ['Teresa', 'Duffy', 'teresa.d@example.com', '(540) 555-2060', 'active'],
-      ['Allan', 'Richmond', 'allan.r@example.com', '(540) 555-2061', 'active'],
-      ['Faith', 'Merritt', 'faith.m@example.com', '(540) 555-2062', 'active'],
-      ['Warren', 'Beard', 'warren.b@example.com', '(540) 555-2063', 'active'],
-      ['Elaine', 'Levine', 'elaine.l@example.com', '(540) 555-2064', 'active'],
-      ['Dominic', 'Olson', 'dominic.o@example.com', '(540) 555-2065', 'lead'],
-      ['Kimberly', 'Sampson', 'kimberly.s@example.com', '(540) 555-2066', 'lead'],
-      ['Stuart', 'Woodward', 'stuart.w@example.com', '(540) 555-2067', 'lead'],
-      ['Gina', 'Hartley', 'gina.h@example.com', '(540) 555-2068', 'lead'],
-      ['Leo', 'Blanchard', 'leo.b@example.com', '(540) 555-2069', 'lead'],
-      ['Christine', 'Fulton', 'christine.f@example.com', '(540) 555-2070', 'active'],
+      ["Anthony", "Rivera", "anthony.r@example.com", "(540) 555-2001", "active"],
+      ["Samantha", "Cole", "samantha.c@example.com", "(540) 555-2002", "active"],
+      ["Douglas", "Fleming", "douglas.f@example.com", "(540) 555-2003", "active"],
+      ["Whitney", "Pearson", "whitney.p@example.com", "(540) 555-2004", "active"],
+      ["Victor", "Garrett", "victor.g@example.com", "(540) 555-2005", "active"],
+      ["Natalie", "Burton", "natalie.b@example.com", "(540) 555-2006", "active"],
+      ["Sean", "Morales", "sean.m@example.com", "(540) 555-2007", "active"],
+      ["Erica", "Hampton", "erica.h@example.com", "(540) 555-2008", "active"],
+      ["Philip", "Doyle", "philip.d@example.com", "(540) 555-2009", "active"],
+      ["Cassandra", "Weaver", "cassandra.w@example.com", "(540) 555-2010", "active"],
+      ["Troy", "McIntyre", "troy.m@example.com", "(540) 555-2011", "active"],
+      ["Gloria", "Sutton", "gloria.s@example.com", "(540) 555-2012", "active"],
+      ["Russell", "Cobb", "russell.c@example.com", "(540) 555-2013", "active"],
+      ["Veronica", "Holt", "veronica.h@example.com", "(540) 555-2014", "active"],
+      ["Craig", "Lindsey", "craig.l@example.com", "(540) 555-2015", "active"],
+      ["Monica", "Vaughn", "monica.v@example.com", "(540) 555-2016", "active"],
+      ["Keith", "Barber", "keith.b@example.com", "(540) 555-2017", "active"],
+      ["Stephanie", "Lowe", "stephanie.l@example.com", "(540) 555-2018", "active"],
+      ["Dennis", "Walters", "dennis.w@example.com", "(540) 555-2019", "active"],
+      ["Amber", "Dalton", "amber.d@example.com", "(540) 555-2020", "active"],
+      ["Randy", "Espinoza", "randy.e@example.com", "(540) 555-2021", "active"],
+      ["Crystal", "Phelps", "crystal.p@example.com", "(540) 555-2022", "active"],
+      ["Joel", "Compton", "joel.c@example.com", "(540) 555-2023", "active"],
+      ["Leslie", "Gaines", "leslie.g@example.com", "(540) 555-2024", "active"],
+      ["Travis", "Woodard", "travis.w@example.com", "(540) 555-2025", "active"],
+      ["Courtney", "Buckley", "courtney.b@example.com", "(540) 555-2026", "active"],
+      ["Gerald", "Maxwell", "gerald.m@example.com", "(540) 555-2027", "active"],
+      ["Vanessa", "Pratt", "vanessa.p@example.com", "(540) 555-2028", "active"],
+      ["Darren", "Cannon", "darren.c@example.com", "(540) 555-2029", "active"],
+      ["Alicia", "Rowe", "alicia.r@example.com", "(540) 555-2030", "active"],
+      ["Curtis", "Pollard", "curtis.p@example.com", "(540) 555-2031", "active"],
+      ["Brianna", "Farrell", "brianna.f@example.com", "(540) 555-2032", "active"],
+      ["Lance", "Ingram", "lance.i@example.com", "(540) 555-2033", "active"],
+      ["Jasmine", "Huff", "jasmine.h@example.com", "(540) 555-2034", "active"],
+      ["Wayne", "Strickland", "wayne.s@example.com", "(540) 555-2035", "active"],
+      ["Sharon", "Callahan", "sharon.c@example.com", "(540) 555-2036", "active"],
+      ["Terrence", "Knox", "terrence.k@example.com", "(540) 555-2037", "active"],
+      ["Kathryn", "Malone", "kathryn.m@example.com", "(540) 555-2038", "active"],
+      ["Mitchell", "Brock", "mitchell.b@example.com", "(540) 555-2039", "active"],
+      ["Carmen", "Wyatt", "carmen.w@example.com", "(540) 555-2040", "active"],
+      ["Evan", "Shaffer", "evan.s@example.com", "(540) 555-2041", "active"],
+      ["Lorraine", "Juarez", "lorraine.j@example.com", "(540) 555-2042", "active"],
+      ["Blake", "Finley", "blake.f@example.com", "(540) 555-2043", "active"],
+      ["Pamela", "Norris", "pamela.n@example.com", "(540) 555-2044", "active"],
+      ["Albert", "Rocha", "albert.r@example.com", "(540) 555-2045", "active"],
+      ["Renee", "Pace", "renee.p@example.com", "(540) 555-2046", "active"],
+      ["Martin", "Hendricks", "martin.h@example.com", "(540) 555-2047", "active"],
+      ["Allison", "Spence", "allison.s@example.com", "(540) 555-2048", "active"],
+      ["Scott", "Gilmore", "scott.g@example.com", "(540) 555-2049", "active"],
+      ["Bethany", "Estes", "bethany.e@example.com", "(540) 555-2050", "active"],
+      ["Jordan", "Melton", "jordan.m@example.com", "(540) 555-2051", "active"],
+      ["Theresa", "Ochoa", "theresa.o@example.com", "(540) 555-2052", "active"],
+      ["Marcus", "Penn", "marcus.penn@example.com", "(540) 555-2053", "active"],
+      ["Bridget", "Swanson", "bridget.s@example.com", "(540) 555-2054", "active"],
+      ["Franklin", "Mejia", "franklin.m@example.com", "(540) 555-2055", "active"],
+      ["Rosa", "Odom", "rosa.o@example.com", "(540) 555-2056", "active"],
+      ["Neil", "Greer", "neil.g@example.com", "(540) 555-2057", "active"],
+      ["Dianne", "Bates", "dianne.b@example.com", "(540) 555-2058", "active"],
+      ["Cody", "Waller", "cody.w@example.com", "(540) 555-2059", "active"],
+      ["Teresa", "Duffy", "teresa.d@example.com", "(540) 555-2060", "active"],
+      ["Allan", "Richmond", "allan.r@example.com", "(540) 555-2061", "active"],
+      ["Faith", "Merritt", "faith.m@example.com", "(540) 555-2062", "active"],
+      ["Warren", "Beard", "warren.b@example.com", "(540) 555-2063", "active"],
+      ["Elaine", "Levine", "elaine.l@example.com", "(540) 555-2064", "active"],
+      ["Dominic", "Olson", "dominic.o@example.com", "(540) 555-2065", "lead"],
+      ["Kimberly", "Sampson", "kimberly.s@example.com", "(540) 555-2066", "lead"],
+      ["Stuart", "Woodward", "stuart.w@example.com", "(540) 555-2067", "lead"],
+      ["Gina", "Hartley", "gina.h@example.com", "(540) 555-2068", "lead"],
+      ["Leo", "Blanchard", "leo.b@example.com", "(540) 555-2069", "lead"],
+      ["Christine", "Fulton", "christine.f@example.com", "(540) 555-2070", "active"],
     ];
 
     const extraAddresses: [string, number, number, number, string][] = [
-      ['101 Hanover St', 38.3041, -77.4578, 2, 'medium'],
-      ['215 Amelia St', 38.3025, -77.4592, 1, 'small'],
-      ['330 Fauquier St', 38.3058, -77.4601, 3, 'large'],
-      ['445 Prince Edward St', 38.3033, -77.4615, 1, 'medium'],
-      ['560 Charlotte St', 38.3019, -77.4545, 2, 'large'],
-      ['125 Canal St', 38.3008, -77.4562, 1, 'small'],
-      ['240 Lewis St', 38.3072, -77.4588, 2, 'medium'],
-      ['355 Hawke St', 38.3049, -77.4535, 4, 'large'],
-      ['470 Frederick St', 38.3063, -77.4572, 1, 'small'],
-      ['585 Barton St', 38.2995, -77.4609, 2, 'medium'],
-      ['1412 Dandridge St', 38.2968, -77.4652, 1, 'medium'],
-      ['1527 Herndon St', 38.2953, -77.4688, 3, 'large'],
-      ['1643 Sylvania Ave', 38.2938, -77.4724, 2, 'small'],
-      ['1758 Idlewild Blvd', 38.2922, -77.4760, 1, 'medium'],
-      ['1874 Gordon Rd', 38.2907, -77.4796, 2, 'large'],
-      ['1015 Executive Ave', 38.2965, -77.4543, 1, 'small'],
-      ['1130 Deacon Rd', 38.2950, -77.4511, 2, 'medium'],
-      ['1245 Jackson St', 38.2935, -77.4479, 3, 'large'],
-      ['1360 Millwood Dr', 38.2920, -77.4447, 1, 'medium'],
-      ['1475 Jefferson Davis Hwy', 38.2905, -77.4415, 2, 'small'],
-      ['2510 Mine Rd', 38.2845, -77.4925, 1, 'medium'],
-      ['2625 Lansdowne Rd', 38.2831, -77.4961, 2, 'large'],
-      ['2740 Belman Rd', 38.2816, -77.4997, 1, 'small'],
-      ['2855 Hood Dr', 38.2801, -77.5033, 3, 'large'],
-      ['2970 Wicklow Dr', 38.2786, -77.5069, 2, 'medium'],
-      ['3085 Leavells Rd', 38.2771, -77.5105, 1, 'small'],
-      ['3200 Harrison Rd', 38.2756, -77.5141, 2, 'large'],
-      ['3315 Lee Hill Dr', 38.2741, -77.5177, 1, 'medium'],
-      ['3430 Benchmark Rd', 38.2726, -77.5213, 4, 'large'],
-      ['3545 Smith Station Rd', 38.2711, -77.5249, 2, 'medium'],
-      ['4001 Cambridge St', 38.2696, -77.4383, 1, 'small'],
-      ['4116 River Rd', 38.2681, -77.4351, 2, 'medium'],
-      ['4231 Hillcrest Dr', 38.2666, -77.4319, 3, 'large'],
-      ['4346 Courthouse Rd', 38.2651, -77.4287, 1, 'medium'],
-      ['4461 Garrisonville Rd', 38.2636, -77.4255, 2, 'small'],
-      ['4576 Plantation Dr', 38.2735, -77.4623, 1, 'large'],
-      ['4691 Warrenton Rd', 38.2750, -77.4659, 2, 'medium'],
-      ['4806 Chatham Heights Rd', 38.2765, -77.4695, 1, 'small'],
-      ['4921 Butler Rd', 38.2780, -77.4731, 3, 'large'],
-      ['5036 Tidewater Trail', 38.2795, -77.4767, 2, 'medium'],
-      ['1901 College Ave', 38.2810, -77.4803, 1, 'small'],
-      ['2016 Hospital Dr', 38.2825, -77.4839, 2, 'medium'],
-      ['2131 William St Extended', 38.2840, -77.4875, 1, 'large'],
-      ['2246 Normandy Ave', 38.2855, -77.4911, 4, 'large'],
-      ['2361 Sunken Rd Extended', 38.2870, -77.4947, 2, 'medium'],
-      ['620 Bunker Hill St', 38.3085, -77.4625, 1, 'small'],
-      ['735 Marye St', 38.3098, -77.4659, 2, 'medium'],
-      ['850 Kirkland Dr', 38.3112, -77.4693, 3, 'large'],
-      ['965 Lee Dr', 38.3126, -77.4727, 1, 'medium'],
-      ['1080 Mayfield Dr', 38.3140, -77.4761, 2, 'small'],
-      ['1195 Breckenridge Dr', 38.3154, -77.4795, 1, 'medium'],
-      ['1310 College Heights', 38.3168, -77.4829, 2, 'large'],
-      ['1425 Battlefield Blvd', 38.3182, -77.4863, 1, 'small'],
-      ['1540 Telegraph Rd', 38.3196, -77.4897, 3, 'large'],
-      ['1655 Altoona Dr', 38.3210, -77.4931, 2, 'medium'],
-      ['720 Pitt St', 38.3005, -77.4530, 1, 'medium'],
-      ['835 Commerce St', 38.2990, -77.4498, 2, 'large'],
-      ['950 Water St', 38.2975, -77.4466, 1, 'small'],
-      ['1065 Ford St', 38.2960, -77.4434, 3, 'large'],
-      ['1180 Bridgewater St', 38.2945, -77.4402, 2, 'medium'],
-      ['1295 Riverside Dr', 38.2930, -77.4370, 1, 'small'],
-      ['1410 Ferry Farm Ln', 38.2915, -77.4338, 2, 'large'],
-      ['1525 Kings Hwy', 38.2900, -77.4306, 1, 'medium'],
-      ['1640 Embrey Mill Rd', 38.2885, -77.4274, 4, 'large'],
-      ['1755 Celebrate Virginia Dr', 38.2870, -77.4242, 2, 'medium'],
-      ['1870 Central Park Blvd', 38.3015, -77.4680, 1, 'small'],
-      ['1985 Greenview Dr', 38.3030, -77.4716, 2, 'medium'],
-      ['2100 Oak Hill Ln', 38.3045, -77.4752, 3, 'large'],
-      ['2215 Pine Grove Ct', 38.3060, -77.4788, 1, 'small'],
-      ['2330 Maple Ridge Rd', 38.3075, -77.4824, 2, 'medium'],
+      ["101 Hanover St", 38.3041, -77.4578, 2, "medium"],
+      ["215 Amelia St", 38.3025, -77.4592, 1, "small"],
+      ["330 Fauquier St", 38.3058, -77.4601, 3, "large"],
+      ["445 Prince Edward St", 38.3033, -77.4615, 1, "medium"],
+      ["560 Charlotte St", 38.3019, -77.4545, 2, "large"],
+      ["125 Canal St", 38.3008, -77.4562, 1, "small"],
+      ["240 Lewis St", 38.3072, -77.4588, 2, "medium"],
+      ["355 Hawke St", 38.3049, -77.4535, 4, "large"],
+      ["470 Frederick St", 38.3063, -77.4572, 1, "small"],
+      ["585 Barton St", 38.2995, -77.4609, 2, "medium"],
+      ["1412 Dandridge St", 38.2968, -77.4652, 1, "medium"],
+      ["1527 Herndon St", 38.2953, -77.4688, 3, "large"],
+      ["1643 Sylvania Ave", 38.2938, -77.4724, 2, "small"],
+      ["1758 Idlewild Blvd", 38.2922, -77.476, 1, "medium"],
+      ["1874 Gordon Rd", 38.2907, -77.4796, 2, "large"],
+      ["1015 Executive Ave", 38.2965, -77.4543, 1, "small"],
+      ["1130 Deacon Rd", 38.295, -77.4511, 2, "medium"],
+      ["1245 Jackson St", 38.2935, -77.4479, 3, "large"],
+      ["1360 Millwood Dr", 38.292, -77.4447, 1, "medium"],
+      ["1475 Jefferson Davis Hwy", 38.2905, -77.4415, 2, "small"],
+      ["2510 Mine Rd", 38.2845, -77.4925, 1, "medium"],
+      ["2625 Lansdowne Rd", 38.2831, -77.4961, 2, "large"],
+      ["2740 Belman Rd", 38.2816, -77.4997, 1, "small"],
+      ["2855 Hood Dr", 38.2801, -77.5033, 3, "large"],
+      ["2970 Wicklow Dr", 38.2786, -77.5069, 2, "medium"],
+      ["3085 Leavells Rd", 38.2771, -77.5105, 1, "small"],
+      ["3200 Harrison Rd", 38.2756, -77.5141, 2, "large"],
+      ["3315 Lee Hill Dr", 38.2741, -77.5177, 1, "medium"],
+      ["3430 Benchmark Rd", 38.2726, -77.5213, 4, "large"],
+      ["3545 Smith Station Rd", 38.2711, -77.5249, 2, "medium"],
+      ["4001 Cambridge St", 38.2696, -77.4383, 1, "small"],
+      ["4116 River Rd", 38.2681, -77.4351, 2, "medium"],
+      ["4231 Hillcrest Dr", 38.2666, -77.4319, 3, "large"],
+      ["4346 Courthouse Rd", 38.2651, -77.4287, 1, "medium"],
+      ["4461 Garrisonville Rd", 38.2636, -77.4255, 2, "small"],
+      ["4576 Plantation Dr", 38.2735, -77.4623, 1, "large"],
+      ["4691 Warrenton Rd", 38.275, -77.4659, 2, "medium"],
+      ["4806 Chatham Heights Rd", 38.2765, -77.4695, 1, "small"],
+      ["4921 Butler Rd", 38.278, -77.4731, 3, "large"],
+      ["5036 Tidewater Trail", 38.2795, -77.4767, 2, "medium"],
+      ["1901 College Ave", 38.281, -77.4803, 1, "small"],
+      ["2016 Hospital Dr", 38.2825, -77.4839, 2, "medium"],
+      ["2131 William St Extended", 38.284, -77.4875, 1, "large"],
+      ["2246 Normandy Ave", 38.2855, -77.4911, 4, "large"],
+      ["2361 Sunken Rd Extended", 38.287, -77.4947, 2, "medium"],
+      ["620 Bunker Hill St", 38.3085, -77.4625, 1, "small"],
+      ["735 Marye St", 38.3098, -77.4659, 2, "medium"],
+      ["850 Kirkland Dr", 38.3112, -77.4693, 3, "large"],
+      ["965 Lee Dr", 38.3126, -77.4727, 1, "medium"],
+      ["1080 Mayfield Dr", 38.314, -77.4761, 2, "small"],
+      ["1195 Breckenridge Dr", 38.3154, -77.4795, 1, "medium"],
+      ["1310 College Heights", 38.3168, -77.4829, 2, "large"],
+      ["1425 Battlefield Blvd", 38.3182, -77.4863, 1, "small"],
+      ["1540 Telegraph Rd", 38.3196, -77.4897, 3, "large"],
+      ["1655 Altoona Dr", 38.321, -77.4931, 2, "medium"],
+      ["720 Pitt St", 38.3005, -77.453, 1, "medium"],
+      ["835 Commerce St", 38.299, -77.4498, 2, "large"],
+      ["950 Water St", 38.2975, -77.4466, 1, "small"],
+      ["1065 Ford St", 38.296, -77.4434, 3, "large"],
+      ["1180 Bridgewater St", 38.2945, -77.4402, 2, "medium"],
+      ["1295 Riverside Dr", 38.293, -77.437, 1, "small"],
+      ["1410 Ferry Farm Ln", 38.2915, -77.4338, 2, "large"],
+      ["1525 Kings Hwy", 38.29, -77.4306, 1, "medium"],
+      ["1640 Embrey Mill Rd", 38.2885, -77.4274, 4, "large"],
+      ["1755 Celebrate Virginia Dr", 38.287, -77.4242, 2, "medium"],
+      ["1870 Central Park Blvd", 38.3015, -77.468, 1, "small"],
+      ["1985 Greenview Dr", 38.303, -77.4716, 2, "medium"],
+      ["2100 Oak Hill Ln", 38.3045, -77.4752, 3, "large"],
+      ["2215 Pine Grove Ct", 38.306, -77.4788, 1, "small"],
+      ["2330 Maple Ridge Rd", 38.3075, -77.4824, 2, "medium"],
     ];
 
     const extraPlanConfigs: { idx: number; freq: string; price: string; ri: number }[] = [
-      { idx: 0, freq: 'weekly', price: '22.00', ri: 0 },
-      { idx: 1, freq: 'weekly', price: '18.00', ri: 1 },
-      { idx: 2, freq: 'weekly', price: '35.00', ri: 2 },
-      { idx: 3, freq: 'biweekly', price: '28.00', ri: 3 },
-      { idx: 4, freq: 'weekly', price: '30.00', ri: 4 },
-      { idx: 5, freq: 'weekly', price: '20.00', ri: 0 },
-      { idx: 6, freq: 'weekly', price: '26.00', ri: 1 },
-      { idx: 7, freq: 'weekly', price: '42.00', ri: 2 },
-      { idx: 8, freq: 'biweekly', price: '24.00', ri: 3 },
-      { idx: 9, freq: 'weekly', price: '32.00', ri: 4 },
-      { idx: 10, freq: 'weekly', price: '19.00', ri: 0 },
-      { idx: 11, freq: 'weekly', price: '38.00', ri: 1 },
-      { idx: 12, freq: 'monthly', price: '45.00', ri: 2 },
-      { idx: 13, freq: 'weekly', price: '23.00', ri: 3 },
-      { idx: 14, freq: 'weekly', price: '34.00', ri: 4 },
-      { idx: 15, freq: 'biweekly', price: '27.00', ri: 0 },
-      { idx: 16, freq: 'weekly', price: '21.00', ri: 1 },
-      { idx: 17, freq: 'weekly', price: '36.00', ri: 2 },
-      { idx: 18, freq: 'weekly', price: '29.00', ri: 3 },
-      { idx: 19, freq: 'weekly', price: '16.00', ri: 4 },
-      { idx: 20, freq: 'weekly', price: '25.00', ri: 0 },
-      { idx: 21, freq: 'biweekly', price: '33.00', ri: 1 },
-      { idx: 22, freq: 'weekly', price: '20.00', ri: 2 },
-      { idx: 23, freq: 'weekly', price: '40.00', ri: 3 },
-      { idx: 24, freq: 'weekly', price: '28.00', ri: 4 },
-      { idx: 25, freq: 'weekly', price: '17.00', ri: 0 },
-      { idx: 26, freq: 'weekly', price: '31.00', ri: 1 },
-      { idx: 27, freq: 'biweekly', price: '26.00', ri: 2 },
-      { idx: 28, freq: 'weekly', price: '44.00', ri: 3 },
-      { idx: 29, freq: 'weekly', price: '22.00', ri: 4 },
-      { idx: 30, freq: 'weekly', price: '19.00', ri: 0 },
-      { idx: 31, freq: 'weekly', price: '24.00', ri: 1 },
-      { idx: 32, freq: 'weekly', price: '37.00', ri: 2 },
-      { idx: 33, freq: 'biweekly', price: '30.00', ri: 3 },
-      { idx: 34, freq: 'weekly', price: '15.00', ri: 4 },
-      { idx: 35, freq: 'weekly', price: '29.00', ri: 0 },
-      { idx: 36, freq: 'weekly', price: '23.00', ri: 1 },
-      { idx: 37, freq: 'monthly', price: '40.00', ri: 2 },
-      { idx: 38, freq: 'weekly', price: '35.00', ri: 3 },
-      { idx: 39, freq: 'weekly', price: '27.00', ri: 4 },
-      { idx: 40, freq: 'biweekly', price: '21.00', ri: 0 },
-      { idx: 41, freq: 'weekly', price: '26.00', ri: 1 },
-      { idx: 42, freq: 'weekly', price: '18.00', ri: 2 },
-      { idx: 43, freq: 'weekly', price: '43.00', ri: 3 },
-      { idx: 44, freq: 'weekly', price: '32.00', ri: 4 },
-      { idx: 45, freq: 'weekly', price: '20.00', ri: 0 },
-      { idx: 46, freq: 'weekly', price: '28.00', ri: 1 },
-      { idx: 47, freq: 'biweekly', price: '36.00', ri: 2 },
-      { idx: 48, freq: 'weekly', price: '25.00', ri: 3 },
-      { idx: 49, freq: 'weekly', price: '16.00', ri: 4 },
-      { idx: 50, freq: 'weekly', price: '22.00', ri: 0 },
-      { idx: 51, freq: 'weekly', price: '34.00', ri: 1 },
-      { idx: 52, freq: 'weekly', price: '19.00', ri: 2 },
-      { idx: 53, freq: 'biweekly', price: '38.00', ri: 3 },
-      { idx: 54, freq: 'weekly', price: '30.00', ri: 4 },
-      { idx: 55, freq: 'weekly', price: '24.00', ri: 0 },
-      { idx: 56, freq: 'weekly', price: '31.00', ri: 1 },
-      { idx: 57, freq: 'monthly', price: '42.00', ri: 2 },
-      { idx: 58, freq: 'weekly', price: '39.00', ri: 3 },
-      { idx: 59, freq: 'weekly', price: '17.00', ri: 4 },
-      { idx: 60, freq: 'weekly', price: '33.00', ri: 0 },
-      { idx: 61, freq: 'biweekly', price: '25.00', ri: 1 },
-      { idx: 62, freq: 'weekly', price: '41.00', ri: 2 },
-      { idx: 63, freq: 'weekly', price: '23.00', ri: 3 },
-      { idx: 64, freq: 'weekly', price: '29.00', ri: 4 },
-      { idx: 65, freq: 'biweekly', price: '26.00', ri: 0 },
-      { idx: 66, freq: 'weekly', price: '37.00', ri: 1 },
-      { idx: 67, freq: 'weekly', price: '21.00', ri: 2 },
-      { idx: 68, freq: 'weekly', price: '34.00', ri: 3 },
-      { idx: 69, freq: 'weekly', price: '27.00', ri: 4 },
+      { idx: 0, freq: "weekly", price: "22.00", ri: 0 },
+      { idx: 1, freq: "weekly", price: "18.00", ri: 1 },
+      { idx: 2, freq: "weekly", price: "35.00", ri: 2 },
+      { idx: 3, freq: "biweekly", price: "28.00", ri: 3 },
+      { idx: 4, freq: "weekly", price: "30.00", ri: 4 },
+      { idx: 5, freq: "weekly", price: "20.00", ri: 0 },
+      { idx: 6, freq: "weekly", price: "26.00", ri: 1 },
+      { idx: 7, freq: "weekly", price: "42.00", ri: 2 },
+      { idx: 8, freq: "biweekly", price: "24.00", ri: 3 },
+      { idx: 9, freq: "weekly", price: "32.00", ri: 4 },
+      { idx: 10, freq: "weekly", price: "19.00", ri: 0 },
+      { idx: 11, freq: "weekly", price: "38.00", ri: 1 },
+      { idx: 12, freq: "monthly", price: "45.00", ri: 2 },
+      { idx: 13, freq: "weekly", price: "23.00", ri: 3 },
+      { idx: 14, freq: "weekly", price: "34.00", ri: 4 },
+      { idx: 15, freq: "biweekly", price: "27.00", ri: 0 },
+      { idx: 16, freq: "weekly", price: "21.00", ri: 1 },
+      { idx: 17, freq: "weekly", price: "36.00", ri: 2 },
+      { idx: 18, freq: "weekly", price: "29.00", ri: 3 },
+      { idx: 19, freq: "weekly", price: "16.00", ri: 4 },
+      { idx: 20, freq: "weekly", price: "25.00", ri: 0 },
+      { idx: 21, freq: "biweekly", price: "33.00", ri: 1 },
+      { idx: 22, freq: "weekly", price: "20.00", ri: 2 },
+      { idx: 23, freq: "weekly", price: "40.00", ri: 3 },
+      { idx: 24, freq: "weekly", price: "28.00", ri: 4 },
+      { idx: 25, freq: "weekly", price: "17.00", ri: 0 },
+      { idx: 26, freq: "weekly", price: "31.00", ri: 1 },
+      { idx: 27, freq: "biweekly", price: "26.00", ri: 2 },
+      { idx: 28, freq: "weekly", price: "44.00", ri: 3 },
+      { idx: 29, freq: "weekly", price: "22.00", ri: 4 },
+      { idx: 30, freq: "weekly", price: "19.00", ri: 0 },
+      { idx: 31, freq: "weekly", price: "24.00", ri: 1 },
+      { idx: 32, freq: "weekly", price: "37.00", ri: 2 },
+      { idx: 33, freq: "biweekly", price: "30.00", ri: 3 },
+      { idx: 34, freq: "weekly", price: "15.00", ri: 4 },
+      { idx: 35, freq: "weekly", price: "29.00", ri: 0 },
+      { idx: 36, freq: "weekly", price: "23.00", ri: 1 },
+      { idx: 37, freq: "monthly", price: "40.00", ri: 2 },
+      { idx: 38, freq: "weekly", price: "35.00", ri: 3 },
+      { idx: 39, freq: "weekly", price: "27.00", ri: 4 },
+      { idx: 40, freq: "biweekly", price: "21.00", ri: 0 },
+      { idx: 41, freq: "weekly", price: "26.00", ri: 1 },
+      { idx: 42, freq: "weekly", price: "18.00", ri: 2 },
+      { idx: 43, freq: "weekly", price: "43.00", ri: 3 },
+      { idx: 44, freq: "weekly", price: "32.00", ri: 4 },
+      { idx: 45, freq: "weekly", price: "20.00", ri: 0 },
+      { idx: 46, freq: "weekly", price: "28.00", ri: 1 },
+      { idx: 47, freq: "biweekly", price: "36.00", ri: 2 },
+      { idx: 48, freq: "weekly", price: "25.00", ri: 3 },
+      { idx: 49, freq: "weekly", price: "16.00", ri: 4 },
+      { idx: 50, freq: "weekly", price: "22.00", ri: 0 },
+      { idx: 51, freq: "weekly", price: "34.00", ri: 1 },
+      { idx: 52, freq: "weekly", price: "19.00", ri: 2 },
+      { idx: 53, freq: "biweekly", price: "38.00", ri: 3 },
+      { idx: 54, freq: "weekly", price: "30.00", ri: 4 },
+      { idx: 55, freq: "weekly", price: "24.00", ri: 0 },
+      { idx: 56, freq: "weekly", price: "31.00", ri: 1 },
+      { idx: 57, freq: "monthly", price: "42.00", ri: 2 },
+      { idx: 58, freq: "weekly", price: "39.00", ri: 3 },
+      { idx: 59, freq: "weekly", price: "17.00", ri: 4 },
+      { idx: 60, freq: "weekly", price: "33.00", ri: 0 },
+      { idx: 61, freq: "biweekly", price: "25.00", ri: 1 },
+      { idx: 62, freq: "weekly", price: "41.00", ri: 2 },
+      { idx: 63, freq: "weekly", price: "23.00", ri: 3 },
+      { idx: 64, freq: "weekly", price: "29.00", ri: 4 },
+      { idx: 65, freq: "biweekly", price: "26.00", ri: 0 },
+      { idx: 66, freq: "weekly", price: "37.00", ri: 1 },
+      { idx: 67, freq: "weekly", price: "21.00", ri: 2 },
+      { idx: 68, freq: "weekly", price: "34.00", ri: 3 },
+      { idx: 69, freq: "weekly", price: "27.00", ri: 4 },
     ];
 
     const contactIds: string[] = [];
@@ -1071,19 +1154,19 @@ async function seedExtraDemoContacts(pool: any, companyId: string) {
       const ri = pc.ri % routeIds.length;
       const day = dayOfWeekMap[ri];
       for (let wk = 6; wk >= -1; wk--) {
-        if (pc.freq === 'biweekly' && wk % 2 !== 0) continue;
-        if (pc.freq === 'monthly' && wk !== 0 && wk !== 4) continue;
+        if (pc.freq === "biweekly" && wk % 2 !== 0) continue;
+        if (pc.freq === "monthly" && wk !== 0 && wk !== 4) continue;
 
         const d = new Date(today);
-        d.setDate(d.getDate() - (wk * 7) + (day - d.getDay()));
-        const dateStr = d.toISOString().split('T')[0];
+        d.setDate(d.getDate() - wk * 7 + (day - d.getDay()));
+        const dateStr = d.toISOString().split("T")[0];
 
         let status: string;
-        if (d > today) status = 'scheduled';
-        else if (dateStr === today.toISOString().split('T')[0]) status = 'scheduled';
-        else status = Math.random() > 0.1 ? 'completed' : 'skipped';
+        if (d > today) status = "scheduled";
+        else if (dateStr === today.toISOString().split("T")[0]) status = "scheduled";
+        else status = Math.random() > 0.1 ? "completed" : "skipped";
 
-        const completedAt = status === 'completed' ? d.toISOString() : null;
+        const completedAt = status === "completed" ? d.toISOString() : null;
         await pool.query(
           `INSERT INTO visits (company_id, service_plan_id, property_id, scheduled_date, status, completed_at) VALUES ($1,$2,$3,$4,$5,$6)`,
           [companyId, planIds[pIdx], propIds[pc.idx], dateStr, status, completedAt]
@@ -1091,7 +1174,9 @@ async function seedExtraDemoContacts(pool: any, companyId: string) {
       }
     }
 
-    console.log(`[Migration] Seeded 70 extra demo contacts with ${extraPlanConfigs.length} service plans`);
+    console.log(
+      `[Migration] Seeded 70 extra demo contacts with ${extraPlanConfigs.length} service plans`
+    );
   } catch (err) {
     console.error("[Migration] Failed to seed extra demo contacts:", err);
   }
@@ -1099,113 +1184,115 @@ async function seedExtraDemoContacts(pool: any, companyId: string) {
 
 async function seedScatteredDemoContacts(pool: any, companyId: string) {
   try {
-    const routeRes = await pool.query("SELECT id FROM routes WHERE company_id = $1 ORDER BY name", [companyId]);
+    const routeRes = await pool.query("SELECT id FROM routes WHERE company_id = $1 ORDER BY name", [
+      companyId,
+    ]);
     if (routeRes.rows.length < 3) return;
     const routeIds = routeRes.rows.map((r: any) => r.id);
 
     const scatteredContacts: [string, string, string, string][] = [
-      ['Harold', 'Beaumont', 'harold.beaumont@example.com', '(540) 555-3001'],
-      ['Margot', 'Ellsworth', 'margot.ellsworth@example.com', '(540) 555-3002'],
-      ['Chester', 'Langford', 'chester.langford@example.com', '(540) 555-3003'],
-      ['Donna', 'Ashford', 'donna.ashford@example.com', '(540) 555-3004'],
-      ['Stuart', 'Chatham', 'stuart.chatham@example.com', '(540) 555-3005'],
-      ['Beverly', 'Wakefield', 'beverly.wakefield@example.com', '(540) 555-3006'],
-      ['Clifton', 'Randolph', 'clifton.randolph@example.com', '(540) 555-3007'],
-      ['Lorraine', 'Prescott', 'lorraine.prescott@example.com', '(540) 555-3008'],
-      ['Irving', 'Thornton', 'irving.thornton@example.com', '(540) 555-3009'],
-      ['Dorothy', 'Breckenridge', 'dorothy.breck@example.com', '(540) 555-3010'],
+      ["Harold", "Beaumont", "harold.beaumont@example.com", "(540) 555-3001"],
+      ["Margot", "Ellsworth", "margot.ellsworth@example.com", "(540) 555-3002"],
+      ["Chester", "Langford", "chester.langford@example.com", "(540) 555-3003"],
+      ["Donna", "Ashford", "donna.ashford@example.com", "(540) 555-3004"],
+      ["Stuart", "Chatham", "stuart.chatham@example.com", "(540) 555-3005"],
+      ["Beverly", "Wakefield", "beverly.wakefield@example.com", "(540) 555-3006"],
+      ["Clifton", "Randolph", "clifton.randolph@example.com", "(540) 555-3007"],
+      ["Lorraine", "Prescott", "lorraine.prescott@example.com", "(540) 555-3008"],
+      ["Irving", "Thornton", "irving.thornton@example.com", "(540) 555-3009"],
+      ["Dorothy", "Breckenridge", "dorothy.breck@example.com", "(540) 555-3010"],
 
-      ['Franklin', 'Whitmore', 'franklin.whitmore@example.com', '(540) 555-3011'],
-      ['Geraldine', 'Oakley', 'geraldine.oakley@example.com', '(540) 555-3012'],
-      ['Nelson', 'Fairbanks', 'nelson.fairbanks@example.com', '(540) 555-3013'],
-      ['Constance', 'Dunbar', 'constance.dunbar@example.com', '(540) 555-3014'],
-      ['Milton', 'Hartwell', 'milton.hartwell@example.com', '(540) 555-3015'],
-      ['Harriet', 'Ainsworth', 'harriet.ainsworth@example.com', '(540) 555-3016'],
-      ['Bernard', 'Kensington', 'bernard.kens@example.com', '(540) 555-3017'],
-      ['Mildred', 'Pemberton', 'mildred.pemb@example.com', '(540) 555-3018'],
-      ['Vernon', 'Blackwood', 'vernon.blackwood@example.com', '(540) 555-3019'],
-      ['Eleanor', 'Stratford', 'eleanor.stratford@example.com', '(540) 555-3020'],
+      ["Franklin", "Whitmore", "franklin.whitmore@example.com", "(540) 555-3011"],
+      ["Geraldine", "Oakley", "geraldine.oakley@example.com", "(540) 555-3012"],
+      ["Nelson", "Fairbanks", "nelson.fairbanks@example.com", "(540) 555-3013"],
+      ["Constance", "Dunbar", "constance.dunbar@example.com", "(540) 555-3014"],
+      ["Milton", "Hartwell", "milton.hartwell@example.com", "(540) 555-3015"],
+      ["Harriet", "Ainsworth", "harriet.ainsworth@example.com", "(540) 555-3016"],
+      ["Bernard", "Kensington", "bernard.kens@example.com", "(540) 555-3017"],
+      ["Mildred", "Pemberton", "mildred.pemb@example.com", "(540) 555-3018"],
+      ["Vernon", "Blackwood", "vernon.blackwood@example.com", "(540) 555-3019"],
+      ["Eleanor", "Stratford", "eleanor.stratford@example.com", "(540) 555-3020"],
 
-      ['Wallace', 'Pendleton', 'wallace.pendleton@example.com', '(540) 555-3021'],
-      ['Beatrice', 'Ashmore', 'beatrice.ashmore@example.com', '(540) 555-3022'],
-      ['Reginald', 'Forsythe', 'reginald.forsythe@example.com', '(540) 555-3023'],
-      ['Vivian', 'Chesterfield', 'vivian.chester@example.com', '(540) 555-3024'],
-      ['Horace', 'Waverly', 'horace.waverly@example.com', '(540) 555-3025'],
-      ['Gladys', 'Redmond', 'gladys.redmond@example.com', '(540) 555-3026'],
-      ['Norbert', 'Claybourne', 'norbert.clay@example.com', '(540) 555-3027'],
-      ['Edith', 'Marlborough', 'edith.marl@example.com', '(540) 555-3028'],
-      ['Lester', 'Worthington', 'lester.worth@example.com', '(540) 555-3029'],
-      ['Lucille', 'Devereaux', 'lucille.dev@example.com', '(540) 555-3030'],
+      ["Wallace", "Pendleton", "wallace.pendleton@example.com", "(540) 555-3021"],
+      ["Beatrice", "Ashmore", "beatrice.ashmore@example.com", "(540) 555-3022"],
+      ["Reginald", "Forsythe", "reginald.forsythe@example.com", "(540) 555-3023"],
+      ["Vivian", "Chesterfield", "vivian.chester@example.com", "(540) 555-3024"],
+      ["Horace", "Waverly", "horace.waverly@example.com", "(540) 555-3025"],
+      ["Gladys", "Redmond", "gladys.redmond@example.com", "(540) 555-3026"],
+      ["Norbert", "Claybourne", "norbert.clay@example.com", "(540) 555-3027"],
+      ["Edith", "Marlborough", "edith.marl@example.com", "(540) 555-3028"],
+      ["Lester", "Worthington", "lester.worth@example.com", "(540) 555-3029"],
+      ["Lucille", "Devereaux", "lucille.dev@example.com", "(540) 555-3030"],
     ];
 
     const scatteredAddresses: [string, number, number, number, string][] = [
-      ['100 Harvard St, Fredericksburg, VA', 38.2745, -77.4985, 2, 'medium'],
-      ['205 Chatham Ct, Fredericksburg, VA', 38.2738, -77.5010, 1, 'small'],
-      ['312 Mulligan Ct, Fredericksburg, VA', 38.2755, -77.4920, 3, 'large'],
-      ['400 Old Dominion Pkwy, Fredericksburg, VA', 38.2710, -77.4895, 2, 'medium'],
-      ['508 Colechester St, Fredericksburg, VA', 38.2698, -77.4945, 1, 'small'],
-      ['615 Crossgate Dr, Fredericksburg, VA', 38.2665, -77.4920, 2, 'large'],
-      ['720 Corbin Hall Ln, Fredericksburg, VA', 38.2760, -77.4860, 4, 'large'],
-      ['825 Blandfield Ln, Fredericksburg, VA', 38.2738, -77.4835, 1, 'small'],
-      ['130 Cannonball Ct, Fredericksburg, VA', 38.2685, -77.5055, 2, 'medium'],
-      ['235 Battery Hill Ln, Fredericksburg, VA', 38.2678, -77.5035, 3, 'large'],
+      ["100 Harvard St, Fredericksburg, VA", 38.2745, -77.4985, 2, "medium"],
+      ["205 Chatham Ct, Fredericksburg, VA", 38.2738, -77.501, 1, "small"],
+      ["312 Mulligan Ct, Fredericksburg, VA", 38.2755, -77.492, 3, "large"],
+      ["400 Old Dominion Pkwy, Fredericksburg, VA", 38.271, -77.4895, 2, "medium"],
+      ["508 Colechester St, Fredericksburg, VA", 38.2698, -77.4945, 1, "small"],
+      ["615 Crossgate Dr, Fredericksburg, VA", 38.2665, -77.492, 2, "large"],
+      ["720 Corbin Hall Ln, Fredericksburg, VA", 38.276, -77.486, 4, "large"],
+      ["825 Blandfield Ln, Fredericksburg, VA", 38.2738, -77.4835, 1, "small"],
+      ["130 Cannonball Ct, Fredericksburg, VA", 38.2685, -77.5055, 2, "medium"],
+      ["235 Battery Hill Ln, Fredericksburg, VA", 38.2678, -77.5035, 3, "large"],
 
-      ['102 Hickory Hill Dr, Fredericksburg, VA', 38.2345, -77.4680, 2, 'medium'],
-      ['207 Andover Ln, Fredericksburg, VA', 38.2378, -77.4645, 1, 'small'],
-      ['310 Timberlake Rd, Fredericksburg, VA', 38.2395, -77.4580, 3, 'large'],
-      ['415 Layton St, Fredericksburg, VA', 38.2385, -77.4555, 2, 'medium'],
-      ['520 Andrews Mill Ln, Fredericksburg, VA', 38.2360, -77.4530, 1, 'small'],
-      ['625 Massaponax Church Rd, Fredericksburg, VA', 38.2335, -77.4495, 2, 'large'],
-      ['730 Alberta Dr, Fredericksburg, VA', 38.2310, -77.4600, 3, 'medium'],
-      ['835 Townsley St, Fredericksburg, VA', 38.2355, -77.4710, 1, 'small'],
-      ['140 Swanson Ct, Fredericksburg, VA', 38.2290, -77.4695, 2, 'medium'],
-      ['245 Cameo St, Fredericksburg, VA', 38.2405, -77.4660, 2, 'large'],
+      ["102 Hickory Hill Dr, Fredericksburg, VA", 38.2345, -77.468, 2, "medium"],
+      ["207 Andover Ln, Fredericksburg, VA", 38.2378, -77.4645, 1, "small"],
+      ["310 Timberlake Rd, Fredericksburg, VA", 38.2395, -77.458, 3, "large"],
+      ["415 Layton St, Fredericksburg, VA", 38.2385, -77.4555, 2, "medium"],
+      ["520 Andrews Mill Ln, Fredericksburg, VA", 38.236, -77.453, 1, "small"],
+      ["625 Massaponax Church Rd, Fredericksburg, VA", 38.2335, -77.4495, 2, "large"],
+      ["730 Alberta Dr, Fredericksburg, VA", 38.231, -77.46, 3, "medium"],
+      ["835 Townsley St, Fredericksburg, VA", 38.2355, -77.471, 1, "small"],
+      ["140 Swanson Ct, Fredericksburg, VA", 38.229, -77.4695, 2, "medium"],
+      ["245 Cameo St, Fredericksburg, VA", 38.2405, -77.466, 2, "large"],
 
-      ['104 Passapatanzy Rd, King George, VA', 38.3380, -77.4280, 2, 'medium'],
-      ['209 Newton Ln, King George, VA', 38.3365, -77.4210, 1, 'small'],
-      ['314 Forest Ridge Dr, King George, VA', 38.3340, -77.4175, 3, 'large'],
-      ['419 Fletchers Chapel Rd, King George, VA', 38.3355, -77.4130, 2, 'medium'],
-      ['524 Oakland Dr, King George, VA', 38.3310, -77.4250, 1, 'small'],
-      ['629 Mullen Rd, King George, VA', 38.3335, -77.4195, 2, 'large'],
-      ['734 Bush St, King George, VA', 38.3360, -77.4320, 4, 'large'],
-      ['839 Covington St, King George, VA', 38.3290, -77.4295, 1, 'small'],
-      ['144 Charleston St, King George, VA', 38.3395, -77.4200, 2, 'medium'],
-      ['249 Martin Ln, King George, VA', 38.3375, -77.4160, 3, 'large'],
+      ["104 Passapatanzy Rd, King George, VA", 38.338, -77.428, 2, "medium"],
+      ["209 Newton Ln, King George, VA", 38.3365, -77.421, 1, "small"],
+      ["314 Forest Ridge Dr, King George, VA", 38.334, -77.4175, 3, "large"],
+      ["419 Fletchers Chapel Rd, King George, VA", 38.3355, -77.413, 2, "medium"],
+      ["524 Oakland Dr, King George, VA", 38.331, -77.425, 1, "small"],
+      ["629 Mullen Rd, King George, VA", 38.3335, -77.4195, 2, "large"],
+      ["734 Bush St, King George, VA", 38.336, -77.432, 4, "large"],
+      ["839 Covington St, King George, VA", 38.329, -77.4295, 1, "small"],
+      ["144 Charleston St, King George, VA", 38.3395, -77.42, 2, "medium"],
+      ["249 Martin Ln, King George, VA", 38.3375, -77.416, 3, "large"],
     ];
 
     const scatteredPlanConfigs: { idx: number; freq: string; price: string; ri: number }[] = [
-      { idx: 0, freq: 'weekly', price: '32.00', ri: 0 },
-      { idx: 1, freq: 'weekly', price: '25.00', ri: 3 },
-      { idx: 2, freq: 'biweekly', price: '38.00', ri: 1 },
-      { idx: 3, freq: 'weekly', price: '28.00', ri: 4 },
-      { idx: 4, freq: 'weekly', price: '22.00', ri: 2 },
-      { idx: 5, freq: 'weekly', price: '35.00', ri: 0 },
-      { idx: 6, freq: 'biweekly', price: '42.00', ri: 3 },
-      { idx: 7, freq: 'weekly', price: '19.00', ri: 1 },
-      { idx: 8, freq: 'weekly', price: '30.00', ri: 4 },
-      { idx: 9, freq: 'weekly', price: '27.00', ri: 2 },
+      { idx: 0, freq: "weekly", price: "32.00", ri: 0 },
+      { idx: 1, freq: "weekly", price: "25.00", ri: 3 },
+      { idx: 2, freq: "biweekly", price: "38.00", ri: 1 },
+      { idx: 3, freq: "weekly", price: "28.00", ri: 4 },
+      { idx: 4, freq: "weekly", price: "22.00", ri: 2 },
+      { idx: 5, freq: "weekly", price: "35.00", ri: 0 },
+      { idx: 6, freq: "biweekly", price: "42.00", ri: 3 },
+      { idx: 7, freq: "weekly", price: "19.00", ri: 1 },
+      { idx: 8, freq: "weekly", price: "30.00", ri: 4 },
+      { idx: 9, freq: "weekly", price: "27.00", ri: 2 },
 
-      { idx: 10, freq: 'weekly', price: '29.00', ri: 1 },
-      { idx: 11, freq: 'weekly', price: '24.00', ri: 4 },
-      { idx: 12, freq: 'biweekly', price: '36.00', ri: 0 },
-      { idx: 13, freq: 'weekly', price: '31.00', ri: 3 },
-      { idx: 14, freq: 'weekly', price: '20.00', ri: 2 },
-      { idx: 15, freq: 'weekly', price: '33.00', ri: 1 },
-      { idx: 16, freq: 'weekly', price: '40.00', ri: 4 },
-      { idx: 17, freq: 'biweekly', price: '18.00', ri: 0 },
-      { idx: 18, freq: 'weekly', price: '26.00', ri: 3 },
-      { idx: 19, freq: 'weekly', price: '34.00', ri: 2 },
+      { idx: 10, freq: "weekly", price: "29.00", ri: 1 },
+      { idx: 11, freq: "weekly", price: "24.00", ri: 4 },
+      { idx: 12, freq: "biweekly", price: "36.00", ri: 0 },
+      { idx: 13, freq: "weekly", price: "31.00", ri: 3 },
+      { idx: 14, freq: "weekly", price: "20.00", ri: 2 },
+      { idx: 15, freq: "weekly", price: "33.00", ri: 1 },
+      { idx: 16, freq: "weekly", price: "40.00", ri: 4 },
+      { idx: 17, freq: "biweekly", price: "18.00", ri: 0 },
+      { idx: 18, freq: "weekly", price: "26.00", ri: 3 },
+      { idx: 19, freq: "weekly", price: "34.00", ri: 2 },
 
-      { idx: 20, freq: 'weekly', price: '28.00', ri: 2 },
-      { idx: 21, freq: 'weekly', price: '23.00', ri: 0 },
-      { idx: 22, freq: 'biweekly', price: '39.00', ri: 3 },
-      { idx: 23, freq: 'weekly', price: '30.00', ri: 1 },
-      { idx: 24, freq: 'weekly', price: '21.00', ri: 4 },
-      { idx: 25, freq: 'weekly', price: '37.00', ri: 2 },
-      { idx: 26, freq: 'weekly', price: '44.00', ri: 0 },
-      { idx: 27, freq: 'biweekly', price: '17.00', ri: 3 },
-      { idx: 28, freq: 'weekly', price: '29.00', ri: 1 },
-      { idx: 29, freq: 'weekly', price: '35.00', ri: 4 },
+      { idx: 20, freq: "weekly", price: "28.00", ri: 2 },
+      { idx: 21, freq: "weekly", price: "23.00", ri: 0 },
+      { idx: 22, freq: "biweekly", price: "39.00", ri: 3 },
+      { idx: 23, freq: "weekly", price: "30.00", ri: 1 },
+      { idx: 24, freq: "weekly", price: "21.00", ri: 4 },
+      { idx: 25, freq: "weekly", price: "37.00", ri: 2 },
+      { idx: 26, freq: "weekly", price: "44.00", ri: 0 },
+      { idx: 27, freq: "biweekly", price: "17.00", ri: 3 },
+      { idx: 28, freq: "weekly", price: "29.00", ri: 1 },
+      { idx: 29, freq: "weekly", price: "35.00", ri: 4 },
     ];
 
     const contactIds: string[] = [];
@@ -1223,11 +1310,11 @@ async function seedScatteredDemoContacts(pool: any, companyId: string) {
     const propIds: string[] = [];
     for (let i = 0; i < scatteredAddresses.length; i++) {
       const [addr, lat, lng, dogs, yard] = scatteredAddresses[i];
-      const parts = addr.split(', ');
+      const parts = addr.split(", ");
       const street = parts[0];
-      const city = parts[1] || 'Fredericksburg';
-      const state = 'VA';
-      const zip = city === 'King George' ? '22485' : '22407';
+      const city = parts[1] || "Fredericksburg";
+      const state = "VA";
+      const zip = city === "King George" ? "22485" : "22407";
       const r = await pool.query(
         `INSERT INTO properties (company_id, contact_id, street_address, city, state, zip_code, latitude, longitude, number_of_dogs, yard_size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
         [companyId, contactIds[i], street, city, state, zip, lat, lng, dogs, yard]
@@ -1254,19 +1341,19 @@ async function seedScatteredDemoContacts(pool: any, companyId: string) {
       const ri = pc.ri % routeIds.length;
       const day = dayOfWeekMap[ri];
       for (let wk = 6; wk >= -1; wk--) {
-        if (pc.freq === 'biweekly' && wk % 2 !== 0) continue;
-        if (pc.freq === 'monthly' && wk !== 0 && wk !== 4) continue;
+        if (pc.freq === "biweekly" && wk % 2 !== 0) continue;
+        if (pc.freq === "monthly" && wk !== 0 && wk !== 4) continue;
 
         const d = new Date(today);
-        d.setDate(d.getDate() - (wk * 7) + (day - d.getDay()));
-        const dateStr = d.toISOString().split('T')[0];
+        d.setDate(d.getDate() - wk * 7 + (day - d.getDay()));
+        const dateStr = d.toISOString().split("T")[0];
 
         let status: string;
-        if (d > today) status = 'scheduled';
-        else if (dateStr === today.toISOString().split('T')[0]) status = 'scheduled';
-        else status = Math.random() > 0.1 ? 'completed' : 'skipped';
+        if (d > today) status = "scheduled";
+        else if (dateStr === today.toISOString().split("T")[0]) status = "scheduled";
+        else status = Math.random() > 0.1 ? "completed" : "skipped";
 
-        const completedAt = status === 'completed' ? d.toISOString() : null;
+        const completedAt = status === "completed" ? d.toISOString() : null;
         await pool.query(
           `INSERT INTO visits (company_id, service_plan_id, property_id, scheduled_date, status, completed_at) VALUES ($1,$2,$3,$4,$5,$6)`,
           [companyId, planIds[pIdx], propIds[pc.idx], dateStr, status, completedAt]
@@ -1274,7 +1361,9 @@ async function seedScatteredDemoContacts(pool: any, companyId: string) {
       }
     }
 
-    console.log(`[Migration] Seeded 30 scattered demo contacts across Lee Hill, Massaponax & Oakland Park`);
+    console.log(
+      `[Migration] Seeded 30 scattered demo contacts across Lee Hill, Massaponax & Oakland Park`
+    );
   } catch (err) {
     console.error("[Migration] Failed to seed scattered demo contacts:", err);
   }
@@ -1287,17 +1376,28 @@ async function seedDemoCompany() {
 
     const existing = await pool.query("SELECT id FROM users WHERE email = 'demo@scoopilot.com'");
     if (existing.rows.length > 0) {
-      const demoCoRes = await pool.query("SELECT c.id FROM users u JOIN company_users cu ON cu.user_id = u.id JOIN companies c ON c.id = cu.company_id WHERE u.email = 'demo@scoopilot.com' LIMIT 1");
+      const demoCoRes = await pool.query(
+        "SELECT c.id FROM users u JOIN company_users cu ON cu.user_id = u.id JOIN companies c ON c.id = cu.company_id WHERE u.email = 'demo@scoopilot.com' LIMIT 1"
+      );
       if (demoCoRes.rows.length > 0) {
         const demoCoId = demoCoRes.rows[0].id;
-        const pricingCount = await pool.query("SELECT COUNT(*) FROM service_pricing WHERE company_id = $1", [demoCoId]);
+        const pricingCount = await pool.query(
+          "SELECT COUNT(*) FROM service_pricing WHERE company_id = $1",
+          [demoCoId]
+        );
         if (parseInt(pricingCount.rows[0].count) === 0) {
           const { storage } = await import("./storage");
           await storage.seedDefaultPricing(demoCoId);
           console.log("[Migration] Demo company service pricing seeded");
         }
-        await pool.query("UPDATE companies SET subscription_tier = 'tier_1_3' WHERE id = $1 AND subscription_tier != 'tier_1_3'", [demoCoId]);
-        const contactCount = await pool.query("SELECT COUNT(*) FROM contacts WHERE company_id = $1", [demoCoId]);
+        await pool.query(
+          "UPDATE companies SET subscription_tier = 'tier_1_3' WHERE id = $1 AND subscription_tier != 'tier_1_3'",
+          [demoCoId]
+        );
+        const contactCount = await pool.query(
+          "SELECT COUNT(*) FROM contacts WHERE company_id = $1",
+          [demoCoId]
+        );
         const cc = parseInt(contactCount.rows[0].count);
         if (cc < 90) {
           await seedExtraDemoContacts(pool, demoCoId);
@@ -1311,11 +1411,12 @@ async function seedDemoCompany() {
       return;
     }
 
-    const pwHash = '6415d9a7e2946fb4151eff58f0d70ade:6ac05bd83e9fd5bb4250cfd95beb3c6e8aae77382c0ae6bcc7c49a8e3be66b419697c4450b961eb85a4d1d31ee444dbe3c965c64dc55c3d9aa70d2b0f6bacdd3';
+    const pwHash =
+      "6415d9a7e2946fb4151eff58f0d70ade:6ac05bd83e9fd5bb4250cfd95beb3c6e8aae77382c0ae6bcc7c49a8e3be66b419697c4450b961eb85a4d1d31ee444dbe3c965c64dc55c3d9aa70d2b0f6bacdd3";
 
     const userRes = await pool.query(
       `INSERT INTO users (email, password_hash, first_name, last_name, must_change_password) VALUES ($1, $2, 'Alex', 'Demo', false) RETURNING id`,
-      ['demo@scoopilot.com', pwHash]
+      ["demo@scoopilot.com", pwHash]
     );
     const userId = userRes.rows[0].id;
 
@@ -1326,34 +1427,37 @@ async function seedDemoCompany() {
     );
     const companyId = compRes.rows[0].id;
 
-    await pool.query(`INSERT INTO company_users (company_id, user_id, role) VALUES ($1, $2, 'owner')`, [companyId, userId]);
+    await pool.query(
+      `INSERT INTO company_users (company_id, user_id, role) VALUES ($1, $2, 'owner')`,
+      [companyId, userId]
+    );
 
     const contactData = [
-      ['Marcus', 'Johnson', 'marcus.j@example.com', '(540) 555-0142', 'active'],
-      ['Sarah', 'Mitchell', 'sarah.m@example.com', '(540) 555-0198', 'active'],
-      ['David', 'Ramirez', 'david.r@example.com', '(540) 555-0267', 'active'],
-      ['Jennifer', "O'Brien", 'jennifer.ob@example.com', '(540) 555-0331', 'active'],
-      ['Chris', 'Nguyen', 'chris.n@example.com', '(540) 555-0415', 'active'],
-      ['Amanda', 'Foster', 'amanda.f@example.com', '(540) 555-0489', 'active'],
-      ['Brian', 'Carlisle', 'brian.c@example.com', '(540) 555-0523', 'active'],
-      ['Heather', 'Torres', 'heather.t@example.com', '(540) 555-0607', 'active'],
-      ['Kevin', 'Whitfield', 'kevin.w@example.com', '(540) 555-0671', 'active'],
-      ['Rachel', 'Simmons', 'rachel.s@example.com', '(540) 555-0745', 'active'],
-      ['Tyler', 'Brooks', 'tyler.b@example.com', '(540) 555-0819', 'active'],
-      ['Laura', 'Pennington', 'laura.p@example.com', '(540) 555-0883', 'lead'],
-      ['Greg', 'Hoffman', 'greg.h@example.com', '(540) 555-0957', 'lead'],
-      ['Nicole', 'Crawford', 'nicole.c@example.com', '(540) 555-1021', 'lead'],
-      ['Mike', 'Patterson', 'mike.p@example.com', '(540) 555-1095', 'active'],
-      ['Danielle', 'Marsh', 'danielle.m@example.com', '(540) 555-1102', 'active'],
-      ['Patrick', 'Yates', 'patrick.y@example.com', '(540) 555-1176', 'active'],
-      ['Carla', 'Benson', 'carla.b@example.com', '(540) 555-1243', 'active'],
-      ['Derek', 'Sullivan', 'derek.s@example.com', '(540) 555-1317', 'active'],
-      ['Megan', 'Hargrove', 'megan.h@example.com', '(540) 555-1391', 'active'],
-      ['Jason', 'Draper', 'jason.d@example.com', '(540) 555-1465', 'active'],
-      ['Tina', 'Blackwell', 'tina.b@example.com', '(540) 555-1539', 'active'],
-      ['Ryan', 'Kessler', 'ryan.k@example.com', '(540) 555-1613', 'active'],
-      ['Olivia', 'Chambers', 'olivia.c@example.com', '(540) 555-1687', 'active'],
-      ['Brandon', 'Faulkner', 'brandon.f@example.com', '(540) 555-1761', 'active'],
+      ["Marcus", "Johnson", "marcus.j@example.com", "(540) 555-0142", "active"],
+      ["Sarah", "Mitchell", "sarah.m@example.com", "(540) 555-0198", "active"],
+      ["David", "Ramirez", "david.r@example.com", "(540) 555-0267", "active"],
+      ["Jennifer", "O'Brien", "jennifer.ob@example.com", "(540) 555-0331", "active"],
+      ["Chris", "Nguyen", "chris.n@example.com", "(540) 555-0415", "active"],
+      ["Amanda", "Foster", "amanda.f@example.com", "(540) 555-0489", "active"],
+      ["Brian", "Carlisle", "brian.c@example.com", "(540) 555-0523", "active"],
+      ["Heather", "Torres", "heather.t@example.com", "(540) 555-0607", "active"],
+      ["Kevin", "Whitfield", "kevin.w@example.com", "(540) 555-0671", "active"],
+      ["Rachel", "Simmons", "rachel.s@example.com", "(540) 555-0745", "active"],
+      ["Tyler", "Brooks", "tyler.b@example.com", "(540) 555-0819", "active"],
+      ["Laura", "Pennington", "laura.p@example.com", "(540) 555-0883", "lead"],
+      ["Greg", "Hoffman", "greg.h@example.com", "(540) 555-0957", "lead"],
+      ["Nicole", "Crawford", "nicole.c@example.com", "(540) 555-1021", "lead"],
+      ["Mike", "Patterson", "mike.p@example.com", "(540) 555-1095", "active"],
+      ["Danielle", "Marsh", "danielle.m@example.com", "(540) 555-1102", "active"],
+      ["Patrick", "Yates", "patrick.y@example.com", "(540) 555-1176", "active"],
+      ["Carla", "Benson", "carla.b@example.com", "(540) 555-1243", "active"],
+      ["Derek", "Sullivan", "derek.s@example.com", "(540) 555-1317", "active"],
+      ["Megan", "Hargrove", "megan.h@example.com", "(540) 555-1391", "active"],
+      ["Jason", "Draper", "jason.d@example.com", "(540) 555-1465", "active"],
+      ["Tina", "Blackwell", "tina.b@example.com", "(540) 555-1539", "active"],
+      ["Ryan", "Kessler", "ryan.k@example.com", "(540) 555-1613", "active"],
+      ["Olivia", "Chambers", "olivia.c@example.com", "(540) 555-1687", "active"],
+      ["Brandon", "Faulkner", "brandon.f@example.com", "(540) 555-1761", "active"],
     ];
 
     const contactIds: string[] = [];
@@ -1369,31 +1473,31 @@ async function seedDemoCompany() {
     }
 
     const addresses = [
-      ['1204 Charles St', 38.3032, -77.4605, 2, 'medium'],
-      ['810 William St', 38.3018, -77.4589, 1, 'small'],
-      ['305 Hanover St', 38.3045, -77.4573, 3, 'large'],
-      ['1501 Princess Anne St', 38.3055, -77.4612, 2, 'medium'],
-      ['2108 Fall Hill Ave', 38.3102, -77.4701, 1, 'small'],
-      ['904 Kenmore Ave', 38.2985, -77.4632, 2, 'large'],
-      ['412 Lafayette Blvd', 38.2967, -77.4598, 1, 'medium'],
-      ['1700 Plank Rd', 38.2921, -77.4915, 3, 'large'],
-      ['206 Caroline St', 38.3012, -77.4567, 2, 'medium'],
-      ['3200 Westwood Dr', 38.2878, -77.4832, 1, 'small'],
-      ['508 Sophia St', 38.3001, -77.4555, 2, 'medium'],
-      ['1105 Stafford Ave', 38.2945, -77.4678, 1, 'small'],
-      ['2401 Cowan Blvd', 38.289, -77.5012, 2, 'large'],
-      ['609 George St', 38.3028, -77.4582, 1, 'medium'],
-      ['1303 Sunken Rd', 38.2935, -77.4745, 2, 'large'],
-      ['700 Littlepage St', 38.2998, -77.4621, 1, 'medium'],
-      ['1800 Augustine Ave', 38.2862, -77.4558, 3, 'large'],
-      ['405 Dixon St', 38.3065, -77.4641, 2, 'small'],
-      ['2205 Bragg Rd', 38.2847, -77.4889, 1, 'medium'],
-      ['1010 Willis St', 38.2973, -77.4543, 2, 'large'],
-      ['3400 Plank Rd', 38.2789, -77.5068, 1, 'small'],
-      ['505 Weedon St', 38.3038, -77.4527, 3, 'large'],
-      ['1600 Old Salem Rd', 38.2915, -77.5134, 2, 'medium'],
-      ['920 Wolfe St', 38.2957, -77.4612, 1, 'small'],
-      ['2600 Salem Church Rd', 38.2821, -77.5201, 2, 'large'],
+      ["1204 Charles St", 38.3032, -77.4605, 2, "medium"],
+      ["810 William St", 38.3018, -77.4589, 1, "small"],
+      ["305 Hanover St", 38.3045, -77.4573, 3, "large"],
+      ["1501 Princess Anne St", 38.3055, -77.4612, 2, "medium"],
+      ["2108 Fall Hill Ave", 38.3102, -77.4701, 1, "small"],
+      ["904 Kenmore Ave", 38.2985, -77.4632, 2, "large"],
+      ["412 Lafayette Blvd", 38.2967, -77.4598, 1, "medium"],
+      ["1700 Plank Rd", 38.2921, -77.4915, 3, "large"],
+      ["206 Caroline St", 38.3012, -77.4567, 2, "medium"],
+      ["3200 Westwood Dr", 38.2878, -77.4832, 1, "small"],
+      ["508 Sophia St", 38.3001, -77.4555, 2, "medium"],
+      ["1105 Stafford Ave", 38.2945, -77.4678, 1, "small"],
+      ["2401 Cowan Blvd", 38.289, -77.5012, 2, "large"],
+      ["609 George St", 38.3028, -77.4582, 1, "medium"],
+      ["1303 Sunken Rd", 38.2935, -77.4745, 2, "large"],
+      ["700 Littlepage St", 38.2998, -77.4621, 1, "medium"],
+      ["1800 Augustine Ave", 38.2862, -77.4558, 3, "large"],
+      ["405 Dixon St", 38.3065, -77.4641, 2, "small"],
+      ["2205 Bragg Rd", 38.2847, -77.4889, 1, "medium"],
+      ["1010 Willis St", 38.2973, -77.4543, 2, "large"],
+      ["3400 Plank Rd", 38.2789, -77.5068, 1, "small"],
+      ["505 Weedon St", 38.3038, -77.4527, 3, "large"],
+      ["1600 Old Salem Rd", 38.2915, -77.5134, 2, "medium"],
+      ["920 Wolfe St", 38.2957, -77.4612, 1, "small"],
+      ["2600 Salem Church Rd", 38.2821, -77.5201, 2, "large"],
     ];
 
     const propIds: string[] = [];
@@ -1419,28 +1523,28 @@ async function seedDemoCompany() {
     const routeIds = routeRes.rows.map((r: any) => r.id);
 
     const planConfigs = [
-      { ci: 0, pi: 0, freq: 'weekly', price: '25.00', ri: 0 },
-      { ci: 1, pi: 1, freq: 'weekly', price: '20.00', ri: 1 },
-      { ci: 2, pi: 2, freq: 'weekly', price: '35.00', ri: 0 },
-      { ci: 3, pi: 3, freq: 'biweekly', price: '30.00', ri: 3 },
-      { ci: 4, pi: 4, freq: 'weekly', price: '18.00', ri: 2 },
-      { ci: 5, pi: 5, freq: 'weekly', price: '28.00', ri: 1 },
-      { ci: 6, pi: 6, freq: 'biweekly', price: '22.00', ri: 4 },
-      { ci: 7, pi: 7, freq: 'weekly', price: '40.00', ri: 3 },
-      { ci: 8, pi: 8, freq: 'weekly', price: '25.00', ri: 0 },
-      { ci: 9, pi: 9, freq: 'monthly', price: '45.00', ri: 2 },
-      { ci: 10, pi: 10, freq: 'weekly', price: '26.00', ri: 1 },
-      { ci: 14, pi: 14, freq: 'weekly', price: '32.00', ri: 4 },
-      { ci: 15, pi: 15, freq: 'weekly', price: '24.00', ri: 0 },
-      { ci: 16, pi: 16, freq: 'weekly', price: '38.00', ri: 3 },
-      { ci: 17, pi: 17, freq: 'weekly', price: '22.00', ri: 1 },
-      { ci: 18, pi: 18, freq: 'biweekly', price: '35.00', ri: 2 },
-      { ci: 19, pi: 19, freq: 'weekly', price: '27.00', ri: 4 },
-      { ci: 20, pi: 20, freq: 'weekly', price: '30.00', ri: 0 },
-      { ci: 21, pi: 21, freq: 'weekly', price: '42.00', ri: 3 },
-      { ci: 22, pi: 22, freq: 'weekly', price: '23.00', ri: 1 },
-      { ci: 23, pi: 23, freq: 'weekly', price: '19.00', ri: 2 },
-      { ci: 24, pi: 24, freq: 'biweekly', price: '33.00', ri: 4 },
+      { ci: 0, pi: 0, freq: "weekly", price: "25.00", ri: 0 },
+      { ci: 1, pi: 1, freq: "weekly", price: "20.00", ri: 1 },
+      { ci: 2, pi: 2, freq: "weekly", price: "35.00", ri: 0 },
+      { ci: 3, pi: 3, freq: "biweekly", price: "30.00", ri: 3 },
+      { ci: 4, pi: 4, freq: "weekly", price: "18.00", ri: 2 },
+      { ci: 5, pi: 5, freq: "weekly", price: "28.00", ri: 1 },
+      { ci: 6, pi: 6, freq: "biweekly", price: "22.00", ri: 4 },
+      { ci: 7, pi: 7, freq: "weekly", price: "40.00", ri: 3 },
+      { ci: 8, pi: 8, freq: "weekly", price: "25.00", ri: 0 },
+      { ci: 9, pi: 9, freq: "monthly", price: "45.00", ri: 2 },
+      { ci: 10, pi: 10, freq: "weekly", price: "26.00", ri: 1 },
+      { ci: 14, pi: 14, freq: "weekly", price: "32.00", ri: 4 },
+      { ci: 15, pi: 15, freq: "weekly", price: "24.00", ri: 0 },
+      { ci: 16, pi: 16, freq: "weekly", price: "38.00", ri: 3 },
+      { ci: 17, pi: 17, freq: "weekly", price: "22.00", ri: 1 },
+      { ci: 18, pi: 18, freq: "biweekly", price: "35.00", ri: 2 },
+      { ci: 19, pi: 19, freq: "weekly", price: "27.00", ri: 4 },
+      { ci: 20, pi: 20, freq: "weekly", price: "30.00", ri: 0 },
+      { ci: 21, pi: 21, freq: "weekly", price: "42.00", ri: 3 },
+      { ci: 22, pi: 22, freq: "weekly", price: "23.00", ri: 1 },
+      { ci: 23, pi: 23, freq: "weekly", price: "19.00", ri: 2 },
+      { ci: 24, pi: 24, freq: "biweekly", price: "33.00", ri: 4 },
     ];
 
     const planIds: string[] = [];
@@ -1460,19 +1564,19 @@ async function seedDemoCompany() {
       const pc = planConfigs[pIdx];
       const day = dayMap[pIdx];
       for (let wk = 6; wk >= -1; wk--) {
-        if (pc.freq === 'biweekly' && wk % 2 !== 0) continue;
-        if (pc.freq === 'monthly' && wk !== 0 && wk !== 4) continue;
+        if (pc.freq === "biweekly" && wk % 2 !== 0) continue;
+        if (pc.freq === "monthly" && wk !== 0 && wk !== 4) continue;
 
         const d = new Date(today);
-        d.setDate(d.getDate() - (wk * 7) + (day - d.getDay()));
-        const dateStr = d.toISOString().split('T')[0];
+        d.setDate(d.getDate() - wk * 7 + (day - d.getDay()));
+        const dateStr = d.toISOString().split("T")[0];
 
         let status: string;
-        if (d > today) status = 'scheduled';
-        else if (dateStr === today.toISOString().split('T')[0]) status = 'scheduled';
-        else status = Math.random() > 0.1 ? 'completed' : 'skipped';
+        if (d > today) status = "scheduled";
+        else if (dateStr === today.toISOString().split("T")[0]) status = "scheduled";
+        else status = Math.random() > 0.1 ? "completed" : "skipped";
 
-        const completedAt = status === 'completed' ? d.toISOString() : null;
+        const completedAt = status === "completed" ? d.toISOString() : null;
         await pool.query(
           `INSERT INTO visits (company_id, service_plan_id, property_id, scheduled_date, status, completed_at) VALUES ($1,$2,$3,$4,$5,$6)`,
           [companyId, planIds[pIdx], propIds[pc.pi], dateStr, status, completedAt]
@@ -1489,26 +1593,32 @@ async function seedDemoCompany() {
       const price = prices[i];
 
       const paidTotal = (price * 4).toFixed(2);
-      const paidInvNum = `INV-${String(invNum++).padStart(5, '0')}`;
+      const paidInvNum = `INV-${String(invNum++).padStart(5, "0")}`;
       await pool.query(
         `INSERT INTO invoices (company_id, contact_id, invoice_number, due_date, subtotal, tax, total, status, auto_generated, payment_attempts, issued_date) VALUES ($1,$2,$3,'2026-03-15',$4,'0',$4,'paid',true,0,'2026-02-15')`,
         [companyId, cid, paidInvNum, paidTotal]
       );
 
       const draftTotal = (price * 2).toFixed(2);
-      const draftInvNum = `INV-${String(invNum++).padStart(5, '0')}`;
+      const draftInvNum = `INV-${String(invNum++).padStart(5, "0")}`;
       await pool.query(
         `INSERT INTO invoices (company_id, contact_id, invoice_number, due_date, subtotal, tax, total, status, auto_generated, payment_attempts) VALUES ($1,$2,$3,'2026-04-01',$4,'0',$4,'draft',true,0) RETURNING id`,
         [companyId, cid, draftInvNum, draftTotal]
       );
     }
 
-    const leadSources = ['Referral', 'Nextdoor', 'Facebook', 'Google', 'Yard Sign', 'Website'];
+    const leadSources = ["Referral", "Nextdoor", "Facebook", "Google", "Yard Sign", "Website"];
     for (const ls of leadSources) {
-      await pool.query(`INSERT INTO lead_sources (company_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [companyId, ls]);
+      await pool.query(
+        `INSERT INTO lead_sources (company_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [companyId, ls]
+      );
     }
 
-    const pricingCount = await pool.query(`SELECT COUNT(*) FROM service_pricing WHERE company_id = $1`, [companyId]);
+    const pricingCount = await pool.query(
+      `SELECT COUNT(*) FROM service_pricing WHERE company_id = $1`,
+      [companyId]
+    );
     if (parseInt(pricingCount.rows[0].count) === 0) {
       const { storage } = await import("./storage");
       await storage.seedDefaultPricing(companyId);
@@ -1563,44 +1673,337 @@ async function seedPoopScoopDemoData() {
   const TIMEZONE = "America/Los_Angeles";
   const TOTAL = 250;
 
-  const FIRST_NAMES = ["James","Mary","John","Patricia","Robert","Jennifer","Michael","Linda","William","Barbara","David","Elizabeth","Richard","Susan","Joseph","Jessica","Thomas","Sarah","Charles","Karen","Christopher","Lisa","Daniel","Nancy","Matthew","Betty","Anthony","Margaret","Mark","Sandra","Donald","Ashley","Steven","Dorothy","Paul","Kimberly","Andrew","Emily","Joshua","Donna","Kenneth","Michelle","Kevin","Carol","Brian","Amanda","George","Melissa","Timothy","Deborah","Ronald","Stephanie","Edward","Rebecca","Jason","Sharon","Jeffrey","Laura","Ryan","Cynthia","Jacob","Kathleen","Gary","Amy","Nicholas","Angela","Eric","Shirley","Jonathan","Anna","Stephen","Brenda","Larry","Pamela","Justin","Emma","Scott","Nicole","Brandon","Helen","Benjamin","Samantha","Samuel","Katherine","Raymond","Christine","Gregory","Debra","Frank","Rachel","Alexander","Carolyn","Patrick","Janet","Jack","Catherine","Dennis","Maria","Jerry","Heather","Tyler","Diane","Aaron","Julie"];
-  const LAST_NAMES = ["Smith","Johnson","Williams","Brown","Jones","Garcia","Miller","Davis","Rodriguez","Martinez","Hernandez","Lopez","Gonzalez","Wilson","Anderson","Thomas","Taylor","Moore","Jackson","Martin","Lee","Perez","Thompson","White","Harris","Sanchez","Clark","Ramirez","Lewis","Robinson","Walker","Young","Allen","King","Wright","Scott","Torres","Nguyen","Hill","Flores","Green","Adams","Nelson","Baker","Hall","Rivera","Campbell","Mitchell","Carter","Roberts","Gomez","Phillips","Evans","Turner","Diaz","Parker","Cruz","Edwards","Collins","Reyes","Stewart","Morris","Morales","Murphy","Cook","Rogers","Gutierrez","Ortiz","Morgan","Cooper","Peterson","Bailey","Reed","Kelly","Howard","Ramos","Kim","Cox","Ward","Richardson","Watson","Brooks","Chavez","Wood","James","Bennett","Gray","Mendoza","Ruiz","Hughes","Price","Alvarez","Castillo","Sanders","Patel","Myers","Long","Ross","Foster","Jimenez","Powell","Jenkins","Perry","Russell"];
-  const STREETS = ["Meridian St","Lakeway Dr","Alabama St","King St","Cornwall Ave","Railroad Ave","Ellis St","Holly St","Magnolia Ave","Douglas Ave","Sunset Dr","Lincoln St","Grant St","Monroe St","State St","Bay St","Maple St","Oak St","Cedar St","Pine St","Birch St","Elm St","Walnut Ave","Chestnut Ave","Alder St","Iowa St","Kentucky St","Virginia St","Michigan St","Indiana St","Ohio St","Wisconsin St","Missouri St","Illinois St","Texas St","Cable St","Bill McDonald Pkwy","James St","Champion St","Stuart Rd","Donovan Ave","Connelly Ave","Yew St","Fir St","Spruce St","Garden St","Forest St","Valley Dr","Ridge Dr","Hill Dr","Park Ave","Lake Dr","Shore Dr","Bay Dr","Crest Dr","View Dr","Summit Dr","Meadow Ln","Woodland Dr","Hillcrest Dr"];
-  const ZIP_CODES = ["98225","98226","98229"];
+  const FIRST_NAMES = [
+    "James",
+    "Mary",
+    "John",
+    "Patricia",
+    "Robert",
+    "Jennifer",
+    "Michael",
+    "Linda",
+    "William",
+    "Barbara",
+    "David",
+    "Elizabeth",
+    "Richard",
+    "Susan",
+    "Joseph",
+    "Jessica",
+    "Thomas",
+    "Sarah",
+    "Charles",
+    "Karen",
+    "Christopher",
+    "Lisa",
+    "Daniel",
+    "Nancy",
+    "Matthew",
+    "Betty",
+    "Anthony",
+    "Margaret",
+    "Mark",
+    "Sandra",
+    "Donald",
+    "Ashley",
+    "Steven",
+    "Dorothy",
+    "Paul",
+    "Kimberly",
+    "Andrew",
+    "Emily",
+    "Joshua",
+    "Donna",
+    "Kenneth",
+    "Michelle",
+    "Kevin",
+    "Carol",
+    "Brian",
+    "Amanda",
+    "George",
+    "Melissa",
+    "Timothy",
+    "Deborah",
+    "Ronald",
+    "Stephanie",
+    "Edward",
+    "Rebecca",
+    "Jason",
+    "Sharon",
+    "Jeffrey",
+    "Laura",
+    "Ryan",
+    "Cynthia",
+    "Jacob",
+    "Kathleen",
+    "Gary",
+    "Amy",
+    "Nicholas",
+    "Angela",
+    "Eric",
+    "Shirley",
+    "Jonathan",
+    "Anna",
+    "Stephen",
+    "Brenda",
+    "Larry",
+    "Pamela",
+    "Justin",
+    "Emma",
+    "Scott",
+    "Nicole",
+    "Brandon",
+    "Helen",
+    "Benjamin",
+    "Samantha",
+    "Samuel",
+    "Katherine",
+    "Raymond",
+    "Christine",
+    "Gregory",
+    "Debra",
+    "Frank",
+    "Rachel",
+    "Alexander",
+    "Carolyn",
+    "Patrick",
+    "Janet",
+    "Jack",
+    "Catherine",
+    "Dennis",
+    "Maria",
+    "Jerry",
+    "Heather",
+    "Tyler",
+    "Diane",
+    "Aaron",
+    "Julie",
+  ];
+  const LAST_NAMES = [
+    "Smith",
+    "Johnson",
+    "Williams",
+    "Brown",
+    "Jones",
+    "Garcia",
+    "Miller",
+    "Davis",
+    "Rodriguez",
+    "Martinez",
+    "Hernandez",
+    "Lopez",
+    "Gonzalez",
+    "Wilson",
+    "Anderson",
+    "Thomas",
+    "Taylor",
+    "Moore",
+    "Jackson",
+    "Martin",
+    "Lee",
+    "Perez",
+    "Thompson",
+    "White",
+    "Harris",
+    "Sanchez",
+    "Clark",
+    "Ramirez",
+    "Lewis",
+    "Robinson",
+    "Walker",
+    "Young",
+    "Allen",
+    "King",
+    "Wright",
+    "Scott",
+    "Torres",
+    "Nguyen",
+    "Hill",
+    "Flores",
+    "Green",
+    "Adams",
+    "Nelson",
+    "Baker",
+    "Hall",
+    "Rivera",
+    "Campbell",
+    "Mitchell",
+    "Carter",
+    "Roberts",
+    "Gomez",
+    "Phillips",
+    "Evans",
+    "Turner",
+    "Diaz",
+    "Parker",
+    "Cruz",
+    "Edwards",
+    "Collins",
+    "Reyes",
+    "Stewart",
+    "Morris",
+    "Morales",
+    "Murphy",
+    "Cook",
+    "Rogers",
+    "Gutierrez",
+    "Ortiz",
+    "Morgan",
+    "Cooper",
+    "Peterson",
+    "Bailey",
+    "Reed",
+    "Kelly",
+    "Howard",
+    "Ramos",
+    "Kim",
+    "Cox",
+    "Ward",
+    "Richardson",
+    "Watson",
+    "Brooks",
+    "Chavez",
+    "Wood",
+    "James",
+    "Bennett",
+    "Gray",
+    "Mendoza",
+    "Ruiz",
+    "Hughes",
+    "Price",
+    "Alvarez",
+    "Castillo",
+    "Sanders",
+    "Patel",
+    "Myers",
+    "Long",
+    "Ross",
+    "Foster",
+    "Jimenez",
+    "Powell",
+    "Jenkins",
+    "Perry",
+    "Russell",
+  ];
+  const STREETS = [
+    "Meridian St",
+    "Lakeway Dr",
+    "Alabama St",
+    "King St",
+    "Cornwall Ave",
+    "Railroad Ave",
+    "Ellis St",
+    "Holly St",
+    "Magnolia Ave",
+    "Douglas Ave",
+    "Sunset Dr",
+    "Lincoln St",
+    "Grant St",
+    "Monroe St",
+    "State St",
+    "Bay St",
+    "Maple St",
+    "Oak St",
+    "Cedar St",
+    "Pine St",
+    "Birch St",
+    "Elm St",
+    "Walnut Ave",
+    "Chestnut Ave",
+    "Alder St",
+    "Iowa St",
+    "Kentucky St",
+    "Virginia St",
+    "Michigan St",
+    "Indiana St",
+    "Ohio St",
+    "Wisconsin St",
+    "Missouri St",
+    "Illinois St",
+    "Texas St",
+    "Cable St",
+    "Bill McDonald Pkwy",
+    "James St",
+    "Champion St",
+    "Stuart Rd",
+    "Donovan Ave",
+    "Connelly Ave",
+    "Yew St",
+    "Fir St",
+    "Spruce St",
+    "Garden St",
+    "Forest St",
+    "Valley Dr",
+    "Ridge Dr",
+    "Hill Dr",
+    "Park Ave",
+    "Lake Dr",
+    "Shore Dr",
+    "Bay Dr",
+    "Crest Dr",
+    "View Dr",
+    "Summit Dr",
+    "Meadow Ln",
+    "Woodland Dr",
+    "Hillcrest Dr",
+  ];
+  const ZIP_CODES = ["98225", "98226", "98229"];
   const ZIP_WEIGHTS = [0.4, 0.35, 0.25];
-  const YARD_SIZES = ["small","medium","large"];
-  const YARD_DIFFICULTIES = ["flat","moderate","difficult"];
-  const FREQUENCIES = ["weekly","biweekly","monthly"];
-  const FREQ_WEIGHTS = [0.50, 0.35, 0.15];
-  const DAYS = ["monday","tuesday","wednesday","thursday","friday","saturday"];
-  const DOMAINS = ["gmail.com","yahoo.com","hotmail.com","outlook.com","icloud.com","comcast.net"];
+  const YARD_SIZES = ["small", "medium", "large"];
+  const YARD_DIFFICULTIES = ["flat", "moderate", "difficult"];
+  const FREQUENCIES = ["weekly", "biweekly", "monthly"];
+  const FREQ_WEIGHTS = [0.5, 0.35, 0.15];
+  const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const DOMAINS = [
+    "gmail.com",
+    "yahoo.com",
+    "hotmail.com",
+    "outlook.com",
+    "icloud.com",
+    "comcast.net",
+  ];
 
   const pick = <T>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
   const wpick = <T>(items: T[], weights: number[]) => {
-    let r = Math.random(), c = 0;
-    for (let i = 0; i < items.length; i++) { c += weights[i]; if (r < c) return items[i]; }
+    let r = Math.random(),
+      c = 0;
+    for (let i = 0; i < items.length; i++) {
+      c += weights[i];
+      if (r < c) return items[i];
+    }
     return items[items.length - 1];
   };
   const rInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-  const rPhone = () => `(${rInt(200,999)}) ${rInt(200,999)}-${rInt(1000,9999)}`;
+  const rPhone = () => `(${rInt(200, 999)}) ${rInt(200, 999)}-${rInt(1000, 9999)}`;
   const rEmail = (f: string, l: string, i: number) => {
     const d = pick(DOMAINS);
-    return pick([`${f.toLowerCase()}.${l.toLowerCase()}${i}@${d}`,`${f.toLowerCase()}${l.toLowerCase().charAt(0)}${i}@${d}`,`${f.toLowerCase().charAt(0)}${l.toLowerCase()}${i}@${d}`]);
+    return pick([
+      `${f.toLowerCase()}.${l.toLowerCase()}${i}@${d}`,
+      `${f.toLowerCase()}${l.toLowerCase().charAt(0)}${i}@${d}`,
+      `${f.toLowerCase().charAt(0)}${l.toLowerCase()}${i}@${d}`,
+    ]);
   };
-  const rStatus = () => { const r = Math.random(); return r < 0.80 ? "active" : r < 0.90 ? "paused" : "cancelled"; };
+  const rStatus = () => {
+    const r = Math.random();
+    return r < 0.8 ? "active" : r < 0.9 ? "paused" : "cancelled";
+  };
   const rPrice = (freq: string, dogs: number) => {
-    const base: Record<string,number> = { weekly: 18, biweekly: 28, monthly: 42 };
+    const base: Record<string, number> = { weekly: 18, biweekly: 28, monthly: 42 };
     return Math.max(15, Math.min(55, (base[freq] ?? 25) + (dogs - 1) * 5 + rInt(-2, 5)));
   };
   const rStartDate = () => {
-    const d = new Date(); d.setMonth(d.getMonth() - rInt(6, 18)); d.setDate(rInt(1, 28));
+    const d = new Date();
+    d.setMonth(d.getMonth() - rInt(6, 18));
+    d.setDate(rInt(1, 28));
     return d.toISOString().split("T")[0];
   };
 
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    let companyRes = await pool.query(`SELECT id FROM companies WHERE name = $1 LIMIT 1`, [COMPANY_NAME]);
+    let companyRes = await pool.query(`SELECT id FROM companies WHERE name = $1 LIMIT 1`, [
+      COMPANY_NAME,
+    ]);
     let companyId: string;
     if (companyRes.rows.length === 0) {
       const ins = await pool.query(
@@ -1613,7 +2016,10 @@ async function seedPoopScoopDemoData() {
       companyId = companyRes.rows[0].id;
     }
 
-    const countRes = await pool.query(`SELECT COUNT(*) AS cnt FROM contacts WHERE company_id = $1`, [companyId]);
+    const countRes = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM contacts WHERE company_id = $1`,
+      [companyId]
+    );
     if (parseInt(countRes.rows[0].cnt, 10) > 10) {
       console.log("[Migration] Poop Scoop already seeded — skipping");
       return;
@@ -1621,28 +2027,61 @@ async function seedPoopScoopDemoData() {
 
     console.log(`[Migration] Seeding ${TOTAL} Poop Scoop contacts...`);
     for (let i = 0; i < TOTAL; i++) {
-      const firstName = pick(FIRST_NAMES), lastName = pick(LAST_NAMES);
+      const firstName = pick(FIRST_NAMES),
+        lastName = pick(LAST_NAMES);
       const dogs = rInt(1, 4);
       const freq = wpick(FREQUENCIES, FREQ_WEIGHTS);
       const cRes = await pool.query(
         `INSERT INTO contacts (company_id,first_name,last_name,email,phone,street_address,city,state,zip_code,number_of_dogs,yard_size,service_frequency,service_day,status)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
-        [companyId, firstName, lastName, rEmail(firstName, lastName, i), rPhone(),
-         `${rInt(100,9999)} ${pick(STREETS)}`, "Bellingham", "WA", wpick(ZIP_CODES, ZIP_WEIGHTS),
-         dogs, pick(YARD_SIZES), freq, pick(DAYS), rStatus()]
+        [
+          companyId,
+          firstName,
+          lastName,
+          rEmail(firstName, lastName, i),
+          rPhone(),
+          `${rInt(100, 9999)} ${pick(STREETS)}`,
+          "Bellingham",
+          "WA",
+          wpick(ZIP_CODES, ZIP_WEIGHTS),
+          dogs,
+          pick(YARD_SIZES),
+          freq,
+          pick(DAYS),
+          rStatus(),
+        ]
       );
       const contactId = cRes.rows[0].id;
       const pRes = await pool.query(
         `INSERT INTO properties (company_id,contact_id,street_address,city,state,zip_code,number_of_dogs,yard_size,yard_difficulty)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-        [companyId, contactId, `${rInt(100,9999)} ${pick(STREETS)}`, "Bellingham", "WA",
-         wpick(ZIP_CODES, ZIP_WEIGHTS), dogs, pick(YARD_SIZES), pick(YARD_DIFFICULTIES)]
+        [
+          companyId,
+          contactId,
+          `${rInt(100, 9999)} ${pick(STREETS)}`,
+          "Bellingham",
+          "WA",
+          wpick(ZIP_CODES, ZIP_WEIGHTS),
+          dogs,
+          pick(YARD_SIZES),
+          pick(YARD_DIFFICULTIES),
+        ]
       );
       await pool.query(
         `INSERT INTO service_plans (company_id,contact_id,property_id,frequency,day_of_week,price_per_visit,is_active,job_status,start_date,job_type)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [companyId, contactId, pRes.rows[0].id, freq, pick(DAYS),
-         rPrice(freq, dogs).toFixed(2), true, "active", rStartDate(), "recurring"]
+        [
+          companyId,
+          contactId,
+          pRes.rows[0].id,
+          freq,
+          pick(DAYS),
+          rPrice(freq, dogs).toFixed(2),
+          true,
+          "active",
+          rStartDate(),
+          "recurring",
+        ]
       );
     }
     console.log(`[Migration] Poop Scoop seeded: ${TOTAL} contacts, properties, and service plans`);
@@ -1681,11 +2120,18 @@ async function backfillPropertyCoordinates() {
         console.log("[Geocode Backfill] No properties missing coordinates");
         return;
       }
-      console.log(`[Geocode Backfill] Found ${rows.length} properties missing coordinates, geocoding now...`);
+      console.log(
+        `[Geocode Backfill] Found ${rows.length} properties missing coordinates, geocoding now...`
+      );
       let geocoded = 0;
       for (const row of rows) {
         try {
-          const coords = await geocodeAddress(row.street_address, row.city, row.state, row.zip_code);
+          const coords = await geocodeAddress(
+            row.street_address,
+            row.city,
+            row.state,
+            row.zip_code
+          );
           if (coords) {
             await pool.query(
               `UPDATE properties SET latitude = $1, longitude = $2, updated_at = NOW() WHERE id = $3`,
@@ -1864,7 +2310,9 @@ async function ensureErrorReportsTable() {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_eft_report ON error_fix_tasks (error_report_id);`);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_eft_report ON error_fix_tasks (error_report_id);`
+    );
     console.log("[Migration] error_reports table ensured");
   } catch (err) {
     console.error("[Migration] Failed to ensure error_reports table:", err);
@@ -1917,7 +2365,9 @@ async function ensureCompanyNotificationColumns() {
         AND onboarding_complete_sent_at IS NULL;
     `);
 
-    console.log("[Migration] client_notifications_suppressed + onboarding_complete_sent_at columns verified");
+    console.log(
+      "[Migration] client_notifications_suppressed + onboarding_complete_sent_at columns verified"
+    );
   } catch (err) {
     console.error("[Migration] Failed to ensure company notification columns:", err);
   } finally {
@@ -1953,8 +2403,12 @@ async function ensureRetellWebhookRepairsTable() {
         repaired_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_retell_webhook_repairs_company ON retell_webhook_repairs (company_id);`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_retell_webhook_repairs_repaired_at ON retell_webhook_repairs (repaired_at);`);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_retell_webhook_repairs_company ON retell_webhook_repairs (company_id);`
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_retell_webhook_repairs_repaired_at ON retell_webhook_repairs (repaired_at);`
+    );
     console.log("[Migration] retell_webhook_repairs table ensured");
   } catch (err) {
     console.error("[Migration] Failed to ensure retell_webhook_repairs table:", err);
@@ -1980,7 +2434,9 @@ async function ensureUserColumns() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_email_sent_at TIMESTAMP`);
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_email_sent_at TIMESTAMP`
+    );
     console.log("[Migration] users onboarding_email_sent_at column verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure users onboarding_email_sent_at column:", err);
@@ -1993,7 +2449,9 @@ async function ensureVoicePortingColumn() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   try {
-    await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS porting_phone_number VARCHAR(20)`);
+    await pool.query(
+      `ALTER TABLE companies ADD COLUMN IF NOT EXISTS porting_phone_number VARCHAR(20)`
+    );
     console.log("[Migration] companies porting_phone_number column verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure companies porting_phone_number column:", err);
@@ -2013,7 +2471,10 @@ async function seedHistoricalDemoData() {
       JOIN users u ON u.id = cu.user_id
       WHERE u.email = 'demo@scoopilot.com' LIMIT 1
     `);
-    if (!compRes.rows.length) { await pool.end(); return; }
+    if (!compRes.rows.length) {
+      await pool.end();
+      return;
+    }
     const companyId = compRes.rows[0].id;
 
     const seededCheck = await pool.query(
@@ -2026,14 +2487,17 @@ async function seedHistoricalDemoData() {
       return;
     }
 
-    const plansRes = await pool.query(`
+    const plansRes = await pool.query(
+      `
       SELECT sp.id, sp.contact_id, sp.property_id, sp.frequency, sp.price_per_visit,
              r.day_of_week
       FROM service_plans sp
       LEFT JOIN routes r ON r.id = sp.route_id
       WHERE sp.company_id = $1 AND sp.is_active = true AND sp.is_stop_only = false
       ORDER BY sp.created_at
-    `, [companyId]);
+    `,
+      [companyId]
+    );
 
     const plans = plansRes.rows;
     const now = new Date();
@@ -2047,10 +2511,10 @@ async function seedHistoricalDemoData() {
       { months: 12, cumPct: 0.08 },
       { months: 11, cumPct: 0.15 },
       { months: 10, cumPct: 0.24 },
-      { months: 9,  cumPct: 0.36 },
-      { months: 8,  cumPct: 0.49 },
-      { months: 7,  cumPct: 0.66 },
-      { months: 6,  cumPct: 0.83 },
+      { months: 9, cumPct: 0.36 },
+      { months: 8, cumPct: 0.49 },
+      { months: 7, cumPct: 0.66 },
+      { months: 6, cumPct: 0.83 },
     ];
 
     const joinMonthsAgo: number[] = [];
@@ -2058,17 +2522,37 @@ async function seedHistoricalDemoData() {
       const pct = i / total;
       let monthsAgo = 0;
       for (const b of boundaries) {
-        if (pct < b.cumPct) { monthsAgo = b.months; break; }
+        if (pct < b.cumPct) {
+          monthsAgo = b.months;
+          break;
+        }
       }
       joinMonthsAgo.push(monthsAgo);
     }
 
     const dayNums: Record<string, number> = {
-      monday: 1, tuesday: 2, wednesday: 3,
-      thursday: 4, friday: 5, saturday: 6, sunday: 0,
+      monday: 1,
+      tuesday: 2,
+      wednesday: 3,
+      thursday: 4,
+      friday: 5,
+      saturday: 6,
+      sunday: 0,
     };
-    const monthNames = ['January','February','March','April','May','June',
-                        'July','August','September','October','November','December'];
+    const monthNames = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
 
     const invNumRes = await pool.query(
       `SELECT invoice_number FROM invoices WHERE company_id = $1 ORDER BY created_at DESC LIMIT 1`,
@@ -2102,12 +2586,12 @@ async function seedHistoricalDemoData() {
       let weekCount = 0;
 
       while (d < cutoffDate) {
-        const shouldSkipBiweekly = plan.frequency === 'biweekly' && weekCount % 2 !== 0;
-        const shouldSkipMonthly = plan.frequency === 'monthly' && weekCount % 4 !== 0;
+        const shouldSkipBiweekly = plan.frequency === "biweekly" && weekCount % 2 !== 0;
+        const shouldSkipMonthly = plan.frequency === "monthly" && weekCount % 4 !== 0;
         if (!shouldSkipBiweekly && !shouldSkipMonthly) {
-          const dateStr = d.toISOString().split('T')[0];
-          const status = Math.random() < 0.93 ? 'completed' : 'skipped';
-          const completedAt = status === 'completed' ? `${dateStr}T10:30:00Z` : null;
+          const dateStr = d.toISOString().split("T")[0];
+          const status = Math.random() < 0.93 ? "completed" : "skipped";
+          const completedAt = status === "completed" ? `${dateStr}T10:30:00Z` : null;
           try {
             await pool.query(
               `INSERT INTO visits (company_id, service_plan_id, property_id, scheduled_date, status, completed_at)
@@ -2116,9 +2600,11 @@ async function seedHistoricalDemoData() {
               [companyId, plan.id, plan.property_id, dateStr, status, completedAt]
             );
             visitsCreated++;
-          } catch { /* skip */ }
+          } catch {
+            /* skip */
+          }
 
-          if (status === 'completed') {
+          if (status === "completed") {
             const mk = dateStr.substring(0, 7);
             if (!visitsByMonth[mk]) visitsByMonth[mk] = { count: 0 };
             visitsByMonth[mk].count++;
@@ -2130,12 +2616,12 @@ async function seedHistoricalDemoData() {
 
       for (const [monthKey, data] of Object.entries(visitsByMonth)) {
         if (data.count === 0) continue;
-        const [yr, mo] = monthKey.split('-').map(Number);
-        const issuedDate = `${yr}-${String(mo).padStart(2,'0')}-01`;
-        const dueDate = new Date(yr, mo, 5).toISOString().split('T')[0];
+        const [yr, mo] = monthKey.split("-").map(Number);
+        const issuedDate = `${yr}-${String(mo).padStart(2, "0")}-01`;
+        const dueDate = new Date(yr, mo, 5).toISOString().split("T")[0];
         const paidAt = new Date(yr, mo - 1, 28, 9, 0, 0).toISOString();
         const subtotal = (price * data.count).toFixed(2);
-        const invoiceNumber = `INV-${String(nextInvNum).padStart(5,'0')}`;
+        const invoiceNumber = `INV-${String(nextInvNum).padStart(5, "0")}`;
         nextInvNum++;
         try {
           const invRes = await pool.query(
@@ -2146,14 +2632,24 @@ async function seedHistoricalDemoData() {
           await pool.query(
             `INSERT INTO invoice_line_items (invoice_id, description, quantity, unit_price, total)
              VALUES ($1,$2,$3,$4,$5)`,
-            [invRes.rows[0].id, `${monthNames[mo-1]} ${yr} service`, data.count, price.toFixed(2), subtotal]
+            [
+              invRes.rows[0].id,
+              `${monthNames[mo - 1]} ${yr} service`,
+              data.count,
+              price.toFixed(2),
+              subtotal,
+            ]
           );
           invoicesCreated++;
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       }
     }
 
-    console.log(`[Migration] Historical demo data seeded: ${visitsCreated} visits, ${invoicesCreated} invoices across 6 months`);
+    console.log(
+      `[Migration] Historical demo data seeded: ${visitsCreated} visits, ${invoicesCreated} invoices across 6 months`
+    );
     await pool.end();
   } catch (err) {
     console.error("[Migration] Failed to seed historical demo data:", err);
@@ -2163,11 +2659,12 @@ async function seedHistoricalDemoData() {
 async function auditRetellWebhooks() {
   try {
     const { storage } = await import("./storage");
-    const { getAppBaseUrl, getRetellAgentWebhookUrl, registerRetellWebhook } = await import("./services/retell");
+    const { getAppBaseUrl, getRetellAgentWebhookUrl, registerRetellWebhook } =
+      await import("./services/retell");
 
     const allCompanies = await storage.getAllCompanies();
     const voiceTenants = allCompanies.filter(
-      (c) => c.voicePlanStatus === "active" && c.retellAgentId,
+      (c) => c.voicePlanStatus === "active" && c.retellAgentId
     );
 
     if (voiceTenants.length === 0) {
@@ -2182,25 +2679,32 @@ async function auditRetellWebhooks() {
       const agentId = company.retellAgentId!;
       try {
         const currentUrl = await getRetellAgentWebhookUrl(agentId);
-        const isRegistered = expectedWebhook
-          ? currentUrl === expectedWebhook
-          : !!currentUrl;
+        const isRegistered = expectedWebhook ? currentUrl === expectedWebhook : !!currentUrl;
 
         if (isRegistered) {
-          console.log(`[RetellAudit] Webhook OK for company ${company.id} (agent ${agentId}): ${currentUrl}`);
+          console.log(
+            `[RetellAudit] Webhook OK for company ${company.id} (agent ${agentId}): ${currentUrl}`
+          );
           continue;
         }
 
-        console.warn(`[RetellAudit] Webhook missing/mismatched for company ${company.id} (agent ${agentId}). Current: "${currentUrl}", expected: "${expectedWebhook}". Attempting re-registration…`);
+        console.warn(
+          `[RetellAudit] Webhook missing/mismatched for company ${company.id} (agent ${agentId}). Current: "${currentUrl}", expected: "${expectedWebhook}". Attempting re-registration…`
+        );
 
         try {
           if (!expectedWebhook) {
-            throw new Error("APP_BASE_URL is not configured — cannot form a valid webhook URL to register");
+            throw new Error(
+              "APP_BASE_URL is not configured — cannot form a valid webhook URL to register"
+            );
           }
           await registerRetellWebhook(agentId);
           console.log(`[RetellAudit] Webhook re-registered successfully for company ${company.id}`);
         } catch (reregErr: any) {
-          console.error(`[RetellAudit] Webhook re-registration failed for company ${company.id}:`, reregErr);
+          console.error(
+            `[RetellAudit] Webhook re-registration failed for company ${company.id}:`,
+            reregErr
+          );
           await storage.createNotification({
             companyId: company.id,
             type: "system_warning",
@@ -2211,7 +2715,10 @@ async function auditRetellWebhooks() {
           });
         }
       } catch (checkErr: any) {
-        console.error(`[RetellAudit] Failed to check webhook for company ${company.id} (agent ${agentId}):`, checkErr);
+        console.error(
+          `[RetellAudit] Failed to check webhook for company ${company.id} (agent ${agentId}):`,
+          checkErr
+        );
       }
     }
   } catch (err) {
@@ -2225,7 +2732,9 @@ async function seedLakeErieScoopersAccount() {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     const crypto = await import("crypto");
 
-    const existing = await pool.query("SELECT id FROM users WHERE email = 'lakeeriescoopers@gmail.com'");
+    const existing = await pool.query(
+      "SELECT id FROM users WHERE email = 'lakeeriescoopers@gmail.com'"
+    );
     if (existing.rows.length > 0) {
       console.log("[Migration] Lake Erie Scoopers account already exists");
       await pool.end();
@@ -2296,7 +2805,9 @@ async function seedLakeErieScoopersAccount() {
       `,
     });
 
-    console.log(`[Migration] Lake Erie Scoopers created — company: ${companyId}, user: ${userId}. Reset email sent to lakeeriescoopers@gmail.com.`);
+    console.log(
+      `[Migration] Lake Erie Scoopers created — company: ${companyId}, user: ${userId}. Reset email sent to lakeeriescoopers@gmail.com.`
+    );
     await pool.end();
   } catch (err) {
     console.error("[Migration] Failed to create Lake Erie Scoopers account:", err);
@@ -2364,21 +2875,21 @@ async function seedLakeErieScoopersAccount() {
     () => {
       log(`serving on port ${port}`);
 
-      import("./services/quickbooks").then(({ isQboConfigured, startCdcPolling }) => {
-        if (isQboConfigured()) {
-          startCdcPolling();
-        } else {
-          console.log("[QBO CDC] QBO not configured, skipping CDC polling");
-        }
-      }).catch(err => console.error("[QBO CDC] Failed to initialize CDC polling:", err));
+      import("./services/quickbooks")
+        .then(({ isQboConfigured, startCdcPolling }) => {
+          if (isQboConfigured()) {
+            startCdcPolling();
+          } else {
+            console.log("[QBO CDC] QBO not configured, skipping CDC polling");
+          }
+        })
+        .catch((err) => console.error("[QBO CDC] Failed to initialize CDC polling:", err));
 
-      backfillPropertyCoordinates().catch(err =>
+      backfillPropertyCoordinates().catch((err) =>
         console.error("[Geocode Backfill] Unexpected error:", err)
       );
 
-      auditRetellWebhooks().catch(err =>
-        console.error("[RetellAudit] Unexpected error:", err)
-      );
-    },
+      auditRetellWebhooks().catch((err) => console.error("[RetellAudit] Unexpected error:", err));
+    }
   );
 })();

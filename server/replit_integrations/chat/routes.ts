@@ -115,4 +115,3 @@ export function registerChatRoutes(app: Express): void {
     }
   });
 }
-

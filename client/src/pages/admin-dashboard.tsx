@@ -3,7 +3,22 @@ import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, Users, Contact2, CalendarCheck, DollarSign, ChevronRight, BarChart3, ArrowRight, AlertTriangle, Bug, Webhook, RefreshCw, CheckCircle2, XCircle } from "lucide-react";
+import {
+  Building2,
+  Users,
+  Contact2,
+  CalendarCheck,
+  DollarSign,
+  ChevronRight,
+  BarChart3,
+  ArrowRight,
+  AlertTriangle,
+  Bug,
+  Webhook,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
@@ -72,7 +87,10 @@ export default function AdminDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "Webhook synced", description: "The Retell webhook URL has been updated successfully." });
+      toast({
+        title: "Webhook synced",
+        description: "The Retell webhook URL has been updated successfully.",
+      });
       qc.invalidateQueries({ queryKey: ["/api/admin/retell/webhook-status"] });
     },
     onError: (err: Error) => {
@@ -81,7 +99,10 @@ export default function AdminDashboard() {
   });
 
   const recentTenants = (companies || [])
-    .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+    .sort(
+      (a: any, b: any) =>
+        new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    )
     .slice(0, 5);
 
   const statCards = [
@@ -95,7 +116,9 @@ export default function AdminDashboard() {
   return (
     <div className="p-6 space-y-8 max-w-7xl mx-auto" data-testid="admin-dashboard">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-admin-title">Platform Overview</h1>
+        <h1 className="text-2xl font-bold" data-testid="text-admin-title">
+          Platform Overview
+        </h1>
         <p className="text-muted-foreground text-sm mt-1">ScooPilot administration at a glance</p>
       </div>
 
@@ -107,7 +130,10 @@ export default function AdminDashboard() {
                 <s.icon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">{s.label}</span>
               </div>
-              <p className="text-xl font-bold" data-testid={`text-stat-${s.label.toLowerCase().replace(/\s/g, "-")}`}>
+              <p
+                className="text-xl font-bold"
+                data-testid={`text-stat-${s.label.toLowerCase().replace(/\s/g, "-")}`}
+              >
                 {statsLoading ? "..." : s.value}
               </p>
             </CardContent>
@@ -116,12 +142,19 @@ export default function AdminDashboard() {
       </div>
 
       <Link href="/admin/errors">
-        <Card className={`hover-elevate cursor-pointer ${(errorStats?.openCount ?? 0) > 0 ? "border-red-300 dark:border-red-800 bg-red-50/30 dark:bg-red-950/10" : ""}`} data-testid="card-system-errors">
+        <Card
+          className={`hover-elevate cursor-pointer ${(errorStats?.openCount ?? 0) > 0 ? "border-red-300 dark:border-red-800 bg-red-50/30 dark:bg-red-950/10" : ""}`}
+          data-testid="card-system-errors"
+        >
           <CardContent className="pt-5 pb-4 px-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${(errorStats?.openCount ?? 0) > 0 ? "bg-red-100 dark:bg-red-900/40" : "bg-muted"}`}>
-                  <Bug className={`h-5 w-5 ${(errorStats?.openCount ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`} />
+                <div
+                  className={`p-2 rounded-lg ${(errorStats?.openCount ?? 0) > 0 ? "bg-red-100 dark:bg-red-900/40" : "bg-muted"}`}
+                >
+                  <Bug
+                    className={`h-5 w-5 ${(errorStats?.openCount ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+                  />
                 </div>
                 <div>
                   <p className="font-medium text-sm">System Errors</p>
@@ -134,14 +167,23 @@ export default function AdminDashboard() {
                   </p>
                   {errorStats?.latestTimestamp && (
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Latest: {new Date(errorStats.latestTimestamp).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      Latest:{" "}
+                      {new Date(errorStats.latestTimestamp).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </p>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 {(errorStats?.openCount ?? 0) > 0 && (
-                  <Badge className="bg-red-500 text-white hover:bg-red-600" data-testid="badge-open-errors">
+                  <Badge
+                    className="bg-red-500 text-white hover:bg-red-600"
+                    data-testid="badge-open-errors"
+                  >
                     {errorStats!.openCount}
                   </Badge>
                 )}
@@ -160,38 +202,62 @@ export default function AdminDashboard() {
           <CardContent className="pt-5 pb-4 px-5">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex items-start gap-3">
-                <div className={`p-2 rounded-lg ${!webhookStatus.configured ? "bg-muted" : webhookStatus.inSync ? "bg-green-100 dark:bg-green-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
-                  <Webhook className={`h-5 w-5 ${!webhookStatus.configured ? "text-muted-foreground" : webhookStatus.inSync ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`} />
+                <div
+                  className={`p-2 rounded-lg ${!webhookStatus.configured ? "bg-muted" : webhookStatus.inSync ? "bg-green-100 dark:bg-green-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}
+                >
+                  <Webhook
+                    className={`h-5 w-5 ${!webhookStatus.configured ? "text-muted-foreground" : webhookStatus.inSync ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}
+                  />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-sm">Retell Webhook</p>
-                    {webhookStatus.configured && webhookStatus.inSync !== undefined && (
-                      webhookStatus.inSync
-                        ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" data-testid="icon-webhook-in-sync" />
-                        : <XCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" data-testid="icon-webhook-out-of-sync" />
-                    )}
+                    {webhookStatus.configured &&
+                      webhookStatus.inSync !== undefined &&
+                      (webhookStatus.inSync ? (
+                        <CheckCircle2
+                          className="h-4 w-4 text-green-600 dark:text-green-400"
+                          data-testid="icon-webhook-in-sync"
+                        />
+                      ) : (
+                        <XCircle
+                          className="h-4 w-4 text-amber-600 dark:text-amber-400"
+                          data-testid="icon-webhook-out-of-sync"
+                        />
+                      ))}
                   </div>
                   {!webhookStatus.configured ? (
-                    <p className="text-sm text-muted-foreground mt-0.5">{webhookStatus.reason || "Not configured"}</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {webhookStatus.reason || "Not configured"}
+                    </p>
                   ) : (
                     <div className="mt-1 space-y-0.5">
                       {webhookStatus.fetchError ? (
-                        <p className="text-xs text-amber-700 dark:text-amber-400" data-testid="text-webhook-fetch-error">
+                        <p
+                          className="text-xs text-amber-700 dark:text-amber-400"
+                          data-testid="text-webhook-fetch-error"
+                        >
                           Could not reach Retell API: {webhookStatus.fetchError}
                         </p>
                       ) : (
                         <>
                           <p className="text-xs text-muted-foreground">
                             <span className="font-medium">Registered:</span>{" "}
-                            <span data-testid="text-registered-url">{webhookStatus.registeredUrl || "—"}</span>
+                            <span data-testid="text-registered-url">
+                              {webhookStatus.registeredUrl || "—"}
+                            </span>
                           </p>
                           <p className="text-xs text-muted-foreground">
                             <span className="font-medium">Expected:</span>{" "}
-                            <span data-testid="text-expected-url">{webhookStatus.expectedUrl || "—"}</span>
+                            <span data-testid="text-expected-url">
+                              {webhookStatus.expectedUrl || "—"}
+                            </span>
                           </p>
                           {webhookStatus.inSync === false && (
-                            <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mt-1" data-testid="text-webhook-mismatch">
+                            <p
+                              className="text-xs text-amber-700 dark:text-amber-400 font-medium mt-1"
+                              data-testid="text-webhook-mismatch"
+                            >
                               URL mismatch — re-sync to update the Retell agent
                             </p>
                           )}
@@ -210,7 +276,9 @@ export default function AdminDashboard() {
                   data-testid="button-sync-retell-webhook"
                   className="shrink-0"
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${syncWebhookMutation.isPending ? "animate-spin" : ""}`} />
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 mr-1.5 ${syncWebhookMutation.isPending ? "animate-spin" : ""}`}
+                  />
                   {syncWebhookMutation.isPending ? "Syncing…" : "Sync Webhook"}
                 </Button>
               )}
@@ -229,7 +297,9 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <p className="font-medium">Manage Tenants</p>
-                  <p className="text-sm text-muted-foreground">View, create, and manage tenant accounts</p>
+                  <p className="text-sm text-muted-foreground">
+                    View, create, and manage tenant accounts
+                  </p>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground" />
@@ -245,7 +315,9 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <p className="font-medium">Platform Analytics</p>
-                  <p className="text-sm text-muted-foreground">Revenue metrics, churn, and growth trends</p>
+                  <p className="text-sm text-muted-foreground">
+                    Revenue metrics, churn, and growth trends
+                  </p>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground" />
@@ -254,8 +326,11 @@ export default function AdminDashboard() {
         </Link>
       </div>
 
-      {inactiveUsers && (Object.values(inactiveUsers).some((arr) => arr.length > 0)) && (
-        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20" data-testid="card-inactive-users-alert">
+      {inactiveUsers && Object.values(inactiveUsers).some((arr) => arr.length > 0) && (
+        <Card
+          className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20"
+          data-testid="card-inactive-users-alert"
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -265,14 +340,34 @@ export default function AdminDashboard() {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { key: "3d", label: "3+ days", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-                { key: "5d", label: "5+ days", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
-                { key: "7d", label: "7+ days", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
-                { key: "14d", label: "14+ days", color: "bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-200" },
+                {
+                  key: "3d",
+                  label: "3+ days",
+                  color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+                },
+                {
+                  key: "5d",
+                  label: "5+ days",
+                  color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+                },
+                {
+                  key: "7d",
+                  label: "7+ days",
+                  color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+                },
+                {
+                  key: "14d",
+                  label: "14+ days",
+                  color: "bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-200",
+                },
               ].map((tier) => {
                 const count = inactiveUsers[tier.key]?.length || 0;
                 return (
-                  <div key={tier.key} className="flex items-center justify-between p-3 rounded-lg border bg-background" data-testid={`stat-inactive-${tier.key}`}>
+                  <div
+                    key={tier.key}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-background"
+                    data-testid={`stat-inactive-${tier.key}`}
+                  >
                     <div>
                       <p className="text-xs text-muted-foreground">No login</p>
                       <p className="text-sm font-medium">{tier.label}</p>
@@ -287,16 +382,28 @@ export default function AdminDashboard() {
               if (worst.length === 0) return null;
               return (
                 <div className="mt-3 space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">14+ day inactive users:</p>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    14+ day inactive users:
+                  </p>
                   {worst.slice(0, 5).map((u: any) => (
                     <Link key={u.userId} href={`/admin/companies/${u.companyId}`}>
-                      <div className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-muted cursor-pointer" data-testid={`row-inactive-${u.userId}`}>
-                        <span className="truncate">{u.firstName} {u.lastName} ({u.email})</span>
-                        <span className="text-muted-foreground shrink-0 ml-2">{u.companyName} - {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Never"}</span>
+                      <div
+                        className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-muted cursor-pointer"
+                        data-testid={`row-inactive-${u.userId}`}
+                      >
+                        <span className="truncate">
+                          {u.firstName} {u.lastName} ({u.email})
+                        </span>
+                        <span className="text-muted-foreground shrink-0 ml-2">
+                          {u.companyName} -{" "}
+                          {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Never"}
+                        </span>
                       </div>
                     </Link>
                   ))}
-                  {worst.length > 5 && <p className="text-xs text-muted-foreground">+{worst.length - 5} more</p>}
+                  {worst.length > 5 && (
+                    <p className="text-xs text-muted-foreground">+{worst.length - 5} more</p>
+                  )}
                 </div>
               );
             })()}
@@ -307,7 +414,11 @@ export default function AdminDashboard() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Recent Tenants</h2>
-          <Link href="/admin/tenants" className="text-sm text-primary hover:underline" data-testid="link-view-all-tenants">
+          <Link
+            href="/admin/tenants"
+            className="text-sm text-primary hover:underline"
+            data-testid="link-view-all-tenants"
+          >
             View all
           </Link>
         </div>
@@ -316,7 +427,11 @@ export default function AdminDashboard() {
             <CardContent className="py-8 text-center text-muted-foreground">
               <Building2 className="h-8 w-8 mx-auto mb-2 opacity-40" />
               <p className="text-sm">No tenants yet</p>
-              <Link href="/admin/tenants" className="text-sm text-primary hover:underline mt-1 inline-block" data-testid="link-add-first-tenant">
+              <Link
+                href="/admin/tenants"
+                className="text-sm text-primary hover:underline mt-1 inline-block"
+                data-testid="link-add-first-tenant"
+              >
                 Add your first tenant
               </Link>
             </CardContent>
@@ -327,14 +442,19 @@ export default function AdminDashboard() {
               const tierConfig = TIER_CONFIG[c.subscriptionTier as keyof typeof TIER_CONFIG];
               return (
                 <Link key={c.id} href={`/admin/companies/${c.id}`}>
-                  <Card className="hover-elevate cursor-pointer" data-testid={`card-recent-${c.id}`}>
+                  <Card
+                    className="hover-elevate cursor-pointer"
+                    data-testid={`card-recent-${c.id}`}
+                  >
                     <CardContent className="py-3 px-4">
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
                           <div className="min-w-0">
                             <p className="font-medium truncate">{c.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{c.email || c.id}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {c.email || c.id}
+                            </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 flex-wrap">

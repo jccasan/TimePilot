@@ -30,7 +30,7 @@ export async function runAutoInvoice() {
 
   console.log(
     `[auto-invoice] Completed: ${totalInvoicesCreated} draft invoices created, ` +
-    `${errors} company errors`
+      `${errors} company errors`
   );
 
   return { totalInvoicesCreated, errors };
@@ -49,7 +49,9 @@ function getMissedDates(lastRun: string | null | undefined, today: string): stri
   }
 
   if (dates.length > 31) {
-    console.warn(`[auto-invoice] Large catch-up window: ${dates.length} missed days, processing all`);
+    console.warn(
+      `[auto-invoice] Large catch-up window: ${dates.length} missed days, processing all`
+    );
   }
 
   return dates;
@@ -59,10 +61,10 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, _t
   let invoicesCreated = 0;
 
   const allActiveJobs = await storage.getJobsWithAgreements(companyId, { isActive: true });
-  const activeJobs = allActiveJobs.filter(j => !j.agreementPausedAt && !j.isStopOnly);
+  const activeJobs = allActiveJobs.filter((j) => !j.agreementPausedAt && !j.isStopOnly);
   if (activeJobs.length === 0) return { invoicesCreated };
 
-  const contactIdSet = new Set(activeJobs.map(j => j.contactId));
+  const contactIdSet = new Set(activeJobs.map((j) => j.contactId));
   const contactIds = Array.from(contactIdSet);
 
   for (const contactId of contactIds) {
@@ -72,9 +74,12 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, _t
       if (contact.status !== "active") continue;
       if (contact.autoInvoiceEnabled === false) continue;
 
-      const contactJobs = activeJobs.filter(j => j.contactId === contactId);
+      const contactJobs = activeJobs.filter((j) => j.contactId === contactId);
 
-      const lookbackStartDate = getLookbackStartDate(todayStr, contact.invoiceFrequency || "per_service");
+      const lookbackStartDate = getLookbackStartDate(
+        todayStr,
+        contact.invoiceFrequency || "per_service"
+      );
 
       const allUninvoicedVisits = await storage.getUninvoicedCompletedVisits(
         companyId,
@@ -83,8 +88,8 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, _t
         todayStr
       );
 
-      const activeSpIds = new Set(contactJobs.map(j => j.servicePlanId).filter(Boolean));
-      const uninvoicedVisits = allUninvoicedVisits.filter(v => activeSpIds.has(v.servicePlanId));
+      const activeSpIds = new Set(contactJobs.map((j) => j.servicePlanId).filter(Boolean));
+      const uninvoicedVisits = allUninvoicedVisits.filter((v) => activeSpIds.has(v.servicePlanId));
 
       if (uninvoicedVisits.length === 0) continue;
 
@@ -96,15 +101,24 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, _t
 
       if (!shouldInvoice) continue;
 
-      const jobBySpId = new Map(contactJobs.map(j => [j.servicePlanId, j]));
+      const jobBySpId = new Map(contactJobs.map((j) => [j.servicePlanId, j]));
 
       const jobAddOnsMap = new Map<string, { name: string; price: string }[]>();
       for (const job of contactJobs) {
         const addOns = await storage.getJobAddOns(job.id);
-        jobAddOnsMap.set(job.id, addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })));
+        jobAddOnsMap.set(
+          job.id,
+          addOns.filter((a) => a.isActive).map((a) => ({ name: a.name, price: a.price }))
+        );
       }
 
-      const lineItems: { visitId: string; description: string; quantity: number; unitPrice: string; total: string }[] = [];
+      const lineItems: {
+        visitId: string;
+        description: string;
+        quantity: number;
+        unitPrice: string;
+        total: string;
+      }[] = [];
       for (const visit of uninvoicedVisits) {
         const job = jobBySpId.get(visit.servicePlanId);
         const unitPrice = job ? job.pricePerVisit : "0";
@@ -159,16 +173,21 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, _t
 
       invoicesCreated++;
 
-      storage.createNotification({
-        companyId,
-        type: "general",
-        title: "Draft Invoice Created",
-        message: `Draft invoice ${invoiceNumber} for $${subtotal.toFixed(2)} created for ${contact.firstName} ${contact.lastName} — review and send when ready`,
-        isRead: false,
-        linkUrl: `/invoices`,
-      }).catch(console.error);
+      storage
+        .createNotification({
+          companyId,
+          type: "general",
+          title: "Draft Invoice Created",
+          message: `Draft invoice ${invoiceNumber} for $${subtotal.toFixed(2)} created for ${contact.firstName} ${contact.lastName} — review and send when ready`,
+          isRead: false,
+          linkUrl: `/invoices`,
+        })
+        .catch(console.error);
     } catch (contactErr) {
-      console.error(`[auto-invoice] Error processing contact ${contactId} in company ${companyId}:`, contactErr);
+      console.error(
+        `[auto-invoice] Error processing contact ${contactId} in company ${companyId}:`,
+        contactErr
+      );
     }
   }
 
@@ -197,11 +216,7 @@ function getLookbackStartDate(todayStr: string, frequency: string): string {
   }
 }
 
-function shouldGenerateInvoice(
-  frequency: string,
-  timing: string,
-  todayStr: string
-): boolean {
+function shouldGenerateInvoice(frequency: string, timing: string, todayStr: string): boolean {
   if (timing === "before_service") {
     return true;
   }

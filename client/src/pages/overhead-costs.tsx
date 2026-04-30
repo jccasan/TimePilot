@@ -7,11 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Select,
   SelectContent,
@@ -90,7 +86,10 @@ function CategorySection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className="border rounded-lg overflow-hidden" data-testid={`category-section-${category}`}>
+      <div
+        className="border rounded-lg overflow-hidden"
+        data-testid={`category-section-${category}`}
+      >
         <CollapsibleTrigger asChild>
           <button
             className="w-full flex items-center justify-between p-3 bg-muted/40 hover:bg-muted/60 transition-colors text-left"
@@ -103,9 +102,7 @@ function CategorySection({
                 <ChevronRight className="h-4 w-4 text-muted-foreground" />
               )}
               <span className="font-medium text-sm">{category}</span>
-              <span className="text-xs text-muted-foreground">
-                ({items.length} items)
-              </span>
+              <span className="text-xs text-muted-foreground">({items.length} items)</span>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex gap-1.5">
@@ -132,7 +129,10 @@ function CategorySection({
         <CollapsibleContent>
           <div className="divide-y">
             {items.map((item) => {
-              const isAutoFuel = item.name === "Fuel" && item.category === "Vehicles + Transportation" && item.isDefault;
+              const isAutoFuel =
+                item.name === "Fuel" &&
+                item.category === "Vehicles + Transportation" &&
+                item.isDefault;
               return (
                 <CostItemRow
                   key={item.id}
@@ -226,12 +226,8 @@ function CostItemRow({
           <span className="text-sm truncate" data-testid={`text-item-name-${item.id}`}>
             {isAutoCalculated ? "Fuel (from routes)" : item.name}
           </span>
-          {isScoopilotSub && (
-            <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
-          )}
-          {isAutoCalculated && (
-            <Route className="h-3 w-3 text-primary shrink-0" />
-          )}
+          {isScoopilotSub && <Lock className="h-3 w-3 text-muted-foreground shrink-0" />}
+          {isAutoCalculated && <Route className="h-3 w-3 text-primary shrink-0" />}
           <Badge
             variant="outline"
             className={`text-[10px] px-1 py-0 shrink-0 ${
@@ -244,7 +240,10 @@ function CostItemRow({
           </Badge>
         </div>
         {isAutoCalculated && (
-          <p className="text-[10px] text-muted-foreground mt-0.5" data-testid={`text-fuel-miles-note-${item.id}`}>
+          <p
+            className="text-[10px] text-muted-foreground mt-0.5"
+            data-testid={`text-fuel-miles-note-${item.id}`}
+          >
             {autoFuelMiles != null && autoFuelMiles > 0
               ? `${autoFuelMiles.toFixed(1)} mi this month · auto-calculated`
               : "No routes this month · auto-calculated"}
@@ -289,7 +288,10 @@ type MonthlyFuelData = {
   routeCount: number;
 };
 
-function FuelVehicleCard({ companyData, onSave }: {
+function FuelVehicleCard({
+  companyData,
+  onSave,
+}: {
   companyData: any;
   onSave: (updates: Record<string, unknown>) => void;
 }) {
@@ -323,15 +325,14 @@ function FuelVehicleCard({ companyData, onSave }: {
   const validGas = !isNaN(gasParsed) && gasParsed > 0;
   const validMpg = !isNaN(mpgParsed) && mpgParsed > 0;
 
-  const computedCostPerMile = validGas && validMpg
-    ? (gasParsed / mpgParsed)
-    : costPerMileCents / 100;
+  const computedCostPerMile = validGas && validMpg ? gasParsed / mpgParsed : costPerMileCents / 100;
 
   const wageParsed = parseFloat(hourlyWage);
   const burdenParsed = parseFloat(burdenMult);
   const validWage = !isNaN(wageParsed) && wageParsed > 0;
   const validBurden = !isNaN(burdenParsed) && burdenParsed >= 1;
-  const burdenedRate = validWage && validBurden ? wageParsed * burdenParsed : (wageCents / 100) * burden;
+  const burdenedRate =
+    validWage && validBurden ? wageParsed * burdenParsed : (wageCents / 100) * burden;
   const costPerMinute = burdenedRate / 60;
 
   const handleSave = () => {
@@ -367,14 +368,19 @@ function FuelVehicleCard({ companyData, onSave }: {
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Gas Price ($/gal)</label>
             <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                $
+              </span>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 className="h-9 pl-6 text-sm tabular-nums"
                 value={gasPrice}
-                onChange={(e) => { setGasPrice(e.target.value); setDirty(true); }}
+                onChange={(e) => {
+                  setGasPrice(e.target.value);
+                  setDirty(true);
+                }}
                 data-testid="input-gas-price"
               />
             </div>
@@ -390,7 +396,10 @@ function FuelVehicleCard({ companyData, onSave }: {
                 placeholder="e.g. 18"
                 className="h-9 pl-8 text-sm tabular-nums"
                 value={vehicleMpg}
-                onChange={(e) => { setVehicleMpg(e.target.value); setDirty(true); }}
+                onChange={(e) => {
+                  setVehicleMpg(e.target.value);
+                  setDirty(true);
+                }}
                 data-testid="input-vehicle-mpg"
               />
             </div>
@@ -405,9 +414,7 @@ function FuelVehicleCard({ companyData, onSave }: {
               <span className="text-xs text-muted-foreground">/mi</span>
             </div>
             {validGas && validMpg && (
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                Computed from gas & MPG
-              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Computed from gas & MPG</p>
             )}
           </div>
           <div className="flex justify-end">
@@ -433,14 +440,19 @@ function FuelVehicleCard({ companyData, onSave }: {
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Base Hourly Rate</label>
               <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  $
+                </span>
                 <Input
                   type="number"
                   step="0.50"
                   min="0"
                   className="h-9 pl-6 text-sm tabular-nums"
                   value={hourlyWage}
-                  onChange={(e) => { setHourlyWage(e.target.value); setDirty(true); }}
+                  onChange={(e) => {
+                    setHourlyWage(e.target.value);
+                    setDirty(true);
+                  }}
                   data-testid="input-hourly-wage"
                 />
               </div>
@@ -448,7 +460,9 @@ function FuelVehicleCard({ companyData, onSave }: {
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Burden Multiplier</label>
               <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">&times;</span>
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  &times;
+                </span>
                 <Input
                   type="number"
                   step="0.1"
@@ -456,13 +470,14 @@ function FuelVehicleCard({ companyData, onSave }: {
                   max="5"
                   className="h-9 pl-7 text-sm tabular-nums"
                   value={burdenMult}
-                  onChange={(e) => { setBurdenMult(e.target.value); setDirty(true); }}
+                  onChange={(e) => {
+                    setBurdenMult(e.target.value);
+                    setDirty(true);
+                  }}
                   data-testid="input-burden-multiplier"
                 />
               </div>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                Taxes, insurance, etc.
-              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Taxes, insurance, etc.</p>
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1">Burdened Rate</label>
@@ -494,17 +509,25 @@ function FuelVehicleCard({ companyData, onSave }: {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <Route className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Estimated Monthly Fuel (from routes)</span>
+              <span className="text-xs text-muted-foreground">
+                Estimated Monthly Fuel (from routes)
+              </span>
             </div>
             {fuelLoading ? (
               <span className="text-xs text-muted-foreground">Calculating...</span>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground tabular-nums" data-testid="text-fuel-total-miles">
+                <span
+                  className="text-xs text-muted-foreground tabular-nums"
+                  data-testid="text-fuel-total-miles"
+                >
                   {weeklyMiles.toFixed(1)} mi/wk × 4.33 = {totalMiles.toFixed(1)} mi/mo
                   {routeCount > 0 && ` · ${routeCount} route${routeCount !== 1 ? "s" : ""}`}
                 </span>
-                <span className="text-sm font-semibold tabular-nums" data-testid="text-fuel-monthly-cost">
+                <span
+                  className="text-sm font-semibold tabular-nums"
+                  data-testid="text-fuel-monthly-cost"
+                >
                   {formatDollars(fuelCostCents)}/mo
                 </span>
               </div>
@@ -566,40 +589,50 @@ function SupplyCard({
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
           <div data-testid="row-supply-disinfectant">
-            <label className="text-xs text-muted-foreground block mb-1">Disinfectant/Deodorizer ($/stop)</label>
+            <label className="text-xs text-muted-foreground block mb-1">
+              Disinfectant/Deodorizer ($/stop)
+            </label>
             <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                $
+              </span>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 className="h-9 pl-6 text-sm tabular-nums"
                 value={disinfectant}
-                onChange={(e) => { setDisinfectant(e.target.value); setDirty(true); }}
+                onChange={(e) => {
+                  setDisinfectant(e.target.value);
+                  setDirty(true);
+                }}
                 data-testid="input-supply-disinfectant"
               />
             </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Flat rate per stop
-            </p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Flat rate per stop</p>
           </div>
           <div data-testid="row-supply-bags">
-            <label className="text-xs text-muted-foreground block mb-1">Bag Unit Cost ($/bag)</label>
+            <label className="text-xs text-muted-foreground block mb-1">
+              Bag Unit Cost ($/bag)
+            </label>
             <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                $
+              </span>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 className="h-9 pl-6 text-sm tabular-nums"
                 value={bags}
-                onChange={(e) => { setBags(e.target.value); setDirty(true); }}
+                onChange={(e) => {
+                  setBags(e.target.value);
+                  setDirty(true);
+                }}
                 data-testid="input-supply-bags"
               />
             </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              ceil(dogs ÷ 2) bags per stop
-            </p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">ceil(dogs ÷ 2) bags per stop</p>
           </div>
           <div className="col-span-2 flex justify-end items-end">
             {dirty && (
@@ -759,7 +792,6 @@ export default function OverheadCosts() {
     .filter((i) => i.type === "variable")
     .reduce((s, i) => s + i.monthlyCostCents, 0);
 
-
   const { data: companyData } = useQuery<any>({
     queryKey: ["/api/company"],
   });
@@ -806,7 +838,10 @@ export default function OverheadCosts() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto h-full overflow-y-auto" data-testid="page-overhead-costs">
+    <div
+      className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto h-full overflow-y-auto"
+      data-testid="page-overhead-costs"
+    >
       <div className="flex items-center gap-2">
         <DollarSign className="h-5 w-5 text-primary" />
         <h1 className="text-lg font-semibold" data-testid="text-page-title">
@@ -857,7 +892,10 @@ export default function OverheadCosts() {
               <Lock className="h-3.5 w-3.5 text-blue-500" />
               <span className="text-xs text-muted-foreground">Fixed</span>
             </div>
-            <p className="text-xl font-bold tabular-nums text-blue-600 dark:text-blue-400" data-testid="text-fixed-total">
+            <p
+              className="text-xl font-bold tabular-nums text-blue-600 dark:text-blue-400"
+              data-testid="text-fixed-total"
+            >
               {formatDollars(fixedTotal)}
             </p>
           </CardContent>
@@ -868,7 +906,10 @@ export default function OverheadCosts() {
               <TrendingUp className="h-3.5 w-3.5 text-amber-500" />
               <span className="text-xs text-muted-foreground">Variable</span>
             </div>
-            <p className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="text-variable-total">
+            <p
+              className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400"
+              data-testid="text-variable-total"
+            >
               {formatDollars(variableTotal)}
             </p>
           </CardContent>
@@ -887,19 +928,24 @@ export default function OverheadCosts() {
               onDelete={handleDelete}
               onAdd={handleAdd}
               isPending={updateMutation.isPending || deleteMutation.isPending}
-              autoFuelMiles={category === "Vehicles + Transportation" ? (monthlyFuelData?.totalMiles ?? 0) : undefined}
+              autoFuelMiles={
+                category === "Vehicles + Transportation"
+                  ? (monthlyFuelData?.totalMiles ?? 0)
+                  : undefined
+              }
             />
           );
         })}
       </div>
 
       {addingCategory && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="modal-add-item">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          data-testid="modal-add-item"
+        >
           <Card className="w-full max-w-sm mx-4">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">
-                Add item to {addingCategory}
-              </CardTitle>
+              <CardTitle className="text-sm">Add item to {addingCategory}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <Input

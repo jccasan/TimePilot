@@ -6,16 +6,25 @@ import { sql, eq, and } from "drizzle-orm";
 import { contacts, reminderLogs } from "@shared/schema";
 import { ObjectStorageService } from "../replit_integrations/object_storage";
 import { sendEmail } from "../services/email";
-import { sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany } from "../services/sms";
+import {
+  sendSmsForCompany,
+  isSmsConfiguredForCompany,
+  getFromPhoneForCompany,
+} from "../services/sms";
 import { getAppBaseUrl } from "../services/retell";
 import { haversineDistance, fetchMapboxDirections } from "../services/route-optimizer";
-import {
-  insertVisitSchema,
-  reviewTokens,
-  reviewResponses,
-} from "@shared/schema";
+import { insertVisitSchema, reviewTokens, reviewResponses } from "@shared/schema";
 
-import { isAuthenticated, getCompanyContext, requireRole, handleError, p, notify, escapeHtml, buildVisitLineItemsWithAddOns } from "./shared";
+import {
+  isAuthenticated,
+  getCompanyContext,
+  requireRole,
+  handleError,
+  p,
+  notify,
+  escapeHtml,
+  buildVisitLineItemsWithAddOns,
+} from "./shared";
 const _objStorage = new ObjectStorageService();
 
 export async function registerVisitsRoutes(app: Express): Promise<void> {
@@ -30,48 +39,59 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
 
       const isTech = role === "tech";
       const companyRoutes = await storage.getRoutes(companyId);
-      const routeMap = new Map(companyRoutes.map(r => [r.id, r]));
+      const routeMap = new Map(companyRoutes.map((r) => [r.id, r]));
 
       if (isTech) {
-        const techRouteIds = new Set(companyRoutes.filter(r => r.technicianId === userId).map(r => r.id));
-        visitsList = visitsList.filter(v => v.routeId && techRouteIds.has(v.routeId));
+        const techRouteIds = new Set(
+          companyRoutes.filter((r) => r.technicianId === userId).map((r) => r.id)
+        );
+        visitsList = visitsList.filter((v) => v.routeId && techRouteIds.has(v.routeId));
       }
 
-      const enriched = await Promise.all(visitsList.map(async (v) => {
-        const plan = v.servicePlanId ? await storage.getServicePlan(v.servicePlanId, companyId) : null;
-        const addOns = plan ? await storage.getServicePlanAddOns(plan.id) : [];
-        const prop = await storage.getProperty(v.propertyId, companyId);
-        const contact = plan ? await storage.getContact(plan.contactId, companyId) : null;
-        const route = v.routeId ? routeMap.get(v.routeId) : null;
-        return {
-          ...v,
-          stopOrder: plan?.stopOrder ?? 999,
-          routeName: route?.name ?? null,
-          routeColor: route?.color ?? null,
-          servicePlanName: plan?.serviceName || (plan?.frequency ? `${plan.frequency} service` : null),
-          addOns: addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })),
-          property: prop ? {
-            streetAddress: prop.streetAddress,
-            city: prop.city,
-            state: prop.state,
-            gateCode: prop.gateCode,
-            specialInstructions: prop.specialInstructions,
-            measuredYardSqft: prop.measuredYardSqft,
-            lotSize: prop.lotSize,
-            numberOfDogs: prop.numberOfDogs,
-            hasDangerousDog: prop.hasDangerousDog,
-            dangerousDogNotes: prop.dangerousDogNotes,
-            latitude: prop.latitude ? parseFloat(prop.latitude) : null,
-            longitude: prop.longitude ? parseFloat(prop.longitude) : null,
-          } : null,
-          contact: contact ? {
-            id: contact.id,
-            firstName: contact.firstName,
-            lastName: contact.lastName,
-            phone: contact.phone,
-          } : null,
-        };
-      }));
+      const enriched = await Promise.all(
+        visitsList.map(async (v) => {
+          const plan = v.servicePlanId
+            ? await storage.getServicePlan(v.servicePlanId, companyId)
+            : null;
+          const addOns = plan ? await storage.getServicePlanAddOns(plan.id) : [];
+          const prop = await storage.getProperty(v.propertyId, companyId);
+          const contact = plan ? await storage.getContact(plan.contactId, companyId) : null;
+          const route = v.routeId ? routeMap.get(v.routeId) : null;
+          return {
+            ...v,
+            stopOrder: plan?.stopOrder ?? 999,
+            routeName: route?.name ?? null,
+            routeColor: route?.color ?? null,
+            servicePlanName:
+              plan?.serviceName || (plan?.frequency ? `${plan.frequency} service` : null),
+            addOns: addOns.filter((a) => a.isActive).map((a) => ({ name: a.name, price: a.price })),
+            property: prop
+              ? {
+                  streetAddress: prop.streetAddress,
+                  city: prop.city,
+                  state: prop.state,
+                  gateCode: prop.gateCode,
+                  specialInstructions: prop.specialInstructions,
+                  measuredYardSqft: prop.measuredYardSqft,
+                  lotSize: prop.lotSize,
+                  numberOfDogs: prop.numberOfDogs,
+                  hasDangerousDog: prop.hasDangerousDog,
+                  dangerousDogNotes: prop.dangerousDogNotes,
+                  latitude: prop.latitude ? parseFloat(prop.latitude) : null,
+                  longitude: prop.longitude ? parseFloat(prop.longitude) : null,
+                }
+              : null,
+            contact: contact
+              ? {
+                  id: contact.id,
+                  firstName: contact.firstName,
+                  lastName: contact.lastName,
+                  phone: contact.phone,
+                }
+              : null,
+          };
+        })
+      );
 
       enriched.sort((a, b) => {
         const routeA = a.routeName ?? "";
@@ -81,7 +101,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       });
 
       res.json(enriched);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/visits/range", isAuthenticated, async (req: Request, res: Response) => {
@@ -89,10 +111,13 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const start = req.query.start as string;
       const end = req.query.end as string;
-      if (!start || !end) return res.status(400).json({ error: "start and end query params required" });
+      if (!start || !end)
+        return res.status(400).json({ error: "start and end query params required" });
       const visitsList = await storage.getVisitsForDateRange(companyId, start, end);
       res.json(visitsList);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/visits", isAuthenticated, async (req: Request, res: Response) => {
@@ -104,7 +129,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       if (req.query.status) filters.status = req.query.status as string;
       const visitsList = await storage.getVisits(companyId, filters);
       res.json(visitsList);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/visits/:id", isAuthenticated, async (req: Request, res: Response) => {
@@ -113,7 +140,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       const visit = await storage.getVisit(p(req.params.id), companyId);
       if (!visit) return res.status(404).json({ error: "Visit not found" });
       res.json(visit);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/visits", isAuthenticated, async (req: Request, res: Response) => {
@@ -121,9 +150,12 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const parsed = insertVisitSchema.parse({ ...req.body, companyId });
       const visit = await storage.createVisit(parsed);
-      if (!visit) return res.status(409).json({ error: "A visit for this plan on that date already exists" });
+      if (!visit)
+        return res.status(409).json({ error: "A visit for this plan on that date already exists" });
       res.status(201).json(visit);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ─── Public Review Router endpoints (no auth required) ───────────────────
@@ -131,10 +163,16 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
   app.get("/api/review/token/:token", async (req: Request, res: Response) => {
     try {
       const token = String(req.params.token);
-      const [row] = await db.select().from(reviewTokens).where(eq(reviewTokens.token, token)).limit(1);
+      const [row] = await db
+        .select()
+        .from(reviewTokens)
+        .where(eq(reviewTokens.token, token))
+        .limit(1);
       if (!row) return res.status(404).json({ error: "Invalid review link" });
-      if (row.expiresAt < new Date()) return res.status(410).json({ error: "This review link has expired" });
-      if (row.usedAt) return res.status(410).json({ error: "This review link has already been used" });
+      if (row.expiresAt < new Date())
+        return res.status(410).json({ error: "This review link has expired" });
+      if (row.usedAt)
+        return res.status(410).json({ error: "This review link has already been used" });
       const company = await storage.getCompany(row.companyId);
       const contact = await storage.getContact(row.contactId, row.companyId);
       res.json({
@@ -145,7 +183,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         contactFirstName: contact?.firstName || "there",
         googleReviewUrl: row.googleReviewUrl || company?.googleReviewUrl || null,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/review/rate", async (req: Request, res: Response) => {
@@ -154,14 +194,21 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       if (!token || !rating || rating < 1 || rating > 5) {
         return res.status(400).json({ error: "token and rating (1-5) are required" });
       }
-      const [row] = await db.select().from(reviewTokens).where(eq(reviewTokens.token, token)).limit(1);
+      const [row] = await db
+        .select()
+        .from(reviewTokens)
+        .where(eq(reviewTokens.token, token))
+        .limit(1);
       if (!row) return res.status(404).json({ error: "Invalid review link" });
-      if (row.expiresAt < new Date()) return res.status(410).json({ error: "This review link has expired" });
-      const [consumed] = await db.update(reviewTokens)
+      if (row.expiresAt < new Date())
+        return res.status(410).json({ error: "This review link has expired" });
+      const [consumed] = await db
+        .update(reviewTokens)
         .set({ usedAt: new Date() })
         .where(and(eq(reviewTokens.token, token), sql`used_at IS NULL`))
         .returning({ id: reviewTokens.id });
-      if (!consumed) return res.status(410).json({ error: "This review link has already been used" });
+      if (!consumed)
+        return res.status(410).json({ error: "This review link has already been used" });
       const branch = rating >= 4 ? "positive" : "negative";
       await db.insert(reviewResponses).values({
         tokenId: consumed.id,
@@ -176,7 +223,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         branch,
         googleReviewUrl: row.googleReviewUrl || company?.googleReviewUrl || null,
       });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.post("/api/review/submit", async (req: Request, res: Response) => {
@@ -188,17 +237,31 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       if (!feedbackText || feedbackText.trim().length < 10) {
         return res.status(400).json({ error: "Please provide at least 10 characters of feedback" });
       }
-      const [row] = await db.select().from(reviewTokens).where(eq(reviewTokens.token, token)).limit(1);
+      const [row] = await db
+        .select()
+        .from(reviewTokens)
+        .where(eq(reviewTokens.token, token))
+        .limit(1);
       if (!row) return res.status(404).json({ error: "Invalid review link" });
-      if (row.expiresAt < new Date()) return res.status(410).json({ error: "This review link has expired" });
+      if (row.expiresAt < new Date())
+        return res.status(410).json({ error: "This review link has expired" });
       if (!row.usedAt) return res.status(400).json({ error: "Rating not yet recorded" });
-      const [existingResponse] = await db.select().from(reviewResponses).where(eq(reviewResponses.tokenId, row.id)).limit(1);
+      const [existingResponse] = await db
+        .select()
+        .from(reviewResponses)
+        .where(eq(reviewResponses.tokenId, row.id))
+        .limit(1);
       if (!existingResponse) return res.status(404).json({ error: "Rating not yet recorded" });
-      if (existingResponse.branch !== "negative") return res.status(400).json({ error: "Only negative responses require text feedback" });
-      if (existingResponse.alertSent || (existingResponse.feedbackText && existingResponse.feedbackText.trim().length > 0)) {
+      if (existingResponse.branch !== "negative")
+        return res.status(400).json({ error: "Only negative responses require text feedback" });
+      if (
+        existingResponse.alertSent ||
+        (existingResponse.feedbackText && existingResponse.feedbackText.trim().length > 0)
+      ) {
         return res.status(409).json({ error: "Feedback already submitted" });
       }
-      const updated = await db.update(reviewResponses)
+      const updated = await db
+        .update(reviewResponses)
         .set({ feedbackText: feedbackText.trim(), submittedAt: new Date() })
         .where(and(eq(reviewResponses.id, existingResponse.id), sql`feedback_text IS NULL`))
         .returning();
@@ -243,7 +306,13 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
           for (const emailRow of ownerEmails.rows) {
             const ownerEmail = String((emailRow as Record<string, unknown>).email ?? "");
             if (ownerEmail) {
-              await sendEmail({ to: ownerEmail, subject: emailSubject, text: emailText, html: emailHtml, companyId: row.companyId });
+              await sendEmail({
+                to: ownerEmail,
+                subject: emailSubject,
+                text: emailText,
+                html: emailHtml,
+                companyId: row.companyId,
+              });
             }
           }
           const smsConfigured = await isSmsConfiguredForCompany(row.companyId);
@@ -258,17 +327,26 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
             for (const phoneRow of ownerPhones.rows) {
               const ownerPhone = String((phoneRow as Record<string, unknown>).phone ?? "");
               if (ownerPhone) {
-                await sendSmsForCompany({ to: ownerPhone, body: smsBody, companyId: row.companyId }).catch((e) => console.error("[ReviewAlert] SMS failed:", e));
+                await sendSmsForCompany({
+                  to: ownerPhone,
+                  body: smsBody,
+                  companyId: row.companyId,
+                }).catch((e) => console.error("[ReviewAlert] SMS failed:", e));
               }
             }
           }
-          await db.update(reviewResponses).set({ alertSent: true }).where(eq(reviewResponses.id, existingResponse.id));
+          await db
+            .update(reviewResponses)
+            .set({ alertSent: true })
+            .where(eq(reviewResponses.id, existingResponse.id));
         }
       } catch (alertErr) {
         console.error("[ReviewAlert] Failed to send owner alert:", alertErr);
       }
       res.json({ success: true, branch: existingResponse.branch });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   app.get("/api/review/responses", isAuthenticated, async (req: Request, res: Response) => {
@@ -290,7 +368,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         LIMIT 50
       `);
       res.json(rows.rows);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   // ─── End public Review Router endpoints ─────────────────────────────────
@@ -333,7 +413,12 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
           : `Hi ${contact.firstName}! We'd love to hear about your experience with ${company.name}. Would you mind leaving us a quick Google review? It really helps! ${reviewLink}`;
         if (contact.phone) {
           try {
-            await sendSmsForCompany({ to: contact.phone, body: message, companyId, contactId: contact.id });
+            await sendSmsForCompany({
+              to: contact.phone,
+              body: message,
+              companyId,
+              contactId: contact.id,
+            });
           } catch (smsErr) {
             console.error("[ReviewRequest] SMS send failed:", smsErr);
           }
@@ -348,16 +433,22 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
           deliveryStatus: "sent",
           sentAt: new Date(),
         });
-        await db.update(contacts).set({
-          visitsSinceLastReviewRequest: 0,
-          reviewRequestSentCount: sql`${contacts.reviewRequestSentCount} + 1`,
-          lastReviewRequestSentAt: new Date(),
-        }).where(eq(contacts.id, contactId));
+        await db
+          .update(contacts)
+          .set({
+            visitsSinceLastReviewRequest: 0,
+            reviewRequestSentCount: sql`${contacts.reviewRequestSentCount} + 1`,
+            lastReviewRequestSentAt: new Date(),
+          })
+          .where(eq(contacts.id, contactId));
         console.log(`[ReviewRequest] Sent to contact ${contactId} (visit ${visitId})`);
       } else {
-        await db.update(contacts).set({
-          visitsSinceLastReviewRequest: newCount,
-        }).where(eq(contacts.id, contactId));
+        await db
+          .update(contacts)
+          .set({
+            visitsSinceLastReviewRequest: newCount,
+          })
+          .where(eq(contacts.id, contactId));
       }
     } catch (err) {
       console.error("[ReviewRequest] Error in maybeFireReviewRequest:", err);
@@ -382,7 +473,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
 
       const validVisitStatuses = ["scheduled", "in_progress", "completed", "skipped", "cancelled"];
       if (req.body.status && !validVisitStatuses.includes(req.body.status)) {
-        return res.status(400).json({ error: `Invalid status. Must be one of: ${validVisitStatuses.join(", ")}` });
+        return res
+          .status(400)
+          .json({ error: `Invalid status. Must be one of: ${validVisitStatuses.join(", ")}` });
       }
       const allowedTransitions: Record<string, string[]> = {
         scheduled: ["in_progress", "completed", "skipped", "cancelled"],
@@ -394,13 +487,27 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       if (req.body.status && req.body.status !== existing.status) {
         const allowed = allowedTransitions[existing.status] || [];
         if (!allowed.includes(req.body.status)) {
-          return res.status(400).json({ error: `Cannot transition from '${existing.status}' to '${req.body.status}'` });
+          return res
+            .status(400)
+            .json({ error: `Cannot transition from '${existing.status}' to '${req.body.status}'` });
         }
       }
-      const allowedFields = ["status", "scheduledDate", "routeId", "startedAt", "completedAt",
-        "proofOfServicePhoto", "proofOfServicePhotoBefore", "gateClosedPhoto", "extraPhotos", "technicianNotes"];
+      const allowedFields = [
+        "status",
+        "scheduledDate",
+        "routeId",
+        "startedAt",
+        "completedAt",
+        "proofOfServicePhoto",
+        "proofOfServicePhotoBefore",
+        "gateClosedPhoto",
+        "extraPhotos",
+        "technicianNotes",
+      ];
       const updates: any = {};
-      for (const key of allowedFields) { if (req.body[key] !== undefined) updates[key] = req.body[key]; }
+      for (const key of allowedFields) {
+        if (req.body[key] !== undefined) updates[key] = req.body[key];
+      }
       if (req.body.status === "completed") {
         updates.completedBy = userId;
       }
@@ -415,10 +522,19 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         visit = await storage.updateVisit(p(req.params.id), companyId, updates);
       } catch (updateErr: unknown) {
         const msg = updateErr instanceof Error ? updateErr.message : String(updateErr);
-        const causeMsg = (updateErr instanceof Error && updateErr.cause instanceof Error) ? updateErr.cause.message : "";
-        if (msg.includes("unique constraint") || msg.includes("duplicate key") ||
-            causeMsg.includes("unique constraint") || causeMsg.includes("duplicate key")) {
-          return res.status(409).json({ error: "A visit with this service plan already exists on the selected date" });
+        const causeMsg =
+          updateErr instanceof Error && updateErr.cause instanceof Error
+            ? updateErr.cause.message
+            : "";
+        if (
+          msg.includes("unique constraint") ||
+          msg.includes("duplicate key") ||
+          causeMsg.includes("unique constraint") ||
+          causeMsg.includes("duplicate key")
+        ) {
+          return res
+            .status(409)
+            .json({ error: "A visit with this service plan already exists on the selected date" });
         }
         throw updateErr;
       }
@@ -428,25 +544,33 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
           const plan = await storage.getServicePlan(visit.servicePlanId, companyId);
           if (plan) {
             const contact = await storage.getContact(plan.contactId, companyId);
-            if (contact && contact.autoInvoiceEnabled !== false && contact.invoiceTiming === "after_service" && contact.invoiceFrequency === "per_service") {
+            if (
+              contact &&
+              contact.autoInvoiceEnabled !== false &&
+              contact.invoiceTiming === "after_service" &&
+              contact.invoiceFrequency === "per_service"
+            ) {
               const alreadyInvoiced = await storage.isVisitInvoiced(visit.id);
               if (!alreadyInvoiced) {
                 const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
                 const planMap = new Map([[plan.id, plan]]);
                 const lineItems = await buildVisitLineItemsWithAddOns([visit], planMap);
                 const subtotal = lineItems.reduce((sum, li) => sum + parseFloat(li.total), 0);
-                const autoInvoice = await storage.createInvoiceWithLineItems({
-                  companyId,
-                  contactId: plan.contactId,
-                  invoiceNumber,
-                  dueDate: new Date().toISOString().split("T")[0],
-                  subtotal: subtotal.toFixed(2),
-                  tax: "0",
-                  total: subtotal.toFixed(2),
-                  status: "draft",
-                  autoGenerated: true,
-                  paymentAttempts: 0,
-                }, lineItems);
+                const autoInvoice = await storage.createInvoiceWithLineItems(
+                  {
+                    companyId,
+                    contactId: plan.contactId,
+                    invoiceNumber,
+                    dueDate: new Date().toISOString().split("T")[0],
+                    subtotal: subtotal.toFixed(2),
+                    tax: "0",
+                    total: subtotal.toFixed(2),
+                    status: "draft",
+                    autoGenerated: true,
+                    paymentAttempts: 0,
+                  },
+                  lineItems
+                );
                 await storage.updateVisit(visit.id, companyId, { invoiceId: autoInvoice.id });
               }
             }
@@ -454,11 +578,23 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         } catch (autoErr) {
           console.error("Auto-invoice generation failed:", autoErr);
         }
-        notify(companyId, "visit_completed", "Visit Completed", `Visit on ${visit.scheduledDate} has been marked as completed.`, `/scheduling`);
+        notify(
+          companyId,
+          "visit_completed",
+          "Visit Completed",
+          `Visit on ${visit.scheduledDate} has been marked as completed.`,
+          `/scheduling`
+        );
         try {
           const { fireAutomationTrigger } = await import("../services/automation-runner");
-          await fireAutomationTrigger("service_completed", companyId, { visitId: visit.id, servicePlanId: visit.servicePlanId, scheduledDate: visit.scheduledDate });
-        } catch (autoErr) { console.error("[automation] service_completed trigger error:", autoErr); }
+          await fireAutomationTrigger("service_completed", companyId, {
+            visitId: visit.id,
+            servicePlanId: visit.servicePlanId,
+            scheduledDate: visit.scheduledDate,
+          });
+        } catch (autoErr) {
+          console.error("[automation] service_completed trigger error:", autoErr);
+        }
         try {
           const planForReview = await storage.getServicePlan(visit.servicePlanId, companyId);
           if (planForReview?.contactId) {
@@ -470,7 +606,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       }
 
       res.json(visit);
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   const onMyWayCooldowns = new Map<string, number>();
@@ -484,12 +622,20 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       if (role === "tech") {
         if (!visit.routeId) return res.status(403).json({ error: "Visit has no assigned route" });
         const route = await storage.getRoute(visit.routeId, companyId);
-        if (!route || route.technicianId !== userId) return res.status(403).json({ error: "You are not assigned to this visit's route" });
+        if (!route || route.technicianId !== userId)
+          return res.status(403).json({ error: "You are not assigned to this visit's route" });
       }
 
       const lat = Number(req.body.latitude);
       const lon = Number(req.body.longitude);
-      if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      if (
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lon) ||
+        lat < -90 ||
+        lat > 90 ||
+        lon < -180 ||
+        lon > 180
+      ) {
         return res.status(400).json({ error: "Valid latitude and longitude are required" });
       }
 
@@ -497,7 +643,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       const lastSent = onMyWayCooldowns.get(cooldownKey);
       if (lastSent && Date.now() - lastSent < 5 * 60 * 1000) {
         const waitSec = Math.ceil((5 * 60 * 1000 - (Date.now() - lastSent)) / 1000);
-        return res.status(429).json({ error: `Please wait ${waitSec} seconds before sending another on-my-way SMS for this stop` });
+        return res.status(429).json({
+          error: `Please wait ${waitSec} seconds before sending another on-my-way SMS for this stop`,
+        });
       }
 
       const plan = await storage.getServicePlan(visit.servicePlanId, companyId);
@@ -511,7 +659,8 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
 
       const destLat = parseFloat(String(property.latitude));
       const destLon = parseFloat(String(property.longitude));
-      if (!Number.isFinite(destLat) || !Number.isFinite(destLon)) return res.status(400).json({ error: "Property is not geocoded" });
+      if (!Number.isFinite(destLat) || !Number.isFinite(destLon))
+        return res.status(400).json({ error: "Property is not geocoded" });
 
       const company = await storage.getCompany(companyId);
       const companyName = company?.name || "Your service provider";
@@ -535,8 +684,14 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
 
       const etaMsg = `Hi ${contact.firstName}, ${companyName} is on the way! Estimated arrival in about ${roundedMinutes} minutes. Please ensure your yard is accessible and any dogs are inside. See you soon!`;
 
-      const smsResult = await sendSmsForCompany({ to: contact.phone, body: etaMsg, companyId, contactId: contact.id });
-      if (!smsResult.success) return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
+      const smsResult = await sendSmsForCompany({
+        to: contact.phone,
+        body: etaMsg,
+        companyId,
+        contactId: contact.id,
+      });
+      if (!smsResult.success)
+        return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
 
       onMyWayCooldowns.set(cooldownKey, Date.now());
 
@@ -563,299 +718,365 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         console.error("On-my-way message logging failed (SMS was sent):", logErr);
       }
 
-      res.json({ sent: true, etaMinutes: roundedMinutes, contactName: `${contact.firstName} ${contact.lastName}` });
-    } catch (err) { handleError(res, err); }
+      res.json({
+        sent: true,
+        etaMinutes: roundedMinutes,
+        contactName: `${contact.firstName} ${contact.lastName}`,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 
   const customSmsCooldowns = new Map<string, number>();
-  app.post("/api/visits/:id/send-custom-sms", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, userId, role } = await getCompanyContext(req);
-      const visit = await storage.getVisit(p(req.params.id), companyId);
-      if (!visit) return res.status(404).json({ error: "Visit not found" });
-
-      if (role === "tech") {
-        if (!visit.routeId) return res.status(403).json({ error: "Visit has no assigned route" });
-        const route = await storage.getRoute(visit.routeId, companyId);
-        if (!route || route.technicianId !== userId) {
-          return res.status(403).json({ error: "You are not assigned to this visit's route" });
-        }
-      }
-
-      if (typeof req.body.message !== "string") {
-        return res.status(400).json({ error: "Message must be a string" });
-      }
-      const messageBody = req.body.message.trim();
-      if (!messageBody || messageBody.length > 1000) {
-        return res.status(400).json({ error: "Message is required and must be under 1000 characters" });
-      }
-
-      const cooldownKey = `${companyId}:${visit.id}`;
-      const lastSent = customSmsCooldowns.get(cooldownKey);
-      if (lastSent && Date.now() - lastSent < 5 * 60 * 1000) {
-        const secsLeft = Math.ceil((5 * 60 * 1000 - (Date.now() - lastSent)) / 1000);
-        return res.status(429).json({ error: `Please wait ${secsLeft}s before sending another message for this visit` });
-      }
-
-      const plan = await storage.getServicePlan(visit.servicePlanId, companyId);
-      if (!plan) return res.status(404).json({ error: "Service plan not found" });
-
-      const contact = await storage.getContact(plan.contactId, companyId);
-      if (!contact?.phone) return res.status(400).json({ error: "Customer has no phone number on file" });
-
-      const smsReady = await isSmsConfiguredForCompany(companyId);
-      if (!smsReady) return res.status(503).json({ error: "SMS is not configured for your company" });
-
-      const smsResult = await sendSmsForCompany({ to: contact.phone, body: messageBody, companyId, contactId: contact.id });
-      if (!smsResult.success) return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
-
-      customSmsCooldowns.set(cooldownKey, Date.now());
-
+  app.post(
+    "/api/visits/:id/send-custom-sms",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
       try {
-        const fromPhone = await getFromPhoneForCompany(companyId);
-        await storage.createMessage({
+        const { companyId, userId, role } = await getCompanyContext(req);
+        const visit = await storage.getVisit(p(req.params.id), companyId);
+        if (!visit) return res.status(404).json({ error: "Visit not found" });
+
+        if (role === "tech") {
+          if (!visit.routeId) return res.status(403).json({ error: "Visit has no assigned route" });
+          const route = await storage.getRoute(visit.routeId, companyId);
+          if (!route || route.technicianId !== userId) {
+            return res.status(403).json({ error: "You are not assigned to this visit's route" });
+          }
+        }
+
+        if (typeof req.body.message !== "string") {
+          return res.status(400).json({ error: "Message must be a string" });
+        }
+        const messageBody = req.body.message.trim();
+        if (!messageBody || messageBody.length > 1000) {
+          return res
+            .status(400)
+            .json({ error: "Message is required and must be under 1000 characters" });
+        }
+
+        const cooldownKey = `${companyId}:${visit.id}`;
+        const lastSent = customSmsCooldowns.get(cooldownKey);
+        if (lastSent && Date.now() - lastSent < 5 * 60 * 1000) {
+          const secsLeft = Math.ceil((5 * 60 * 1000 - (Date.now() - lastSent)) / 1000);
+          return res.status(429).json({
+            error: `Please wait ${secsLeft}s before sending another message for this visit`,
+          });
+        }
+
+        const plan = await storage.getServicePlan(visit.servicePlanId, companyId);
+        if (!plan) return res.status(404).json({ error: "Service plan not found" });
+
+        const contact = await storage.getContact(plan.contactId, companyId);
+        if (!contact?.phone)
+          return res.status(400).json({ error: "Customer has no phone number on file" });
+
+        const smsReady = await isSmsConfiguredForCompany(companyId);
+        if (!smsReady)
+          return res.status(503).json({ error: "SMS is not configured for your company" });
+
+        const smsResult = await sendSmsForCompany({
+          to: contact.phone,
+          body: messageBody,
           companyId,
           contactId: contact.id,
-          channel: "sms",
-          direction: "outbound",
-          status: "sent",
-          fromAddress: fromPhone,
-          toAddress: contact.phone,
-          body: messageBody,
-          externalId: smsResult.messageSid,
         });
-      } catch (logErr) {
-        console.error("Custom visit SMS message logging failed (SMS was sent):", logErr);
-      }
+        if (!smsResult.success)
+          return res.status(500).json({ error: smsResult.error || "Failed to send SMS" });
 
-      res.json({ sent: true, contactName: `${contact.firstName} ${contact.lastName}` });
-    } catch (err) { handleError(res, err); }
-  });
+        customSmsCooldowns.set(cooldownKey, Date.now());
 
-  app.post("/api/visits/:id/complete-notify", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, userId, role } = await getCompanyContext(req);
-      const existing = await storage.getVisit(p(req.params.id), companyId);
-      if (!existing) return res.status(404).json({ error: "Visit not found" });
-
-      if (role === "tech") {
-        if (!existing.routeId) {
-          return res.status(403).json({ error: "Visit has no assigned route" });
-        }
-        const route = await storage.getRoute(existing.routeId, companyId);
-        if (!route || route.technicianId !== userId) {
-          return res.status(403).json({ error: "You are not assigned to this visit's route" });
-        }
-      }
-
-      if (existing.status === "completed") return res.json({ visit: existing, completionSms: null, etaSms: null, alreadyCompleted: true });
-      if (existing.status !== "in_progress") {
-        return res.status(400).json({ error: `Cannot complete visit from '${existing.status}' status. Visit must be started first.` });
-      }
-
-      const { gateClosedPhoto, extraPhotos, technicianNotes, noGate } = req.body;
-      if (!noGate && (!gateClosedPhoto || typeof gateClosedPhoto !== "string")) {
-        return res.status(400).json({ error: "gateClosedPhoto is required" });
-      }
-      if (extraPhotos && !Array.isArray(extraPhotos)) {
-        return res.status(400).json({ error: "extraPhotos must be an array of strings" });
-      }
-
-      const visit = await storage.updateVisit(p(req.params.id), companyId, {
-        status: "completed",
-        completedAt: new Date(),
-        completedBy: userId,
-        gateClosedPhoto: gateClosedPhoto || null,
-        extraPhotos: extraPhotos || null,
-        proofOfServicePhoto: gateClosedPhoto || existing.proofOfServicePhoto,
-        technicianNotes: technicianNotes || existing.technicianNotes,
-      });
-
-      // Mark visit photos as public so they can be served via /objects/ without auth.
-      // Photos are intentionally shared with customers (portal + SMS), so public
-      // visibility is the appropriate ACL policy for this object type.
-      const photoPaths: string[] = [];
-      if (gateClosedPhoto && typeof gateClosedPhoto === "string") photoPaths.push(gateClosedPhoto);
-      if (Array.isArray(extraPhotos)) photoPaths.push(...extraPhotos.filter((p: unknown) => typeof p === "string"));
-      if (photoPaths.length > 0) {
-        const publicAcl = { owner: userId, visibility: "public" as const };
-        await Promise.allSettled(photoPaths.map(path => _objStorage.trySetObjectEntityAclPolicy(path, publicAcl)));
-      }
-
-      const plan = await storage.getServicePlan(visit.servicePlanId, companyId);
-      if (!plan) return res.json({ visit, completionSms: null, etaSms: null });
-
-      const contact = await storage.getContact(plan.contactId, companyId);
-      const company = await storage.getCompany(companyId);
-      if (!contact || !company) return res.json({ visit, completionSms: null, etaSms: null });
-
-      if (contact.autoInvoiceEnabled !== false && contact.invoiceTiming === "after_service" && contact.invoiceFrequency === "per_service") {
         try {
-          const alreadyInvoiced = await storage.isVisitInvoiced(visit.id);
-          if (!alreadyInvoiced) {
-            const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
-            const planMap = new Map([[plan.id, plan]]);
-            const lineItems = await buildVisitLineItemsWithAddOns([visit], planMap);
-            const subtotal = lineItems.reduce((sum, li) => sum + parseFloat(li.total), 0);
-            const autoInv = await storage.createInvoiceWithLineItems({
-              companyId,
-              contactId: plan.contactId,
-              invoiceNumber,
-              dueDate: new Date().toISOString().split("T")[0],
-              subtotal: subtotal.toFixed(2),
-              tax: "0",
-              total: subtotal.toFixed(2),
-              status: "draft",
-              autoGenerated: true,
-              paymentAttempts: 0,
-            }, lineItems);
-            await storage.updateVisit(visit.id, companyId, { invoiceId: autoInv.id });
-          }
-        } catch (autoErr) {
-          console.error("Auto-invoice generation failed:", autoErr);
-        }
-      }
-
-      notify(companyId, "visit_completed", "Visit Completed", `Visit on ${visit.scheduledDate} has been marked as completed.`, `/scheduling`);
-
-      try {
-        if (plan?.contactId) {
-          await maybeFireReviewRequest(companyId, plan.contactId, visit.id);
-        }
-      } catch (reviewErr) {
-        console.error("Review request check failed:", reviewErr);
-      }
-
-      let completionSmsResult: any = null;
-      let etaSmsResult: any = null;
-
-      const todayStr = new Date().toISOString().split("T")[0];
-      const isScheduledForToday = visit.scheduledDate === todayStr;
-
-      if (isScheduledForToday) {
-        const appBaseUrl = `https://${req.get("host")}`;
-        const gatePhotoFullUrl = gateClosedPhoto ? `${appBaseUrl}${gateClosedPhoto}` : undefined;
-
-        const completionSmsReady = await isSmsConfiguredForCompany(companyId);
-        if (contact.phone && completionSmsReady) {
-          const completionMsg = noGate
-            ? `Hi ${contact.firstName}. ${company.name} just finished your poop scoop service. Let us know if there is anything we can do.`
-            : `Hi ${contact.firstName}. ${company.name} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`;
-          completionSmsResult = await sendSmsForCompany({
-            to: contact.phone,
-            body: completionMsg,
-            mediaUrl: noGate ? undefined : gatePhotoFullUrl,
+          const fromPhone = await getFromPhoneForCompany(companyId);
+          await storage.createMessage({
             companyId,
             contactId: contact.id,
+            channel: "sms",
+            direction: "outbound",
+            status: "sent",
+            fromAddress: fromPhone,
+            toAddress: contact.phone,
+            body: messageBody,
+            externalId: smsResult.messageSid,
           });
+        } catch (logErr) {
+          console.error("Custom visit SMS message logging failed (SMS was sent):", logErr);
+        }
 
-          if (completionSmsResult.success) {
-            const completionFrom = await getFromPhoneForCompany(companyId);
-            await storage.createMessage({
+        res.json({ sent: true, contactName: `${contact.firstName} ${contact.lastName}` });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/visits/:id/complete-notify",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, userId, role } = await getCompanyContext(req);
+        const existing = await storage.getVisit(p(req.params.id), companyId);
+        if (!existing) return res.status(404).json({ error: "Visit not found" });
+
+        if (role === "tech") {
+          if (!existing.routeId) {
+            return res.status(403).json({ error: "Visit has no assigned route" });
+          }
+          const route = await storage.getRoute(existing.routeId, companyId);
+          if (!route || route.technicianId !== userId) {
+            return res.status(403).json({ error: "You are not assigned to this visit's route" });
+          }
+        }
+
+        if (existing.status === "completed")
+          return res.json({
+            visit: existing,
+            completionSms: null,
+            etaSms: null,
+            alreadyCompleted: true,
+          });
+        if (existing.status !== "in_progress") {
+          return res.status(400).json({
+            error: `Cannot complete visit from '${existing.status}' status. Visit must be started first.`,
+          });
+        }
+
+        const { gateClosedPhoto, extraPhotos, technicianNotes, noGate } = req.body;
+        if (!noGate && (!gateClosedPhoto || typeof gateClosedPhoto !== "string")) {
+          return res.status(400).json({ error: "gateClosedPhoto is required" });
+        }
+        if (extraPhotos && !Array.isArray(extraPhotos)) {
+          return res.status(400).json({ error: "extraPhotos must be an array of strings" });
+        }
+
+        const visit = await storage.updateVisit(p(req.params.id), companyId, {
+          status: "completed",
+          completedAt: new Date(),
+          completedBy: userId,
+          gateClosedPhoto: gateClosedPhoto || null,
+          extraPhotos: extraPhotos || null,
+          proofOfServicePhoto: gateClosedPhoto || existing.proofOfServicePhoto,
+          technicianNotes: technicianNotes || existing.technicianNotes,
+        });
+
+        // Mark visit photos as public so they can be served via /objects/ without auth.
+        // Photos are intentionally shared with customers (portal + SMS), so public
+        // visibility is the appropriate ACL policy for this object type.
+        const photoPaths: string[] = [];
+        if (gateClosedPhoto && typeof gateClosedPhoto === "string")
+          photoPaths.push(gateClosedPhoto);
+        if (Array.isArray(extraPhotos))
+          photoPaths.push(...extraPhotos.filter((p: unknown) => typeof p === "string"));
+        if (photoPaths.length > 0) {
+          const publicAcl = { owner: userId, visibility: "public" as const };
+          await Promise.allSettled(
+            photoPaths.map((path) => _objStorage.trySetObjectEntityAclPolicy(path, publicAcl))
+          );
+        }
+
+        const plan = await storage.getServicePlan(visit.servicePlanId, companyId);
+        if (!plan) return res.json({ visit, completionSms: null, etaSms: null });
+
+        const contact = await storage.getContact(plan.contactId, companyId);
+        const company = await storage.getCompany(companyId);
+        if (!contact || !company) return res.json({ visit, completionSms: null, etaSms: null });
+
+        if (
+          contact.autoInvoiceEnabled !== false &&
+          contact.invoiceTiming === "after_service" &&
+          contact.invoiceFrequency === "per_service"
+        ) {
+          try {
+            const alreadyInvoiced = await storage.isVisitInvoiced(visit.id);
+            if (!alreadyInvoiced) {
+              const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
+              const planMap = new Map([[plan.id, plan]]);
+              const lineItems = await buildVisitLineItemsWithAddOns([visit], planMap);
+              const subtotal = lineItems.reduce((sum, li) => sum + parseFloat(li.total), 0);
+              const autoInv = await storage.createInvoiceWithLineItems(
+                {
+                  companyId,
+                  contactId: plan.contactId,
+                  invoiceNumber,
+                  dueDate: new Date().toISOString().split("T")[0],
+                  subtotal: subtotal.toFixed(2),
+                  tax: "0",
+                  total: subtotal.toFixed(2),
+                  status: "draft",
+                  autoGenerated: true,
+                  paymentAttempts: 0,
+                },
+                lineItems
+              );
+              await storage.updateVisit(visit.id, companyId, { invoiceId: autoInv.id });
+            }
+          } catch (autoErr) {
+            console.error("Auto-invoice generation failed:", autoErr);
+          }
+        }
+
+        notify(
+          companyId,
+          "visit_completed",
+          "Visit Completed",
+          `Visit on ${visit.scheduledDate} has been marked as completed.`,
+          `/scheduling`
+        );
+
+        try {
+          if (plan?.contactId) {
+            await maybeFireReviewRequest(companyId, plan.contactId, visit.id);
+          }
+        } catch (reviewErr) {
+          console.error("Review request check failed:", reviewErr);
+        }
+
+        let completionSmsResult: any = null;
+        let etaSmsResult: any = null;
+
+        const todayStr = new Date().toISOString().split("T")[0];
+        const isScheduledForToday = visit.scheduledDate === todayStr;
+
+        if (isScheduledForToday) {
+          const appBaseUrl = `https://${req.get("host")}`;
+          const gatePhotoFullUrl = gateClosedPhoto ? `${appBaseUrl}${gateClosedPhoto}` : undefined;
+
+          const completionSmsReady = await isSmsConfiguredForCompany(companyId);
+          if (contact.phone && completionSmsReady) {
+            const completionMsg = noGate
+              ? `Hi ${contact.firstName}. ${company.name} just finished your poop scoop service. Let us know if there is anything we can do.`
+              : `Hi ${contact.firstName}. ${company.name} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`;
+            completionSmsResult = await sendSmsForCompany({
+              to: contact.phone,
+              body: completionMsg,
+              mediaUrl: noGate ? undefined : gatePhotoFullUrl,
               companyId,
               contactId: contact.id,
-              channel: "sms",
-              direction: "outbound",
-              status: "sent",
-              fromAddress: completionFrom,
-              toAddress: contact.phone,
-              body: completionMsg,
-              externalId: completionSmsResult.messageSid,
             });
+
+            if (completionSmsResult.success) {
+              const completionFrom = await getFromPhoneForCompany(companyId);
+              await storage.createMessage({
+                companyId,
+                contactId: contact.id,
+                channel: "sms",
+                direction: "outbound",
+                status: "sent",
+                fromAddress: completionFrom,
+                toAddress: contact.phone,
+                body: completionMsg,
+                externalId: completionSmsResult.messageSid,
+              });
+            }
           }
         }
-      }
 
-      if (isScheduledForToday && visit.routeId) {
-        try {
-          const allPlansOnRoute = await storage.getServicePlans(companyId, { routeId: visit.routeId, isActive: true });
-          const sorted = allPlansOnRoute.sort((a, b) => a.stopOrder - b.stopOrder);
-          const currentIdx = sorted.findIndex(sp => sp.id === visit.servicePlanId);
+        if (isScheduledForToday && visit.routeId) {
+          try {
+            const allPlansOnRoute = await storage.getServicePlans(companyId, {
+              routeId: visit.routeId,
+              isActive: true,
+            });
+            const sorted = allPlansOnRoute.sort((a, b) => a.stopOrder - b.stopOrder);
+            const currentIdx = sorted.findIndex((sp) => sp.id === visit.servicePlanId);
 
-          if (currentIdx >= 0) {
-            const today = new Date().toISOString().split("T")[0];
-            const todayVisits = await storage.getVisits(companyId, { date: today });
+            if (currentIdx >= 0) {
+              const today = new Date().toISOString().split("T")[0];
+              const todayVisits = await storage.getVisits(companyId, { date: today });
 
-            let nextPlan = null;
-            let nextVisit = null;
-            for (let i = currentIdx + 1; i < sorted.length; i++) {
-              const candidatePlan = sorted[i];
-              const candidateVisit = todayVisits.find(v => v.servicePlanId === candidatePlan.id && (v.status === "scheduled" || v.status === "in_progress"));
-              if (candidateVisit) {
-                nextPlan = candidatePlan;
-                nextVisit = candidateVisit;
-                break;
-              }
-            }
-
-            if (nextVisit && nextPlan) {
-              const nextContact = await storage.getContact(nextPlan.contactId, companyId);
-              const currentProperty = await storage.getProperty(visit.propertyId, companyId);
-              const nextProperty = await storage.getProperty(nextVisit.propertyId, companyId);
-
-              const nextSmsReady = await isSmsConfiguredForCompany(companyId);
-              if (nextContact?.phone && currentProperty && nextProperty && nextSmsReady) {
-                let travelMinutes = 10;
-
-                const curLat = currentProperty.latitude ? parseFloat(currentProperty.latitude) : null;
-                const curLon = currentProperty.longitude ? parseFloat(currentProperty.longitude) : null;
-                const nxtLat = nextProperty.latitude ? parseFloat(nextProperty.latitude) : null;
-                const nxtLon = nextProperty.longitude ? parseFloat(nextProperty.longitude) : null;
-
-                if (curLat && curLon && nxtLat && nxtLon) {
-                  const mapbox = await fetchMapboxDirections([
-                    { longitude: curLon, latitude: curLat },
-                    { longitude: nxtLon, latitude: nxtLat },
-                  ]);
-
-                  if (mapbox) {
-                    travelMinutes = mapbox.duration;
-                  } else {
-                    const miles = haversineDistance(curLat, curLon, nxtLat, nxtLon);
-                    travelMinutes = (miles / 25) * 60;
-                  }
+              let nextPlan = null;
+              let nextVisit = null;
+              for (let i = currentIdx + 1; i < sorted.length; i++) {
+                const candidatePlan = sorted[i];
+                const candidateVisit = todayVisits.find(
+                  (v) =>
+                    v.servicePlanId === candidatePlan.id &&
+                    (v.status === "scheduled" || v.status === "in_progress")
+                );
+                if (candidateVisit) {
+                  nextPlan = candidatePlan;
+                  nextVisit = candidateVisit;
+                  break;
                 }
+              }
 
-                const roundedMinutes = Math.max(5, Math.floor(travelMinutes / 5) * 5);
+              if (nextVisit && nextPlan) {
+                const nextContact = await storage.getContact(nextPlan.contactId, companyId);
+                const currentProperty = await storage.getProperty(visit.propertyId, companyId);
+                const nextProperty = await storage.getProperty(nextVisit.propertyId, companyId);
 
-                const etaMsg = `Hi ${nextContact.firstName}, ${company.name} is on its way to your house for your poop scoop appointment. We'll be there in about ${roundedMinutes} minutes. Please ensure your yard is accessible and any dogs are inside. See you soon!`;
+                const nextSmsReady = await isSmsConfiguredForCompany(companyId);
+                if (nextContact?.phone && currentProperty && nextProperty && nextSmsReady) {
+                  let travelMinutes = 10;
 
-                etaSmsResult = await sendSmsForCompany({
-                  to: nextContact.phone,
-                  body: etaMsg,
-                  companyId,
-                  contactId: nextContact.id,
-                });
+                  const curLat = currentProperty.latitude
+                    ? parseFloat(currentProperty.latitude)
+                    : null;
+                  const curLon = currentProperty.longitude
+                    ? parseFloat(currentProperty.longitude)
+                    : null;
+                  const nxtLat = nextProperty.latitude ? parseFloat(nextProperty.latitude) : null;
+                  const nxtLon = nextProperty.longitude ? parseFloat(nextProperty.longitude) : null;
 
-                if (etaSmsResult.success) {
-                  const etaFrom = await getFromPhoneForCompany(companyId);
-                  await storage.createMessage({
+                  if (curLat && curLon && nxtLat && nxtLon) {
+                    const mapbox = await fetchMapboxDirections([
+                      { longitude: curLon, latitude: curLat },
+                      { longitude: nxtLon, latitude: nxtLat },
+                    ]);
+
+                    if (mapbox) {
+                      travelMinutes = mapbox.duration;
+                    } else {
+                      const miles = haversineDistance(curLat, curLon, nxtLat, nxtLon);
+                      travelMinutes = (miles / 25) * 60;
+                    }
+                  }
+
+                  const roundedMinutes = Math.max(5, Math.floor(travelMinutes / 5) * 5);
+
+                  const etaMsg = `Hi ${nextContact.firstName}, ${company.name} is on its way to your house for your poop scoop appointment. We'll be there in about ${roundedMinutes} minutes. Please ensure your yard is accessible and any dogs are inside. See you soon!`;
+
+                  etaSmsResult = await sendSmsForCompany({
+                    to: nextContact.phone,
+                    body: etaMsg,
                     companyId,
                     contactId: nextContact.id,
-                    channel: "sms",
-                    direction: "outbound",
-                    status: "sent",
-                    fromAddress: etaFrom,
-                    toAddress: nextContact.phone,
-                    body: etaMsg,
-                    externalId: etaSmsResult.messageSid,
                   });
+
+                  if (etaSmsResult.success) {
+                    const etaFrom = await getFromPhoneForCompany(companyId);
+                    await storage.createMessage({
+                      companyId,
+                      contactId: nextContact.id,
+                      channel: "sms",
+                      direction: "outbound",
+                      status: "sent",
+                      fromAddress: etaFrom,
+                      toAddress: nextContact.phone,
+                      body: etaMsg,
+                      externalId: etaSmsResult.messageSid,
+                    });
+                  }
                 }
               }
             }
+          } catch (etaErr) {
+            console.error("ETA notification failed:", etaErr);
           }
-        } catch (etaErr) {
-          console.error("ETA notification failed:", etaErr);
         }
-      }
 
-      res.json({
-        visit,
-        completionSms: completionSmsResult,
-        etaSms: etaSmsResult,
-      });
-    } catch (err) { handleError(res, err); }
-  });
+        res.json({
+          visit,
+          completionSms: completionSmsResult,
+          etaSms: etaSmsResult,
+        });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.post("/api/visits/generate", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -866,13 +1087,13 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       }
 
       const allPlans = await storage.getServicePlans(companyId, { isActive: true });
-      const plans = allPlans.filter(p => !p.pausedAt);
+      const plans = allPlans.filter((p) => !p.pausedAt);
       const existingVisits = await storage.getVisitsForDateRange(companyId, startDate, endDate);
       const existingKeys = new Set(
         existingVisits.map((v) => `${v.servicePlanId}_${v.scheduledDate}`)
       );
 
-      const planIds = plans.map(p => p.id);
+      const planIds = plans.map((p) => p.id);
       const allHolds = await storage.getVacationHoldsForPlans(planIds);
       const holdsByPlan = new Map<string, typeof allHolds>();
       for (const hold of allHolds) {
@@ -882,8 +1103,13 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       }
 
       const dayMap: Record<string, number> = {
-        monday: 1, tuesday: 2, wednesday: 3, thursday: 4,
-        friday: 5, saturday: 6, sunday: 0,
+        monday: 1,
+        tuesday: 2,
+        wednesday: 3,
+        thursday: 4,
+        friday: 5,
+        saturday: 6,
+        sunday: 0,
       };
 
       const created: any[] = [];
@@ -908,7 +1134,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
             const dateStr = current.toISOString().split("T")[0];
             const key = `${plan.id}_${dateStr}`;
 
-            const inVacation = planHolds.some(h => dateStr >= h.startDate && dateStr <= h.endDate);
+            const inVacation = planHolds.some(
+              (h) => dateStr >= h.startDate && dateStr <= h.endDate
+            );
 
             if (!existingKeys.has(key) && !inVacation) {
               let shouldGenerate = true;
@@ -921,10 +1149,15 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
                 if (diffWeeks % 2 !== 0) shouldGenerate = false;
               } else if (plan.frequency === "monthly") {
                 const planStartDate = new Date(plan.startDate + "T00:00:00Z");
-                if (current.getUTCMonth() === planStartDate.getUTCMonth() && current.getUTCFullYear() === planStartDate.getUTCFullYear()) {
+                if (
+                  current.getUTCMonth() === planStartDate.getUTCMonth() &&
+                  current.getUTCFullYear() === planStartDate.getUTCFullYear()
+                ) {
                   shouldGenerate = true;
                 } else {
-                  const firstOfMonth = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1));
+                  const firstOfMonth = new Date(
+                    Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1)
+                  );
                   let firstTargetDay = new Date(firstOfMonth);
                   while (firstTargetDay.getUTCDay() !== targetDay) {
                     firstTargetDay.setUTCDate(firstTargetDay.getUTCDate() + 1);
@@ -961,7 +1194,8 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       }
 
       res.json({ generated: created.length, visits: created });
-    } catch (err) { handleError(res, err); }
+    } catch (err) {
+      handleError(res, err);
+    }
   });
-
 }

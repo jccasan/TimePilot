@@ -21,7 +21,7 @@ export function isSharedNumber(phoneNumber: string): boolean {
   const phoneDigits = phoneNumber.replace(/\D/g, "").slice(-10);
   if (phoneDigits.length < 10) return false;
   const candidates = [getSharedSmsNumber(), process.env.TELNYX_PHONE_NUMBER || ""].filter(Boolean);
-  return candidates.some(s => {
+  return candidates.some((s) => {
     const sDigits = s.replace(/\D/g, "").slice(-10);
     return sDigits.length >= 10 && sDigits === phoneDigits;
   });
@@ -32,12 +32,14 @@ export async function getCompanySmsConfig(companyId: string): Promise<CompanySms
   const company = await storage.getCompany(companyId);
   if (!company) return { provider: "telnyx", configured: false, phoneNumber: "" };
 
-  const storedKey = company.telnyxApiKey && company.telnyxApiKey !== "null" ? company.telnyxApiKey : null;
+  const storedKey =
+    company.telnyxApiKey && company.telnyxApiKey !== "null" ? company.telnyxApiKey : null;
   const apiKey = storedKey || process.env.TELNYX_API_KEY;
   const dedicatedNumber = company.telnyxPhoneNumber || company.dedicatedPhoneNumber || "";
   const sharedNumber = getSharedSmsNumber();
   const phoneNumber = dedicatedNumber || sharedNumber || process.env.TELNYX_PHONE_NUMBER || "";
-  const profileId = company.telnyxMessagingProfileId || process.env.TELNYX_MESSAGING_PROFILE_ID || "";
+  const profileId =
+    company.telnyxMessagingProfileId || process.env.TELNYX_MESSAGING_PROFILE_ID || "";
   const configured = !!(apiKey && phoneNumber && profileId);
   return { provider: "telnyx", configured, phoneNumber };
 }
@@ -68,14 +70,19 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
     return { success: false, error: "Company not found" };
   }
 
-  const storedKey = company.telnyxApiKey && company.telnyxApiKey !== "null" ? company.telnyxApiKey : null;
+  const storedKey =
+    company.telnyxApiKey && company.telnyxApiKey !== "null" ? company.telnyxApiKey : null;
   const apiKey = storedKey || process.env.TELNYX_API_KEY;
   const dedicatedNumber = company.telnyxPhoneNumber || company.dedicatedPhoneNumber || "";
   const sharedNumber = getSharedSmsNumber();
   const phoneNumber = dedicatedNumber || sharedNumber || process.env.TELNYX_PHONE_NUMBER;
   const profileId = company.telnyxMessagingProfileId || process.env.TELNYX_MESSAGING_PROFILE_ID;
   if (!apiKey || !phoneNumber || !profileId) {
-    return { success: false, error: "Telnyx SMS is not configured. Set API key, phone number, and messaging profile ID in Settings." };
+    return {
+      success: false,
+      error:
+        "Telnyx SMS is not configured. Set API key, phone number, and messaging profile ID in Settings.",
+    };
   }
 
   const { sendTelnyxSms } = await import("./telnyx-sms");
@@ -104,20 +111,29 @@ export async function sendSmsForCompany(options: SendSmsForCompanyOptions): Prom
   });
 
   if (result.success && isSharedNumber(phoneNumber)) {
-    storage.upsertMessageRouting({
-      sharedNumber: phoneNumber,
-      customerPhone: options.to,
-      companyId: options.companyId,
-      contactId: options.contactId || null,
-      channel: "sms",
-      lastUsedAt: new Date(),
-    }).catch((err) => console.error("[SMS Routing] Failed to upsert routing entry:", err));
+    storage
+      .upsertMessageRouting({
+        sharedNumber: phoneNumber,
+        customerPhone: options.to,
+        companyId: options.companyId,
+        contactId: options.contactId || null,
+        channel: "sms",
+        lastUsedAt: new Date(),
+      })
+      .catch((err) => console.error("[SMS Routing] Failed to upsert routing entry:", err));
   }
 
   return result;
 }
 
-export async function logSmsMessage(companyId: string, to: string, from: string, direction: "inbound" | "outbound", externalId?: string, segments?: number): Promise<void> {
+export async function logSmsMessage(
+  companyId: string,
+  to: string,
+  from: string,
+  direction: "inbound" | "outbound",
+  externalId?: string,
+  segments?: number
+): Promise<void> {
   const segCount = segments ?? 1;
   await db.insert(smsMessages).values({
     companyId,
@@ -128,18 +144,21 @@ export async function logSmsMessage(companyId: string, to: string, from: string,
     segments: segCount,
   });
   if (direction === "outbound") {
-    db.insert(usageEvents).values({
-      companyId,
-      eventType: "sms_segment",
-      quantity: segCount,
-      metadata: { externalId, to },
-    }).then(async () => {
-      const { reportMeteredUsage } = await import("./stripe");
-      const { storage } = await import("../storage");
-      const company = await storage.getCompany(companyId);
-      if (company?.stripeSubscriptionId) {
-        reportMeteredUsage(company.stripeSubscriptionId, "sms_segment", segCount).catch(() => {});
-      }
-    }).catch((err) => console.error("[Usage] Failed to log SMS usage:", err.message));
+    db.insert(usageEvents)
+      .values({
+        companyId,
+        eventType: "sms_segment",
+        quantity: segCount,
+        metadata: { externalId, to },
+      })
+      .then(async () => {
+        const { reportMeteredUsage } = await import("./stripe");
+        const { storage } = await import("../storage");
+        const company = await storage.getCompany(companyId);
+        if (company?.stripeSubscriptionId) {
+          reportMeteredUsage(company.stripeSubscriptionId, "sms_segment", segCount).catch(() => {});
+        }
+      })
+      .catch((err) => console.error("[Usage] Failed to log SMS usage:", err.message));
   }
 }

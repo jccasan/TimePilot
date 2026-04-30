@@ -5,7 +5,9 @@ export async function runMonthlyCreditReplenishment() {
   const now = new Date();
   if (now.getDate() !== 1) return;
 
-  console.log("[monthly-credits] 1st of month — replenishing optimizer credits for all active companies");
+  console.log(
+    "[monthly-credits] 1st of month — replenishing optimizer credits for all active companies"
+  );
 
   const allCompanies = await storage.getAllCompanies();
   let replenished = 0;

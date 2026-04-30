@@ -17,7 +17,11 @@ function computeHmacSignature(secret: string, payload: string): string {
   return crypto.createHmac("sha256", secret).update(payload).digest("hex");
 }
 
-export async function dispatchWebhooksForEvent(companyId: string, event: string, payload: Record<string, any>) {
+export async function dispatchWebhooksForEvent(
+  companyId: string,
+  event: string,
+  payload: Record<string, any>
+) {
   try {
     const matchingWebhooks = await db
       .select()
@@ -102,9 +106,7 @@ async function attemptDelivery(delivery: WebhookDelivery, url: string, secret: s
       .where(eq(webhookDeliveries.id, delivery.id));
   } else {
     const isFinal = newAttempts >= MAX_ATTEMPTS;
-    const nextRetry = isFinal
-      ? null
-      : new Date(Date.now() + BACKOFF_DELAYS_MS[newAttempts - 1]);
+    const nextRetry = isFinal ? null : new Date(Date.now() + BACKOFF_DELAYS_MS[newAttempts - 1]);
 
     await db
       .update(webhookDeliveries)
@@ -135,10 +137,7 @@ export async function retryFailedWebhookDeliveries() {
       );
 
     for (const delivery of pendingDeliveries) {
-      const [webhook] = await db
-        .select()
-        .from(webhooks)
-        .where(eq(webhooks.id, delivery.webhookId));
+      const [webhook] = await db.select().from(webhooks).where(eq(webhooks.id, delivery.webhookId));
 
       if (!webhook || !webhook.isActive) {
         await db

@@ -35,23 +35,27 @@ ScooPilot includes a full customer relationship management system designed for s
 ScooPilot's universal quoting engine lets you create professional, branded proposals for both residential homeowners and commercial properties — complete with interactive yard measurements and a client-facing acceptance portal.
 
 ### Residential Quoting
+
 - **Smart Pricing Calculator** — Enter the number of dogs, yard size, service frequency, and whether it's a first-time cleanup. ScooPilot calculates pricing across three tiers automatically.
 - **Multi-Tier Proposals** — Every quote generates three pricing options: Essential, Premium, and Deluxe. Each tier includes a customizable feature list so clients can see exactly what they're getting at each price point.
 - **First-Time Deep Clean** — Automatically adds an initial cleanup fee for new properties that haven't been maintained, with the fee clearly broken out on the proposal.
 
 ### Commercial Quoting
+
 - **Station-Based Pricing** — Built for HOAs, apartment complexes, dog parks, and commercial properties. Enter the number of waste stations, time per station, common area minutes, crew size, and service frequency.
 - **Full Cost Calculator** — Accounts for round-trip mileage (calculated at the IRS standard rate), dump fees, site square footage, crew labor, and initial deep clean costs.
 - **Frequency Discounts** — Automatically applies volume discounts for multi-visit schedules (2x/week, 3x/week) so commercial clients see the value of more frequent service.
 - **Margin Visibility** — See your cost subtotal, markup percentage, markup dollar amount, and final price per visit. Adjust your markup on the fly to hit your target margins.
 
 ### Interactive Yard Measurement Tool
+
 - **Satellite Imagery** — View any property on a high-resolution satellite map powered by Mapbox. Draw measurement polygons directly on the satellite view.
 - **Precise Area Calculation** — Click to place points around the yard boundary. ScooPilot calculates the exact square footage using geodesic math. Supports multiple separate measurements per property.
 - **Saved Measurement Images** — Each measurement is captured as a satellite image with the green polygon overlay clearly visible, automatically sized to fit the measured area regardless of property size. These images are attached to the quote and displayed in the proposal.
 - **Auto-Classification** — Yards are automatically categorized as Small, Standard, Large, or Extra Large based on square footage, with corresponding pricing adjustments.
 
 ### Proposal Delivery & Acceptance
+
 - **Branded Proposals** — Proposals display your company logo, name, contact information, and branding. Each proposal includes the property address, measurement images, pricing tiers, service features, and terms.
 - **Custom Quote Numbers** — Assign your own quote numbering system or let ScooPilot auto-generate sequential numbers.
 - **Client Portal** — Send proposals via email or SMS. Clients receive a branded link where they can view the full proposal, review measurement images, compare pricing tiers, and accept or decline — all without creating an account.
@@ -134,7 +138,7 @@ Give your clients a professional, self-service experience with ScooPilot's brand
 - **Dog Management** — Clients can update their dog information (count, breeds, notes) directly through the portal, keeping your records current without phone calls or emails.
 - **Quote Review & Acceptance** — When you send a proposal, clients receive a branded link to review pricing tiers, view yard measurement images, and accept their preferred plan — all through the portal.
 - **Pause & Resume Service** — Clients can pause or resume their service directly from the portal. When paused, future visits are cancelled automatically; resuming reactivates their service plan.
-- **Service Requests** *(Coming soon)* — Clients will be able to request one-time cleanups or other service changes directly through the portal, with requests appearing in your dashboard for approval.
+- **Service Requests** _(Coming soon)_ — Clients will be able to request one-time cleanups or other service changes directly through the portal, with requests appearing in your dashboard for approval.
 - **In-App Messaging** — Two-way messaging between clients and your office. Conversations are threaded and stored for reference.
 - **Account Management** — Clients can update their contact information, manage payment methods, and view their complete service history.
 
@@ -145,17 +149,20 @@ Give your clients a professional, self-service experience with ScooPilot's brand
 ScooPilot integrates artificial intelligence throughout the platform to help you work smarter, price better, and serve clients faster.
 
 ### Rover AI — Your In-App Business Assistant
+
 - **Context-Aware Chat** — Rover is an AI chatbot built into your ScooPilot dashboard that knows your business. It has real-time access to your contact count, monthly recurring revenue, upcoming visits, and overdue invoices.
 - **Live Data Queries** — Ask Rover questions like "How many active clients do I have?" or "What's my MRR?" and get instant, accurate answers pulled from your live data.
 - **Action Suggestions** — Rover can suggest creating support tickets or feature requests based on your conversation, streamlining your workflow.
 - **Streaming Responses** — Rover responds in real-time with streaming text, so you see answers as they're generated — no waiting for a full response.
 
 ### AI Pricing Optimizer
+
 - **Market Benchmarking** — Compare your pricing against local competitor data to ensure you're positioned competitively in your market.
 - **Price Elasticity Simulation** — Model how price changes would affect customer retention and net revenue before you make changes. See the projected impact of a 5%, 10%, or 15% increase.
 - **Unprofitable Account Detection** — AI analyzes your per-customer profitability and flags accounts that are costing you money, with specific recommendations for price adjustments.
 
 ### AI-Assisted Data Import
+
 - **Smart Column Mapping** — When importing CSV files from competitors or spreadsheets, AI automatically maps your columns to ScooPilot fields. It handles variations in column naming, date formats, phone number formats, and service frequency descriptions.
 - **Data Cleaning** — Automatically standardizes phone numbers, addresses, and pricing data during import.
 
@@ -224,25 +231,29 @@ Keep your books in sync automatically. ScooPilot's QuickBooks Online integration
 ScooPilot offers flexible pricing tiers that grow with your business, from solo operators to multi-crew enterprises. All plans include a 14-day free trial.
 
 ### SaaS Subscription Tiers
-| Plan | Price | Max Users | Best For |
-|------|-------|-----------|----------|
-| **Solo** | $29/month | 1 | Solo operators |
-| **Walk** | $49/month | 3 | Small teams |
-| **Run** | $99/month | 6 | Growing businesses |
-| **Grow** | $149/month | 12 | Multi-crew operations |
-| **Enterprise** | Custom pricing — contact us | Unlimited | Large organizations |
+
+| Plan           | Price                       | Max Users | Best For              |
+| -------------- | --------------------------- | --------- | --------------------- |
+| **Solo**       | $29/month                   | 1         | Solo operators        |
+| **Walk**       | $49/month                   | 3         | Small teams           |
+| **Run**        | $99/month                   | 6         | Growing businesses    |
+| **Grow**       | $149/month                  | 12        | Multi-crew operations |
+| **Enterprise** | Custom pricing — contact us | Unlimited | Large organizations   |
 
 - **Additional Users** — Add team members beyond your plan limit for $7/user/month.
 - **14-Day Free Trial** — Every new account starts with a full-featured, no-commitment trial. No credit card required to start.
 
 ### Stripe Connect for Your Clients
+
 - **Accept Payments Through Your Brand** — ScooPilot uses Stripe Connect to let you accept credit card payments from your clients under your own business name. Funds are deposited directly to your bank account.
 - **Platform Fee** — A transparent 2.9% platform fee on processed payments, in addition to standard Stripe processing fees.
 
 ### Metered Billing
+
 - **Pay for What You Use** — SMS segments, voice agent minutes, and additional user seats are tracked and billed automatically based on actual usage. No surprises — usage dashboards show exactly where you stand against your plan limits.
 
 ### Billing Management
+
 - **Stripe Customer Portal** — Manage your subscription, update payment methods, view invoices, and change plans through a secure Stripe-hosted billing portal.
 - **Automated Account Management** — Failed payments trigger automatic notifications and account status updates. Accounts with persistent payment failures are frozen to prevent unbilled service delivery.
 
@@ -271,11 +282,13 @@ ScooPilot's automation engine lets you create "if this, then that" rules that el
 ScooPilot is built to integrate with your existing tools and external services through a robust webhook and API system.
 
 ### Outbound Webhooks
+
 - **Event Notifications** — Push real-time event data to external URLs when key events occur: contact created, contact updated, visit completed, invoice created, invoice paid, payment failed.
 - **HMAC Security** — Every outbound webhook is signed with HMAC SHA256 so the receiving system can verify it came from ScooPilot. Your data integrity is protected.
 - **Reliable Delivery** — Built-in retry logic attempts delivery up to 5 times with exponential backoff. Delivery logs show the status of every webhook attempt.
 
 ### Inbound Lead Capture Webhook
+
 - **External Lead Forms** — Accept leads from your website, landing pages, or any external system via a dedicated webhook endpoint. ScooPilot automatically:
   - Creates a new contact with "lead" status
   - Geocodes the address and creates a property record
@@ -284,6 +297,7 @@ ScooPilot is built to integrate with your existing tools and external services t
 - **API Key Authentication** — Secure your webhook endpoints with scoped API keys. Each key can be restricted to specific operations.
 
 ### Voice Agent Scheduling API
+
 - **Platform-Agnostic REST API** — A dedicated API for AI voice agents (or any external system) to perform caller lookup, check service availability, book new services, pause/resume accounts, reschedule visits, cancel services, and retrieve call logs.
 
 ---
@@ -293,15 +307,18 @@ ScooPilot is built to integrate with your existing tools and external services t
 ScooPilot gives you a clear picture of your business health with real-time dashboards, KPI tracking, visual analytics, and AI-powered executive assessments.
 
 ### Customizable Dashboard
+
 - **Drag-and-Drop Widgets** — Build your perfect dashboard by adding, removing, and rearranging widgets. Choose from MRR, revenue, team size, client count, visit progress, and more.
 - **Client Request Inbox** — See service change requests, portal messages, and one-time cleanup leads directly on your dashboard.
 - **Today's Operations** — Real-time progress bar showing how many of today's visits are completed, plus a weekly upcoming visit summary.
 - **5-Day Weather Forecast** — Plan around the weather with an integrated forecast widget. Know when rain or extreme temperatures might affect your service schedule.
 
 ### Business Overview
+
 An executive-level command center that surfaces the metrics that matter most — and tells you what to do about them.
 
 **KPI Scorecard**
+
 - **Monthly Recurring Revenue** — Real-time MRR calculated from all active service plans.
 - **Active Customers** — Current count of paying clients.
 - **Avg Profit Margin** — Average margin across all customers, color-coded green / yellow / red against industry thresholds.
@@ -309,6 +326,7 @@ An executive-level command center that surfaces the metrics that matter most —
 - **Visit Completion Rate** — Percentage of scheduled service visits completed in the last 30 days.
 
 **Charts**
+
 - **12-Month Revenue** — Area chart of earned revenue over the trailing year. Spot seasonality and growth momentum at a glance.
 - **Customer Growth** — Line chart overlaying total customers and new clients added per month over 12 months.
 - **Profitability Mix** — Donut chart breaking your customer base into three groups: Profitable, Marginal, and Unprofitable — with exact customer counts for each.
@@ -316,6 +334,7 @@ An executive-level command center that surfaces the metrics that matter most —
 
 **AI Business Assessment**
 The signature feature of the Business Overview. Click "Run AI Assessment" to send your live KPI data to the AI and receive a structured health report:
+
 - **Health Score (0–100)** — An animated ring gauge giving your business a single, comparable score you can track over time.
 - **Overall Verdict** — A plain-English summary of your business health at this moment.
 - **CFO Perspective** — Financial findings rated Healthy / Caution / At Risk, covering revenue trends, collection rate, and margin health — the view a finance officer would give on your P&L.
@@ -325,15 +344,18 @@ The signature feature of the Business Overview. Click "Run AI Assessment" to sen
 - **Print Report** — The entire Business Overview page — KPIs, charts, and AI assessment — formats cleanly for PDF or printing for board meetings, investor updates, or personal records.
 
 ### Analytics
+
 A deeper operational intelligence dashboard for day-to-day business visibility.
 
 **KPI Cards**
+
 - **This Month Revenue** — Current month earnings with a month-over-month growth percentage and trend arrow.
 - **Active Clients** — Active client count out of your total contact database.
 - **Visit Completion Rate** — Completion percentage with total visit volume for the last 30 days.
 - **Outstanding Balance** — Total dollar amount sitting in unpaid invoices.
 
 **Charts**
+
 - **Monthly Revenue** — 12-month area chart of revenue with gradient fill for visual clarity.
 - **Customer Acquisition** — Combined bar/line chart showing new clients added each month as bars and the running total as a line.
 - **Route Performance by Day** — Stacked bar chart of visit outcomes (completed, scheduled, skipped, cancelled) by day of week over the last 30 days. Instantly see which days have the highest skip rates.
@@ -342,6 +364,7 @@ A deeper operational intelligence dashboard for day-to-day business visibility.
 - **Lead Source Distribution** — Horizontal bar chart showing which marketing channels (referral, Facebook, Google, NextDoor, yard sign, local advertising) are bringing in your clients.
 
 **Supplementary Cards**
+
 - **Service Day Distribution** — Bar chart of how your stops are spread across days of the week, useful for balancing route load.
 - **Avg Service Metrics** — Average price per visit and average invoice amount alongside total active service plan count.
 
@@ -365,10 +388,12 @@ ScooPilot goes beyond revenue tracking to show you true profitability — accoun
 Switching to ScooPilot from another platform? The migration tools make it painless to bring your existing data — clients, properties, service plans, and invoice history — into your new system.
 
 ### Competitor-Specific Import
+
 - **Sweep & Go** — Purpose-built parser for Sweep & Go exports. Automatically maps fields, handles their specific data formats, and imports contacts, properties, and invoice history.
 - **Jobber** — Dedicated import support for Jobber data exports with field mapping tailored to Jobber's export format.
 
 ### General Import Tools
+
 - **CSV Upload** — Upload any CSV file and use the interactive column mapping wizard to match your columns to ScooPilot fields.
 - **AI-Assisted Mapping** — When column names don't match exactly, AI suggests the best field mapping. It handles variations like "Customer Name" → "Contact Name" or "Svc Freq" → "Service Frequency."
 - **Data Preview** — Review your imported data before committing. See warnings for potential issues (missing required fields, format mismatches) and fix them before import.
@@ -461,4 +486,4 @@ ScooPilot is built on a modern, scalable technology stack designed for reliabili
 
 ---
 
-*ScooPilot is continuously updated with new features and improvements. For the latest information, visit [app.scoopilot.com](https://app.scoopilot.com).*
+_ScooPilot is continuously updated with new features and improvements. For the latest information, visit [app.scoopilot.com](https://app.scoopilot.com)._

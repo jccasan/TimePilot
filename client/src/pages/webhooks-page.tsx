@@ -29,12 +29,17 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Plus, Webhook as WebhookIcon, Trash2, CheckCircle, XCircle, Clock, ChevronDown, RotateCcw } from "lucide-react";
+  Plus,
+  Webhook as WebhookIcon,
+  Trash2,
+  CheckCircle,
+  XCircle,
+  Clock,
+  ChevronDown,
+  RotateCcw,
+} from "lucide-react";
 
 const availableEvents = [
   "contact.created",
@@ -56,12 +61,27 @@ type WebhookFormValues = z.infer<typeof webhookFormSchema>;
 
 function DeliveryStatusBadge({ status }: { status: string }) {
   if (status === "success") {
-    return <Badge variant="default" className="bg-green-600 text-white"><CheckCircle className="mr-1 h-3 w-3" />Success</Badge>;
+    return (
+      <Badge variant="default" className="bg-green-600 text-white">
+        <CheckCircle className="mr-1 h-3 w-3" />
+        Success
+      </Badge>
+    );
   }
   if (status === "failed") {
-    return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" />Failed</Badge>;
+    return (
+      <Badge variant="destructive">
+        <XCircle className="mr-1 h-3 w-3" />
+        Failed
+      </Badge>
+    );
   }
-  return <Badge variant="secondary"><Clock className="mr-1 h-3 w-3" />Pending</Badge>;
+  return (
+    <Badge variant="secondary">
+      <Clock className="mr-1 h-3 w-3" />
+      Pending
+    </Badge>
+  );
 }
 
 function formatDate(dateStr: string | Date | null) {
@@ -80,13 +100,11 @@ function DeliveryLogSection({ webhookId }: { webhookId?: string }) {
   const queryKey = webhookId
     ? ["/api/webhooks", webhookId, "deliveries"]
     : ["/api/webhooks/deliveries"];
-  const url = webhookId
-    ? `/api/webhooks/${webhookId}/deliveries`
-    : "/api/webhooks/deliveries";
+  const url = webhookId ? `/api/webhooks/${webhookId}/deliveries` : "/api/webhooks/deliveries";
 
   const { data: deliveries, isLoading } = useQuery<WebhookDelivery[]>({
     queryKey,
-    queryFn: () => fetch(url, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => fetch(url, { credentials: "include" }).then((r) => r.json()),
   });
 
   if (isLoading) {
@@ -123,7 +141,10 @@ function DeliveryLogSection({ webhookId }: { webhookId?: string }) {
                 </div>
                 <div className="flex items-center gap-2">
                   {delivery.responseCode && (
-                    <span className="text-xs font-mono text-muted-foreground" data-testid={`text-response-code-${delivery.id}`}>
+                    <span
+                      className="text-xs font-mono text-muted-foreground"
+                      data-testid={`text-response-code-${delivery.id}`}
+                    >
                       HTTP {delivery.responseCode}
                     </span>
                   )}
@@ -228,7 +249,9 @@ export default function WebhooksPage() {
   return (
     <div className="p-4 md:p-6 space-y-4 overflow-auto h-full">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold" data-testid="text-webhooks-heading">Webhooks</h1>
+        <h1 className="text-2xl font-bold" data-testid="text-webhooks-heading">
+          Webhooks
+        </h1>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-create-webhook">
@@ -240,57 +263,87 @@ export default function WebhooksPage() {
               <DialogTitle>Create Webhook</DialogTitle>
             </DialogHeader>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit((v) => createMutation.mutate(v))} className="space-y-4">
-                <FormField control={form.control} name="url" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Endpoint URL</FormLabel>
-                    <FormControl><Input type="url" placeholder="https://..." {...field} data-testid="input-webhook-url" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="events" render={() => (
-                  <FormItem>
-                    <FormLabel>Events</FormLabel>
-                    <div className="space-y-2">
-                      {availableEvents.map((event) => (
-                        <FormField
-                          key={event}
-                          control={form.control}
-                          name="events"
-                          render={({ field }) => (
-                            <FormItem className="flex items-center gap-2 space-y-0">
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(event)}
-                                  onCheckedChange={(checked) => {
-                                    const current = field.value || [];
-                                    if (checked) {
-                                      field.onChange([...current, event]);
-                                    } else {
-                                      field.onChange(current.filter((e: string) => e !== event));
-                                    }
-                                  }}
-                                  data-testid={`checkbox-event-${event}`}
-                                />
-                              </FormControl>
-                              <span className="text-sm font-mono">{event}</span>
-                            </FormItem>
-                          )}
+              <form
+                onSubmit={form.handleSubmit((v) => createMutation.mutate(v))}
+                className="space-y-4"
+              >
+                <FormField
+                  control={form.control}
+                  name="url"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Endpoint URL</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="url"
+                          placeholder="https://..."
+                          {...field}
+                          data-testid="input-webhook-url"
                         />
-                      ))}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="isActive" render={({ field }) => (
-                  <FormItem className="flex items-center gap-2 space-y-0">
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-webhook-active" />
-                    </FormControl>
-                    <FormLabel>Active</FormLabel>
-                  </FormItem>
-                )} />
-                <Button type="submit" disabled={createMutation.isPending} data-testid="button-submit-webhook">
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="events"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Events</FormLabel>
+                      <div className="space-y-2">
+                        {availableEvents.map((event) => (
+                          <FormField
+                            key={event}
+                            control={form.control}
+                            name="events"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center gap-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(event)}
+                                    onCheckedChange={(checked) => {
+                                      const current = field.value || [];
+                                      if (checked) {
+                                        field.onChange([...current, event]);
+                                      } else {
+                                        field.onChange(current.filter((e: string) => e !== event));
+                                      }
+                                    }}
+                                    data-testid={`checkbox-event-${event}`}
+                                  />
+                                </FormControl>
+                                <span className="text-sm font-mono">{event}</span>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="isActive"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="switch-webhook-active"
+                        />
+                      </FormControl>
+                      <FormLabel>Active</FormLabel>
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  data-testid="button-submit-webhook"
+                >
                   {createMutation.isPending ? "Creating..." : "Create Webhook"}
                 </Button>
               </form>
@@ -301,8 +354,12 @@ export default function WebhooksPage() {
 
       <Tabs defaultValue="endpoints" data-testid="tabs-webhooks">
         <TabsList>
-          <TabsTrigger value="endpoints" data-testid="tab-endpoints">Endpoints</TabsTrigger>
-          <TabsTrigger value="deliveries" data-testid="tab-deliveries">Delivery Log</TabsTrigger>
+          <TabsTrigger value="endpoints" data-testid="tab-endpoints">
+            Endpoints
+          </TabsTrigger>
+          <TabsTrigger value="deliveries" data-testid="tab-deliveries">
+            Delivery Log
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="endpoints" className="space-y-3 mt-4">
@@ -320,7 +377,10 @@ export default function WebhooksPage() {
                     <div className="flex items-center gap-3">
                       <WebhookIcon className="h-5 w-5 text-muted-foreground shrink-0" />
                       <div>
-                        <p className="font-medium text-sm break-all" data-testid={`text-webhook-url-${webhook.id}`}>
+                        <p
+                          className="font-medium text-sm break-all"
+                          data-testid={`text-webhook-url-${webhook.id}`}
+                        >
                           {webhook.url}
                         </p>
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -335,7 +395,9 @@ export default function WebhooksPage() {
                     <div className="flex items-center gap-2">
                       <Switch
                         checked={webhook.isActive}
-                        onCheckedChange={(checked) => toggleMutation.mutate({ id: webhook.id, isActive: checked })}
+                        onCheckedChange={(checked) =>
+                          toggleMutation.mutate({ id: webhook.id, isActive: checked })
+                        }
                         data-testid={`switch-webhook-${webhook.id}`}
                       />
                       <Button
@@ -353,7 +415,10 @@ export default function WebhooksPage() {
             </div>
           ) : (
             <Card>
-              <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-no-webhooks">
+              <CardContent
+                className="p-6 text-center text-muted-foreground"
+                data-testid="text-no-webhooks"
+              >
                 No webhooks configured. Create one to receive event notifications.
               </CardContent>
             </Card>

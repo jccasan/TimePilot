@@ -3,33 +3,62 @@ import { maskEmail } from "../utils/pii";
 import { storage } from "../storage";
 import { companies } from "@shared/schema";
 import { z } from "zod";
-import { getUserByEmail, createUserWithTempPassword, claimOnboardingEmailSend, resetOnboardingEmailSent } from "../services/app-auth";
+import {
+  getUserByEmail,
+  createUserWithTempPassword,
+  claimOnboardingEmailSend,
+  resetOnboardingEmailSent,
+} from "../services/app-auth";
 import { sendEmail, buildWelcomeEmailContent } from "../services/email";
 import { sendSmsForCompany, isSmsConfiguredForCompany } from "../services/sms";
-import { calculateQuotePricing, renderResidentialProposalHtml, renderCommercialProposalHtml, renderQuoteSmsText, type ResidentialQuoteInput, type CommercialQuoteInput } from "../services/quote-pricing";
-import { generateQuotePdf, generateQuoteDocx } from "../services/quote-document";
 import {
-  type InsertQuote,
-} from "@shared/schema";
+  calculateQuotePricing,
+  renderResidentialProposalHtml,
+  renderCommercialProposalHtml,
+  renderQuoteSmsText,
+  type ResidentialQuoteInput,
+  type CommercialQuoteInput,
+} from "../services/quote-pricing";
+import { generateQuotePdf, generateQuoteDocx } from "../services/quote-document";
+import { type InsertQuote } from "@shared/schema";
 
-import { isAuthenticated, getCompanyContext, getBaseUrl, p, seedDefaultLeadSources, normalizeQuoteFrequency } from "./shared";
-
+import {
+  isAuthenticated,
+  getCompanyContext,
+  getBaseUrl,
+  p,
+  seedDefaultLeadSources,
+  normalizeQuoteFrequency,
+} from "./shared";
 
 export async function registerQuotesRoutes(app: Express): Promise<void> {
   // ================ Tenant Provisioning (marketing site → app) ================
 
   app.post("/api/create-tenant", async (req: Request, res: Response) => {
     try {
-      const apiKey = (req.headers["x-api-key"] || req.headers["authorization"]?.replace(/^Bearer\s+/i, "")) as string | undefined;
+      const apiKey = (req.headers["x-api-key"] ||
+        req.headers["authorization"]?.replace(/^Bearer\s+/i, "")) as string | undefined;
       const expectedKey = process.env.SCOOPILOT_API_KEY;
       if (!expectedKey || !apiKey || apiKey !== expectedKey) {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const { email, first_name, last_name, company, phone, plan, domain, stripe_customer_id, stripe_subscription_id } = req.body;
+      const {
+        email,
+        first_name,
+        last_name,
+        company,
+        phone,
+        plan,
+        domain,
+        stripe_customer_id,
+        stripe_subscription_id,
+      } = req.body;
 
       if (!email || !first_name || !company) {
-        return res.status(400).json({ error: "Missing required fields: email, first_name, company" });
+        return res
+          .status(400)
+          .json({ error: "Missing required fields: email, first_name, company" });
       }
 
       const existingUser = await getUserByEmail(email);
@@ -45,9 +74,14 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
             if (plan) updateData.subscriptionTier = plan;
             updateData.subscriptionStatus = "trialing";
             if (Object.keys(updateData).length > 0) {
-              await storage.updateCompany(existingCompany.id, updateData as Partial<typeof companies.$inferInsert>);
+              await storage.updateCompany(
+                existingCompany.id,
+                updateData as Partial<typeof companies.$inferInsert>
+              );
             }
-            console.log(`[Create Tenant] Updated existing company "${existingCompany.name}" (${existingCompany.id}) for ${email}`);
+            console.log(
+              `[Create Tenant] Updated existing company "${existingCompany.name}" (${existingCompany.id}) for ${email}`
+            );
             return res.json({
               success: true,
               tenant_id: existingCompany.id,
@@ -102,10 +136,18 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
 
       const tenantClaimed = await claimOnboardingEmailSend(user.id).catch(() => false);
       if (!tenantClaimed) {
-        console.log(`[Create Tenant] Onboarding email already sent for ${maskEmail(email)}, skipping.`);
+        console.log(
+          `[Create Tenant] Onboarding email already sent for ${maskEmail(email)}, skipping.`
+        );
       } else {
         try {
-          const _tenantWelcome = buildWelcomeEmailContent({ firstName: first_name, companyName: company, appUrl, email, tempPassword });
+          const _tenantWelcome = buildWelcomeEmailContent({
+            firstName: first_name,
+            companyName: company,
+            appUrl,
+            email,
+            tempPassword,
+          });
           await sendEmail({
             companyId: newCompany.id,
             to: email,
@@ -115,12 +157,17 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           });
           console.log(`[Create Tenant] Welcome email sent to ${maskEmail(email)}`);
         } catch (emailErr) {
-          console.error(`[Create Tenant] Failed to send welcome email to ${maskEmail(email)}, resetting flag:`, emailErr);
+          console.error(
+            `[Create Tenant] Failed to send welcome email to ${maskEmail(email)}, resetting flag:`,
+            emailErr
+          );
           await resetOnboardingEmailSent(user.id).catch(() => {});
         }
       }
 
-      console.log(`[Create Tenant] Provisioned new tenant "${company}" (${newCompany.id}) for ${maskEmail(email)}`);
+      console.log(
+        `[Create Tenant] Provisioned new tenant "${company}" (${newCompany.id}) for ${maskEmail(email)}`
+      );
       return res.json({
         success: true,
         tenant_id: newCompany.id,
@@ -135,106 +182,129 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
 
   // ================ Quotes ================
 
-  app.post("/api/quotes/generate-yard-image", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const { propertyId, caption, polygon: directPolygon, lat: directLat, lng: directLng, sqft: directSqft } = req.body;
+  app.post(
+    "/api/quotes/generate-yard-image",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const {
+          propertyId,
+          caption,
+          polygon: directPolygon,
+          lat: directLat,
+          lng: directLng,
+          sqft: directSqft,
+        } = req.body;
 
-      let polygon: number[][] | null = null;
-      let lat: number | null = null;
-      let lng: number | null = null;
-      let sqft: number | undefined;
+        let polygon: number[][] | null = null;
+        let lat: number | null = null;
+        let lng: number | null = null;
+        let sqft: number | undefined;
 
-      if (directPolygon && Array.isArray(directPolygon) && directPolygon.length >= 3 && directLat && directLng) {
-        polygon = directPolygon;
-        lat = parseFloat(String(directLat));
-        lng = parseFloat(String(directLng));
-        sqft = directSqft ? Number(directSqft) : undefined;
-      } else if (propertyId) {
-        const property = await storage.getProperty(propertyId, companyId);
-        if (!property) {
-          return res.status(404).json({ error: "Property not found" });
+        if (
+          directPolygon &&
+          Array.isArray(directPolygon) &&
+          directPolygon.length >= 3 &&
+          directLat &&
+          directLng
+        ) {
+          polygon = directPolygon;
+          lat = parseFloat(String(directLat));
+          lng = parseFloat(String(directLng));
+          sqft = directSqft ? Number(directSqft) : undefined;
+        } else if (propertyId) {
+          const property = await storage.getProperty(propertyId, companyId);
+          if (!property) {
+            return res.status(404).json({ error: "Property not found" });
+          }
+          polygon = property.yardPolygon as number[][] | null;
+          lat = property.latitude ? parseFloat(String(property.latitude)) : null;
+          lng = property.longitude ? parseFloat(String(property.longitude)) : null;
+          sqft = property.measuredYardSqft ? Number(property.measuredYardSqft) : undefined;
         }
-        polygon = property.yardPolygon as number[][] | null;
-        lat = property.latitude ? parseFloat(String(property.latitude)) : null;
-        lng = property.longitude ? parseFloat(String(property.longitude)) : null;
-        sqft = property.measuredYardSqft ? Number(property.measuredYardSqft) : undefined;
-      }
 
-      if (!polygon || polygon.length < 3 || !lat || !lng) {
-        return res.status(400).json({ error: "Must provide a polygon with at least 3 points and coordinates" });
-      }
-
-      const mapboxToken = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
-      if (!mapboxToken) {
-        return res.status(500).json({ error: "Mapbox token not configured" });
-      }
-
-      const width = 800;
-      const height = 600;
-
-      const closedPoly = [...polygon];
-      if (closedPoly[0][0] !== closedPoly[closedPoly.length - 1][0] ||
-          closedPoly[0][1] !== closedPoly[closedPoly.length - 1][1]) {
-        closedPoly.push(closedPoly[0]);
-      }
-
-      const geoJson = {
-        type: "Feature",
-        properties: {
-          "stroke": "#22c55e",
-          "stroke-width": 3,
-          "stroke-opacity": 0.9,
-          "fill": "#22c55e",
-          "fill-opacity": 0.25
-        },
-        geometry: {
-          type: "Polygon",
-          coordinates: [closedPoly]
+        if (!polygon || polygon.length < 3 || !lat || !lng) {
+          return res
+            .status(400)
+            .json({ error: "Must provide a polygon with at least 3 points and coordinates" });
         }
-      };
 
-      const geoJsonEncoded = encodeURIComponent(JSON.stringify(geoJson));
-      const staticUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/geojson(${geoJsonEncoded})/auto/${width}x${height}@2x?padding=40&access_token=${mapboxToken}&attribution=false&logo=false`;
+        const mapboxToken = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
+        if (!mapboxToken) {
+          return res.status(500).json({ error: "Mapbox token not configured" });
+        }
 
-      const imgResponse = await fetch(staticUrl);
-      if (!imgResponse.ok) {
-        const errText = await imgResponse.text();
-        console.error("Mapbox Static API error:", errText);
-        return res.status(502).json({ error: "Failed to generate satellite image" });
+        const width = 800;
+        const height = 600;
+
+        const closedPoly = [...polygon];
+        if (
+          closedPoly[0][0] !== closedPoly[closedPoly.length - 1][0] ||
+          closedPoly[0][1] !== closedPoly[closedPoly.length - 1][1]
+        ) {
+          closedPoly.push(closedPoly[0]);
+        }
+
+        const geoJson = {
+          type: "Feature",
+          properties: {
+            stroke: "#22c55e",
+            "stroke-width": 3,
+            "stroke-opacity": 0.9,
+            fill: "#22c55e",
+            "fill-opacity": 0.25,
+          },
+          geometry: {
+            type: "Polygon",
+            coordinates: [closedPoly],
+          },
+        };
+
+        const geoJsonEncoded = encodeURIComponent(JSON.stringify(geoJson));
+        const staticUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/geojson(${geoJsonEncoded})/auto/${width}x${height}@2x?padding=40&access_token=${mapboxToken}&attribution=false&logo=false`;
+
+        const imgResponse = await fetch(staticUrl);
+        if (!imgResponse.ok) {
+          const errText = await imgResponse.text();
+          console.error("Mapbox Static API error:", errText);
+          return res.status(502).json({ error: "Failed to generate satellite image" });
+        }
+
+        const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
+
+        const { ObjectStorageService } =
+          await import("../replit_integrations/object_storage/objectStorage");
+        const objStorage = new ObjectStorageService();
+        const uploadURL = await objStorage.getObjectEntityUploadURL();
+        const objectPath = objStorage.normalizeObjectEntityPath(uploadURL);
+
+        const putResponse = await fetch(uploadURL, {
+          method: "PUT",
+          body: imgBuffer,
+          headers: { "Content-Type": "image/png" },
+        });
+
+        if (!putResponse.ok) {
+          throw new Error(`Storage upload failed: ${putResponse.status}`);
+        }
+
+        const autoCaption =
+          caption || `Yard measurement${sqft ? ` — ${Number(sqft).toLocaleString()} sqft` : ""}`;
+
+        res.json({
+          url: objectPath,
+          caption: autoCaption,
+          sqft: sqft || null,
+          width,
+          height,
+        });
+      } catch (err: any) {
+        console.error("Error generating yard image:", err);
+        res.status(500).json({ error: err.message });
       }
-
-      const imgBuffer = Buffer.from(await imgResponse.arrayBuffer());
-
-      const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
-      const objStorage = new ObjectStorageService();
-      const uploadURL = await objStorage.getObjectEntityUploadURL();
-      const objectPath = objStorage.normalizeObjectEntityPath(uploadURL);
-
-      const putResponse = await fetch(uploadURL, {
-        method: "PUT",
-        body: imgBuffer,
-        headers: { "Content-Type": "image/png" },
-      });
-
-      if (!putResponse.ok) {
-        throw new Error(`Storage upload failed: ${putResponse.status}`);
-      }
-
-      const autoCaption = caption || `Yard measurement${sqft ? ` — ${Number(sqft).toLocaleString()} sqft` : ""}`;
-
-      res.json({
-        url: objectPath,
-        caption: autoCaption,
-        sqft: sqft || null,
-        width,
-        height,
-      });
-    } catch (err: any) {
-      console.error("Error generating yard image:", err);
-      res.status(500).json({ error: err.message });
     }
-  });
+  );
 
   app.get("/api/quotes/calculate-pricing", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -259,21 +329,30 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         const frequency = (req.query.frequency as string) || "1x_weekly";
         const input: CommercialQuoteInput = {
           type: "commercial",
-          stationCount: (() => { const v = parseInt(req.query.stationCount as string); return isNaN(v) ? 0 : v; })(),
+          stationCount: (() => {
+            const v = parseInt(req.query.stationCount as string);
+            return isNaN(v) ? 0 : v;
+          })(),
           commonAreaMinutes: parseInt(req.query.commonAreaMinutes as string) || 30,
           frequency: frequency as CommercialQuoteInput["frequency"],
           timePerStation: parseInt(req.query.timePerStation as string) || 10,
           mileageDistance: parseFloat(req.query.mileageDistance as string) || 0,
-          dumpFee: Number.isFinite(parseFloat(req.query.dumpFee as string)) ? parseFloat(req.query.dumpFee as string) : 25,
+          dumpFee: Number.isFinite(parseFloat(req.query.dumpFee as string))
+            ? parseFloat(req.query.dumpFee as string)
+            : 25,
           crewSize: parseInt(req.query.crewSize as string) || 1,
           siteSqft: parseInt(req.query.siteSqft as string) || 0,
           isInitialClean: req.query.isInitialClean === "true",
-          markupPct: Number.isFinite(parseFloat(req.query.markupPct as string)) ? parseFloat(req.query.markupPct as string) : 20,
+          markupPct: Number.isFinite(parseFloat(req.query.markupPct as string))
+            ? parseFloat(req.query.markupPct as string)
+            : 20,
         };
         const pricing = calculateQuotePricing(input, companyQuoteDefaults);
         res.json(pricing);
       } else {
-        res.status(400).json({ error: "Invalid quote type. Must be 'residential' or 'commercial'." });
+        res
+          .status(400)
+          .json({ error: "Invalid quote type. Must be 'residential' or 'commercial'." });
       }
     } catch (err: any) {
       console.error("Error calculating pricing:", err);
@@ -322,21 +401,50 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
     stationCount: z.number().int().min(0).max(200).nullable().optional(),
     commonAreaMinutes: z.number().int().min(0).max(600).nullable().optional(),
     timePerStation: z.number().int().min(0).max(120).nullable().optional(),
-    mileageDistance: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
-    dumpFee: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+    mileageDistance: z
+      .string()
+      .regex(/^\d+(\.\d{1,2})?$/)
+      .nullable()
+      .optional(),
+    dumpFee: z
+      .string()
+      .regex(/^\d+(\.\d{1,2})?$/)
+      .nullable()
+      .optional(),
     crewSize: z.number().int().min(1).max(20).nullable().optional(),
     siteSqft: z.number().int().min(0).nullable().optional(),
     frequency: z.string().max(50).nullable().optional(),
     isFirstTime: z.boolean().optional(),
-    essentialPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
-    premiumPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
-    deluxePrice: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
-    initialCleanFee: z.string().regex(/^\d+(\.\d{1,2})?$/).nullable().optional(),
+    essentialPrice: z
+      .string()
+      .regex(/^\d+(\.\d{1,2})?$/)
+      .nullable()
+      .optional(),
+    premiumPrice: z
+      .string()
+      .regex(/^\d+(\.\d{1,2})?$/)
+      .nullable()
+      .optional(),
+    deluxePrice: z
+      .string()
+      .regex(/^\d+(\.\d{1,2})?$/)
+      .nullable()
+      .optional(),
+    initialCleanFee: z
+      .string()
+      .regex(/^\d+(\.\d{1,2})?$/)
+      .nullable()
+      .optional(),
     essentialFeatures: z.array(z.string()).nullable().optional(),
     premiumFeatures: z.array(z.string()).nullable().optional(),
     deluxeFeatures: z.array(z.string()).nullable().optional(),
     pricingBreakdown: z.record(z.any()).nullable().optional(),
-    images: z.array(z.object({ url: z.string(), caption: z.string(), sqft: z.number().nullable().optional() })).nullable().optional(),
+    images: z
+      .array(
+        z.object({ url: z.string(), caption: z.string(), sqft: z.number().nullable().optional() })
+      )
+      .nullable()
+      .optional(),
     notes: z.string().max(5000).nullable().optional(),
     internalNotes: z.string().max(5000).nullable().optional(),
     expiresAt: z.string().nullable().optional(),
@@ -351,10 +459,12 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
 
       const parsed = createQuoteBodySchema.safeParse(bodyWithoutFlag);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid quote data", details: parsed.error.flatten() });
+        return res
+          .status(400)
+          .json({ error: "Invalid quote data", details: parsed.error.flatten() });
       }
 
-      const quoteNumber = parsed.data.quoteNumber || await storage.getNextQuoteNumber(companyId);
+      const quoteNumber = parsed.data.quoteNumber || (await storage.getNextQuoteNumber(companyId));
 
       let contactId = parsed.data.contactId || null;
       if (!contactId && parsed.data.contactName) {
@@ -397,15 +507,20 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         contactId,
         propertyId,
         expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
-        images: parsed.data.images?.map(img => ({ ...img, sqft: img.sqft ?? undefined })),
+        images: parsed.data.images?.map((img) => ({ ...img, sqft: img.sqft ?? undefined })),
       };
 
       const quote = await storage.createQuote(quoteData);
       if (!suppressNotifications) {
         try {
           const { fireAutomationTrigger } = await import("../services/automation-runner");
-          await fireAutomationTrigger("quote_created", companyId, { quoteId: quote.id, contactId: quote.contactId });
-        } catch (autoErr) { console.error("[automation] quote_created trigger error:", autoErr); }
+          await fireAutomationTrigger("quote_created", companyId, {
+            quoteId: quote.id,
+            contactId: quote.contactId,
+          });
+        } catch (autoErr) {
+          console.error("[automation] quote_created trigger error:", autoErr);
+        }
       }
       res.status(201).json(quote);
     } catch (err: any) {
@@ -422,7 +537,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
 
       const parsed = createQuoteBodySchema.partial().safeParse(req.body);
       if (!parsed.success) {
-        return res.status(400).json({ error: "Invalid quote data", details: parsed.error.flatten() });
+        return res
+          .status(400)
+          .json({ error: "Invalid quote data", details: parsed.error.flatten() });
       }
 
       const updateData = { ...parsed.data } as Record<string, any>;
@@ -430,7 +547,11 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         delete updateData.quoteNumber;
       }
 
-      const quote = await storage.updateQuote(p(req.params.id), companyId, updateData as Partial<InsertQuote>);
+      const quote = await storage.updateQuote(
+        p(req.params.id),
+        companyId,
+        updateData as Partial<InsertQuote>
+      );
       res.json(quote);
     } catch (err: any) {
       console.error("Error updating quote:", err);
@@ -562,9 +683,10 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         baseUrl: getBaseUrl(req),
       };
 
-      const html = quote.type === "commercial"
-        ? renderCommercialProposalHtml(renderData)
-        : renderResidentialProposalHtml(renderData);
+      const html =
+        quote.type === "commercial"
+          ? renderCommercialProposalHtml(renderData)
+          : renderResidentialProposalHtml(renderData);
 
       const sendVia = req.body.sendVia || "email";
       const results: any = { sent: [] };
@@ -601,7 +723,12 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           });
           const smsConfigured = await isSmsConfiguredForCompany(companyId);
           if (smsConfigured) {
-            await sendSmsForCompany({ to: quote.contactPhone, body: smsText, companyId, contactId: quote.contactId || undefined });
+            await sendSmsForCompany({
+              to: quote.contactPhone,
+              body: smsText,
+              companyId,
+              contactId: quote.contactId || undefined,
+            });
           }
           results.sent.push("sms");
         } catch (smsErr: any) {
@@ -661,9 +788,10 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         baseUrl: getBaseUrl(req),
       };
 
-      const html = quote.type === "commercial"
-        ? renderCommercialProposalHtml(renderData)
-        : renderResidentialProposalHtml(renderData);
+      const html =
+        quote.type === "commercial"
+          ? renderCommercialProposalHtml(renderData)
+          : renderResidentialProposalHtml(renderData);
 
       res.setHeader("Content-Type", "text/html");
       res.send(html);
@@ -673,67 +801,73 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.get("/api/quotes/:id/download/:format", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const quote = await storage.getQuote(p(req.params.id), companyId);
-      if (!quote) return res.status(404).json({ error: "Quote not found" });
-      const company = await storage.getCompany(companyId);
-      if (!company) return res.status(404).json({ error: "Company not found" });
+  app.get(
+    "/api/quotes/:id/download/:format",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const quote = await storage.getQuote(p(req.params.id), companyId);
+        if (!quote) return res.status(404).json({ error: "Quote not found" });
+        const company = await storage.getCompany(companyId);
+        if (!company) return res.status(404).json({ error: "Company not found" });
 
-      const pricing = {
-        essential: parseFloat(quote.essentialPrice || "0"),
-        premium: parseFloat(quote.premiumPrice || "0"),
-        deluxe: parseFloat(quote.deluxePrice || "0"),
-        initialCleanFee: parseFloat(quote.initialCleanFee || "0"),
-        essentialFeatures: (quote.essentialFeatures as string[]) || [],
-        premiumFeatures: (quote.premiumFeatures as string[]) || [],
-        deluxeFeatures: (quote.deluxeFeatures as string[]) || [],
-        breakdown: (quote.pricingBreakdown as Record<string, any>) || {},
-      };
+        const pricing = {
+          essential: parseFloat(quote.essentialPrice || "0"),
+          premium: parseFloat(quote.premiumPrice || "0"),
+          deluxe: parseFloat(quote.deluxePrice || "0"),
+          initialCleanFee: parseFloat(quote.initialCleanFee || "0"),
+          essentialFeatures: (quote.essentialFeatures as string[]) || [],
+          premiumFeatures: (quote.premiumFeatures as string[]) || [],
+          deluxeFeatures: (quote.deluxeFeatures as string[]) || [],
+          breakdown: (quote.pricingBreakdown as Record<string, any>) || {},
+        };
 
-      const docData = {
-        companyName: company.name,
-        companyEmail: (company as any).email || undefined,
-        companyPhone: company.phone || undefined,
-        contactName: quote.contactName || "Customer",
-        quoteNumber: quote.quoteNumber,
-        propertyAddress: quote.propertyAddress || undefined,
-        type: quote.type || "residential",
-        frequency: quote.frequency || "weekly",
-        expiresAt: quote.expiresAt?.toISOString() || undefined,
-        notes: quote.notes || undefined,
-        essentialPrice: pricing.essential,
-        premiumPrice: pricing.premium,
-        deluxePrice: pricing.deluxe,
-        initialCleanFee: pricing.initialCleanFee,
-        essentialFeatures: pricing.essentialFeatures,
-        premiumFeatures: pricing.premiumFeatures,
-        deluxeFeatures: pricing.deluxeFeatures,
-        breakdown: pricing.breakdown,
-        images: (quote.images as { url: string; caption: string; sqft?: number }[]) || undefined,
-        baseUrl: getBaseUrl(req),
-      };
+        const docData = {
+          companyName: company.name,
+          companyEmail: (company as any).email || undefined,
+          companyPhone: company.phone || undefined,
+          contactName: quote.contactName || "Customer",
+          quoteNumber: quote.quoteNumber,
+          propertyAddress: quote.propertyAddress || undefined,
+          type: quote.type || "residential",
+          frequency: quote.frequency || "weekly",
+          expiresAt: quote.expiresAt?.toISOString() || undefined,
+          notes: quote.notes || undefined,
+          essentialPrice: pricing.essential,
+          premiumPrice: pricing.premium,
+          deluxePrice: pricing.deluxe,
+          initialCleanFee: pricing.initialCleanFee,
+          essentialFeatures: pricing.essentialFeatures,
+          premiumFeatures: pricing.premiumFeatures,
+          deluxeFeatures: pricing.deluxeFeatures,
+          breakdown: pricing.breakdown,
+          images: (quote.images as { url: string; caption: string; sqft?: number }[]) || undefined,
+          baseUrl: getBaseUrl(req),
+        };
 
-      const safeName = `Quote-${quote.quoteNumber}`.replace(/[^a-zA-Z0-9-_]/g, "_");
+        const safeName = `Quote-${quote.quoteNumber}`.replace(/[^a-zA-Z0-9-_]/g, "_");
 
-      if (p(req.params.format) === "pdf") {
-        const pdfBuffer = await generateQuotePdf(docData);
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", `attachment; filename="${safeName}.pdf"`);
-        res.send(pdfBuffer);
-      } else if (p(req.params.format) === "docx") {
-        const docxBuffer = await generateQuoteDocx(docData);
-        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-        res.setHeader("Content-Disposition", `attachment; filename="${safeName}.docx"`);
-        res.send(docxBuffer);
-      } else {
-        res.status(400).json({ error: "Invalid format. Use 'pdf' or 'docx'." });
+        if (p(req.params.format) === "pdf") {
+          const pdfBuffer = await generateQuotePdf(docData);
+          res.setHeader("Content-Type", "application/pdf");
+          res.setHeader("Content-Disposition", `attachment; filename="${safeName}.pdf"`);
+          res.send(pdfBuffer);
+        } else if (p(req.params.format) === "docx") {
+          const docxBuffer = await generateQuoteDocx(docData);
+          res.setHeader(
+            "Content-Type",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          );
+          res.setHeader("Content-Disposition", `attachment; filename="${safeName}.docx"`);
+          res.send(docxBuffer);
+        } else {
+          res.status(400).json({ error: "Invalid format. Use 'pdf' or 'docx'." });
+        }
+      } catch (err: any) {
+        console.error("Error generating quote download:", err);
+        res.status(500).json({ error: err.message });
       }
-    } catch (err: any) {
-      console.error("Error generating quote download:", err);
-      res.status(500).json({ error: err.message });
     }
-  });
-
+  );
 }
