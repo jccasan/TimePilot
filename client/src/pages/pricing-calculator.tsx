@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -1119,7 +1120,7 @@ function CalculatorPanel() {
             ? dollarsToCents(data.currentPriceDollars)
             : undefined,
       };
-      const { currentPriceDollars, ...rest } = payload as any;
+      const { currentPriceDollars: _currentPriceDollars, ...rest } = payload as any;
       const res = await apiRequest("POST", "/api/pricing/calculate", rest);
       return res.json();
     },

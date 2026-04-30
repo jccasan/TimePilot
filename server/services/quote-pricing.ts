@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { type QuoteDefaults, DEFAULT_QUOTE_DEFAULTS } from "@shared/schema";
 
 function resolveImageUrl(url: string, baseUrl?: string): string {

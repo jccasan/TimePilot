@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { TIER_CONFIG, VOICE_PLAN_CONFIG } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";

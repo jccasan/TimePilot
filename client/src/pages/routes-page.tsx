@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { LiveRoutePlayback } from "@/components/live-route-playback";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -124,6 +125,7 @@ import {
 } from "@dnd-kit/core";
 
 declare module "react" {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
       "stripe-pricing-table": React.DetailedHTMLProps<

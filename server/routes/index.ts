@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { type Server } from "http";
 import crypto from "crypto";

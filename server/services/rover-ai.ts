@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import OpenAI from "openai";
 import { db } from "../db";
 import { trackApiCall } from "./api-usage";

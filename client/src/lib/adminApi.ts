@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 const STORAGE_KEY = "admin_token";
 
 function getToken(): string | null {

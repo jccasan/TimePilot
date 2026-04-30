@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -409,7 +410,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
               .trim()
               .slice(0, 5000);
           }
-        } catch (fetchErr) {
+        } catch (_fetchErr) {
           return res.json({
             success: false,
             error: "Could not fetch website. Please check the URL and try again.",

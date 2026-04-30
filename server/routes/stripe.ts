@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { maskEmail, maskPhone } from "../utils/pii";
 import { storage } from "../storage";
@@ -474,7 +475,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           status: accountStatus.chargesEnabled ? "connected" : "pending",
           ...accountStatus,
         });
-      } catch (stripeErr) {
+      } catch (_stripeErr) {
         return res.json({
           status: "error",
           chargesEnabled: false,

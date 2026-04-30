@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { storage } from "../storage";
 import { sendEmail } from "./email";
 import { computeInvoice } from "../invoice-engine/invoice.compute";

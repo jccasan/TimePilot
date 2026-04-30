@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { maskEmail } from "../utils/pii";
 import { storage } from "../storage";

@@ -93,13 +93,19 @@ Keep the codebase free of TS errors. If you add new imports, remove unused ones 
 
 ### ESLint (`lint`)
 
-A `lint` validation step is registered and runs `npx eslint .` against all `.ts` and `.tsx` files. It uses `@typescript-eslint/eslint-plugin` with the recommended ruleset. ESLint **errors block merges** — warnings are acceptable but errors must be resolved.
+A `lint` validation step is registered and runs `npx eslint .` against all `.ts` and `.tsx` files. It uses `@typescript-eslint/eslint-plugin` with the recommended ruleset. ESLint **errors block merges** — the gate must pass with 0 errors and 0 warnings.
 
 - **Run command**: `npx eslint .`
 - **Config**: `eslint.config.js` (flat config format, ESLint v10)
 - **Registered as**: validation command `lint`
 
-Rules producing errors are kept to a strict subset; pre-existing patterns (implicit `any`, require imports, namespace usage) are downgraded to warnings since the `typecheck` gate already enforces those. New code introducing ESLint errors will fail the gate and block merges.
+The following rules are enforced as **errors** (will block merges):
+- `@typescript-eslint/no-unused-vars` — unused variables/args must be prefixed with `_`; catch-clause variables follow `caughtErrorsIgnorePattern: "^_"`.
+- `@typescript-eslint/no-namespace` — use ES module syntax, not `namespace` blocks (suppress with inline comment only for `declare module` augmentations).
+- `@typescript-eslint/no-unsafe-function-type` — use specific function signatures (`NextFunction`, `RequestHandler`, etc.) instead of `Function`.
+- `@typescript-eslint/no-require-imports` — use `import` syntax; `require()` calls in config files should use inline `eslint-disable` comments.
+
+`@typescript-eslint/no-explicit-any` remains a **warning** (not a merge blocker). Files that contained pre-existing `any` usage have a file-level `/* eslint-disable @typescript-eslint/no-explicit-any */` comment; new code should avoid `any` in favour of `unknown` or explicit types. `.local/**` (platform skill files) is excluded from linting.
 
 ### Prettier (`format`)
 

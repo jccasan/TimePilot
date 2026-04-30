@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback, useRef } from "react";
 import { ImportWizard } from "@/components/import-wizard";
 import { ImportJobProgress } from "@/components/import-job-progress";

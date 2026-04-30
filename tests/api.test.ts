@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import http from "http";
 
 const BASE = "http://localhost:5000";
@@ -865,7 +866,7 @@ async function runTests() {
             skillR.data.success === false,
             `Expected success: false on HTTP ${skillR.status} failure`
           );
-          const knownErrors = [
+          const _knownErrors = [
             "INSUFFICIENT_CREDITS",
             "LOCKED",
             "ROUTE_NOT_FOUND",
@@ -2728,8 +2729,8 @@ async function runTests() {
 
   const crypto = await import("crypto");
   const testApiKeyRaw = crypto.randomBytes(32).toString("hex");
-  const testApiKeyHash = crypto.createHash("sha256").update(testApiKeyRaw).digest("hex");
-  const testApiKeyPrefix = testApiKeyRaw.substring(0, 8);
+  const _testApiKeyHash = crypto.createHash("sha256").update(testApiKeyRaw).digest("hex");
+  const _testApiKeyPrefix = testApiKeyRaw.substring(0, 8);
   let testApiKeyId = "";
 
   await test("Create API key for testing", "ApiKeyAuth", async () => {

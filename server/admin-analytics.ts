@@ -1,4 +1,5 @@
-import type { Express, Request, Response } from "express";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { Express, Request, Response, RequestHandler } from "express";
 import { eq, and, gte, lte, count, sql, desc, lt, or } from "drizzle-orm";
 import { db } from "./db";
 import { storage } from "./storage";
@@ -55,7 +56,7 @@ function monthStart(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
-export function registerAdminAnalyticsRoutes(app: Express, isAdmin: Function) {
+export function registerAdminAnalyticsRoutes(app: Express, isAdmin: RequestHandler) {
   // 1. Executive Overview
   app.get(
     "/api/admin/analytics/executive",

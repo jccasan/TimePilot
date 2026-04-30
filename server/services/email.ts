@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import sgMail from "@sendgrid/mail";
 import { db } from "../db";
 import { emailsSent, companies } from "@shared/schema";

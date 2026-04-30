@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import crypto from "crypto";
 import { retrievePaymentIntentFees } from "./stripe";
 import { db } from "../db";

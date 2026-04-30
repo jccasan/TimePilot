@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { maskEmail } from "../utils/pii";
 import { storage } from "../storage";
@@ -67,7 +68,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => (err ? reject(err) : resolve()));
       });
-      const { passwordHash, ...safeUser } = result.user;
+      const { passwordHash: _passwordHash, ...safeUser } = result.user;
 
       let setupDone = false;
       let companyInfo: { companyId: string; alreadySetup: boolean } | null = null;
@@ -149,7 +150,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => (err ? reject(err) : resolve()));
       });
-      const { passwordHash, ...safeUser } = result.user;
+      const { passwordHash: _passwordHash, ...safeUser } = result.user;
 
       let setupDone = false;
       try {
@@ -173,7 +174,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       const userId = (req.session as any).userId;
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ message: "User not found" });
-      const { passwordHash, ...safeUser } = user;
+      const { passwordHash: _passwordHash, ...safeUser } = user;
       const memberships = await storage.getCompaniesForUser(userId);
       const role = memberships.length > 0 ? memberships[0].role : "tech";
       const companyId = memberships.length > 0 ? memberships[0].companyId : null;

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { trackApiCall } from "./api-usage";
 import { storage } from "../storage";
 

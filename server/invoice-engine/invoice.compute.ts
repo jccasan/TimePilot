@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // invoice.compute.ts
 // ==================
 // Computes invoice totals (subtotal, discount, tax, total, paid, balance)

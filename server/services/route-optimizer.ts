@@ -396,7 +396,7 @@ export async function fetchMapboxDirections(
       if (!route) return null;
       trackApiCall("mapbox", "directions");
       return { distance: route.distance / 1609.34, duration: route.duration / 60 };
-    } catch (err) {
+    } catch (_err) {
       console.log("[route-optimizer] Mapbox Directions API error, falling back to haversine");
       return null;
     }

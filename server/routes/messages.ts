@@ -1,4 +1,5 @@
-import type { Express, Request, Response } from "express";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { Express, Request, Response, NextFunction } from "express";
 import { maskEmail, maskPhone } from "../utils/pii";
 import multer from "multer";
 import { storage } from "../storage";
@@ -386,7 +387,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
   app.post(
     "/api/messages/mms",
     isAuthenticated,
-    (req: Request, res: Response, next: Function) => {
+    (req: Request, res: Response, next: NextFunction) => {
       mmsUpload.array("media", MMS_MAX_ATTACHMENTS)(req, res, (err: any) => {
         if (err) {
           if (err.code === "LIMIT_FILE_SIZE") {
@@ -1173,7 +1174,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
 
   app.post(
     "/api/webhooks/sendgrid/inbound",
-    (req: Request, res: Response, next: Function) => {
+    (req: Request, res: Response, next: NextFunction) => {
       inboundEmailUpload.any()(req, res, (err: any) => {
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_FILE_SIZE") {

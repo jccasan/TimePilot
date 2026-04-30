@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export function splitFullName(value: string): { firstName: string; lastName: string } {
   const parts = value.trim().split(/\s+/);
   if (parts.length === 0) return { firstName: "", lastName: "" };

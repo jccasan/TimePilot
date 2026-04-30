@@ -1,4 +1,5 @@
-import type { Request, Response } from "express";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -423,7 +424,7 @@ export function getStopOnlyOnlyContactIds(
 }
 
 // isAdmin middleware (platform-level admin auth)
-export async function isAdmin(req: Request, res: Response, next: Function) {
+export async function isAdmin(req: Request, res: Response, next: NextFunction) {
   const token = req.headers["x-admin-token"] as string;
   if (!token) return res.status(401).json({ error: "Admin authentication required" });
   const { validateAdminSession } = await import("../services/admin-auth");

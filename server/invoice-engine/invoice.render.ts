@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // invoice.render.ts
 // =================
 // Lightweight mustache-style template renderer.

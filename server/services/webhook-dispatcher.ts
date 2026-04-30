@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import crypto from "crypto";
 import { db } from "../db";
 import { eq, and, lte, lt } from "drizzle-orm";

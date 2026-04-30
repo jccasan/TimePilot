@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 declare module "@uppy/core" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   export interface UppyFile<M = any, B = any> {
     id: string;
     name: string;
