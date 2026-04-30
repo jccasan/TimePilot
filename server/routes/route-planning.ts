@@ -1,83 +1,19 @@
 import type { Express, Request, Response } from "express";
-import { maskEmail, maskPhone } from "../utils/pii";
-import { type Server } from "http";
 import crypto from "crypto";
-import fs from "fs";
-import path from "path";
-import multer from "multer";
 import { storage } from "../storage";
-import { db } from "../db";
-import { sql, eq, and, lt, gte, isNotNull, or, inArray, desc } from "drizzle-orm";
-import { users, companyUsers, companies, contacts, properties, invoices, routes, DEFAULT_PRICING_CONFIG, type PricingConfig, type PricingRulesConfig, DEFAULT_PRICING_RULES, adminUsers, adminSessions, adminAuditLogs, subscriptionTiers, type Visit, reminderLogs, qboSyncLogs, servicePlans as servicePlansTable, messages as messagesTable, messages, usageEvents, auditTrail, visits, type Message, agreements as agreementsTable, jobs as jobsTable, stripeEvents, automationRules, automationEventLogs, quoteFormEvents } from "@shared/schema";
-import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, parseLotSizeStringToAcres, type PriceCalculatorInputs } from "../services/pricing-calculator";
 import { z } from "zod";
-import { registerObjectStorageRoutes, ObjectStorageService, ObjectNotFoundError } from "../replit_integrations/object_storage";
-import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword, claimOnboardingEmailSend, resetOnboardingEmailSent } from "../services/app-auth";
-import type { RequestHandler } from "express";
-import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, logEmailSent, buildWelcomeEmailContent } from "../services/email";
-import { sendInvoiceEmail } from "../services/invoice-email";
-import { getCompanyToday, getCompanyMonthStart, getCompanyMonthEnd, getCompanyWeekStart, getCompanyWeekEnd } from "../utils/company-date";
-import { sendSmsForCompany, isSmsConfiguredForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "../services/sms";
+import { getCompanyToday, getCompanyWeekStart } from "../utils/company-date";
 import {
-  isStripeConfigured,
-  createStripeCustomer,
-  createSetupIntent,
-  getCustomerPaymentMethods,
-  chargeInvoiceAutomatically,
-  constructWebhookEvent,
-  createCheckoutSession,
-  detachPaymentMethod,
-  createConnectAccount,
-  createConnectAccountLink,
-  getConnectAccountStatus,
-  createConnectLoginLink,
-  createSubscriptionCheckout,
-  createCustomerPortalSession,
-  reportMeteredUsage,
-  reportMeteredUsageSet,
-  validateStripeConfig,
-  fetchStripePrices,
-  getCachedStripePrices,
-  createVoicePlanCheckout,
-  migrateCustomerToConnectedAccount,
-  isCustomerOnPlatform,
-  ensureConnectedCustomer,
   createCustomerSession,
-  reportRetellMinutes,
 } from "../services/stripe";
-import { seedRetellKnowledgeBase, provisionRetellNumber, registerRetellWebhook, checkRetellWebhookSync, getRetellAgentWebhookUrl, getAppBaseUrl } from "../services/retell";
-import { checkIpRisk, getClientIp, getCountryCode } from "../services/ip-risk";
-import { optimizeRoute, calculateTotalDistance, getMapboxRouteMetrics, haversineDistance, fetchMapboxDirections, getRouteMetricsWithLegs } from "../services/route-optimizer";
-import { geocodeAddress, getAutocompleteCached, setAutocompleteCache } from "../services/geocode";
-import { trackApiCall, getApiUsageStats } from "../services/api-usage";
-import { computeInvoice } from "../invoice-engine/invoice.compute";
-import { renderInvoice, loadTemplate, loadTheme, getDefaultTemplatePath, getDefaultThemePath } from "../invoice-engine/invoice.render";
-import { calculateQuotePricing, renderResidentialProposalHtml, renderCommercialProposalHtml, renderQuoteSmsText, type ResidentialQuoteInput, type CommercialQuoteInput } from "../services/quote-pricing";
-import { generateQuotePdf, generateQuoteDocx } from "../services/quote-document";
+import { getRouteMetricsWithLegs } from "../services/route-optimizer";
+import { geocodeAddress } from "../services/geocode";
 import {
   TIER_CONFIG,
-  VOICE_PLAN_CONFIG,
-  insertContactSchema,
-  insertTagSchema,
-  insertPropertySchema,
   insertRouteSchema,
-  insertServicePlanSchema,
-  insertVacationHoldSchema,
-  insertVisitSchema,
-  insertInvoiceSchema,
-  insertInvoiceLineItemSchema,
-  insertAutomationRuleSchema,
-  insertWebhookSchema,
-  insertServicePricingSchema,
-  insertServicePackageSchema,
-  type InsertQuote,
-  type InsertJob,
-  type InsertAgreement,
-  reviewTokens,
-  reviewResponses,
 } from "@shared/schema";
 
-import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, getDemoCompanyId } from "./shared";
+import { isAuthenticated, getCompanyContext, requireRole, handleError, p, clearRouteOptimizationState, getDemoCompanyId } from "./shared";
 
 
 export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
