@@ -956,10 +956,10 @@ function SavingsSummaryDialog({ open, onOpenChange, result }: {
   );
 }
 
-function StripePricingTableDialog({ open, onOpenChange, companyId, topUpNeeded = 0, weeklyBaseline = 0, initialCredits = 0 }: {
+function StripePricingTableDialog({ open, onOpenChange, companyId, topUpNeeded = 0, initialCredits = 0 }: {
   open: boolean; onOpenChange: (open: boolean) => void;
   companyId: string | null | undefined;
-  topUpNeeded?: number; weeklyBaseline?: number; initialCredits?: number;
+  topUpNeeded?: number; initialCredits?: number;
 }) {
   const { toast } = useToast();
   const [customerSecret, setCustomerSecret] = useState<string | null>(null);
@@ -985,7 +985,7 @@ function StripePricingTableDialog({ open, onOpenChange, companyId, topUpNeeded =
       .catch(() => setCustomerSecret(null));
   }, [open, initialCredits]);
 
-  const { data: pollData } = useQuery<{ credits: number; weeklyBaseline: number }>({
+  const { data: pollData } = useQuery<{ credits: number; monthlyAllowance: number }>({
     queryKey: ["/api/route-credits"],
     refetchInterval: open ? 5000 : false,
     enabled: open,
@@ -1012,8 +1012,8 @@ function StripePricingTableDialog({ open, onOpenChange, companyId, topUpNeeded =
             Purchase Route Credits
           </DialogTitle>
           <DialogDescription>
-            {topUpNeeded > 0 && weeklyBaseline > 0
-              ? `Running the Weekly Optimizer uses ${weeklyBaseline} credits. You need ${topUpNeeded} more credit${topUpNeeded !== 1 ? "s" : ""} to proceed.`
+            {topUpNeeded > 0
+              ? `The Weekly Optimizer costs 1 credit per route. You need ${topUpNeeded} more credit${topUpNeeded !== 1 ? "s" : ""} to proceed.`
               : "Each credit optimizes one route of up to 30 stops. Routes with 31-60 stops require 2 credits."
             }
           </DialogDescription>
@@ -1067,6 +1067,7 @@ export default function RoutesPage() {
   const [savingsResult, setSavingsResult] = useState<OptimizeResult | null>(null);
   const [showSavings, setShowSavings] = useState(false);
   const [showPurchase, setShowPurchase] = useState(false);
+  const [purchaseTopUpNeeded, setPurchaseTopUpNeeded] = useState(0);
   const [unassigningRouteId, setUnassigningRouteId] = useState<string | null>(null);
   const [confirmUnassignAll, setConfirmUnassignAll] = useState<string | null>(null);
   const [moveToDayRouteId, setMoveToDayRouteId] = useState<string | null>(null);
@@ -1105,9 +1106,9 @@ export default function RoutesPage() {
   const { data: contacts = [] } = useQuery<Contact[]>({ queryKey: ["/api/contacts"] });
   const { data: properties = [] } = useQuery<Property[]>({ queryKey: ["/api/properties"] });
   const { data: team = [] } = useQuery<TeamMember[]>({ queryKey: ["/api/company/team"] });
-  const { data: creditData } = useQuery<{ credits: number; weeklyBaseline: number }>({ queryKey: ["/api/route-credits"] });
+  const { data: creditData } = useQuery<{ credits: number; monthlyAllowance: number }>({ queryKey: ["/api/route-credits"] });
   const credits = creditData?.credits ?? 0;
-  const weeklyBaseline = creditData?.weeklyBaseline ?? 5;
+  const monthlyAllowance = creditData?.monthlyAllowance ?? 20;
   const { data: company } = useQuery<{ name: string; maxStopsPerRoute?: number | null }>({ queryKey: ["/api/company"] });
   const [maxStopsInput, setMaxStopsInput] = useState<string>("");
   const [isApplyingSplit, setIsApplyingSplit] = useState(false);
@@ -2189,8 +2190,7 @@ export default function RoutesPage() {
       <SavingsSummaryDialog open={showSavings} onOpenChange={setShowSavings} result={savingsResult} />
       <StripePricingTableDialog open={showPurchase} onOpenChange={setShowPurchase}
         companyId={user?.companyId}
-        topUpNeeded={weeklyBaseline > credits ? weeklyBaseline - credits : 0}
-        weeklyBaseline={weeklyBaseline}
+        topUpNeeded={purchaseTopUpNeeded}
         initialCredits={credits} />
 
       <RouteVisitDetailSheet
@@ -2219,8 +2219,8 @@ export default function RoutesPage() {
           open={showWeeklyOptimizer}
           onOpenChange={setShowWeeklyOptimizer}
           credits={credits}
-          weeklyBaseline={weeklyBaseline}
-          onNeedCredits={() => setShowPurchase(true)}
+          monthlyAllowance={monthlyAllowance}
+          onNeedCredits={(topUpNeeded) => { setPurchaseTopUpNeeded(topUpNeeded); setShowPurchase(true); }}
           weekStart={weekStartStr}
         />
       )}

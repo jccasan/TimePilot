@@ -140,13 +140,13 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
 };
 
 export const TIER_CONFIG = {
-  free_trial:   { name: "Free Trial (14 days)", maxUsers: 1,   maxContacts: null as number | null, price: 0,   additionalUserPrice: 7, visible: true,  weeklyOptimizerCredits: 1  },
-  tier_starter: { name: "Starter",              maxUsers: 1,   maxContacts: 10 as number | null,   price: 10,  additionalUserPrice: 7, visible: true,  weeklyOptimizerCredits: 1  },
-  tier_1:       { name: "Solo",                 maxUsers: 1,   maxContacts: null as number | null, price: 29,  additionalUserPrice: 7, visible: true,  weeklyOptimizerCredits: 5  },
-  tier_1_3:     { name: "Crew",                 maxUsers: 3,   maxContacts: null as number | null, price: 49,  additionalUserPrice: 7, visible: true,  weeklyOptimizerCredits: 15 },
-  tier_3_5:     { name: "Team",                 maxUsers: 6,   maxContacts: null as number | null, price: 99,  additionalUserPrice: 7, visible: true,  weeklyOptimizerCredits: 30 },
-  tier_6_10:    { name: "Agency",               maxUsers: 12,  maxContacts: null as number | null, price: 149, additionalUserPrice: 7, visible: true,  weeklyOptimizerCredits: 60 },
-  tier_10_plus: { name: "Enterprise",           maxUsers: 999, maxContacts: null as number | null, price: 599, additionalUserPrice: 7, visible: false, weeklyOptimizerCredits: 60 },
+  free_trial:   { name: "Free Trial (14 days)", maxUsers: 1,   maxContacts: null as number | null, price: 0,   additionalUserPrice: 7, visible: true,  monthlyOptimizerCredits: 5   },
+  tier_starter: { name: "Starter",              maxUsers: 1,   maxContacts: 10 as number | null,   price: 10,  additionalUserPrice: 7, visible: true,  monthlyOptimizerCredits: 5   },
+  tier_1:       { name: "Solo",                 maxUsers: 1,   maxContacts: null as number | null, price: 29,  additionalUserPrice: 7, visible: true,  monthlyOptimizerCredits: 20  },
+  tier_1_3:     { name: "Crew",                 maxUsers: 3,   maxContacts: null as number | null, price: 49,  additionalUserPrice: 7, visible: true,  monthlyOptimizerCredits: 60  },
+  tier_3_5:     { name: "Team",                 maxUsers: 6,   maxContacts: null as number | null, price: 99,  additionalUserPrice: 7, visible: true,  monthlyOptimizerCredits: 120 },
+  tier_6_10:    { name: "Agency",               maxUsers: 12,  maxContacts: null as number | null, price: 149, additionalUserPrice: 7, visible: true,  monthlyOptimizerCredits: 240 },
+  tier_10_plus: { name: "Enterprise",           maxUsers: 999, maxContacts: null as number | null, price: 599, additionalUserPrice: 7, visible: false, monthlyOptimizerCredits: 240 },
 } as const;
 
 export const VOICE_PLAN_CONFIG = {

@@ -138,12 +138,12 @@ function formatMinutes(mins: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseline = 5, onNeedCredits, weekStart }: {
+export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllowance = 20, onNeedCredits, weekStart }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   credits: number;
-  weeklyBaseline?: number;
-  onNeedCredits: () => void;
+  monthlyAllowance?: number;
+  onNeedCredits: (topUpNeeded: number) => void;
   weekStart?: string;
 }) {
   const { toast } = useToast();
@@ -164,7 +164,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
     creditsRemaining: number;
   } | null>(null);
 
-  const { data: freshCreditData } = useQuery<{ credits: number; weeklyBaseline: number }>({
+  const { data: freshCreditData } = useQuery<{ credits: number; monthlyAllowance: number }>({
     queryKey: ["/api/route-credits"],
     staleTime: 0,
     enabled: applyConfirmPending,
@@ -177,7 +177,13 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
     ? new Set(result.movedStops.map(m => m.contactName)).size
     : 0;
 
-  const acceptedCredits = result && acceptedDays.size > 0 ? weeklyBaseline : 0;
+  const acceptedRouteCount = result
+    ? result.proposed.days
+        .filter(d => acceptedDays.has(d.day) && d.totalStops > 0)
+        .reduce((acc, d) => acc + d.routes.length, 0)
+    : 0;
+
+  const acceptedCredits = acceptedRouteCount;
 
   useEffect(() => {
     if (result && result.movedStops.length > 0) {
@@ -226,13 +232,13 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
         minutesSaved: result!.minutesSaved,
         routesCreated: data.routesCreated ?? 0,
         stopsUpdated: data.stopsUpdated ?? 0,
-        creditsUsed: data.creditsUsed ?? 0,
+        creditsUsed: data.creditsUsed ?? acceptedCredits,
         creditsRemaining: data.creditsRemaining ?? 0,
       });
     },
     onError: (err: Error) => {
       if (err.message.includes("Insufficient")) {
-        onNeedCredits();
+        onNeedCredits(Math.max(0, acceptedCredits - credits));
       } else {
         toast({ title: "Failed to apply plan", description: err.message, variant: "destructive" });
       }
@@ -289,8 +295,8 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
                 </p>
               )}
               {successData.creditsUsed > 0 && (
-                <p className="text-xs text-muted-foreground" data-testid="text-success-credits">
-                  {successData.creditsUsed} credit{successData.creditsUsed !== 1 ? "s" : ""} used · {successData.creditsRemaining} remaining
+                <p className="text-xs text-muted-foreground" data-testid="text-success-credits-used">
+                  {successData.creditsUsed} credit{successData.creditsUsed !== 1 ? "s" : ""} used (1 per route) · {successData.creditsRemaining} remaining this month
                 </p>
               )}
             </div>
@@ -587,10 +593,10 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-2.5 text-sm flex items-center gap-2" data-testid="banner-credit-confirm">
                 <span className="text-amber-700 dark:text-amber-400">
                   This will use{" "}
-                  <span className="font-semibold" data-testid="text-confirm-credits-cost">{weeklyBaseline}</span>
-                  {" "}credit{weeklyBaseline !== 1 ? "s" : ""}. You currently have{" "}
+                  <span className="font-semibold" data-testid="text-confirm-credits-cost">{acceptedRouteCount}</span>
+                  {" "}credit{acceptedRouteCount !== 1 ? "s" : ""} (1 per route). You currently have{" "}
                   <span className="font-semibold" data-testid="text-confirm-credits-balance">{liveCredits}</span>
-                  {" "}remaining.
+                  {" "}remaining this month.
                 </span>
               </div>
             )}
@@ -599,16 +605,17 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
                 {credits !== Infinity && acceptedDays.size > 0 && !applyConfirmPending && (
                   <>
                     <span>
-                      <span className="font-semibold text-foreground" data-testid="text-credits-required">{weeklyBaseline}</span>
-                      {" "}credits · {credits} available
+                      This will use{" "}
+                      <span className="font-semibold text-foreground" data-testid="text-credits-required">{acceptedRouteCount}</span>
+                      {" "}credit{acceptedRouteCount !== 1 ? "s" : ""} (1 per route) · {credits} available this month
                     </span>
-                    {credits < weeklyBaseline && (
+                    {credits < acceptedCredits && (
                       <button
                         className="text-xs text-primary underline underline-offset-2 text-left"
-                        onClick={onNeedCredits}
+                        onClick={() => onNeedCredits(acceptedCredits - credits)}
                         data-testid="button-topup-inline"
                       >
-                        Need {weeklyBaseline - credits} more — top up
+                        Need {acceptedCredits - credits} more — top up
                       </button>
                     )}
                   </>
@@ -641,7 +648,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
                     : applyMutation.isPending
                     ? "Applying..."
                     : applyConfirmPending
-                    ? `Confirm — costs ${weeklyBaseline} credit${weeklyBaseline !== 1 ? "s" : ""}`
+                    ? `Confirm — ${acceptedRouteCount} credit${acceptedRouteCount !== 1 ? "s" : ""}`
                     : "Apply Optimization"}
                 </Button>
               </div>

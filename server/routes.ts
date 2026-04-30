@@ -5006,10 +5006,10 @@ Return ONLY valid JSON, no markdown.`,
       const company = await storage.getCompany(companyId);
       const demoUnlimited = !!(company as any).demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
       const tier = (company?.subscriptionTier ?? "tier_1") as keyof typeof TIER_CONFIG;
-      const weeklyBaseline = TIER_CONFIG[tier]?.weeklyOptimizerCredits ?? 5;
+      const monthlyAllowance = TIER_CONFIG[tier]?.monthlyOptimizerCredits ?? 20;
       res.json({
         credits: demoUnlimited ? 999999 : (company?.routeCredits ?? 0),
-        weeklyBaseline: demoUnlimited ? 999999 : weeklyBaseline,
+        monthlyAllowance: demoUnlimited ? 999999 : monthlyAllowance,
       });
     } catch (err) { handleError(res, err); }
   });
@@ -5706,9 +5706,8 @@ Return ONLY valid JSON, no markdown.`,
       const demoUnlimitedCredits = !!(company as any).demoUnlimitedCredits;
       const isDemoCompanyForCredits = demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
 
-      // Tier-based weekly baseline: applying the full weekly optimizer costs the baseline amount
       const tier = (company.subscriptionTier ?? "tier_1") as keyof typeof TIER_CONFIG;
-      const weeklyBaseline = TIER_CONFIG[tier]?.weeklyOptimizerCredits ?? 5;
+      const monthlyAllowance = TIER_CONFIG[tier]?.monthlyOptimizerCredits ?? 20;
 
       const daysToApply: DayPlan[] = acceptedDays && Array.isArray(acceptedDays)
         ? typedDays.filter(d => acceptedDays.includes(d.day))
@@ -5738,17 +5737,15 @@ Return ONLY valid JSON, no markdown.`,
         return res.status(400).json({ error: "No valid stops to apply" });
       }
 
-      // Weekly optimizer costs the full tier baseline, regardless of the number of routes produced.
-      // If the user has already spent some credits this week and their balance is below the baseline,
-      // they need to top up to reach the baseline before applying.
-      const creditsToCharge = weeklyBaseline;
+      // Monthly optimizer costs 1 credit per route actually applied.
+      const creditsToCharge = totalRoutes;
       const currentCredits = company.routeCredits ?? 0;
       if (!isDemoCompanyForCredits && currentCredits < creditsToCharge) {
         return res.status(402).json({
           error: "Insufficient route credits",
           creditsRequired: creditsToCharge,
           creditsAvailable: currentCredits,
-          weeklyBaseline,
+          monthlyAllowance,
           topUpNeeded: creditsToCharge - currentCredits,
         });
       }
@@ -5840,7 +5837,8 @@ Return ONLY valid JSON, no markdown.`,
         stopsUpdated,
         creditsUsed: isDemoCompanyForCredits ? 0 : creditsToCharge,
         creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - creditsToCharge,
-        weeklyBaseline,
+        creditsPerRoute: 1,
+        monthlyAllowance,
       });
 
       // Background: delete stale visits and regenerate for the next 6 months.
@@ -20456,6 +20454,11 @@ Respond with exactly one category from the list above and nothing else.`;
   import("./jobs/nightly-rollup").then(({ runNightlyRollup }) => {
     setTimeout(() => runNightlyRollup().catch(console.error), 30000);
     setInterval(() => runNightlyRollup().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
+  import("./jobs/monthly-credits").then(({ runMonthlyCreditReplenishment }) => {
+    setTimeout(() => runMonthlyCreditReplenishment().catch(console.error), 60000);
+    setInterval(() => runMonthlyCreditReplenishment().catch(console.error), 24 * 60 * 60 * 1000);
   });
 
   setTimeout(() => {
