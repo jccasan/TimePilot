@@ -77,7 +77,7 @@ import {
   reviewResponses,
 } from "@shared/schema";
 
-import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, provisionPortalAccess } from "./shared";
+import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, provisionPortalAccess, getDemoCompanyId } from "./shared";
 const _backfilledLogoAcls = new Set<string>();
 const _objStorage = new ObjectStorageService();
 
@@ -381,18 +381,6 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
   });
 
   // ── Demo Mode API ────────────────────────────────────────────────────────
-  // Helpers – resolve the demo company ID once per request
-  async function getDemoCompanyId(): Promise<string | null> {
-    const { db } = await import("../db");
-    const { sql: drizzleSql } = await import("drizzle-orm");
-    const row = await db.execute(drizzleSql`
-      SELECT c.id FROM users u
-      JOIN company_users cu ON cu.user_id = u.id
-      JOIN companies c ON c.id = cu.company_id
-      WHERE u.email = 'demo@scoopilot.com' LIMIT 1
-    `);
-    return row.rows?.[0]?.id as string | null;
-  }
 
   app.get("/api/demo/status", isAuthenticated, async (req: Request, res: Response) => {
     try {

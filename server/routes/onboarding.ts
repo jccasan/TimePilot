@@ -12,7 +12,7 @@ import { users, companyUsers, companies, contacts, properties, invoices, routes,
 import { calculatePrice, sqftToAcres, yardSizeLabelToAcres, parseLotSizeStringToAcres, type PriceCalculatorInputs } from "../services/pricing-calculator";
 import { z } from "zod";
 import { registerObjectStorageRoutes, ObjectStorageService, ObjectNotFoundError } from "../replit_integrations/object_storage";
-import { registerUser, loginUser, getUserById, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword, claimOnboardingEmailSend, resetOnboardingEmailSent } from "../services/app-auth";
+import { registerUser, loginUser, getUserByEmail, createPasswordResetToken, resetPasswordWithToken, createUserWithTempPassword, changePassword, claimOnboardingEmailSend, resetOnboardingEmailSent } from "../services/app-auth";
 import type { RequestHandler } from "express";
 import { sendEmail, sendAdminSignupNotification, generateEmailThreadId, logEmailSent, buildWelcomeEmailContent } from "../services/email";
 import { sendInvoiceEmail } from "../services/invoice-email";
@@ -77,53 +77,11 @@ import {
   reviewResponses,
 } from "@shared/schema";
 
-import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, getDemoCompanyId } from "./shared";
+import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, getDemoCompanyId, ensureCompanySetup } from "./shared";
 
 
 export async function registerOnboardingRoutes(app: Express): Promise<void> {
   // ================ Setup / Onboarding ================
-
-  async function ensureCompanySetup(userId: string, companyName?: string): Promise<{ companyId: string; alreadySetup: boolean }> {
-    const existing = await storage.getCompaniesForUser(userId);
-    if (existing.length > 0) {
-      return { companyId: existing[0].companyId, alreadySetup: true };
-    }
-    const user = await getUserById(userId);
-    const username = user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User" : "User";
-    const resolvedName = companyName?.trim() || `${username}'s Company`;
-
-    const baseSlug = resolvedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "company";
-    let slug = baseSlug;
-    let slugSuffix = 1;
-    while (true) {
-      const existingSlug = await storage.getCompanyBySlug(slug);
-      if (!existingSlug) break;
-      slug = `${baseSlug}-${slugSuffix++}`;
-    }
-
-    const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-    const company = await storage.createCompany({
-      name: resolvedName,
-      email: user?.email || "",
-      slug,
-      subscriptionTier: "free_trial",
-      subscriptionStatus: "trialing",
-      trialEndsAt,
-    } as typeof companies.$inferInsert);
-    await storage.addUserToCompany(userId, company.id, "owner");
-
-    await seedDefaultLeadSources(company.id);
-    await storage.seedDefaultPricing(company.id);
-
-    return { companyId: company.id, alreadySetup: false };
-  }
-
-  async function seedDefaultLeadSources(companyId: string) {
-    const defaultLeadSources = ["Referral", "Nextdoor", "Facebook", "Yelp", "Instagram", "Google Ad", "Organic Search", "Bing", "Yard Sign", "Local Advertising"];
-    for (const name of defaultLeadSources) {
-      await storage.createLeadSource({ companyId, name });
-    }
-  }
 
   app.post("/api/setup", isAuthenticated, async (req: Request, res: Response) => {
     try {

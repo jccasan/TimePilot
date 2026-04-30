@@ -190,15 +190,6 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
 
   // ─── Public Review Router endpoints (no auth required) ───────────────────
 
-  function escapeHtml(str: string): string {
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#x27;");
-  }
-
   app.get("/api/review/token/:token", async (req: Request, res: Response) => {
     try {
       const token = String(req.params.token);

@@ -77,7 +77,7 @@ import {
   reviewResponses,
 } from "@shared/schema";
 
-import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, provisionPortalAccess } from "./shared";
+import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, provisionPortalAccess, buildVisitLineItemsWithAddOns, validateAndResolveAddOns } from "./shared";
 
 
 export async function registerServicePlansRoutes(app: Express): Promise<void> {
@@ -492,62 +492,6 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       });
     } catch (err) { handleError(res, err); }
   });
-
-  async function buildVisitLineItemsWithAddOns(
-    visits: { id: string; scheduledDate: string; servicePlanId: string }[],
-    planMap: Map<string, { pricePerVisit: string; name?: string | null; serviceName?: string | null; id: string }>,
-  ): Promise<{ visitId: string; description: string; quantity: number; unitPrice: string; total: string }[]> {
-    const planAddOnsCache = new Map<string, { name: string; price: string }[]>();
-    const lineItems: { visitId: string; description: string; quantity: number; unitPrice: string; total: string }[] = [];
-    for (const visit of visits) {
-      const plan = planMap.get(visit.servicePlanId);
-      const unitPrice = plan ? plan.pricePerVisit : "0";
-      const planLabel = plan?.serviceName || plan?.name || "";
-      lineItems.push({
-        visitId: visit.id,
-        description: `${planLabel ? planLabel + " - " : ""}Service on ${visit.scheduledDate}`,
-        quantity: 1,
-        unitPrice: unitPrice.toString(),
-        total: unitPrice.toString(),
-      });
-      if (plan) {
-        if (!planAddOnsCache.has(plan.id)) {
-          const addOns = await storage.getServicePlanAddOns(plan.id);
-          planAddOnsCache.set(plan.id, addOns.filter(a => a.isActive).map(a => ({ name: a.name, price: a.price })));
-        }
-        const addOns = planAddOnsCache.get(plan.id) || [];
-        for (const addon of addOns) {
-          lineItems.push({
-            visitId: visit.id,
-            description: `${addon.name} on ${visit.scheduledDate}`,
-            quantity: 1,
-            unitPrice: addon.price,
-            total: addon.price,
-          });
-        }
-      }
-    }
-    return lineItems;
-  }
-
-  async function validateAndResolveAddOns(addOns: any[], companyId: string) {
-    if (!Array.isArray(addOns)) return [];
-    const pricingItems = await storage.getServicePricing(companyId);
-    const validAddOns: { servicePricingId: string; name: string; price: string }[] = [];
-    const seen = new Set<string>();
-    for (const addon of addOns) {
-      if (!addon.servicePricingId || seen.has(addon.servicePricingId)) continue;
-      const item = pricingItems.find(p => p.id === addon.servicePricingId && p.category === "add_on" && p.isActive);
-      if (!item) continue;
-      seen.add(addon.servicePricingId);
-      validAddOns.push({
-        servicePricingId: item.id,
-        name: item.name,
-        price: item.basePrice,
-      });
-    }
-    return validAddOns;
-  }
 
   app.patch("/api/service-plans/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {

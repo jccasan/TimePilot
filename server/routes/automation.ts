@@ -77,7 +77,7 @@ import {
   reviewResponses,
 } from "@shared/schema";
 
-import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml } from "./shared";
+import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, suggestServiceDay } from "./shared";
 
 
 export async function registerAutomationRoutes(app: Express): Promise<void> {
@@ -190,65 +190,6 @@ export async function registerAutomationRoutes(app: Express): Promise<void> {
   });
 
   // ================ Route Day Suggestion ================
-
-  function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-
-  async function suggestServiceDay(
-    companyId: string,
-    lat: number,
-    lng: number
-  ): Promise<{ day: string; routeName: string; distanceKm: number } | null> {
-    const routes = await storage.getRoutes(companyId);
-    const recurringRoutes = routes.filter(r => r.dayOfWeek && !r.date);
-    if (!recurringRoutes.length) return null;
-
-    const plans = await storage.getServicePlans(companyId, { isActive: true });
-    const properties = await storage.getProperties(companyId);
-    const propMap = new Map(properties.map(p => [p.id, p]));
-
-    // For each recurring route, find the distance to the nearest stop
-    type DayBest = { day: string; routeName: string; distanceKm: number };
-    const dayBest = new Map<string, DayBest>();
-
-    for (const route of recurringRoutes) {
-      if (!route.dayOfWeek) continue;
-      const routePlans = plans.filter(sp => sp.routeId === route.id);
-      for (const sp of routePlans) {
-        if (!sp.propertyId) continue;
-        const prop = propMap.get(sp.propertyId);
-        if (!prop?.latitude || !prop?.longitude) continue;
-        const km = haversineKm(lat, lng, Number(prop.latitude), Number(prop.longitude));
-        const existing = dayBest.get(route.dayOfWeek);
-        if (!existing || km < existing.distanceKm) {
-          dayBest.set(route.dayOfWeek, { day: route.dayOfWeek, routeName: route.name || route.dayOfWeek, distanceKm: km });
-        }
-      }
-    }
-
-    if (!dayBest.size) {
-      // No stops with coordinates — fall back to day with most stops
-      const dayCounts = new Map<string, number>();
-      for (const route of recurringRoutes) {
-        if (!route.dayOfWeek) continue;
-        const count = plans.filter(sp => sp.routeId === route.id).length;
-        dayCounts.set(route.dayOfWeek, (dayCounts.get(route.dayOfWeek) || 0) + count);
-      }
-      if (!dayCounts.size) return null;
-      const bestDay = [...dayCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-      const route = recurringRoutes.find(r => r.dayOfWeek === bestDay);
-      return { day: bestDay, routeName: route?.name || bestDay, distanceKm: -1 };
-    }
-
-    return [...dayBest.values()].sort((a, b) => a.distanceKm - b.distanceKm)[0];
-  }
 
   app.get("/api/routes/suggest-day", isAuthenticated, async (req: Request, res: Response) => {
     try {
