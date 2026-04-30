@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Sparkles, Check, Loader2, RotateCcw, Car, Calendar,
-  CheckCircle2, Shield, X, AlertTriangle, MapPin, User,
+  CheckCircle2, Shield, X, AlertTriangle, MapPin, User, XCircle,
 } from "lucide-react";
 
 const ROUTE_COLORS = [
@@ -80,6 +80,13 @@ type MultiWeekResult = { weeks: MultiWeekEntry[] };
 
 type TeamMember = { id: string; companyUserId: string; role: string; firstName: string; lastName: string; email: string };
 
+type WeekApplyStatus = {
+  weekStart: string;
+  weekLabel: string;
+  status: "pending" | "applying" | "success" | "error";
+  error?: string;
+};
+
 function StopMiniMap({ routes }: { routes: WeeklyProposedRoute[] }) {
   const allStops = routes.flatMap((r, rIdx) => r.stops.map(s => ({ ...s, routeIdx: rIdx })));
   if (allStops.length === 0) return null;
@@ -138,13 +145,15 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
   const [techAssignments, setTechAssignments] = useState<Record<string, string>>({});
   const [notifyCustomers, setNotifyCustomers] = useState(true);
   const [applyConfirmPending, setApplyConfirmPending] = useState(false);
-  const [applyProgress, setApplyProgress] = useState<{ current: number; total: number } | null>(null);
+  const [weekApplyStatuses, setWeekApplyStatuses] = useState<WeekApplyStatus[]>([]);
   const [successData, setSuccessData] = useState<{
     weeksApplied: number;
+    weeksFailed: number;
     routesCreated: number;
     stopsUpdated: number;
     creditsUsed: number;
     creditsRemaining: number;
+    weekResults: WeekApplyStatus[];
   } | null>(null);
   const [geocodeError, setGeocodeError] = useState<{
     message: string;
@@ -203,7 +212,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
     setAcceptedWeeks(new Set());
     setTechAssignments({});
     setApplyConfirmPending(false);
-    setApplyProgress(null);
+    setWeekApplyStatuses([]);
     setSuccessData(null);
     setGeocodeError(null);
   }
@@ -261,46 +270,77 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
       const weeksToApply = multiWeekResult.weeks.filter(
         (w): w is NonEmptyWeekEntry => !w.empty && acceptedWeeks.has(w.weekStart)
       );
+
+      const initialStatuses: WeekApplyStatus[] = weeksToApply.map(w => ({
+        weekStart: w.weekStart,
+        weekLabel: w.weekLabel,
+        status: "pending",
+      }));
+      setWeekApplyStatuses(initialStatuses);
+
       let totalRoutesCreated = 0, totalStopsUpdated = 0, totalCreditsUsed = 0, totalCreditsRemaining = 0;
+      const finalStatuses: WeekApplyStatus[] = [...initialStatuses];
+      let creditShortfallDetected = false;
 
       for (let i = 0; i < weeksToApply.length; i++) {
-        setApplyProgress({ current: i + 1, total: weeksToApply.length });
         const week = weeksToApply[i];
-        const daysWithStops = week.proposed.days.filter(d => d.totalStops > 0);
-        const res = await apiRequest("POST", "/api/routes/apply-weekly-plan", {
-          acceptedDays: daysWithStops.map(d => d.day),
-          proposedDays: daysWithStops,
-          notifyCustomers,
-        });
-        const data = await res.json();
-        totalRoutesCreated += data.routesCreated ?? 0;
-        totalStopsUpdated += data.stopsUpdated ?? 0;
-        totalCreditsUsed += data.creditsUsed ?? 0;
-        totalCreditsRemaining = data.creditsRemaining ?? 0;
+        finalStatuses[i] = { ...finalStatuses[i], status: "applying" };
+        setWeekApplyStatuses([...finalStatuses]);
+
+        try {
+          const daysWithStops = week.proposed.days.filter(d => d.totalStops > 0);
+          const res = await apiRequest("POST", "/api/routes/apply-weekly-plan", {
+            acceptedDays: daysWithStops.map(d => d.day),
+            proposedDays: daysWithStops,
+            notifyCustomers,
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `Server error ${res.status}`);
+          }
+          const data = await res.json();
+          totalRoutesCreated += data.routesCreated ?? 0;
+          totalStopsUpdated += data.stopsUpdated ?? 0;
+          totalCreditsUsed += data.creditsUsed ?? 0;
+          totalCreditsRemaining = data.creditsRemaining ?? 0;
+          finalStatuses[i] = { ...finalStatuses[i], status: "success" };
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          if (msg.includes("Insufficient")) creditShortfallDetected = true;
+          finalStatuses[i] = { ...finalStatuses[i], status: "error", error: msg };
+        }
+
+        setWeekApplyStatuses([...finalStatuses]);
       }
 
-      return { weeksApplied: weeksToApply.length, totalRoutesCreated, totalStopsUpdated, totalCreditsUsed, totalCreditsRemaining };
+      const weeksFailed = finalStatuses.filter(s => s.status === "error").length;
+      const weeksApplied = finalStatuses.filter(s => s.status === "success").length;
+
+      if (creditShortfallDetected) {
+        onNeedCredits(Math.max(0, totalAcceptedCredits - credits));
+      }
+
+      return { weeksApplied, weeksFailed, totalRoutesCreated, totalStopsUpdated, totalCreditsUsed, totalCreditsRemaining, weekResults: finalStatuses };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
-      setApplyProgress(null);
       setApplyConfirmPending(false);
       setSuccessData({
         weeksApplied: data.weeksApplied,
+        weeksFailed: data.weeksFailed,
         routesCreated: data.totalRoutesCreated,
         stopsUpdated: data.totalStopsUpdated,
         creditsUsed: data.totalCreditsUsed,
         creditsRemaining: data.totalCreditsRemaining,
+        weekResults: data.weekResults,
       });
     },
     onError: (err: Error) => {
-      setApplyProgress(null);
+      setWeekApplyStatuses([]);
       setApplyConfirmPending(false);
-      if (err.message.includes("Insufficient")) {
-        onNeedCredits(Math.max(0, totalAcceptedCredits - credits));
-      } else {
+      if (!err.message.includes("Insufficient")) {
         toast({ title: "Failed to apply plan", description: err.message, variant: "destructive" });
       }
     },
@@ -330,16 +370,82 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
           </DialogDescription>
         </DialogHeader>
 
+        {/* ── APPLYING PROGRESS ── */}
+        {!successData && applyMutation.isPending && weekApplyStatuses.length > 0 && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-6 py-8" data-testid="panel-apply-progress">
+            <div className="w-full max-w-sm space-y-4">
+              <p className="text-center text-sm font-semibold text-muted-foreground uppercase tracking-wide">Applying Plan</p>
+              <div className="space-y-2">
+                {weekApplyStatuses.map((ws) => (
+                  <div
+                    key={ws.weekStart}
+                    className="flex items-center gap-3 rounded-lg border px-4 py-3"
+                    data-testid={`row-week-apply-status-${ws.weekStart}`}
+                  >
+                    <div className="shrink-0 w-5 h-5 flex items-center justify-center">
+                      {ws.status === "pending" && (
+                        <span className="w-3 h-3 rounded-full bg-muted-foreground/30" data-testid={`icon-week-pending-${ws.weekStart}`} />
+                      )}
+                      {ws.status === "applying" && (
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" data-testid={`icon-week-applying-${ws.weekStart}`} />
+                      )}
+                      {ws.status === "success" && (
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" data-testid={`icon-week-success-${ws.weekStart}`} />
+                      )}
+                      {ws.status === "error" && (
+                        <XCircle className="h-4 w-4 text-destructive" data-testid={`icon-week-error-${ws.weekStart}`} />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{ws.weekLabel}</p>
+                      {ws.status === "error" && ws.error && (
+                        <p className="text-xs text-destructive mt-0.5 truncate" data-testid={`text-week-error-${ws.weekStart}`}>{ws.error}</p>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground capitalize shrink-0">
+                      {ws.status === "applying" ? "Applying…" : ws.status === "pending" ? "Waiting" : ws.status === "success" ? "Done" : "Failed"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden" data-testid="progress-bar-apply">
+                <div
+                  className="h-full bg-primary rounded-full transition-all duration-500"
+                  style={{
+                    width: weekApplyStatuses.length > 0
+                      ? `${(weekApplyStatuses.filter(s => s.status === "success" || s.status === "error").length / weekApplyStatuses.length) * 100}%`
+                      : "0%",
+                  }}
+                  data-testid="progress-bar-apply-fill"
+                />
+              </div>
+              <p className="text-center text-xs text-muted-foreground">
+                {weekApplyStatuses.filter(s => s.status === "success" || s.status === "error").length} of {weekApplyStatuses.length} week{weekApplyStatuses.length !== 1 ? "s" : ""} complete
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* ── SUCCESS ── */}
         {successData ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-6" data-testid="panel-apply-success">
-            <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-6">
-              <CheckCircle2 className="h-14 w-14 text-green-600 dark:text-green-400" />
+            <div className={`rounded-full p-6 ${successData.weeksApplied === 0 ? "bg-red-100 dark:bg-red-900/30" : successData.weeksFailed > 0 ? "bg-amber-100 dark:bg-amber-900/30" : "bg-green-100 dark:bg-green-900/30"}`}>
+              {successData.weeksApplied === 0
+                ? <XCircle className="h-14 w-14 text-destructive" />
+                : successData.weeksFailed > 0
+                ? <AlertTriangle className="h-14 w-14 text-amber-600 dark:text-amber-400" />
+                : <CheckCircle2 className="h-14 w-14 text-green-600 dark:text-green-400" />
+              }
             </div>
             <div className="text-center space-y-2">
-              <p className="text-xl font-semibold">Plan Applied</p>
+              <p className="text-xl font-semibold">
+                {successData.weeksApplied === 0 ? "Apply Failed" : successData.weeksFailed > 0 ? "Partially Applied" : "Plan Applied"}
+              </p>
               <p className="text-foreground font-medium" data-testid="text-success-summary">
-                {successData.weeksApplied} week{successData.weeksApplied !== 1 ? "s" : ""} applied
+                {successData.weeksApplied > 0
+                  ? `${successData.weeksApplied} week${successData.weeksApplied !== 1 ? "s" : ""} applied`
+                  : "No weeks were applied"}
+                {successData.weeksFailed > 0 && ` · ${successData.weeksFailed} failed`}
                 {successData.routesCreated > 0 && ` · ${successData.routesCreated} route${successData.routesCreated !== 1 ? "s" : ""} created`}
                 {successData.stopsUpdated > 0 && ` · ${successData.stopsUpdated} stop${successData.stopsUpdated !== 1 ? "s" : ""} reassigned`}
               </p>
@@ -349,6 +455,30 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
                 </p>
               )}
             </div>
+            {/* Per-week result breakdown */}
+            {(successData.weekResults.length > 1 || successData.weekResults.some(w => w.status === "error")) && (
+              <div className="w-full max-w-sm space-y-1.5" data-testid="section-week-results">
+                {successData.weekResults.map((ws) => (
+                  <div key={ws.weekStart} className="flex items-center gap-3 rounded-lg border px-3 py-2" data-testid={`row-week-result-${ws.weekStart}`}>
+                    <div className="shrink-0">
+                      {ws.status === "success"
+                        ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                        : <XCircle className="h-4 w-4 text-destructive" />
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{ws.weekLabel}</p>
+                      {ws.status === "error" && ws.error && (
+                        <p className="text-xs text-destructive mt-0.5 truncate">{ws.error}</p>
+                      )}
+                    </div>
+                    <span className={`text-xs font-medium shrink-0 ${ws.status === "success" ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>
+                      {ws.status === "success" ? "Applied" : "Failed"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <Button onClick={() => { resetAll(); onOpenChange(false); navigate("/routes"); }} data-testid="button-view-routes">
                 View Routes
@@ -728,7 +858,9 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
                   {applyMutation.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                      {applyProgress ? `Applying week ${applyProgress.current} of ${applyProgress.total}...` : "Applying..."}
+                      {weekApplyStatuses.length > 0
+                        ? `Week ${Math.min(weekApplyStatuses.filter(s => s.status === "success" || s.status === "error").length + 1, weekApplyStatuses.length)} of ${weekApplyStatuses.length}…`
+                        : "Applying..."}
                     </>
                   ) : totalAcceptedCredits > liveCredits ? (
                     "Not Enough Credits"
