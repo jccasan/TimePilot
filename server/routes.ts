@@ -5764,7 +5764,7 @@ Return ONLY valid JSON, no markdown.`,
             const sp = visit.servicePlanId ? planMap.get(visit.servicePlanId) : undefined;
             if (!sp) continue;
             const prop = propertyMap.get(sp.propertyId);
-            if (prop && prop.streetAddress && !prop.latitude && !prop.longitude) {
+            if (prop && prop.streetAddress && (!prop.latitude || !prop.longitude)) {
               const coords = await geocodeAddress(prop.streetAddress, prop.city, prop.state, prop.zipCode);
               if (coords) {
                 const updated = await storage.updateProperty(prop.id, companyId, { latitude: coords.latitude, longitude: coords.longitude });

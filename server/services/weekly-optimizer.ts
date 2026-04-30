@@ -368,9 +368,26 @@ export async function analyzeWeeklySchedule(
       const dayStops = dayClusters.flat();
       for (const stop of dayStops) proposedStopDayMap.set(stop.servicePlanId, day);
 
+      // Distribute the day-level route budget across clusters proportionally by
+      // stop count.  Each cluster always gets at least 1 route; remaining slots
+      // (needed to meet the tech-count minimum) are given to the largest clusters.
+      const dayTarget = Math.max(minRoutesPerDay, dayClusters.length);
+      const clusterMin = dayClusters.map(() => 1);
+      let remaining = dayTarget - dayClusters.length;
+      if (remaining > 0) {
+        const sorted = dayClusters
+          .map((c, i) => ({ i, len: c.length }))
+          .sort((a, b) => b.len - a.len);
+        for (const { i } of sorted) {
+          if (remaining <= 0) break;
+          clusterMin[i]++;
+          remaining--;
+        }
+      }
+
       const routes: ProposedRoute[] = [];
-      for (const cluster of dayClusters) {
-        const subRoutes = await splitIntoSubRoutes(cluster, day, startPoint, maxStopsPerDay, minRoutesPerDay);
+      for (let ci = 0; ci < dayClusters.length; ci++) {
+        const subRoutes = await splitIntoSubRoutes(dayClusters[ci], day, startPoint, maxStopsPerDay, clusterMin[ci]);
         routes.push(...subRoutes);
       }
 
