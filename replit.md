@@ -81,14 +81,23 @@ The scheduling data model is refactored into three layers: `agreements` (billing
 
 ## CI / Quality Gates
 
-### Combined Check (`check-all`) — Recommended
+### Combined Check (`check-all`) — Sequential
 
-Run all three quality gates in one step:
+Run all three quality gates in sequence — stops on the first failure:
 
 - **Run command**: `npx eslint . && npx tsc --noEmit && npx prettier --check .`
 - **Registered as**: validation command `check-all`
 - **Exit code**: `0` only if lint, typecheck, **and** format all pass
-- Use this as the single quality gate before committing or merging. It runs the checks in sequence (lint → typecheck → format) and stops on the first failure.
+- Runs checks in sequence (lint → typecheck → format) and stops at the first failure. Use this when you want a fast exit on the first problem.
+
+### Combined Check (`check-all-parallel`) — Parallel, All Failures at Once
+
+Run all three quality gates in parallel and always report every failure:
+
+- **Run command**: `npx concurrently --raw "npx eslint ." "npx tsc --noEmit" "npx prettier --check ."`
+- **Registered as**: validation command `check-all-parallel`
+- **Exit code**: `0` only if lint, typecheck, **and** format all pass
+- All three checks run simultaneously regardless of individual failures, so every problem is surfaced in a single pass. Use this when multiple checks may be broken and you want to see all failures at once.
 
 ### TypeScript (`typecheck`)
 
