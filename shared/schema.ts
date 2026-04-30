@@ -253,6 +253,7 @@ export const companies = pgTable("companies", {
   clientNotificationsSuppressed: boolean("client_notifications_suppressed").notNull().default(true),
   onboardingCompleteSentAt: timestamp("onboarding_complete_sent_at"),
   passStripeFees: boolean("pass_stripe_fees").notNull().default(false),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

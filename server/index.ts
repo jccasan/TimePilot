@@ -347,6 +347,7 @@ async function ensureCompanyColumns() {
     `);
     await pool.query(`
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS quote_defaults JSONB;
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
     `);
     await pool.query(`
       DO $$ BEGIN

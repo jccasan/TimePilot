@@ -302,6 +302,9 @@ export interface IStorage {
 
   // Admin (platform-level)
   getAllCompanies(): Promise<Company[]>;
+  getPendingDeletionCompanies(): Promise<Company[]>;
+  softDeleteCompany(id: string): Promise<Company>;
+  restoreCompany(id: string): Promise<Company>;
   getAdminNotes(companyId: string): Promise<AdminNote[]>;
   createAdminNote(data: InsertAdminNote): Promise<AdminNote>;
   deleteAdminNote(id: string): Promise<void>;
@@ -521,17 +524,17 @@ export type GroupedErrorReport = {
 export class DatabaseStorage implements IStorage {
   // ================ Companies ================
   async getCompany(id: string): Promise<Company | undefined> {
-    const [company] = await db.select().from(companies).where(eq(companies.id, id));
+    const [company] = await db.select().from(companies).where(and(eq(companies.id, id), isNull(companies.deletedAt)));
     return company;
   }
 
   async listCompanies(): Promise<Company[]> {
-    return db.select().from(companies);
+    return db.select().from(companies).where(isNull(companies.deletedAt));
   }
 
   async getCompanyByPhone(phone: string): Promise<Company | undefined> {
     const digits = phone.replace(/\D/g, "");
-    const allCompanies = await db.select().from(companies);
+    const allCompanies = await db.select().from(companies).where(isNull(companies.deletedAt));
     return allCompanies.find(c => {
       if (!c.phone) return false;
       const cDigits = c.phone.replace(/\D/g, "");
@@ -540,12 +543,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCompanyBySlug(slug: string): Promise<Company | undefined> {
-    const [company] = await db.select().from(companies).where(eq(companies.slug, slug));
+    const [company] = await db.select().from(companies).where(and(eq(companies.slug, slug), isNull(companies.deletedAt)));
     return company;
   }
 
   async getCompanyByStripeConnectAccountId(accountId: string): Promise<Company | undefined> {
-    const [company] = await db.select().from(companies).where(eq(companies.stripeConnectAccountId, accountId));
+    const [company] = await db.select().from(companies).where(and(eq(companies.stripeConnectAccountId, accountId), isNull(companies.deletedAt)));
     return company;
   }
 
@@ -1949,7 +1952,21 @@ export class DatabaseStorage implements IStorage {
 
   // ================ Admin (Platform-level) ================
   async getAllCompanies(): Promise<Company[]> {
-    return db.select().from(companies).orderBy(desc(companies.createdAt));
+    return db.select().from(companies).where(isNull(companies.deletedAt)).orderBy(desc(companies.createdAt));
+  }
+
+  async getPendingDeletionCompanies(): Promise<Company[]> {
+    return db.select().from(companies).where(isNotNull(companies.deletedAt)).orderBy(desc(companies.deletedAt));
+  }
+
+  async softDeleteCompany(id: string): Promise<Company> {
+    const [company] = await db.update(companies).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(companies.id, id)).returning();
+    return company;
+  }
+
+  async restoreCompany(id: string): Promise<Company> {
+    const [company] = await db.update(companies).set({ deletedAt: null, updatedAt: new Date() }).where(eq(companies.id, id)).returning();
+    return company;
   }
 
   async getAdminNotes(companyId: string): Promise<AdminNote[]> {
@@ -1981,7 +1998,7 @@ export class DatabaseStorage implements IStorage {
     const tierPricing: Record<string, number> = {
       tier_1: 29, tier_1_3: 49, tier_3_5: 99, tier_6_10: 149, tier_10_plus: 599,
     };
-    const allCompanies = await db.select().from(companies);
+    const allCompanies = await db.select().from(companies).where(isNull(companies.deletedAt));
     const [usersCount] = await db.select({ count: count() }).from(companyUsers);
     const [contactsCount] = await db.select({ count: count() }).from(contacts);
     const [visitsCount] = await db.select({ count: count() }).from(visits);

@@ -152,6 +152,8 @@ const isAuthenticated: RequestHandler = async (req, res, next) => {
 async function getCompanyContext(req: Request) {
   const apiKeyAuth = (req as any)._apiKeyAuth as { userId: string; companyId: string; role: string } | undefined;
   if (apiKeyAuth) {
+    const company = await storage.getCompany(apiKeyAuth.companyId);
+    if (!company) throw { status: 403, message: "Company is unavailable" };
     return { userId: apiKeyAuth.userId, companyId: apiKeyAuth.companyId, role: apiKeyAuth.role };
   }
   const userId = (req.session as any)?.userId;
@@ -163,6 +165,8 @@ async function getCompanyContext(req: Request) {
     throw { status: 403, message: "No company membership found" };
   }
   const membership = memberships[0];
+  const company = await storage.getCompany(membership.companyId);
+  if (!company) throw { status: 403, message: "Company is unavailable" };
   return { userId, companyId: membership.companyId, role: membership.role };
 }
 
@@ -17974,23 +17978,27 @@ Rules:
       const companyId = p(req.params.id);
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
-      const companyUsersList = await storage.getCompanyUsers(companyId);
-      const { companies: companiesTable, users: usersTable, companyUsers: companyUsersTable } = await import("@shared/schema");
+      await storage.softDeleteCompany(companyId);
+      console.log(`[Admin] Tenant "${company.name}" (${companyId}) soft-deleted (pending deletion) by ${(req as any).adminUser?.email}`);
+      res.json({ ok: true, deletedCompany: company.name, pendingDeletion: true });
+    } catch (err) { handleError(res, err); }
+  });
 
-      await db.transaction(async (tx) => {
-        await tx.delete(companiesTable).where(eq(companiesTable.id, companyId));
-        for (const cu of companyUsersList) {
-          const [remaining] = await tx.select({ count: sql<number>`count(*)` })
-            .from(companyUsersTable)
-            .where(eq(companyUsersTable.userId, cu.userId));
-          if (!remaining || Number(remaining.count) === 0) {
-            await tx.delete(usersTable).where(eq(usersTable.id, cu.userId));
-          }
-        }
-      });
+  app.post("/api/admin/companies/:id/restore", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const companyId = p(req.params.id);
+      const [pendingCompany] = await db.select().from(companies).where(and(eq(companies.id, companyId), isNotNull(companies.deletedAt)));
+      if (!pendingCompany) return res.status(404).json({ error: "Company not found in pending deletion queue" });
+      await storage.restoreCompany(companyId);
+      console.log(`[Admin] Tenant "${pendingCompany.name}" (${companyId}) restored by ${(req as any).adminUser?.email}`);
+      res.json({ ok: true, restoredCompany: pendingCompany.name });
+    } catch (err) { handleError(res, err); }
+  });
 
-      console.log(`[Admin] Tenant "${company.name}" (${companyId}) deleted by ${(req as any).adminUser?.email}`);
-      res.json({ ok: true, deletedCompany: company.name });
+  app.get("/api/admin/companies-pending-deletion", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const pending = await storage.getPendingDeletionCompanies();
+      res.json(pending);
     } catch (err) { handleError(res, err); }
   });
 
@@ -21100,6 +21108,35 @@ Respond with exactly one category from the list above and nothing else.`;
       handleError(res, err);
     }
   });
+
+  // Scheduled cleanup: permanently delete companies that have been in pending-deletion state for 24+ hours
+  async function runPendingDeletionCleanup() {
+    try {
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const expired = await db.select().from(companies).where(and(isNotNull(companies.deletedAt), lt(companies.deletedAt, cutoff)));
+      for (const company of expired) {
+        const companyUsersList = await storage.getCompanyUsers(company.id);
+        await db.transaction(async (tx) => {
+          await tx.delete(companies).where(eq(companies.id, company.id));
+          for (const cu of companyUsersList) {
+            const [remaining] = await tx.select({ count: sql<number>`count(*)` })
+              .from(companyUsers)
+              .where(eq(companyUsers.userId, cu.userId));
+            if (!remaining || Number(remaining.count) === 0) {
+              await tx.delete(users).where(eq(users.id, cu.userId));
+            }
+          }
+        });
+        console.log(`[Admin] Tenant "${company.name}" (${company.id}) permanently deleted after 24-hour hold.`);
+      }
+    } catch (err) {
+      console.error("[Admin] Pending-deletion cleanup failed:", err);
+    }
+  }
+
+  // Run once at startup then every hour
+  runPendingDeletionCleanup();
+  setInterval(runPendingDeletionCleanup, 60 * 60 * 1000);
 
   return httpServer;
 }

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Search, ChevronRight, Plus, Trash2, AlertTriangle, MessageSquare, Phone, Clock, CheckCircle, XCircle, ExternalLink, Globe } from "lucide-react";
+import { Building2, Search, ChevronRight, Plus, Trash2, AlertTriangle, MessageSquare, Phone, Clock, CheckCircle, XCircle, ExternalLink, Globe, RotateCcw, Hourglass } from "lucide-react";
 import { TIER_CONFIG, type Company } from "@shared/schema";
 import { useState, useMemo } from "react";
 
@@ -46,11 +46,28 @@ const tierColors: Record<string, string> = {
   tier_10_plus: "bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-200",
 };
 
+function formatCountdown(deletedAt: string | null): string {
+  if (!deletedAt) return "";
+  const deleteTime = new Date(deletedAt).getTime() + 24 * 60 * 60 * 1000;
+  const remaining = deleteTime - Date.now();
+  if (remaining <= 0) return "Deleting soon...";
+  const hours = Math.floor(remaining / (60 * 60 * 1000));
+  const minutes = Math.floor((remaining % (60 * 60 * 1000)) / 60000);
+  return `${hours}h ${minutes}m remaining`;
+}
+
+function formatScheduledDeletion(deletedAt: string | null): string {
+  if (!deletedAt) return "";
+  const deleteTime = new Date(new Date(deletedAt).getTime() + 24 * 60 * 60 * 1000);
+  return deleteTime.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 export default function AdminTenants() {
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerFirstName, setOwnerFirstName] = useState("");
@@ -104,14 +121,36 @@ export default function AdminTenants() {
       return res.json();
     },
     onSuccess: (data) => {
-      toast({ title: "Tenant removed", description: `${data.deletedCompany} has been permanently deleted.` });
+      toast({ title: "Tenant queued for deletion", description: `${data.deletedCompany} has been removed from all listings and will be permanently deleted in 24 hours.` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies-pending-deletion"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       setDeleteOpen(false);
       setDeleteTarget(null);
+      setDeleteConfirmName("");
     },
     onError: (error: Error) => {
       toast({ title: "Failed to delete tenant", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async (companyId: string) => {
+      const res = await adminRequest("POST", `/api/admin/companies/${companyId}/restore`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to restore tenant");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Tenant restored", description: `${data.restoredCompany} has been restored and is fully accessible again.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies-pending-deletion"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to restore tenant", description: error.message, variant: "destructive" });
     },
   });
 
@@ -168,6 +207,12 @@ export default function AdminTenants() {
     queryFn: adminFetchFn("/api/admin/pending-approvals"),
   });
 
+  const { data: pendingDeletion, isLoading: pendingDeletionLoading } = useQuery<Company[]>({
+    queryKey: ["/api/admin/companies-pending-deletion"],
+    queryFn: adminFetchFn("/api/admin/companies-pending-deletion"),
+    refetchInterval: 60000,
+  });
+
   const filtered = useMemo(() => {
     if (!companies) return [];
     if (!search.trim()) return companies;
@@ -181,6 +226,8 @@ export default function AdminTenants() {
   }, [companies, search]);
 
   const pendingCount = pendingApprovals?.length ?? 0;
+  const pendingDeletionCount = pendingDeletion?.length ?? 0;
+  const nameMatches = deleteConfirmName === deleteTarget?.name;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto" data-testid="admin-tenants">
@@ -191,6 +238,9 @@ export default function AdminTenants() {
             {companies ? `${companies.length} tenant${companies.length !== 1 ? "s" : ""}` : "Loading..."}
             {pendingCount > 0 && (
               <span className="ml-2 text-amber-600 dark:text-amber-400 font-medium">· {pendingCount} pending approval</span>
+            )}
+            {pendingDeletionCount > 0 && (
+              <span className="ml-2 text-red-600 dark:text-red-400 font-medium">· {pendingDeletionCount} pending deletion</span>
             )}
           </p>
         </div>
@@ -208,6 +258,14 @@ export default function AdminTenants() {
             {pendingCount > 0 && (
               <span className="ml-1.5 bg-amber-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
                 {pendingCount}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="pending-deletion" data-testid="tab-pending-deletion" className="relative">
+            Pending Deletion
+            {pendingDeletionCount > 0 && (
+              <span className="ml-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
+                {pendingDeletionCount}
               </span>
             )}
           </TabsTrigger>
@@ -283,6 +341,7 @@ export default function AdminTenants() {
                               e.preventDefault();
                               e.stopPropagation();
                               setDeleteTarget({ id: c.id, name: c.name });
+                              setDeleteConfirmName("");
                               setDeleteOpen(true);
                             }}
                             data-testid={`button-delete-company-${c.id}`}
@@ -394,6 +453,63 @@ export default function AdminTenants() {
             </div>
           )}
         </TabsContent>
+
+        <TabsContent value="pending-deletion" className="mt-4">
+          {pendingDeletionLoading ? (
+            <div className="text-center py-8 text-muted-foreground">Loading pending deletions...</div>
+          ) : !pendingDeletion || pendingDeletion.length === 0 ? (
+            <div className="text-center py-12">
+              <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
+              <p className="font-medium">No pending deletions</p>
+              <p className="text-sm text-muted-foreground mt-1">No tenants are queued for deletion.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                These tenants are fully inaccessible but not yet permanently deleted. All data is preserved and can be restored until the countdown expires.
+              </p>
+              {pendingDeletion.map((c) => (
+                <Card key={c.id} className="border-red-200 dark:border-red-800" data-testid={`card-pending-deletion-${c.id}`}>
+                  <CardContent className="py-4 px-5">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <div className="bg-red-100 dark:bg-red-900/40 p-1.5 rounded-full mt-0.5 shrink-0">
+                          <Hourglass className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        </div>
+                        <div className="min-w-0 space-y-1">
+                          <p className="font-semibold" data-testid={`text-pending-deletion-name-${c.id}`}>{c.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{c.id}</p>
+                          <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">
+                            <Badge variant="outline" className="border-red-300 text-red-700 dark:border-red-700 dark:text-red-300 text-xs" data-testid={`badge-deletion-countdown-${c.id}`}>
+                              <Clock className="h-3 w-3 mr-1" />
+                              {formatCountdown(c.deletedAt ? c.deletedAt.toString() : null)}
+                            </Badge>
+                            <span className="text-xs" data-testid={`text-deletion-schedule-${c.id}`}>
+                              Permanent deletion: {formatScheduledDeletion(c.deletedAt ? c.deletedAt.toString() : null)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-900/20"
+                          onClick={() => restoreMutation.mutate(c.id)}
+                          disabled={restoreMutation.isPending}
+                          data-testid={`button-restore-company-${c.id}`}
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                          {restoreMutation.isPending ? "Restoring..." : "Restore"}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -476,25 +592,44 @@ export default function AdminTenants() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); if (!open) setDeleteTarget(null); }}>
+      <Dialog open={deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); if (!open) { setDeleteTarget(null); setDeleteConfirmName(""); } }}>
         <DialogContent data-testid="dialog-delete-tenant">
           <DialogHeader>
-            <DialogTitle>Remove Tenant</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Remove Tenant
+            </DialogTitle>
             <DialogDescription>
-              This will permanently delete <strong>{deleteTarget?.name}</strong> and all of its data including contacts, jobs, invoices, and user accounts that belong only to this company. This cannot be undone.
+              This will place <strong>{deleteTarget?.name}</strong> in a 24-hour deletion hold. The company will become fully inaccessible immediately, but all data will be preserved and can be restored by an admin until the hold expires. After 24 hours, the company and all of its data will be permanently deleted.
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label htmlFor="deleteConfirmName">
+              Type <strong>{deleteTarget?.name}</strong> to confirm:
+            </Label>
+            <Input
+              id="deleteConfirmName"
+              placeholder={deleteTarget?.name || "Company name"}
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              data-testid="input-delete-confirm-name"
+              autoComplete="off"
+            />
+            {deleteConfirmName.length > 0 && !nameMatches && (
+              <p className="text-xs text-destructive" data-testid="text-name-mismatch">Name does not match. Please type it exactly.</p>
+            )}
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setDeleteOpen(false); setDeleteTarget(null); }} data-testid="button-cancel-delete">
+            <Button variant="outline" onClick={() => { setDeleteOpen(false); setDeleteTarget(null); setDeleteConfirmName(""); }} data-testid="button-cancel-delete">
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-              disabled={deleteMutation.isPending}
+              disabled={deleteMutation.isPending || !nameMatches}
               data-testid="button-confirm-delete-tenant"
             >
-              {deleteMutation.isPending ? "Deleting..." : "Delete Permanently"}
+              {deleteMutation.isPending ? "Queuing deletion..." : "Begin 24-Hour Hold"}
             </Button>
           </DialogFooter>
         </DialogContent>
