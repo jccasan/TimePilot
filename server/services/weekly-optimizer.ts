@@ -375,13 +375,15 @@ export async function analyzeWeeklySchedule(
       const clusterMin = dayClusters.map(() => 1);
       let remaining = dayTarget - dayClusters.length;
       if (remaining > 0) {
+        // Round-robin, largest clusters first, until all slots are distributed.
         const sorted = dayClusters
           .map((c, i) => ({ i, len: c.length }))
           .sort((a, b) => b.len - a.len);
-        for (const { i } of sorted) {
-          if (remaining <= 0) break;
-          clusterMin[i]++;
+        let si = 0;
+        while (remaining > 0) {
+          clusterMin[sorted[si % sorted.length].i]++;
           remaining--;
+          si++;
         }
       }
 

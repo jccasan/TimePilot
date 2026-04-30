@@ -5685,7 +5685,7 @@ Return ONLY valid JSON, no markdown.`,
 
       // Count active technicians — used to split each day into one route per tech.
       const companyUsersList = await storage.getCompanyUsers(companyId);
-      const activeTechCount = companyUsersList.filter(cu => cu.isActive !== false).length;
+      const activeTechCount = companyUsersList.filter(cu => cu.role === "tech" && cu.isActive !== false).length;
       const numTechs = Math.max(1, activeTechCount);
 
       // Build shared lookup maps (plans, properties, contacts) — fetched once for all weeks.
