@@ -57,7 +57,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Plus, X, Edit2, Save, Receipt, Shield, ShieldOff, Trash2, ArrowRight, CheckCircle, Calendar, FileText, DollarSign, Mail, MessageSquare, StickyNote, LogIn, Ruler, Calculator, AlertTriangle, TrendingUp, TrendingDown, KeyRound, Zap, Clock, MapPin, ChevronDown, ShieldAlert, Dog, Paperclip, Send, Loader2, AlertCircle, Star, ClipboardList, ClipboardCheck, Copy, ExternalLink, RefreshCw, Sparkles, Users } from "lucide-react";
-import { compressImage, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/image-compress";
+import { compressMessageAttachment, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/compress-image";
 import { Switch } from "@/components/ui/switch";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
@@ -3992,7 +3992,7 @@ function InlineSmsCompose({ contactId, contactName, phone }: { contactId: string
           continue;
         }
         const preCompressSize = file.size;
-        const compressed = await compressImage(file);
+        const compressed = await compressMessageAttachment(file);
         newFiles.push(compressed);
         newPreviews.push(URL.createObjectURL(compressed));
         newOrigSizes.push(preCompressSize);

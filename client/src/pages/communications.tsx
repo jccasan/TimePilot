@@ -38,7 +38,7 @@ import {
 import { Mail, MessageSquare, Send, ArrowUpRight, ArrowDownLeft, AlertCircle, ArrowLeft, User, Loader2, Paperclip, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useLocation } from "wouter";
-import { compressImage, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/image-compress";
+import { compressMessageAttachment, ALLOWED_IMAGE_TYPES, MAX_ATTACHMENT_SIZE } from "@/lib/compress-image";
 
 const emailFormSchema = z.object({
   contactId: z.string().optional(),
@@ -173,7 +173,7 @@ function ConversationThread({
           continue;
         }
         const preCompressSize = file.size;
-        const compressed = await compressImage(file);
+        const compressed = await compressMessageAttachment(file);
         newFiles.push(compressed);
         newPreviews.push(URL.createObjectURL(compressed));
         newOrigSizes.push(preCompressSize);
