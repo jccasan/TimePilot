@@ -5805,7 +5805,7 @@ Return ONLY valid JSON, no markdown.`,
 
       for (const rId of Array.from(affectedRouteIds)) {
         clearRouteOptimizationState(rId, companyId).catch(console.error);
-        storage.renumberRouteStops(rId, companyId).catch(console.error);
+        await storage.renumberRouteStops(rId, companyId);
       }
 
       const appliedDaySet = new Set(daysToApply.map(d => d.day));
@@ -6642,7 +6642,7 @@ Return ONLY valid JSON, no markdown.`,
         if (existing.routeId) routesToRenumber.add(existing.routeId);
         if (body.routeId && body.routeId !== existing.routeId) routesToRenumber.add(body.routeId);
         for (const rId of Array.from(routesToRenumber)) {
-          storage.renumberRouteStops(rId, companyId).catch(console.error);
+          await storage.renumberRouteStops(rId, companyId);
         }
       }
 
@@ -20518,6 +20518,11 @@ Respond with exactly one category from the list above and nothing else.`;
   import("./jobs/retell-webhook-check").then(({ runRetellWebhookCheck }) => {
     setTimeout(() => runRetellWebhookCheck().catch(console.error), 60000);
     setInterval(() => runRetellWebhookCheck().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
+  import("./jobs/stop-order-repair").then(({ runStopOrderRepair }) => {
+    setTimeout(() => runStopOrderRepair().catch(console.error), 180000);
+    setInterval(() => runStopOrderRepair().catch(console.error), 24 * 60 * 60 * 1000);
   });
 
   async function syncSeatUsageToStripe(): Promise<void> {
