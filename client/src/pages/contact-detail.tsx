@@ -1519,7 +1519,6 @@ export default function ContactDetail() {
         <div ref={smsComposeRef}>
           <InlineSmsCompose
             contactId={id!}
-            contactName={`${contact.firstName} ${contact.lastName}`}
             phone={contact.phone}
           />
         </div>
@@ -5038,15 +5037,7 @@ const activityActionLabels: Record<string, string> = {
   portal_login: "Portal Login",
 };
 
-function InlineSmsCompose({
-  contactId,
-  contactName: _contactName,
-  phone,
-}: {
-  contactId: string;
-  contactName: string;
-  phone: string;
-}) {
+function InlineSmsCompose({ contactId, phone }: { contactId: string; phone: string }) {
   const { toast } = useToast();
   const [messageText, setMessageText] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
