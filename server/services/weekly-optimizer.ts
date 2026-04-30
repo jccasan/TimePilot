@@ -235,11 +235,15 @@ async function splitIntoSubRoutes(
   stops: WeeklyStop[],
   day: string,
   startPoint?: StartPoint,
-  maxStops: number = MAX_STOPS_PER_ROUTE
+  maxStops: number = MAX_STOPS_PER_ROUTE,
+  minRoutes: number = 1
 ): Promise<ProposedRoute[]> {
   if (stops.length === 0) return [];
 
-  if (stops.length <= maxStops) {
+  const numByMax = Math.ceil(stops.length / maxStops);
+  const numRoutes = Math.max(minRoutes, numByMax);
+
+  if (numRoutes <= 1) {
     const optimizedStops = await optimizeStopOrder(stops, startPoint);
     const metrics = await computeDayMetrics(optimizedStops, startPoint);
     return [{
@@ -252,7 +256,6 @@ async function splitIntoSubRoutes(
     }];
   }
 
-  const numRoutes = Math.ceil(stops.length / maxStops);
   const clusters = kMeansClustering(stops, numRoutes);
 
   return Promise.all(clusters.map(async (cluster, idx) => {
@@ -299,10 +302,12 @@ export async function analyzeWeeklySchedule(
     zones?: ZoneMapping[];
     includeSaturday?: boolean;
     maxStopsPerDay?: number;
+    numTechs?: number;
   } = {}
 ): Promise<WeeklyOptimizationResult> {
-  const { respectZones = false, zones = [], includeSaturday = false, maxStopsPerDay } = options;
+  const { respectZones = false, zones = [], includeSaturday = false, maxStopsPerDay, numTechs } = options;
   const activeDays = includeSaturday ? ALL_DAYS : WORK_DAYS;
+  const minRoutesPerDay = numTechs && numTechs > 1 ? numTechs : 1;
 
   const currentByDay = new Map<string, WeeklyStop[]>();
   for (const day of activeDays) {
@@ -319,7 +324,7 @@ export async function analyzeWeeklySchedule(
 
   for (const day of activeDays) {
     const dayStops = currentByDay.get(day) || [];
-    const routes = await splitIntoSubRoutes(dayStops, day, startPoint, maxStopsPerDay);
+    const routes = await splitIntoSubRoutes(dayStops, day, startPoint, maxStopsPerDay, minRoutesPerDay);
     const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
     const totalMinutes = routes.reduce((s, r) => s + r.estimatedMinutes, 0);
     currentDays.push({
@@ -343,7 +348,7 @@ export async function analyzeWeeklySchedule(
     for (const day of activeDays) {
       const dayStops = proposedByDay.get(day) || [];
       for (const stop of dayStops) proposedStopDayMap.set(stop.servicePlanId, day);
-      const routes = await splitIntoSubRoutes(dayStops, day, startPoint, maxStopsPerDay);
+      const routes = await splitIntoSubRoutes(dayStops, day, startPoint, maxStopsPerDay, minRoutesPerDay);
       const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
       const totalMinutes = routes.reduce((s, r) => s + r.estimatedMinutes, 0);
       proposedDays.push({
@@ -365,7 +370,7 @@ export async function analyzeWeeklySchedule(
 
       const routes: ProposedRoute[] = [];
       for (const cluster of dayClusters) {
-        const subRoutes = await splitIntoSubRoutes(cluster, day, startPoint, maxStopsPerDay);
+        const subRoutes = await splitIntoSubRoutes(cluster, day, startPoint, maxStopsPerDay, minRoutesPerDay);
         routes.push(...subRoutes);
       }
 
