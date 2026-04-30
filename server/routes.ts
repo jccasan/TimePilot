@@ -17814,7 +17814,7 @@ Rules:
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
-      const { name, email, phone, address } = req.body;
+      const { name, email, phone, address, routeCredits } = req.body;
       const updates: Record<string, any> = {};
       if (name !== undefined) {
         if (typeof name !== "string" || name.trim().length < 2) return res.status(400).json({ error: "Company name must be at least 2 characters" });
@@ -17831,11 +17831,42 @@ Rules:
       }
       if (phone !== undefined) updates.phone = phone?.trim() || null;
       if (address !== undefined) updates.address = address?.trim() || null;
+      if (routeCredits !== undefined) {
+        const creditsStr = String(routeCredits);
+        const credits = parseInt(creditsStr, 10);
+        if (isNaN(credits) || credits < 0 || String(credits) !== creditsStr.trim()) return res.status(400).json({ error: "Route credits must be a non-negative integer" });
+        updates.routeCredits = credits;
+      }
 
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No fields to update" });
 
       const { companies: companiesTable } = await import("@shared/schema");
       await db.update(companiesTable).set(updates).where(eq(companiesTable.id, companyId));
+
+      if (updates.routeCredits !== undefined) {
+        const adminEmail = (req as any).adminUser?.email || "unknown";
+        await db.insert(auditTrail).values({
+          companyId,
+          userId: null,
+          entityType: "company",
+          entityId: companyId,
+          action: "update",
+          changes: {
+            old: { routeCredits: company.routeCredits ?? 0 },
+            new: { routeCredits: updates.routeCredits },
+          },
+          ipAddress: req.ip || null,
+        }).catch(() => {});
+        await db.insert(adminAuditLogs).values({
+          adminUserId: (req as any).adminUser?.id || null,
+          adminEmail,
+          action: "update_route_credits",
+          resourceType: "company",
+          resourceId: companyId,
+          details: { old: company.routeCredits ?? 0, new: updates.routeCredits },
+          ipAddress: req.ip || null,
+        }).catch(() => {});
+      }
 
       console.log(`[Admin] Company ${companyId} updated by ${(req as any).adminUser?.email}: ${JSON.stringify(updates)}`);
       res.json({ ok: true, ...updates });

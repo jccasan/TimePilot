@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X, MessageSquare, Phone, Activity, Download, Clock, Filter, Database, FlaskConical, XCircle } from "lucide-react";
+import { ArrowLeft, Building2, Users, Contact2, FileText, StickyNote, Trash2, KeyRound, Copy, Eye, EyeOff, Mail, Send, Pencil, Check, X, MessageSquare, Phone, Activity, Download, Clock, Filter, Database, FlaskConical, XCircle, CreditCard } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState } from "react";
 import { queryClient } from "@/lib/queryClient";
@@ -75,7 +75,7 @@ export default function AdminCompanyDetail() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [editingCompany, setEditingCompany] = useState(false);
-  const [companyForm, setCompanyForm] = useState({ name: "", email: "", phone: "", address: "" });
+  const [companyForm, setCompanyForm] = useState({ name: "", email: "", phone: "", address: "", routeCredits: "0" });
 
   const [editUserOpen, setEditUserOpen] = useState(false);
   const [editUserTarget, setEditUserTarget] = useState<{ userId: string; firstName: string; lastName: string; email: string; role: string } | null>(null);
@@ -267,7 +267,7 @@ export default function AdminCompanyDetail() {
   });
 
   const updateCompanyMutation = useMutation({
-    mutationFn: async (updates: Record<string, string>) => {
+    mutationFn: async (updates: Record<string, string | number | null>) => {
       const res = await adminRequest("PATCH", `/api/admin/companies/${id}`, updates);
       if (!res.ok) {
         const data = await res.json();
@@ -334,16 +334,21 @@ export default function AdminCompanyDetail() {
       email: company?.email || "",
       phone: company?.phone || "",
       address: company?.address || "",
+      routeCredits: String(company?.routeCredits ?? 0),
     });
     setEditingCompany(true);
   };
 
   const handleSaveCompany = () => {
-    const updates: Record<string, string> = {};
+    const updates: Record<string, string | number | null> = {};
     if (companyForm.name !== (company?.name || "")) updates.name = companyForm.name;
     if (companyForm.email !== (company?.email || "")) updates.email = companyForm.email;
     if (companyForm.phone !== (company?.phone || "")) updates.phone = companyForm.phone;
     if (companyForm.address !== (company?.address || "")) updates.address = companyForm.address;
+    const parsedCredits = parseInt(companyForm.routeCredits, 10);
+    if (!isNaN(parsedCredits) && parsedCredits !== (company?.routeCredits ?? 0)) {
+      updates.routeCredits = parsedCredits;
+    }
     if (Object.keys(updates).length === 0) {
       setEditingCompany(false);
       return;
@@ -600,6 +605,16 @@ export default function AdminCompanyDetail() {
                       <Label className="text-xs text-muted-foreground">Address</Label>
                       <Input value={companyForm.address} onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })} data-testid="input-company-address" />
                     </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Route Credits</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={companyForm.routeCredits}
+                        onChange={(e) => setCompanyForm({ ...companyForm, routeCredits: e.target.value })}
+                        data-testid="input-route-credits"
+                      />
+                    </div>
                   </>
                 ) : (
                   <>
@@ -726,6 +741,12 @@ export default function AdminCompanyDetail() {
                         <span className="text-sm text-right max-w-[200px]">{company.address}</span>
                       </div>
                     )}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-muted-foreground flex items-center gap-1">
+                        <CreditCard className="h-3.5 w-3.5" /> Route Credits
+                      </span>
+                      <Badge variant="secondary" data-testid="badge-route-credits">{company.routeCredits ?? 0}</Badge>
+                    </div>
                   </>
                 )}
               </CardContent>
