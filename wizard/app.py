@@ -90,6 +90,39 @@ def _is_wizard_or_admin_authed() -> bool:
         return True
     return _is_admin_authed()
 
+
+def _get_tenant_xapi_key(phone: str) -> str:
+    """Return the per-tenant xApiKey for the given phone, or empty string if not found."""
+    tenant = db.search(Tenant.phone == phone)
+    if not tenant:
+        return ""
+    return tenant[0].get("credentials", {}).get("xApiKey", "")
+
+
+def _check_tenant_key(phone: str, provided: str) -> bool:
+    """Return True if the provided key matches the per-tenant xApiKey for this phone."""
+    if not provided:
+        return False
+    tenant_key = _get_tenant_xapi_key(phone)
+    if not tenant_key:
+        return False
+    return provided == tenant_key
+
+
+def _is_tenant_or_admin_authed(phone: str) -> bool:
+    """Return True if the request has the correct per-tenant key OR valid admin auth.
+
+    This enforces tenant isolation: a key issued for tenant A cannot be used to
+    access or mutate data belonging to tenant B.
+    """
+    provided = (
+        request.headers.get("X-Wizard-Key", "")
+        or request.args.get("key", "")
+    )
+    if provided and _check_tenant_key(phone, provided):
+        return True
+    return _is_admin_authed()
+
 ALLOWED_EXTENSIONS = {
     "csv", "xlsx", "xls", "pdf", "png", "jpg", "jpeg", "gif",
     "doc", "docx", "txt", "zip",
@@ -498,7 +531,7 @@ def onboard_save(phone: str):
 
 @app.post("/update-agent-types/<phone>")
 def update_agent_types(phone: str):
-    if not _is_wizard_or_admin_authed():
+    if not _is_tenant_or_admin_authed(phone):
         abort(401)
     agent_types = request.json.get("agentTypes", [])
     merge_tenant(phone, {"agentTypes": agent_types})
@@ -603,7 +636,7 @@ def zip_polygons():
 
 @app.post("/upload/<phone>")
 def upload_doc(phone: str):
-    if not _is_wizard_or_admin_authed():
+    if not _is_tenant_or_admin_authed(phone):
         abort(401)
     tenant = get_tenant(phone)
     if not tenant:
@@ -652,7 +685,7 @@ def upload_doc(phone: str):
 
 @app.post("/remove-doc/<phone>")
 def remove_doc(phone: str):
-    if not _is_wizard_or_admin_authed():
+    if not _is_tenant_or_admin_authed(phone):
         abort(401)
     tenant = get_tenant(phone)
     if not tenant:
@@ -673,7 +706,7 @@ def remove_doc(phone: str):
 
 @app.get("/uploads/<phone>/<filename>")
 def serve_upload(phone: str, filename: str):
-    if not _is_wizard_or_admin_authed():
+    if not _is_tenant_or_admin_authed(phone):
         abort(401)
     safe_phone = phone.replace("+", "").replace(" ", "")
     upload_dir = UPLOADS_DIR / safe_phone
@@ -706,7 +739,7 @@ def ready(phone: str):
 
 @app.get("/download/<phone>/<filename>")
 def download_output(phone: str, filename: str):
-    if not _is_wizard_or_admin_authed():
+    if not _is_tenant_or_admin_authed(phone):
         abort(401)
     safe_phone = phone.replace("+", "").replace(" ", "")
     out_dir = OUTPUT_DIR / safe_phone
@@ -721,7 +754,7 @@ def download_output(phone: str, filename: str):
 
 @app.get("/handbook/<phone>")
 def handbook(phone: str):
-    if not _is_wizard_or_admin_authed():
+    if not _is_tenant_or_admin_authed(phone):
         abort(401)
     safe_phone = phone.replace("+", "").replace(" ", "")
     md_path = OUTPUT_DIR / safe_phone / "agent_handbook.md"
@@ -743,10 +776,9 @@ def handbook(phone: str):
 
 @app.get("/api/config/<path:phone>")
 def api_config(phone: str):
-    key = request.headers.get("X-Wizard-Key", "") or request.args.get("key", "")
-    if not _check_wizard_key(key):
-        abort(401)
     phone = normalize_phone(phone) if not phone.startswith("+") else phone
+    if not _is_tenant_or_admin_authed(phone):
+        abort(401)
     safe_phone = phone.replace("+", "").replace(" ", "")
     config_path = OUTPUT_DIR / safe_phone / "tenant_config.json"
     if config_path.exists():
@@ -764,6 +796,9 @@ def verify_location_api():
     phone = data.get("phone", "")
     if phone and not phone.startswith("+"):
         phone = normalize_phone(phone)
+
+    if not _is_tenant_or_admin_authed(phone):
+        abort(401)
 
     # Source-of-truth: load from territory_data.json first
     safe_phone = phone.replace("+", "").replace(" ", "")

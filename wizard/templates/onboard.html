@@ -412,8 +412,9 @@
           </button>
         </div>
         <div class="creds-note">
-          This key is auto-generated and read-only. Supply it as <code>X-Wizard-Key</code> when calling
-          <code>GET /api/config/{{ phone }}</code>. Sysadmin rotation: <code>GET /admin/credentials/{{ phone }}</code>.
+          This key is unique to this tenant and read-only. Supply it as <code>X-Wizard-Key</code> when calling
+          tenant-scoped endpoints such as <code>GET /api/config/{{ phone }}</code> and <code>POST /api/verify-location</code>.
+          It grants access only to this tenant's data. Sysadmin rotation: <code>GET /admin/credentials/{{ phone }}</code>.
         </div>
       </div>
     </div>

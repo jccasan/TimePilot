@@ -190,10 +190,14 @@
             <button type="button" class="btn btn-copy btn-sm" onclick="copyApiKey('{{ api_key }}')">Copy Key</button>
           </div>
           <div class="creds-note">
-            Config API: <code>GET /api/config/{{ phone }}</code> with <code>X-Wizard-Key: &lt;key&gt;</code>
+            This key is unique to this tenant. Supply it as <code>X-Wizard-Key: &lt;key&gt;</code> to access
+            tenant-scoped endpoints. It grants access only to this tenant's data.
           </div>
           <div class="creds-note" style="margin-top:4px">
-            Location check: <code>POST /api/verify-location</code>
+            Config API: <code>GET /api/config/{{ phone }}</code> &mdash; requires <code>X-Wizard-Key</code>
+          </div>
+          <div class="creds-note" style="margin-top:4px">
+            Location check: <code>POST /api/verify-location</code> &mdash; requires <code>X-Wizard-Key</code>
           </div>
         </div>
       </div>
