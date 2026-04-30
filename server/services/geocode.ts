@@ -141,6 +141,16 @@ export async function geocodeAddress(
       const data = await response.json();
       const feature = data.features?.[0];
       if (!feature) {
+        // Primary API returned no results — try Search Box API fallback
+        const sbResult = await trySearchBoxFallback(parts, countryFilter, token);
+        if (sbResult) {
+          geocodeCache.set(cacheKey, { value: sbResult, storedAt: Date.now() });
+          storage.setGeocodeCache(cacheKey, sbResult.latitude, sbResult.longitude).catch((err) => {
+            console.warn("[GeocodeCache] DB write failed:", err instanceof Error ? err.message : err);
+          });
+          trackApiCall("mapbox_searchbox", "geocode");
+          return sbResult;
+        }
         geocodeCache.set(cacheKey, { value: null, storedAt: Date.now() });
         storage.setGeocodeCache(cacheKey, null, null).catch((err) => {
           console.warn("[GeocodeCache] DB write failed:", err instanceof Error ? err.message : err);
@@ -170,4 +180,35 @@ export async function geocodeAddress(
     }
   }
   return null;
+}
+
+async function trySearchBoxFallback(
+  query: string,
+  country: string,
+  token: string
+): Promise<{ latitude: string; longitude: string } | null> {
+  console.log("[Geocode] Falling back to Search Box API");
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      access_token: token,
+      country,
+      types: "address",
+      limit: "1",
+    });
+    const url = `https://api.mapbox.com/search/searchbox/v1/forward?${params}`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = await response.json();
+    const feature = data.features?.[0];
+    if (!feature) return null;
+    const coords = feature.geometry?.coordinates;
+    if (!coords || coords.length < 2) return null;
+    return {
+      latitude: String(coords[1]),
+      longitude: String(coords[0]),
+    };
+  } catch {
+    return null;
+  }
 }

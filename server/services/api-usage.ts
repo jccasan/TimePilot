@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 
-export type ApiProvider = "mapbox" | "openai";
+export type ApiProvider = "mapbox" | "mapbox_searchbox" | "openai";
 export type ApiMetric =
   | "geocode"
   | "autocomplete"
