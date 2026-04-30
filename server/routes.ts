@@ -12310,7 +12310,8 @@ Rules:
       if (contactId) {
         const contact = await storage.getContact(contactId, companyId);
         if (contact?.email && contact.email.toLowerCase() !== senderEmail) {
-          console.warn(`[Inbound Email] Sender mismatch: expected=${contact.email}, got=${senderEmail}, thread=${threadId}`);
+          console.warn(`[Inbound Email] Sender mismatch: expected=${maskEmail(contact.email)}, got=${maskEmail(senderEmail)}, thread=${threadId} — rejecting`);
+          return res.status(200).json({ ok: true });
         }
       }
 
@@ -12489,7 +12490,7 @@ Rules:
         const signature = req.headers["x-retell-signature"] as string | undefined;
         if (!signature) {
           console.warn("[Retell Webhook] Missing x-retell-signature header");
-          return res.status(200).json({ ok: true });
+          return res.status(401).json({ error: "Missing webhook signature" });
         }
         const crypto = await import("crypto");
         const rawBody = (req as any).rawBody || JSON.stringify(req.body);
@@ -12500,10 +12501,14 @@ Rules:
         const expectedBuf = Buffer.from(expectedSignature);
         if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
           console.warn("[Retell Webhook] Signature mismatch");
-          return res.status(200).json({ ok: true });
+          return res.status(401).json({ error: "Invalid webhook signature" });
         }
       } else {
-        console.warn("[Retell Webhook] RETELL_API_KEY not set — skipping signature verification");
+        if (process.env.NODE_ENV === "production") {
+          console.error("[Retell Webhook] RETELL_API_KEY not set in production — rejecting request");
+          return res.status(401).json({ error: "Webhook verification not configured" });
+        }
+        console.warn("[Retell Webhook] RETELL_API_KEY not set — skipping signature verification (dev only)");
       }
 
       const payload = req.body;
