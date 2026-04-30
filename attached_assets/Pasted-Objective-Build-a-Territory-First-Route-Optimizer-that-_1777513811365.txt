@@ -1,0 +1,41 @@
+Objective: Build a "Territory-First" Route Optimizer that clusters stops geographically and automatically assigns them to techs and days to ensure geographic continuity (e.g., all "North Side" stops happen on sequential days).
+
+Technical Requirements:
+
+Phase 1: The Geographic "Big Bang"
+
+Fetch ALL active appointments for the week.
+
+Plot coordinates and use a clustering algorithm (e.g., K-Means) to create "Route Bundles" based on the user-defined Max Stops per Day.
+
+New Logic: After creating the bundles, calculate the Centroid (the geographic center point) of each bundle.
+
+Phase 2: The "Auto-Assign" Button (Regional Continuity)
+
+Implement an "Auto-Pilot Assign" button.
+
+Logic for Day Assignment: * Sort the bundles by their Centroid coordinates (e.g., West to East).
+
+Assign bundles that are geographically adjacent to sequential days on the calendar.
+
+Example: If "Cluster A" and "Cluster B" are both in the West End, the system should automatically assign Cluster A to Monday and Cluster B to Tuesday for the same tech.
+
+Logic for Tech Assignment: Assign bundles in the same general region to the same technician to build "Territory Expertise."
+
+Phase 3: Visual Boundary Verification
+
+Draw Convex Hulls (shaded boundaries) around each cluster on the map using different colors.
+
+This allows the user to see at a glance that Monday and Tuesday (e.g., both Green shades) are on the same side of town, while Wednesday (Blue) moves to the city center.
+
+UI/UX Controls:
+
+Constraint Toggle: "Prioritize Regional Continuity." When ON, the system forces sequential days for adjacent clusters.
+
+"Efficiency Dividend" Stat: Display the reduction in "Inter-Cluster Travel Time"—showing how much time is saved by not driving across town between shifts.
+
+Database Commitment:
+
+Upon user approval ("Commit Flight Plan"), batch update the appointments table with the new scheduled_date and assigned_tech_id.
+
+Visual Style: High-contrast "Mission-Control" aesthetic. Use a "Heatmap" overlay to show the user where their most profitable "Money Zones" are based on the new density clusters.
