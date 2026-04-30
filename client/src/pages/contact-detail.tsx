@@ -1070,7 +1070,7 @@ export default function ContactDetail() {
 
       <RouteAssignmentCard servicePlans={servicePlansForPricing} routes={allRoutes} />
 
-      <ServicePlansCard contactId={id!} contact={contact} properties={properties || []} />
+      <ServicePlansCard contactId={id!} properties={properties || []} />
 
       <Card>
         <CardHeader>
@@ -2201,7 +2201,7 @@ function SuggestionActionRow({
   return null;
 }
 
-function AiSuggestionsPanel({ contactId, onDismiss: _onDismiss }: { contactId: string; onDismiss: () => void }) {
+function AiSuggestionsPanel({ contactId }: { contactId: string }) {
   const [fetchKey, setFetchKey] = useState(0);
   const { data, isLoading, isError, error } = useQuery<{ suggestions: AiSuggestion[] }>({
     queryKey: ["/api/profitability/customer", contactId, "suggestions", fetchKey],
@@ -2475,7 +2475,6 @@ function ProfitabilityIndicator({ contactId, contactStatus }: { contactId: strin
             ) : (
               <AiSuggestionsPanel
                 contactId={contactId}
-                onDismiss={() => setShowSuggestions(false)}
               />
             )}
           </div>
@@ -2664,9 +2663,9 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
     : undefined;
   const matchedServiceName = matchedPricingItem?.name;
 
-  const resolvedCadence = resolveBillingField("cadence", contact.billingCadenceOverride, matchedServiceRule?.billingCadence, systemCadence);
-  const resolvedTrigger = resolveBillingField("trigger", contact.billingTriggerOverride, matchedServiceRule?.billingTrigger, systemTrigger);
-  const resolvedPayment = resolveBillingField("payment", contact.paymentBehaviorOverride, matchedServiceRule?.paymentBehavior, systemBehavior);
+  const resolvedCadence = resolveBillingField(contact.billingCadenceOverride, matchedServiceRule?.billingCadence, systemCadence);
+  const resolvedTrigger = resolveBillingField(contact.billingTriggerOverride, matchedServiceRule?.billingTrigger, systemTrigger);
+  const resolvedPayment = resolveBillingField(contact.paymentBehaviorOverride, matchedServiceRule?.paymentBehavior, systemBehavior);
 
   const saveMutation = useMutation({
     mutationFn: async (data: { billingCadenceOverride: string | null; billingTriggerOverride: string | null; paymentBehaviorOverride: string | null }) => {
@@ -3068,7 +3067,7 @@ function RouteAssignmentCard({ servicePlans, routes }: { servicePlans: ServicePl
   );
 }
 
-function ServicePlansCard({ contactId, contact: _contact, properties }: { contactId: string; contact: Contact; properties: Property[] }) {
+function ServicePlansCard({ contactId, properties }: { contactId: string; properties: Property[] }) {
   const tz = useCompanyTimezone();
   const { toast } = useToast();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
