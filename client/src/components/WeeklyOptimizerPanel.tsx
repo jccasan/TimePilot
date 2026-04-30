@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -146,6 +147,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
   weekStart?: string;
 }) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [respectZones, setRespectZones] = useState(false);
   const [includeSaturday, setIncludeSaturday] = useState(false);
   const [result, setResult] = useState<WeeklyOptResult | null>(null);
@@ -153,7 +155,21 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
   const [notifyCustomers, setNotifyCustomers] = useState(true);
   const [dayByDayOpen, setDayByDayOpen] = useState(false);
   const [applyConfirmPending, setApplyConfirmPending] = useState(false);
-  const [successData, setSuccessData] = useState<{ milesSaved: number; minutesSaved: number } | null>(null);
+  const [successData, setSuccessData] = useState<{
+    milesSaved: number;
+    minutesSaved: number;
+    routesCreated: number;
+    stopsUpdated: number;
+    creditsUsed: number;
+    creditsRemaining: number;
+  } | null>(null);
+
+  const { data: freshCreditData } = useQuery<{ credits: number; weeklyBaseline: number }>({
+    queryKey: ["/api/route-credits"],
+    staleTime: 0,
+    enabled: applyConfirmPending,
+  });
+  const liveCredits = applyConfirmPending && freshCreditData != null ? freshCreditData.credits : credits;
 
   const dollarSavings = result ? Math.round(result.milesSaved * 0.67) : 0;
 
@@ -169,15 +185,6 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
     }
   }, [result]);
 
-  useEffect(() => {
-    if (successData) {
-      const timer = setTimeout(() => {
-        setSuccessData(null);
-        onOpenChange(false);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [successData, onOpenChange]);
 
   const analyzeMutation = useMutation({
     mutationFn: async () => {
@@ -210,11 +217,18 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
       });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
-      setSuccessData({ milesSaved: result!.milesSaved, minutesSaved: result!.minutesSaved });
+      setSuccessData({
+        milesSaved: result!.milesSaved,
+        minutesSaved: result!.minutesSaved,
+        routesCreated: data.routesCreated ?? 0,
+        stopsUpdated: data.stopsUpdated ?? 0,
+        creditsUsed: data.creditsUsed ?? 0,
+        creditsRemaining: data.creditsRemaining ?? 0,
+      });
     },
     onError: (err: Error) => {
       if (err.message.includes("Insufficient")) {
@@ -261,13 +275,36 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
             </div>
             <div className="text-center space-y-2">
               <p className="text-xl font-semibold">Optimization Applied</p>
-              <p className="text-muted-foreground text-sm" data-testid="text-success-summary">
-                Saved {successData.milesSaved} miles · {formatMinutes(successData.minutesSaved)} this week
+              <p className="text-foreground font-medium" data-testid="text-success-summary">
+                {successData.routesCreated > 0
+                  ? `${successData.routesCreated} route${successData.routesCreated !== 1 ? "s" : ""} created`
+                  : "Routes updated"
+                } · {successData.stopsUpdated} stop{successData.stopsUpdated !== 1 ? "s" : ""} reassigned
               </p>
+              {(successData.milesSaved > 0 || successData.minutesSaved > 0) && (
+                <p className="text-muted-foreground text-sm" data-testid="text-success-savings">
+                  {successData.milesSaved > 0 && `${successData.milesSaved} miles saved`}
+                  {successData.milesSaved > 0 && successData.minutesSaved > 0 && " · "}
+                  {successData.minutesSaved > 0 && `${formatMinutes(successData.minutesSaved)} saved this week`}
+                </p>
+              )}
+              {successData.creditsUsed > 0 && (
+                <p className="text-xs text-muted-foreground" data-testid="text-success-credits">
+                  {successData.creditsUsed} credit{successData.creditsUsed !== 1 ? "s" : ""} used · {successData.creditsRemaining} remaining
+                </p>
+              )}
             </div>
-            <Button variant="outline" size="sm" onClick={() => { setSuccessData(null); onOpenChange(false); }} data-testid="button-close-success">
-              Close
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => { setSuccessData(null); onOpenChange(false); navigate("/routes"); }}
+                data-testid="button-view-routes"
+              >
+                View Routes
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => { setSuccessData(null); onOpenChange(false); }} data-testid="button-close-success">
+                Close
+              </Button>
+            </div>
           </div>
         ) : !result ? (
           <div className="space-y-6 py-4">
@@ -546,9 +583,20 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
         {result && !successData && (
           <>
             <Separator className="mt-2" />
+            {applyConfirmPending && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-2.5 text-sm flex items-center gap-2" data-testid="banner-credit-confirm">
+                <span className="text-amber-700 dark:text-amber-400">
+                  This will use{" "}
+                  <span className="font-semibold" data-testid="text-confirm-credits-cost">{weeklyBaseline}</span>
+                  {" "}credit{weeklyBaseline !== 1 ? "s" : ""}. You currently have{" "}
+                  <span className="font-semibold" data-testid="text-confirm-credits-balance">{liveCredits}</span>
+                  {" "}remaining.
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-3 pt-2" data-testid="dialog-confirm-apply-weekly">
               <div className="text-sm text-muted-foreground flex flex-col gap-0.5">
-                {credits !== Infinity && acceptedDays.size > 0 && (
+                {credits !== Infinity && acceptedDays.size > 0 && !applyConfirmPending && (
                   <>
                     <span>
                       <span className="font-semibold text-foreground" data-testid="text-credits-required">{weeklyBaseline}</span>
@@ -577,7 +625,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
                 </Button>
                 <Button
                   onClick={handleApplyClick}
-                  disabled={acceptedDays.size === 0 || acceptedCredits > credits || applyMutation.isPending}
+                  disabled={acceptedDays.size === 0 || acceptedCredits > liveCredits || applyMutation.isPending}
                   data-testid={applyConfirmPending ? "button-confirm-apply" : "button-apply-plan"}
                   className={applyConfirmPending ? "bg-green-600 hover:bg-green-700 text-white" : ""}
                 >
@@ -588,12 +636,12 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, weeklyBaseli
                   ) : (
                     <Sparkles className="h-4 w-4 mr-1" />
                   )}
-                  {acceptedCredits > credits
+                  {acceptedCredits > liveCredits
                     ? "Not Enough Credits"
                     : applyMutation.isPending
                     ? "Applying..."
                     : applyConfirmPending
-                    ? "Confirm Apply"
+                    ? `Confirm — costs ${weeklyBaseline} credit${weeklyBaseline !== 1 ? "s" : ""}`
                     : "Apply Optimization"}
                 </Button>
               </div>
