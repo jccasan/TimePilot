@@ -234,11 +234,12 @@ async function computeDayMetrics(
 async function splitIntoSubRoutes(
   stops: WeeklyStop[],
   day: string,
-  startPoint?: StartPoint
+  startPoint?: StartPoint,
+  maxStops: number = MAX_STOPS_PER_ROUTE
 ): Promise<ProposedRoute[]> {
   if (stops.length === 0) return [];
 
-  if (stops.length <= MAX_STOPS_PER_ROUTE) {
+  if (stops.length <= maxStops) {
     const optimizedStops = await optimizeStopOrder(stops, startPoint);
     const metrics = await computeDayMetrics(optimizedStops, startPoint);
     return [{
@@ -251,7 +252,7 @@ async function splitIntoSubRoutes(
     }];
   }
 
-  const numRoutes = Math.ceil(stops.length / MAX_STOPS_PER_ROUTE);
+  const numRoutes = Math.ceil(stops.length / maxStops);
   const clusters = kMeansClustering(stops, numRoutes);
 
   return Promise.all(clusters.map(async (cluster, idx) => {
@@ -318,7 +319,7 @@ export async function analyzeWeeklySchedule(
 
   for (const day of activeDays) {
     const dayStops = currentByDay.get(day) || [];
-    const routes = await splitIntoSubRoutes(dayStops, day, startPoint);
+    const routes = await splitIntoSubRoutes(dayStops, day, startPoint, maxStopsPerDay);
     const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
     const totalMinutes = routes.reduce((s, r) => s + r.estimatedMinutes, 0);
     currentDays.push({
@@ -342,7 +343,7 @@ export async function analyzeWeeklySchedule(
     for (const day of activeDays) {
       const dayStops = proposedByDay.get(day) || [];
       for (const stop of dayStops) proposedStopDayMap.set(stop.servicePlanId, day);
-      const routes = await splitIntoSubRoutes(dayStops, day, startPoint);
+      const routes = await splitIntoSubRoutes(dayStops, day, startPoint, maxStopsPerDay);
       const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
       const totalMinutes = routes.reduce((s, r) => s + r.estimatedMinutes, 0);
       proposedDays.push({
@@ -364,7 +365,7 @@ export async function analyzeWeeklySchedule(
 
       const routes: ProposedRoute[] = [];
       for (const cluster of dayClusters) {
-        const subRoutes = await splitIntoSubRoutes(cluster, day, startPoint);
+        const subRoutes = await splitIntoSubRoutes(cluster, day, startPoint, maxStopsPerDay);
         routes.push(...subRoutes);
       }
 
