@@ -76,7 +76,7 @@ type EmptyWeekEntry = WeekMeta & { empty: true; reason: string };
 type NonEmptyWeekEntry = WeekMeta & { empty: false } & WeeklyOptResult;
 type MultiWeekEntry = EmptyWeekEntry | NonEmptyWeekEntry;
 
-type MultiWeekResult = { weeks: MultiWeekEntry[] };
+type MultiWeekResult = { weeks: MultiWeekEntry[]; existingTechAssignments?: Record<string, string | null> };
 
 type TeamMember = { id: string; companyUserId: string; role: string; firstName: string; lastName: string; email: string };
 
@@ -266,6 +266,24 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
       );
       setAcceptedWeeks(initialAccepted);
       setApplyConfirmPending(false);
+
+      // Pre-fill tech assignments from existing recurring routes.
+      // Only the first (index-0) proposed route per day maps to the first existing
+      // DB route (same selection logic as apply-weekly-plan). Always reset state so
+      // stale values from a previous analysis don't carry over.
+      const prefilled: Record<string, string> = {};
+      if (data.existingTechAssignments) {
+        for (const week of data.weeks) {
+          if (week.empty) continue;
+          for (const day of week.proposed.days) {
+            const techId = data.existingTechAssignments[day.day];
+            if (!techId || day.routes.length === 0) continue;
+            const firstRoute = day.routes[0];
+            prefilled[`${week.weekStart}|${day.day}|${firstRoute.routeLabel}`] = techId;
+          }
+        }
+      }
+      setTechAssignments(prefilled);
     },
     onError: (err: Error) => {
       const gErr = err as GeocodeFailureError;

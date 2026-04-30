@@ -5865,7 +5865,22 @@ Return ONLY valid JSON, no markdown.`,
           });
       }
 
-      res.json({ weeks: weekResults });
+      // Build a map of existing recurring-route tech assignments (dayOfWeek → technicianId | null)
+      // so the frontend can pre-fill the first route's dropdown for each proposed day.
+      // Uses the same route-selection criteria as apply-weekly-plan (dayOfWeek, no date, not locked),
+      // and picks the first match per day using the same unsorted getRoutes() output so the
+      // "first" route is consistent between prefill and the apply handler.
+      const allExistingRoutes = await storage.getRoutes(companyId);
+      const existingTechAssignments: Record<string, string | null> = {};
+      for (const r of allExistingRoutes) {
+        if (!r.dayOfWeek || r.date || r.isLocked) continue;
+        // Only record the first match per day (same as apply-weekly-plan's .find() call)
+        if (!(r.dayOfWeek in existingTechAssignments)) {
+          existingTechAssignments[r.dayOfWeek] = r.technicianId ?? null;
+        }
+      }
+
+      res.json({ weeks: weekResults, existingTechAssignments });
     } catch (err) { handleError(res, err); }
   });
 
@@ -5970,23 +5985,24 @@ Return ONLY valid JSON, no markdown.`,
           const hasTechAssignment = techKey in techAssignmentsMap;
           const assignedTechId = hasTechAssignment ? (techAssignmentsMap[techKey] || null) : undefined;
 
-          let existingRoute = dayRouteIdx === 0
+          let existingRoute: typeof existingRoutes[number] | undefined = dayRouteIdx === 0
             ? existingRoutes.find(r => r.dayOfWeek === day && !r.date && !r.isLocked)
-            : null;
+            : undefined;
+          const resolvedTechId: string | null = assignedTechId ?? null;
           if (!existingRoute) {
             const newRoute = await storage.createRoute({
               companyId,
               name: routeLabel,
               dayOfWeek: day,
               color: ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6"][routesCreated % 5],
-              ...(hasTechAssignment ? { technicianId: assignedTechId } : {}),
+              ...(hasTechAssignment ? { technicianId: resolvedTechId } : {}),
             });
             existingRoute = newRoute;
             existingRoutes.push(newRoute);
             routesCreated++;
           } else if (hasTechAssignment) {
-            await storage.updateRoute(existingRoute.id, companyId, { technicianId: assignedTechId });
-            existingRoute = { ...existingRoute, technicianId: assignedTechId ?? null };
+            await storage.updateRoute(existingRoute.id, companyId, { technicianId: resolvedTechId });
+            existingRoute = { ...existingRoute, technicianId: resolvedTechId };
           }
           dayRouteIdx++;
           affectedRouteIds.add(existingRoute!.id);
