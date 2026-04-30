@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  DollarSign, Users, TrendingUp, TrendingDown, CheckCircle,
-  Sparkles, Loader2, AlertTriangle, Minus, Activity, LayoutDashboard, ArrowUp, ArrowDown, Printer,
+  DollarSign, Users, TrendingUp, CheckCircle,
+  Sparkles, Loader2, AlertTriangle, Minus, LayoutDashboard, ArrowUp, ArrowDown, Printer,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,

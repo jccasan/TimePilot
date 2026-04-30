@@ -3608,10 +3608,6 @@ export default function Settings() {
   });
   const isDemo = !!demoStatusData?.isDemo;
 
-  const availableSettingsBlockDefs = useMemo(
-    () => SETTINGS_BLOCK_DEFS.filter(b => isDemo || b.id !== "demo_mode"),
-    [isDemo]
-  );
   const availableSettingsBlockIds = useMemo(
     () => DEFAULT_SETTINGS_BLOCK_IDS.filter(id => isDemo || id !== "demo_mode"),
     [isDemo]

@@ -63,10 +63,6 @@ function nextFrequency(freq: string): string | null {
   return null;
 }
 
-function centsToDisplay(cents: number): string {
-  return `$${(Math.abs(cents) / 100).toFixed(2)}`;
-}
-
 export async function generateProfitabilitySuggestions(
   companyId: string,
   contactId: string

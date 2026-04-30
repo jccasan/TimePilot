@@ -57,21 +57,6 @@ export async function fetchDriveTimeMatrix(
   }
 }
 
-/**
- * Build a TimeDistMap from a raw N×N duration matrix (in minutes).
- * `ids` must have the same length as the matrix dimension.
- */
-function buildTimeDistMap(ids: string[], matrix: number[][]): TimeDistMap {
-  const map: TimeDistMap = new Map();
-  for (let i = 0; i < ids.length; i++) {
-    const inner = new Map<string, number>();
-    for (let j = 0; j < ids.length; j++) {
-      if (i !== j) inner.set(ids[j], matrix[i][j]);
-    }
-    map.set(ids[i], inner);
-  }
-  return map;
-}
 
 /** Look up drive-time distance between two stops; falls back to haversine. */
 function getDist(

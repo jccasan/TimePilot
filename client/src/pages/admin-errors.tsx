@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 import { queryClient } from "@/lib/queryClient";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -232,7 +231,6 @@ export default function AdminErrors() {
   });
 
   const isLoading = viewMode === "all" ? allLoading : groupedLoading;
-  const reports = viewMode === "all" ? allReports : [];
   const hasNextPage = viewMode === "all" ? allReports.length === PAGE_SIZE : groupedReports.length === PAGE_SIZE;
 
   const selected = selectedId
@@ -263,16 +261,6 @@ export default function AdminErrors() {
       setSelectedId(null);
       setExpandedGroups(new Set());
     };
-  }
-
-  function resetFilters() {
-    setStatusFilter("all");
-    setSeverityFilter("all");
-    setFromDate("");
-    setToDate("");
-    setPage(0);
-    setSelectedId(null);
-    setExpandedGroups(new Set());
   }
 
   function toggleGroup(message: string) {

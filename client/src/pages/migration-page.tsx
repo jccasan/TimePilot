@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { ImportWizard } from "@/components/import-wizard";
-import { ImportJobProgress, type ImportJobStatus } from "@/components/import-job-progress";
+import { ImportJobProgress } from "@/components/import-job-progress";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";

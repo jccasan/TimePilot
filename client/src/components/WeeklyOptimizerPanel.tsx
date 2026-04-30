@@ -155,7 +155,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
     creditsRemaining: number;
     weekResults: WeekApplyStatus[];
   } | null>(null);
-  const [prevSuccessData, setPrevSuccessData] = useState<typeof successData>(null);
+  const [, setPrevSuccessData] = useState<typeof successData>(null);
   const [geocodeError, setGeocodeError] = useState<{
     message: string;
     failedStops: UngeocodedStop[];

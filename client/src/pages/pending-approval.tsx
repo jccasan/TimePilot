@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,6 @@ import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 export default function PendingApproval() {
   const { logout, isLoggingOut } = useAuth();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
