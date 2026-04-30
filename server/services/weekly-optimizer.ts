@@ -632,7 +632,8 @@ const MAX_STOPS_PER_ROUTE_ASSIGN = 50;
 export async function assignNewStopsToRoutes(
   newStops: NewStopInput[],
   existingRoutes: ExistingRouteInfo[],
-  createRouteFn: (name: string, day: string) => Promise<{ id: string; name: string }>
+  createRouteFn: (name: string, day: string) => Promise<{ id: string; name: string }>,
+  maxStops: number = MAX_STOPS_PER_ROUTE_ASSIGN
 ): Promise<AssignStopsResult> {
   const routeMap = new Map<string, ExistingRouteInfo & { mutable: true }>(
     existingRoutes.map(r => [r.id, { ...r, mutable: true as const }])
@@ -656,7 +657,7 @@ export async function assignNewStopsToRoutes(
       if (stop.lat !== null && stop.lng !== null) {
         let bestDist = Infinity;
         for (const route of dayRoutes) {
-          if (route.stopCount >= MAX_STOPS_PER_ROUTE_ASSIGN) continue;
+          if (route.stopCount >= maxStops) continue;
           if (route.stopCoords.length === 0) {
             if (bestDist === Infinity) bestRouteId = route.id;
             continue;
@@ -668,7 +669,7 @@ export async function assignNewStopsToRoutes(
         }
       } else {
         const leastFull = dayRoutes
-          .filter(r => r.stopCount < MAX_STOPS_PER_ROUTE_ASSIGN)
+          .filter(r => r.stopCount < maxStops)
           .sort((a, b) => a.stopCount - b.stopCount)[0];
         if (leastFull) bestRouteId = leastFull.id;
       }

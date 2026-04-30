@@ -6412,6 +6412,7 @@ Return ONLY valid JSON, no markdown.`,
 
       if (autoAssign && createdPlans.length > 0) {
         const { assignNewStopsToRoutes } = await import("./services/weekly-optimizer");
+        const company = await storage.getCompany(companyId);
 
         const allExistingPlans = await storage.getServicePlans(companyId);
         const existingPlansByRoute = new Map<string, number>();
@@ -6466,7 +6467,8 @@ Return ONLY valid JSON, no markdown.`,
               dayOfWeek: day as DayOfWeekValue,
             });
             return { id: created.id, name: created.name };
-          }
+          },
+          company?.maxStopsPerRoute ?? undefined
         );
 
         routesCreated = newRoutes.length;
