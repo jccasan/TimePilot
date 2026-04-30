@@ -155,6 +155,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
     creditsRemaining: number;
     weekResults: WeekApplyStatus[];
   } | null>(null);
+  const [prevSuccessData, setPrevSuccessData] = useState<typeof successData>(null);
   const [geocodeError, setGeocodeError] = useState<{
     message: string;
     failedStops: UngeocodedStop[];
@@ -214,7 +215,19 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
     setApplyConfirmPending(false);
     setWeekApplyStatuses([]);
     setSuccessData(null);
+    setPrevSuccessData(null);
     setGeocodeError(null);
+  }
+
+  function handleRetryFailed() {
+    if (!successData) return;
+    const failedWeekStarts = new Set(
+      successData.weekResults.filter(w => w.status === "error").map(w => w.weekStart)
+    );
+    setPrevSuccessData(successData);
+    setSuccessData(null);
+    setWeekApplyStatuses([]);
+    applyMutation.mutate({ weekStartsOverride: failedWeekStarts });
   }
 
   const analyzeMutation = useMutation({
@@ -265,10 +278,11 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
   });
 
   const applyMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts?: { weekStartsOverride?: Set<string> }) => {
       if (!multiWeekResult) throw new Error("No result to apply");
+      const effectiveWeekStarts = opts?.weekStartsOverride ?? acceptedWeeks;
       const weeksToApply = multiWeekResult.weeks.filter(
-        (w): w is NonEmptyWeekEntry => !w.empty && acceptedWeeks.has(w.weekStart)
+        (w): w is NonEmptyWeekEntry => !w.empty && effectiveWeekStarts.has(w.weekStart)
       );
 
       const initialStatuses: WeekApplyStatus[] = weeksToApply.map(w => ({
@@ -328,7 +342,8 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
       const weeksApplied = finalStatuses.filter(s => s.status === "success").length;
 
       if (creditShortfallDetected) {
-        onNeedCredits(Math.max(0, totalAcceptedCredits - credits));
+        const thisRunCreditsRequired = weeksToApply.reduce((acc, w) => acc + w.creditsRequired, 0);
+        onNeedCredits(Math.max(0, thisRunCreditsRequired - credits));
       }
 
       return { weeksApplied, weeksFailed, totalRoutesCreated, totalStopsUpdated, totalCreditsUsed, totalCreditsRemaining, weekResults: finalStatuses };
@@ -338,19 +353,43 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
       setApplyConfirmPending(false);
-      setSuccessData({
-        weeksApplied: data.weeksApplied,
-        weeksFailed: data.weeksFailed,
-        routesCreated: data.totalRoutesCreated,
-        stopsUpdated: data.totalStopsUpdated,
-        creditsUsed: data.totalCreditsUsed,
-        creditsRemaining: data.totalCreditsRemaining,
-        weekResults: data.weekResults,
+
+      setPrevSuccessData(prev => {
+        if (prev) {
+          const retryResultsByWeek = new Map(data.weekResults.map(r => [r.weekStart, r]));
+          const mergedWeekResults = prev.weekResults.map(r =>
+            retryResultsByWeek.has(r.weekStart) ? retryResultsByWeek.get(r.weekStart)! : r
+          );
+          setSuccessData({
+            weeksApplied: prev.weeksApplied + data.weeksApplied,
+            weeksFailed: data.weeksFailed,
+            routesCreated: prev.routesCreated + data.totalRoutesCreated,
+            stopsUpdated: prev.stopsUpdated + data.totalStopsUpdated,
+            creditsUsed: prev.creditsUsed + data.totalCreditsUsed,
+            creditsRemaining: data.totalCreditsRemaining,
+            weekResults: mergedWeekResults,
+          });
+          return null;
+        }
+        setSuccessData({
+          weeksApplied: data.weeksApplied,
+          weeksFailed: data.weeksFailed,
+          routesCreated: data.totalRoutesCreated,
+          stopsUpdated: data.totalStopsUpdated,
+          creditsUsed: data.totalCreditsUsed,
+          creditsRemaining: data.totalCreditsRemaining,
+          weekResults: data.weekResults,
+        });
+        return null;
       });
     },
     onError: (err: Error) => {
       setWeekApplyStatuses([]);
       setApplyConfirmPending(false);
+      setPrevSuccessData(prev => {
+        if (prev) setSuccessData(prev);
+        return null;
+      });
       if (!err.message.includes("Insufficient")) {
         toast({ title: "Failed to apply plan", description: err.message, variant: "destructive" });
       }
@@ -362,7 +401,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
       setApplyConfirmPending(true);
       return;
     }
-    applyMutation.mutate();
+    applyMutation.mutate(undefined);
   };
 
   return (
@@ -490,7 +529,18 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
                 ))}
               </div>
             )}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap justify-center">
+              {successData.weeksFailed > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={handleRetryFailed}
+                  disabled={applyMutation.isPending}
+                  data-testid="button-retry-failed-weeks"
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Retry Failed Week{successData.weeksFailed !== 1 ? "s" : ""}
+                </Button>
+              )}
               <Button onClick={() => { resetAll(); onOpenChange(false); navigate("/routes"); }} data-testid="button-view-routes">
                 View Routes
               </Button>
