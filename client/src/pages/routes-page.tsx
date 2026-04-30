@@ -147,7 +147,7 @@ function LegSeparator({ distance, duration }: { distance: number; duration: numb
   );
 }
 
-function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, updatingVisitStatus, onStopClick, onOnMyWay, onMyWaySendingId, onSelectStop, isSelected, isHighlighted }: {
+function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, updatingVisitStatus, onStopClick, onOnMyWay, onMyWaySendingId, onSelectStop, isSelected, isHighlighted, displayIndex }: {
   stop: ServicePlan; contacts: Contact[]; properties: Property[];
   visit?: Visit | null; onVisitStatusChange?: (visitId: string, status: string) => void;
   updatingVisitId?: string | null;
@@ -158,6 +158,7 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
   onSelectStop?: (stopId: string) => void;
   isSelected?: boolean;
   isHighlighted?: boolean;
+  displayIndex?: number;
 }) {
   const contact = contacts.find(c => c.id === stop.contactId);
   const property = properties.find(p => p.id === stop.propertyId);
@@ -207,9 +208,9 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
                   One-Time
                 </Badge>
               )}
-              {stop.stopOrder > 0 && (
+              {displayIndex != null && (
                 <Badge variant="outline" className="text-[10px]" data-testid={`badge-stop-order-${stop.id}`}>
-                  #{stop.stopOrder}
+                  #{displayIndex}
                 </Badge>
               )}
               {onSelectStop && (
@@ -543,6 +544,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
                     onSelectStop={onSelectStop}
                     isSelected={selectedStopId === stop.id}
                     isHighlighted={highlightedStopIds?.has(stop.id)}
+                    displayIndex={idx + 1}
                   />
                 </div>
               );
