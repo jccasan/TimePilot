@@ -5986,10 +5986,10 @@ Return ONLY valid JSON, no markdown.`,
             routesCreated++;
           } else if (hasTechAssignment) {
             await storage.updateRoute(existingRoute.id, companyId, { technicianId: assignedTechId });
-            existingRoute = { ...existingRoute, technicianId: assignedTechId };
+            existingRoute = { ...existingRoute, technicianId: assignedTechId ?? null };
           }
           dayRouteIdx++;
-          affectedRouteIds.add(existingRoute.id);
+          affectedRouteIds.add(existingRoute!.id);
 
           for (let sIdx = 0; sIdx < validStops.length; sIdx++) {
             const stop = validStops[sIdx];
@@ -5997,7 +5997,7 @@ Return ONLY valid JSON, no markdown.`,
             const planBefore = companyPlans.find(p => p.id === spId);
             if (planBefore?.routeId) affectedRouteIds.add(planBefore.routeId);
             await storage.updateServicePlan(spId, companyId, {
-              routeId: existingRoute.id,
+              routeId: existingRoute!.id,
               dayOfWeek: day,
               stopOrder: sIdx + 1,
             });

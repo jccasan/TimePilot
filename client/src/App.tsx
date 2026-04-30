@@ -668,6 +668,43 @@ function isChunkLoadError(error: Error | null): boolean {
   );
 }
 
+function UpdateBanner() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setVisible(true);
+    window.addEventListener("app:update-available", handler);
+    return () => window.removeEventListener("app:update-available", handler);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      data-testid="update-banner"
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-lg border bg-background shadow-lg px-4 py-3 text-sm"
+      style={{ maxWidth: "calc(100vw - 2rem)" }}
+    >
+      <span className="text-foreground font-medium">A new version is available.</span>
+      <button
+        data-testid="update-banner-reload"
+        onClick={() => window.location.reload()}
+        className="rounded-md bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+      >
+        Reload
+      </button>
+      <button
+        data-testid="update-banner-dismiss"
+        onClick={() => setVisible(false)}
+        className="ml-1 text-muted-foreground hover:text-foreground transition-colors"
+        aria-label="Dismiss"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 class ErrorBoundary extends Component<
   { children: ReactNode },
   { hasError: boolean; error: Error | null }
@@ -693,11 +730,7 @@ class ErrorBoundary extends Component<
       }).catch(() => {});
     }
     if (isChunkLoadError(error)) {
-      const key = "scoopilot_chunk_reload";
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, "1");
-        window.location.reload();
-      }
+      window.dispatchEvent(new Event("app:update-available"));
     }
   }
 
@@ -705,35 +738,48 @@ class ErrorBoundary extends Component<
     if (this.state.hasError) {
       if (isChunkLoadError(this.state.error)) {
         return (
-          <div style={{ padding: 40, fontFamily: "sans-serif" }}>
-            <h1 style={{ color: "#dc2626" }}>Something went wrong</h1>
-            <p style={{ color: "#333", marginTop: 16 }}>
-              A new version of the app is available. Click below to refresh.
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              style={{ marginTop: 16, padding: "8px 16px", cursor: "pointer" }}
-            >
-              Reload
-            </button>
+          <div className="flex min-h-screen items-center justify-center bg-background p-8">
+            <div className="max-w-md text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                <svg className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+              <h1 className="text-xl font-semibold text-foreground">A new version is available</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                The app has been updated. Reload to get the latest version.
+              </p>
+              <button
+                data-testid="chunk-error-reload"
+                onClick={() => window.location.reload()}
+                className="mt-6 rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+              >
+                Reload now
+              </button>
+            </div>
           </div>
         );
       }
       return (
-        <div style={{ padding: 40, fontFamily: "sans-serif" }}>
-          <h1 style={{ color: "#dc2626" }}>Something went wrong</h1>
-          <pre style={{ whiteSpace: "pre-wrap", color: "#333", marginTop: 16 }}>
-            {this.state.error?.message}
-          </pre>
-          <pre style={{ whiteSpace: "pre-wrap", color: "#666", fontSize: 12, marginTop: 8 }}>
-            {this.state.error?.stack}
-          </pre>
-          <button
-            onClick={() => window.location.reload()}
-            style={{ marginTop: 16, padding: "8px 16px", cursor: "pointer" }}
-          >
-            Reload
-          </button>
+        <div className="flex min-h-screen items-center justify-center bg-background p-8">
+          <div className="max-w-md text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+              <svg className="h-6 w-6 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h1 className="text-xl font-semibold text-foreground">Something went wrong</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {this.state.error?.message || "An unexpected error occurred."}
+            </p>
+            <button
+              data-testid="generic-error-reload"
+              onClick={() => window.location.reload()}
+              className="mt-6 rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+            >
+              Reload
+            </button>
+          </div>
         </div>
       );
     }
@@ -742,10 +788,6 @@ class ErrorBoundary extends Component<
 }
 
 function App() {
-  useEffect(() => {
-    sessionStorage.removeItem("scoopilot_chunk_reload");
-  }, []);
-
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
@@ -754,6 +796,7 @@ function App() {
             <AppContent />
             <Toaster />
             <PwaInstallPrompt />
+            <UpdateBanner />
           </TooltipProvider>
         </ThemeProvider>
       </QueryClientProvider>

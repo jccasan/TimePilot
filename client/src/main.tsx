@@ -4,7 +4,7 @@ import "./index.css";
 import { reportError } from "./lib/errorReporter";
 
 window.addEventListener("vite:preloadError", () => {
-  window.location.reload();
+  window.dispatchEvent(new Event("app:update-available"));
 });
 
 window.onerror = function (message, _source, _lineno, _colno, error) {
