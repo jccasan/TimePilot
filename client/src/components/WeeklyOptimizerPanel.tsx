@@ -289,10 +289,21 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
 
         try {
           const daysWithStops = week.proposed.days.filter(d => d.totalStops > 0);
+          const weekTechAssignments: Record<string, string> = {};
+          for (const [key, userId] of Object.entries(techAssignments)) {
+            const parts = key.split("|");
+            const keyWeekStart = parts[0];
+            const keyDay = parts[1];
+            const keyRouteLabel = parts.slice(2).join("|");
+            if (keyWeekStart === week.weekStart) {
+              weekTechAssignments[`${keyDay}|${keyRouteLabel}`] = userId;
+            }
+          }
           const res = await apiRequest("POST", "/api/routes/apply-weekly-plan", {
             acceptedDays: daysWithStops.map(d => d.day),
             proposedDays: daysWithStops,
             notifyCustomers,
+            techAssignments: weekTechAssignments,
           });
           if (!res.ok) {
             const errData = await res.json().catch(() => ({}));

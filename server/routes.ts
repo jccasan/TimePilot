@@ -5879,7 +5879,8 @@ Return ONLY valid JSON, no markdown.`,
       type PlanRoute = { routeLabel?: string; stops?: PlanStop[] };
       type DayPlan = { day: DayOfWeekValue; routes: PlanRoute[] };
 
-      const { acceptedDays, proposedDays } = req.body;
+      const { acceptedDays, proposedDays, techAssignments } = req.body;
+      const techAssignmentsMap: Record<string, string> = (techAssignments && typeof techAssignments === "object") ? techAssignments : {};
       if (!proposedDays || !Array.isArray(proposedDays)) {
         return res.status(400).json({ error: "proposedDays is required" });
       }
@@ -5965,6 +5966,9 @@ Return ONLY valid JSON, no markdown.`,
           if (validStops.length === 0) continue;
 
           const routeLabel = proposedRoute.routeLabel || `${day.charAt(0).toUpperCase() + day.slice(1)} Route`;
+          const techKey = `${day}|${routeLabel}`;
+          const hasTechAssignment = techKey in techAssignmentsMap;
+          const assignedTechId = hasTechAssignment ? (techAssignmentsMap[techKey] || null) : undefined;
 
           let existingRoute = dayRouteIdx === 0
             ? existingRoutes.find(r => r.dayOfWeek === day && !r.date && !r.isLocked)
@@ -5975,10 +5979,14 @@ Return ONLY valid JSON, no markdown.`,
               name: routeLabel,
               dayOfWeek: day,
               color: ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6"][routesCreated % 5],
+              ...(hasTechAssignment ? { technicianId: assignedTechId } : {}),
             });
             existingRoute = newRoute;
             existingRoutes.push(newRoute);
             routesCreated++;
+          } else if (hasTechAssignment) {
+            await storage.updateRoute(existingRoute.id, companyId, { technicianId: assignedTechId });
+            existingRoute = { ...existingRoute, technicianId: assignedTechId };
           }
           dayRouteIdx++;
           affectedRouteIds.add(existingRoute.id);
