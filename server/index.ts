@@ -410,6 +410,7 @@ async function ensureCompanyColumns() {
     await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS dump_fee DECIMAL(10,2)`);
     await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS crew_size INTEGER`);
     await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS site_sqft INTEGER`);
+    await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS quote_token VARCHAR(36) UNIQUE`);
     console.log("[Migration] Quotes table verified");
     console.log("[Migration] Company voice columns verified");
     await pool.query(`
@@ -427,6 +428,7 @@ async function ensureCompanyColumns() {
     console.log("[Migration] Business onboarding columns verified");
     await pool.query(`
       ALTER TABLE properties ADD COLUMN IF NOT EXISTS onboarding_token VARCHAR(36) UNIQUE;
+      ALTER TABLE properties ADD COLUMN IF NOT EXISTS onboarding_token_expires_at TIMESTAMP;
       ALTER TABLE properties ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMP;
       ALTER TABLE properties ADD COLUMN IF NOT EXISTS dog_names TEXT;
       ALTER TABLE properties ADD COLUMN IF NOT EXISTS dog_breeds TEXT;
