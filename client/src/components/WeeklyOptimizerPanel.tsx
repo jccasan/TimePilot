@@ -135,6 +135,16 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
   monthlyAllowance?: number;
   onNeedCredits: (topUpNeeded: number) => void;
 }) {
+  const TECH_ASSIGNMENTS_KEY = (() => {
+    try {
+      const token = localStorage.getItem("sessionToken");
+      const suffix = token ? `_${token.slice(0, 12)}` : "";
+      return `routePlanner_techAssignments${suffix}`;
+    } catch {
+      return "routePlanner_techAssignments";
+    }
+  })();
+
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [respectZones, setRespectZones] = useState(false);
@@ -200,7 +210,11 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
 
   function setTechForRoute(weekStart: string, day: string, routeLabel: string, userId: string) {
     const key = `${weekStart}|${day}|${routeLabel}`;
-    setTechAssignments(prev => ({ ...prev, [key]: userId }));
+    setTechAssignments(prev => {
+      const next = { ...prev, [key]: userId };
+      try { localStorage.setItem(TECH_ASSIGNMENTS_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
   }
 
   function getTechForRoute(weekStart: string, day: string, routeLabel: string): string {
@@ -283,6 +297,20 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
           }
         }
       }
+      // Merge any manually saved overrides from localStorage (they take priority over API defaults).
+      try {
+        const saved = localStorage.getItem(TECH_ASSIGNMENTS_KEY);
+        if (saved) {
+          const savedAssignments = JSON.parse(saved) as Record<string, string>;
+          const validWeekStarts = new Set(data.weeks.map(w => w.weekStart));
+          for (const [key, userId] of Object.entries(savedAssignments)) {
+            const weekStart = key.split("|")[0];
+            if (validWeekStarts.has(weekStart) && userId) {
+              prefilled[key] = userId;
+            }
+          }
+        }
+      } catch {}
       setTechAssignments(prefilled);
     },
     onError: (err: Error) => {
@@ -370,6 +398,9 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
+      if (data.weeksFailed === 0) {
+        try { localStorage.removeItem(TECH_ASSIGNMENTS_KEY); } catch {}
+      }
       setApplyConfirmPending(false);
 
       setPrevSuccessData(prev => {
