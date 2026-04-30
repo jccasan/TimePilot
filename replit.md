@@ -81,6 +81,14 @@ The scheduling data model is refactored into three layers: `agreements` (billing
 
 ## CI / Quality Gates
 
+### Auto-Fix (`fix-all`)
+
+Run ESLint with auto-fix and then Prettier write in a single step, correcting all automatically fixable issues:
+
+- **Run command**: `npx eslint . --fix && npx prettier --write .`
+- **Registered as**: validation command `fix-all`
+- Applies ESLint's auto-fixable rule corrections first, then reformats every file with Prettier. Use this before running a check command to clear as many issues as possible automatically.
+
 ### Combined Check (`check-all`) — Sequential
 
 Run all three quality gates in sequence — stops on the first failure:

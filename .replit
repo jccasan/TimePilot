@@ -67,6 +67,10 @@ args = "check-all"
 task = "workflow.run"
 args = "check-all-parallel"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "fix-all"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -160,6 +164,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npx concurrently --raw \"npx eslint .\" \"npx tsc --noEmit\" \"npx prettier --check .\""
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "fix-all"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx eslint . --fix && npx prettier --write ."
 
 [workflows.workflow.metadata]
 isValidation = true
