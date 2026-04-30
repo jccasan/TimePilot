@@ -638,6 +638,45 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/billing/seat-checkout", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const priceId = process.env.STRIPE_PRICE_SEAT_ADDON;
+      if (!priceId) return res.status(400).json({ error: "Seat add-on price not configured" });
+
+      const baseUrl = getBaseUrl(req);
+      const { default: StripeLib } = await import("stripe");
+      const stripeLib = new StripeLib(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-01-28.clover" as any });
+
+      const sessionParams: any = {
+        mode: "payment",
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${baseUrl}/settings?seatAdded=1`,
+        cancel_url: `${baseUrl}/settings`,
+        payment_intent_data: {
+          metadata: { type: "seat_purchase", companyId },
+        },
+        metadata: { type: "seat_purchase", companyId },
+      };
+
+      if (company.stripeCustomerId) {
+        sessionParams.customer = company.stripeCustomerId;
+      } else if (company.email) {
+        sessionParams.customer_email = company.email;
+      }
+
+      const session = await stripeLib.checkout.sessions.create(sessionParams);
+      res.json({ url: session.url });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/billing/usage", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -2284,7 +2323,7 @@ Return ONLY valid JSON, no markdown.`,
       const tierMaxUsers = tierConfig[tier as keyof typeof tierConfig]?.maxUsers || 1;
       const maxUsers = company?.customMaxUsers ?? tierMaxUsers;
       if (activeCount >= maxUsers) {
-        return res.status(400).json({ error: `Seat limit reached (${activeCount}/${maxUsers}). Upgrade your plan to add more team members.` });
+        return res.status(402).json({ error: `Seat limit reached (${activeCount}/${maxUsers}).`, seatLimitReached: true, currentCount: activeCount, maxUsers });
       }
 
       let existingUser = await getUserByEmail(email);
@@ -12855,6 +12894,25 @@ Rules:
 
           if (!resolved) {
             console.warn(`[Stripe Webhook] checkout.session.completed: could not resolve invoice ${invoiceId} (session ${session.id}, tenant_id=${tenantId || "missing"}, connectAccount=${connectAccountId || "none"}). Manual resolution required.`);
+          }
+        }
+
+        // Seat add-on purchase
+        if (meta.type === "seat_purchase" && meta.companyId) {
+          try {
+            const seatCompany = await storage.getCompany(meta.companyId);
+            if (seatCompany) {
+              const qty = (session as any).line_items?.data?.[0]?.quantity ?? 1;
+              const tierConfig = (await import("@shared/schema")).TIER_CONFIG;
+              const tierMax = tierConfig[seatCompany.subscriptionTier as keyof typeof tierConfig]?.maxUsers || 1;
+              const currentMax = seatCompany.customMaxUsers ?? tierMax;
+              await storage.updateCompany(meta.companyId, { customMaxUsers: currentMax + qty } as any);
+              console.log(`[Stripe Seats] Added ${qty} seat(s) to company "${seatCompany.name}" (${meta.companyId}). New max: ${currentMax + qty}`);
+            } else {
+              console.warn(`[Stripe Seats] seat_purchase: company ${meta.companyId} not found (session ${session.id})`);
+            }
+          } catch (seatErr: any) {
+            console.error(`[Stripe Seats] Failed to process seat purchase (session ${session.id}): ${seatErr.message}`);
           }
         }
 

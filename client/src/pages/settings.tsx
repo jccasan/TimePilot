@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { getDismissedKey } from "@/components/rover-chatbot";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, authFetch } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical, Rocket, Zap, PlayCircle, DollarSign, Star, PhoneCall } from "lucide-react";
+import { Building2, Users, Mail, Phone, MapPin, Save, Shield, Wrench, Crown, Upload, Image, Download, FileSpreadsheet, FileDown, Plus, X, AlertTriangle, CheckCircle2, Info, KeyRound, CalendarClock, Bell, CreditCard, ExternalLink, Unlink, Loader2, RefreshCw, BookOpen, RotateCcw, GripVertical, Rocket, Zap, PlayCircle, DollarSign, Star, PhoneCall, ShoppingCart } from "lucide-react";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -3555,6 +3555,8 @@ export default function Settings() {
   const [newLeadSourceName, setNewLeadSourceName] = useState("");
   const [importStep, setImportStep] = useState<"idle" | "mapping" | "review">("idle");
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [seatLimitDialogOpen, setSeatLimitDialogOpen] = useState(false);
+  const [seatLimitData, setSeatLimitData] = useState<{ currentCount: number; maxUsers: number } | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteFirstName, setInviteFirstName] = useState("");
   const [inviteLastName, setInviteLastName] = useState("");
@@ -3661,9 +3663,39 @@ export default function Settings() {
     refetchInterval: 60_000,
   });
 
+  const seatCheckoutMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/billing/seat-checkout");
+      const data = await res.json();
+      return data as { url: string };
+    },
+    onSuccess: (data) => {
+      if (data.url) window.location.href = data.url;
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message || "Could not start checkout.", variant: "destructive" });
+    },
+  });
+
   const inviteMutation = useMutation({
     mutationFn: async (data: { email: string; firstName: string; lastName: string; role: string }) => {
-      const res = await apiRequest("POST", "/api/company/invite", data);
+      const res = await authFetch("/api/company/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (res.status === 402) {
+        const body = await res.json();
+        const err: any = new Error(body.error || "Seat limit reached");
+        err.seatLimitReached = true;
+        err.currentCount = body.currentCount;
+        err.maxUsers = body.maxUsers;
+        throw err;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Something went wrong");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -3676,6 +3708,12 @@ export default function Settings() {
       toast({ title: "Team member invited", description: "An email with login credentials has been sent." });
     },
     onError: (err: any) => {
+      if (err.seatLimitReached) {
+        setInviteDialogOpen(false);
+        setSeatLimitData({ currentCount: err.currentCount, maxUsers: err.maxUsers });
+        setSeatLimitDialogOpen(true);
+        return;
+      }
       toast({ title: "Failed to invite", description: err.message || "Something went wrong", variant: "destructive" });
     },
   });
@@ -4146,7 +4184,10 @@ export default function Settings() {
         );
       case "reminder_settings":
         return <div className="h-full overflow-auto"><ReminderSettingsSection company={company ?? null} toast={toast} /></div>;
-      case "team_members":
+      case "team_members": {
+        const activeCount = team?.length || 0;
+        const maxSeats = tierInfo?.maxUsers || 1;
+        const atCapacity = activeCount >= maxSeats;
         return (
           <Card className="h-full overflow-auto">
             <CardHeader>
@@ -4156,18 +4197,32 @@ export default function Settings() {
                     <Users className="h-5 w-5" />
                     Team Members
                   </CardTitle>
-                  <CardDescription>
-                    {team?.length || 0} / {tierInfo?.maxUsers || 1} seats used
+                  <CardDescription className={atCapacity ? "text-amber-600 dark:text-amber-400 font-medium" : ""} data-testid="text-seat-usage">
+                    {activeCount} / {maxSeats} seats used{atCapacity ? " — at limit" : ""}
                   </CardDescription>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={() => setInviteDialogOpen(true)}
-                  data-testid="button-invite-team-member"
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                  Invite Team Member
-                </Button>
+                <div className="flex items-center gap-2">
+                  {atCapacity && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setSeatLimitDialogOpen(true)}
+                      data-testid="button-buy-seat"
+                      className="border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+                    >
+                      <ShoppingCart className="h-4 w-4 mr-1" />
+                      Buy a Seat
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => setInviteDialogOpen(true)}
+                    data-testid="button-invite-team-member"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Invite Team Member
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -4242,6 +4297,7 @@ export default function Settings() {
             </CardContent>
           </Card>
         );
+      }
       case "change_password":
         return (
           <Card className="h-full overflow-auto">
@@ -5124,6 +5180,40 @@ export default function Settings() {
               data-testid="button-confirm-invite"
             >
               {inviteMutation.isPending ? "Sending..." : "Send Invite"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={seatLimitDialogOpen} onOpenChange={setSeatLimitDialogOpen}>
+        <DialogContent data-testid="dialog-seat-limit">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-amber-500" />
+              Seat Limit Reached
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Your plan allows <strong>{seatLimitData?.maxUsers ?? tierInfo?.maxUsers ?? 1}</strong> seat{(seatLimitData?.maxUsers ?? 1) !== 1 ? "s" : ""}.
+              You currently have <strong>{seatLimitData?.currentCount ?? team?.length ?? 0}</strong> active team member{(seatLimitData?.currentCount ?? 0) !== 1 ? "s" : ""}.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Purchase an additional seat to invite more team members. Each seat purchase adds one extra slot to your plan.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSeatLimitDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => seatCheckoutMutation.mutate()}
+              disabled={seatCheckoutMutation.isPending}
+              data-testid="button-confirm-buy-seat"
+            >
+              {seatCheckoutMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Loading...</>
+              ) : (
+                <><ShoppingCart className="h-4 w-4 mr-2" />Buy a Seat</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
