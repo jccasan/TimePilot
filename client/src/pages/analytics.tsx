@@ -360,7 +360,7 @@ export default function Analytics() {
                   tickFormatter={(v) => leadSourceLabels[v] || v}
                 />
                 <Tooltip
-                  formatter={(value: number, name: string, props: any) => [value, leadSourceLabels[props.payload.source] || props.payload.source]}
+                  formatter={(value: number, _name: string, props: any) => [value, leadSourceLabels[props.payload.source] || props.payload.source]}
                 />
                 <Bar dataKey="count" name="Clients" fill="hsl(var(--chart-2))" radius={[0, 4, 4, 0]}>
                   {data.leadSourceDistribution.map((_, idx) => (

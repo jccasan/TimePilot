@@ -1217,8 +1217,8 @@ function VisitDetailSheet({
   servicePlans,
   startStr,
   endStr,
-  canEdit,
-  team,
+  canEdit: _canEdit,
+  team: _team,
   onShowInvoiceDialog,
 }: {
   visit: Visit | null;

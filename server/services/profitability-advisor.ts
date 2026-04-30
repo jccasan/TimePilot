@@ -298,7 +298,7 @@ export async function generateProfitabilitySuggestions(
           ne(properties.contactId, contactId)
         )
       )
-      .then(async (rows) => {
+      .then(async (_rows) => {
         const allNearby = await db
           .select({ latitude: properties.latitude, longitude: properties.longitude })
           .from(properties)

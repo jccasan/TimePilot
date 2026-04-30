@@ -360,7 +360,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     } catch (err) { handleError(res, err); }
   });
 
-  function verificationPendingPage(firstName: string, appUrl: string, email: string): string {
+  function verificationPendingPage(firstName: string, _appUrl: string, email: string): string {
     const escapedEmail = email.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     return `<!DOCTYPE html>
 <html lang="en">

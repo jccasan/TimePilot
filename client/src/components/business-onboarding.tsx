@@ -844,7 +844,7 @@ function PricingSetupStep({
 }
 
 function PaymentProcessingStep({
-  companyData,
+  companyData: _companyData,
   onNext,
   onBack,
   onSkip,

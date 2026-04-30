@@ -47,7 +47,7 @@ type Props = {
   compact?: boolean;
 };
 
-export function ServiceZoneMap({ zones, onZonesChange, companyAddress, compact }: Props) {
+export function ServiceZoneMap({ zones, onZonesChange, companyAddress: _companyAddress, compact }: Props) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);

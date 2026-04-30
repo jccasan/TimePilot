@@ -55,7 +55,7 @@ function getMissedDates(lastRun: string | null | undefined, today: string): stri
   return dates;
 }
 
-async function processCompanyAutoInvoice(companyId: string, todayStr: string, timezone: string) {
+async function processCompanyAutoInvoice(companyId: string, todayStr: string, _timezone: string) {
   let invoicesCreated = 0;
 
   const allActiveJobs = await storage.getJobsWithAgreements(companyId, { isActive: true });

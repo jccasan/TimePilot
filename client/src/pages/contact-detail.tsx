@@ -2201,7 +2201,7 @@ function SuggestionActionRow({
   return null;
 }
 
-function AiSuggestionsPanel({ contactId, onDismiss }: { contactId: string; onDismiss: () => void }) {
+function AiSuggestionsPanel({ contactId, onDismiss: _onDismiss }: { contactId: string; onDismiss: () => void }) {
   const [fetchKey, setFetchKey] = useState(0);
   const { data, isLoading, isError, error } = useQuery<{ suggestions: AiSuggestion[] }>({
     queryKey: ["/api/profitability/customer", contactId, "suggestions", fetchKey],
@@ -3068,7 +3068,7 @@ function RouteAssignmentCard({ servicePlans, routes }: { servicePlans: ServicePl
   );
 }
 
-function ServicePlansCard({ contactId, contact, properties }: { contactId: string; contact: Contact; properties: Property[] }) {
+function ServicePlansCard({ contactId, contact: _contact, properties }: { contactId: string; contact: Contact; properties: Property[] }) {
   const tz = useCompanyTimezone();
   const { toast } = useToast();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -3925,7 +3925,7 @@ const activityActionLabels: Record<string, string> = {
   portal_login: "Portal Login",
 };
 
-function InlineSmsCompose({ contactId, contactName, phone }: { contactId: string; contactName: string; phone: string }) {
+function InlineSmsCompose({ contactId, contactName: _contactName, phone }: { contactId: string; contactName: string; phone: string }) {
   const { toast } = useToast();
   const [messageText, setMessageText] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);

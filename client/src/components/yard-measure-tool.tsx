@@ -316,7 +316,7 @@ function StaticMapMeasure({ lat, lng, existingPolygon, onSave, onCancel }: {
   );
 }
 
-export function YardMeasureTool({ lat, lng, propertyId, existingPolygon, existingArea, onSave, onCancel }: YardMeasureToolProps) {
+export function YardMeasureTool({ lat, lng, propertyId: _propertyId, existingPolygon, existingArea: _existingArea, onSave, onCancel }: YardMeasureToolProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);

@@ -661,7 +661,7 @@ export function TutorialOverlay({
       return step.validate(targetEl);
     };
 
-    const handler = (e: Event) => {
+    const handler = (_e: Event) => {
       if (step.action === "click") {
         if (passesValidation(el)) {
           setActionDetected(true);

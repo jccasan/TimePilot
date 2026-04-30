@@ -1273,11 +1273,11 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
       const res = await apiRequest("POST", `/api/contacts/${contactId}/send-payment-reminder`);
       return res.json();
     },
-    onSuccess: (_, contactId) => {
+    onSuccess: (_, _contactId) => {
       toast({ title: "Reminder sent", description: "Payment reminder sent to client." });
       setRemindingId(null);
     },
-    onError: (err: Error, contactId) => {
+    onError: (err: Error, _contactId) => {
       toast({ title: "Failed to send reminder", description: err.message, variant: "destructive" });
       setRemindingId(null);
     },
@@ -1990,7 +1990,7 @@ function RouteMapPreviewWidget() {
         let hasCoords = false;
 
         mapData.routes.forEach((route) => {
-          route.coordinates.forEach((coord, idx) => {
+          route.coordinates.forEach((coord, _idx) => {
             hasCoords = true;
             bounds.extend([coord.lng, coord.lat]);
             const marker = document.createElement("div");

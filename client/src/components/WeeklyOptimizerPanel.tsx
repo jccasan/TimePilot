@@ -128,7 +128,7 @@ function weekTabLabel(weekNum: number): string {
   return weekNum === 1 ? "Next Week" : `Week ${weekNum}`;
 }
 
-export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllowance = 20, onNeedCredits }: {
+export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllowance: _monthlyAllowance = 20, onNeedCredits }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   credits: number;

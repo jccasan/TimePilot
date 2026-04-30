@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, Plus, X, Send, DoorClosed, Navigation, ShieldAlert, Dog, Map as MapIcon, MapPin, Clock, ArrowRight, Flag, BarChart2 } from "lucide-react";
+import { Play, CheckCircle, Camera, ChevronDown, ChevronUp, ImageIcon, Loader2, Satellite, X, Send, DoorClosed, Navigation, ShieldAlert, Dog, Map as MapIcon, MapPin, Clock, ArrowRight, Flag, BarChart2 } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 const RouteMapView = lazy(() => import("@/components/route-map-view"));
 import { SatelliteImage } from "@/components/satellite-image";

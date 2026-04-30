@@ -62,7 +62,7 @@ export function BillingRuleInheritance({ label, value, labels, origin, sourceNam
 }
 
 export function resolveBillingField(
-  field: "cadence" | "trigger" | "payment",
+  _field: "cadence" | "trigger" | "payment",
   contactOverride: string | null | undefined,
   serviceRule: string | null | undefined,
   systemDefault: string,

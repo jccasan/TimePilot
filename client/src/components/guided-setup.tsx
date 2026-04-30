@@ -349,7 +349,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding/status"] });
       setActiveStep(3);
     },
-    onError: (err: Error) => {
+    onError: (_err: Error) => {
       setActiveStep(3);
       toast({ title: "Price saved locally", description: "Continuing to next step." });
     },
