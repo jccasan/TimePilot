@@ -71,6 +71,16 @@ The scheduling data model is refactored into three layers: `agreements` (billing
 - Hover-detail Popovers (e.g., `ClientInfoPopover`) should not be placed inside Sheet/Drawer content either; prefer a linked navigation target or an inline expansion.
 - This rule was validated by a project-wide audit (Task #311, April 2026). All current Popovers are outside Sheet/Drawer contexts.
 
+## CI / Quality Gates
+
+A `typecheck` validation step is registered and runs `npx tsc --noEmit` against the full project (`client/`, `server/`, `shared/`). It enforces all compiler flags in `tsconfig.json`, including `strict: true` and `noUnusedLocals: true`. TypeScript errors **block merges** — the check must pass before any PR is accepted.
+
+- **Run command**: `npx tsc --noEmit`
+- **Config**: `tsconfig.json`
+- **Registered as**: validation command `typecheck`
+
+Keep the codebase free of TS errors. If you add new imports, remove unused ones before committing.
+
 ## External Dependencies
 - **PostgreSQL**: Primary database.
 - **Object Storage**: For file uploads.
