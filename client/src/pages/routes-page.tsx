@@ -109,10 +109,20 @@ type TeamMember = {
   email: string; profileImageUrl: string | null;
 };
 
+type FailedStop = {
+  servicePlanId: string;
+  contactId: string;
+  propertyId: string;
+  name: string;
+  address: string;
+};
+
 type OptimizeResult = {
   optimized: boolean; totalDistance: number; originalDistance: number;
   milesSaved: number; minutesSaved: number; stopCount: number;
   creditsUsed: number; creditsRemaining: number; message?: string;
+  geocodeFailure?: boolean;
+  failedStops?: FailedStop[];
 };
 
 type RouteMetrics = {
@@ -137,7 +147,7 @@ function LegSeparator({ distance, duration }: { distance: number; duration: numb
   );
 }
 
-function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, updatingVisitStatus, onStopClick, onOnMyWay, onMyWaySendingId, onSelectStop, isSelected }: {
+function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange, updatingVisitId, updatingVisitStatus, onStopClick, onOnMyWay, onMyWaySendingId, onSelectStop, isSelected, isHighlighted }: {
   stop: ServicePlan; contacts: Contact[]; properties: Property[];
   visit?: Visit | null; onVisitStatusChange?: (visitId: string, status: string) => void;
   updatingVisitId?: string | null;
@@ -147,6 +157,7 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
   onMyWaySendingId?: string | null;
   onSelectStop?: (stopId: string) => void;
   isSelected?: boolean;
+  isHighlighted?: boolean;
 }) {
   const contact = contacts.find(c => c.id === stop.contactId);
   const property = properties.find(p => p.id === stop.propertyId);
@@ -161,7 +172,7 @@ function DraggableStop({ stop, contacts, properties, visit, onVisitStatusChange,
 
   return (
     <div ref={setNodeRef} style={style}
-      className={`border rounded-md p-2.5 bg-background transition-all ${isDragging ? "opacity-30" : ""} ${isSelected ? "ring-2 ring-amber-400 border-amber-300" : ""} ${isCompleted ? "border-green-300 dark:border-green-800 opacity-70" : ""} ${isSkipped ? "border-orange-300 dark:border-orange-800 opacity-60" : ""} ${isCancelled ? "border-red-300 dark:border-red-800 opacity-50" : ""}`}
+      className={`border rounded-md p-2.5 bg-background transition-all ${isDragging ? "opacity-30" : ""} ${isHighlighted ? "ring-2 ring-orange-400 border-orange-400 bg-orange-50 dark:bg-orange-950/20" : isSelected ? "ring-2 ring-amber-400 border-amber-300" : ""} ${isCompleted ? "border-green-300 dark:border-green-800 opacity-70" : ""} ${isSkipped ? "border-orange-300 dark:border-orange-800 opacity-60" : ""} ${isCancelled ? "border-red-300 dark:border-red-800 opacity-50" : ""}`}
       data-testid={`draggable-stop-${stop.id}`}
     >
       <div className="flex items-start gap-2">
@@ -325,7 +336,7 @@ function DroppableZone({ id, children, isOver, className = "" }: {
 
 function RouteCard({ route, stops, contacts, properties, team, isOverThis, credits,
   onEdit, onDelete, onOptimize, onReverse, onDispatch, onUnassignAll, onLock, onMoveToDay, isOptimizing, isReversing, isDispatching, isUnassigning, isLocking,
-  visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick, onOnMyWay, onMyWaySendingId, onSelectStop, selectedStopId }: {
+  visitsByPlan, onVisitStatusChange, updatingVisitId, updatingVisitStatus, metrics, metricsLoading, onStopClick, onOnMyWay, onMyWaySendingId, onSelectStop, selectedStopId, highlightedStopIds }: {
   route: RouteWithOptStatus; stops: ServicePlan[]; contacts: Contact[]; properties: Property[];
   team: TeamMember[]; isOverThis: boolean; credits: number;
   onEdit: (route: Route) => void; onDelete: (route: Route) => void;
@@ -347,6 +358,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
   onMyWaySendingId?: string | null;
   onSelectStop?: (stopId: string) => void;
   selectedStopId?: string | null;
+  highlightedStopIds?: Set<string>;
 }) {
   const tech = team.find(t => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
@@ -530,6 +542,7 @@ function RouteCard({ route, stops, contacts, properties, team, isOverThis, credi
                     onMyWaySendingId={onMyWaySendingId}
                     onSelectStop={onSelectStop}
                     isSelected={selectedStopId === stop.id}
+                    isHighlighted={highlightedStopIds?.has(stop.id)}
                   />
                 </div>
               );
@@ -1074,6 +1087,8 @@ export default function RoutesPage() {
   const [moveToDayDate, setMoveToDayDate] = useState<string>("");
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+  const [highlightedStopIds, setHighlightedStopIds] = useState<Set<string>>(new Set());
+  const [geocodeAlert, setGeocodeAlert] = useState<{ routeId: string; stops: FailedStop[] } | null>(null);
   const [showZones, setShowZones] = useState(false);
   const [showWeeklyOptimizer, setShowWeeklyOptimizer] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -1649,6 +1664,10 @@ export default function RoutesPage() {
       if (data.optimized) {
         setSavingsResult(data);
         setShowSavings(true);
+        setGeocodeAlert(null);
+        setHighlightedStopIds(new Set());
+      } else if (data.geocodeFailure && data.failedStops && data.failedStops.length > 0) {
+        setGeocodeAlert({ routeId, stops: data.failedStops });
       } else {
         toast({ title: "Could not optimize", description: data.message });
       }
@@ -1660,6 +1679,35 @@ export default function RoutesPage() {
       } else {
         toast({ title: "Optimization failed", description: err.message, variant: "destructive" });
       }
+    },
+  });
+
+  const retryGeocodeMutation = useMutation({
+    mutationFn: async (routeId: string) => {
+      await apiRequest("POST", "/api/properties/geocode-all");
+      const res = await apiRequest("POST", `/api/routes/${routeId}/optimize`);
+      return res.json() as Promise<OptimizeResult>;
+    },
+    onSuccess: (data, routeId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      setRouteMetrics(prev => { const next = { ...prev }; delete next[routeId]; return next; });
+      if (data.optimized) {
+        setGeocodeAlert(null);
+        setHighlightedStopIds(new Set());
+        setSavingsResult(data);
+        setShowSavings(true);
+      } else if (data.geocodeFailure && data.failedStops && data.failedStops.length > 0) {
+        setGeocodeAlert({ routeId, stops: data.failedStops });
+        toast({ title: "Some stops still ungeocoded", description: `${data.failedStops.length} stop${data.failedStops.length !== 1 ? "s" : ""} could not be geocoded. Check their addresses.`, variant: "destructive" });
+      } else {
+        setGeocodeAlert(null);
+        toast({ title: "Could not optimize", description: data.message });
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Retry failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -2004,6 +2052,82 @@ export default function RoutesPage() {
                     </div>
                   )}
 
+                  {geocodeAlert && routesForDay.some(r => r.id === geocodeAlert.routeId) && (
+                    <div className="rounded-lg border border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30 p-4 mb-3 space-y-3" data-testid="banner-geocode-alert">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
+                              {geocodeAlert.stops.length} stop{geocodeAlert.stops.length !== 1 ? "s" : ""} could not be geocoded
+                            </p>
+                            <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
+                              These stops are missing map coordinates and were excluded from the optimization. Check their addresses and retry.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setGeocodeAlert(null); setHighlightedStopIds(new Set()); }}
+                          className="text-orange-500 hover:text-orange-700 dark:hover:text-orange-300 shrink-0"
+                          data-testid="button-dismiss-geocode-alert"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <ul className="space-y-1 ml-7" data-testid="list-geocode-failed-stops">
+                        {geocodeAlert.stops.map((stop) => (
+                          <li key={stop.servicePlanId} className="flex items-start gap-2 text-xs text-orange-800 dark:text-orange-200">
+                            <MapPin className="h-3 w-3 shrink-0 mt-0.5 text-orange-500" />
+                            <span>
+                              <span className="font-medium">{stop.name}</span>
+                              {stop.address && stop.address !== "No address" && (
+                                <span className="text-orange-600 dark:text-orange-400"> — {stop.address}</span>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="flex items-center gap-2 ml-7">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-950/50"
+                          onClick={() => {
+                            const ids = new Set(geocodeAlert.stops.map(s => s.servicePlanId));
+                            setHighlightedStopIds(ids);
+                            const firstId = geocodeAlert.stops[0]?.servicePlanId;
+                            if (firstId) {
+                              requestAnimationFrame(() => {
+                                const el = document.querySelector(`[data-testid="draggable-stop-${firstId}"]`);
+                                el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                              });
+                            }
+                          }}
+                          data-testid="button-show-ungeocoded-stops"
+                        >
+                          <MapPin className="h-3 w-3 mr-1" />
+                          Show stops
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-950/50"
+                          onClick={() => retryGeocodeMutation.mutate(geocodeAlert.routeId)}
+                          disabled={retryGeocodeMutation.isPending}
+                          data-testid="button-retry-geocoding"
+                        >
+                          {retryGeocodeMutation.isPending ? (
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          ) : (
+                            <RotateCcw className="h-3 w-3 mr-1" />
+                          )}
+                          Retry geocoding
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   {routesForDay.length === 0 ? (
                     <Card className="border-dashed">
                       <CardContent className="p-8 text-center">
@@ -2057,6 +2181,7 @@ export default function RoutesPage() {
                           onMyWaySendingId={onMyWaySending}
                           onSelectStop={(id) => setSelectedStopId(prev => prev === id ? null : id)}
                           selectedStopId={selectedStopId}
+                          highlightedStopIds={highlightedStopIds}
                         />
                       ))}
                     </div>

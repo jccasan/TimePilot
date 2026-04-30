@@ -94,11 +94,25 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
 
     const ungeocoded = routePlans.length - stops.length;
     if (stops.length < 2) {
+      const geocodedIds = new Set(stops.map(s => s.id));
+      const allContacts = await storage.getContacts(companyId);
+      const contactMap = new Map(allContacts.map(c => [c.id, c]));
+      const failedStops = routePlans
+        .filter(sp => !geocodedIds.has(sp.id))
+        .map(sp => {
+          const prop = propertyMap.get(sp.propertyId);
+          const contact = contactMap.get(sp.contactId);
+          const name = contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown";
+          const address = prop
+            ? [prop.streetAddress, prop.city, prop.state, prop.zipCode].filter(Boolean).join(", ")
+            : "No address";
+          return { servicePlanId: sp.id, contactId: sp.contactId, propertyId: sp.propertyId, name, address };
+        });
       return {
         success: false,
         message: `${ungeocoded} of ${routePlans.length} stops could not be geocoded. Ensure addresses are complete.`,
         error: "GEOCODE_FAILURE",
-        data: { stopCount: routePlans.length, geocodedCount: stops.length },
+        data: { stopCount: routePlans.length, geocodedCount: stops.length, failedStops },
       };
     }
 

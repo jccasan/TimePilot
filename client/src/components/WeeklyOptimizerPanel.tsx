@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import {
   Sparkles, ArrowRight, Check, Loader2, RotateCcw, Car, Calendar,
-  ChevronDown, ChevronUp, CheckCircle2, Bell, Shield, X,
+  ChevronDown, ChevronUp, CheckCircle2, Bell, Shield, X, AlertTriangle, MapPin,
 } from "lucide-react";
 
 const ROUTE_COLORS = [
@@ -51,6 +51,14 @@ type WeeklyOptResult = {
   movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[];
   creditsRequired: number;
   excludedWeekendCount?: number;
+  ungeocodedStops?: UngeocodedStop[];
+};
+
+type UngeocodedStop = { servicePlanId: string; contactId: string; name: string; address: string };
+
+type GeocodeFailureError = Error & {
+  geocodeFailure?: boolean;
+  failedStops?: UngeocodedStop[];
 };
 
 function StopMiniMap({ routes }: { routes: WeeklyProposedRoute[] }) {
@@ -163,6 +171,10 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
     creditsUsed: number;
     creditsRemaining: number;
   } | null>(null);
+  const [geocodeError, setGeocodeError] = useState<{
+    message: string;
+    failedStops: UngeocodedStop[];
+  } | null>(null);
 
   const { data: freshCreditData } = useQuery<{ credits: number; monthlyAllowance: number }>({
     queryKey: ["/api/route-credits"],
@@ -193,22 +205,48 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
 
 
   const analyzeMutation = useMutation({
+    onMutate: () => {
+      setResult(null);
+      setApplyConfirmPending(false);
+    },
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/routes/optimize-weekly", {
-        respectZones,
-        includeSaturday,
-        ...(weekStart ? { weekStart } : {}),
+      const res = await fetch("/api/routes/optimize-weekly", {
+        method: "POST",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          respectZones,
+          includeSaturday,
+          ...(weekStart ? { weekStart } : {}),
+        }),
       });
-      return res.json() as Promise<WeeklyOptResult>;
+      const data = await res.json();
+      if (!res.ok) {
+        const err: GeocodeFailureError = Object.assign(
+          new Error(data.error || `Error ${res.status}`),
+          {
+            geocodeFailure: data.geocodeFailure as boolean | undefined,
+            failedStops: (data.failedStops ?? []) as UngeocodedStop[],
+          }
+        );
+        throw err;
+      }
+      return data as WeeklyOptResult;
     },
     onSuccess: (data) => {
+      setGeocodeError(null);
       setResult(data);
       setAcceptedDays(new Set(data.proposed.days.filter(d => d.totalStops > 0).map(d => d.day)));
       setApplyConfirmPending(false);
       setDayByDayOpen(false);
     },
     onError: (err: Error) => {
-      toast({ title: "Optimization failed", description: err.message, variant: "destructive" });
+      const gErr = err as GeocodeFailureError;
+      if (gErr.geocodeFailure) {
+        setGeocodeError({ message: err.message, failedStops: gErr.failedStops ?? [] });
+      } else {
+        toast({ title: "Optimization failed", description: err.message, variant: "destructive" });
+      }
     },
   });
 
@@ -260,6 +298,7 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
         setResult(null);
         setApplyConfirmPending(false);
         setSuccessData(null);
+        setGeocodeError(null);
       }
       onOpenChange(v);
     }}>
@@ -339,10 +378,34 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
               </div>
             </div>
 
+            {geocodeError && (
+              <div className="rounded-lg border border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30 p-4 space-y-2" data-testid="banner-weekly-geocode-error">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">Not enough geocoded stops</p>
+                    <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
+                      Fix the addresses below and try again.
+                    </p>
+                  </div>
+                </div>
+                {geocodeError.failedStops.length > 0 && (
+                  <ul className="space-y-1 mt-2 max-h-40 overflow-y-auto">
+                    {geocodeError.failedStops.map((s, i) => (
+                      <li key={s.servicePlanId || i} className="text-xs text-orange-700 dark:text-orange-300 pl-6">
+                        <span className="font-medium">{s.name}</span>
+                        {s.address && <span className="ml-1 opacity-75">— {s.address}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
             <Button
               className="w-full"
               size="lg"
-              onClick={() => analyzeMutation.mutate()}
+              onClick={() => { setGeocodeError(null); analyzeMutation.mutate(); }}
               disabled={analyzeMutation.isPending}
               data-testid="button-run-analysis"
             >
@@ -350,6 +413,11 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
                 <>
                   <Loader2 className="h-5 w-5 animate-spin mr-2" />
                   Analyzing routes...
+                </>
+              ) : geocodeError ? (
+                <>
+                  <RotateCcw className="h-5 w-5 mr-2" />
+                  Retry Analysis
                 </>
               ) : (
                 <>
@@ -378,6 +446,36 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
                   <RotateCcw className="h-4 w-4 mr-1" /> Re-analyze
                 </Button>
               </div>
+
+              {/* Ungeocoded stops warning */}
+              {result.ungeocodedStops && result.ungeocodedStops.length > 0 && (
+                <div className="rounded-lg border border-orange-300 bg-orange-50 dark:border-orange-700 dark:bg-orange-950/30 p-4 space-y-2" data-testid="banner-weekly-geocode-warning">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
+                        {result.ungeocodedStops.length} stop{result.ungeocodedStops.length !== 1 ? "s" : ""} excluded — missing coordinates
+                      </p>
+                      <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
+                        These stops were not included in the optimization. Fix their addresses and re-analyze to include them.
+                      </p>
+                    </div>
+                  </div>
+                  <ul className="space-y-0.5 ml-6">
+                    {result.ungeocodedStops.map((stop) => (
+                      <li key={stop.servicePlanId} className="flex items-start gap-1.5 text-xs text-orange-800 dark:text-orange-200">
+                        <MapPin className="h-3 w-3 shrink-0 mt-0.5 text-orange-500" />
+                        <span>
+                          <span className="font-medium">{stop.name}</span>
+                          {stop.address && stop.address !== "No address" && (
+                            <span className="text-orange-600 dark:text-orange-400"> — {stop.address}</span>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Section 1: Impact Summary */}
               <div className="rounded-xl border bg-primary/5 border-primary/20 p-4" data-testid="tab-summary">

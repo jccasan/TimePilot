@@ -5064,8 +5064,18 @@ Return ONLY valid JSON, no markdown.`,
         if (result.error === "LOCKED") return res.status(409).json({ error: result.message });
         if (result.error === "INSUFFICIENT_CREDITS") return res.status(402).json({ error: result.message, ...result.data });
         if (result.error === "TOO_MANY_STOPS") return res.status(400).json({ error: result.message });
-        if (result.error === "INSUFFICIENT_STOPS" || result.error === "GEOCODE_FAILURE") {
+        if (result.error === "INSUFFICIENT_STOPS") {
           return res.json({ optimized: false, message: result.message, totalDistance: 0, stopCount: result.data?.stopCount ?? 0 });
+        }
+        if (result.error === "GEOCODE_FAILURE") {
+          return res.json({
+            optimized: false,
+            message: result.message,
+            totalDistance: 0,
+            stopCount: result.data?.stopCount ?? 0,
+            geocodeFailure: true,
+            failedStops: result.data?.failedStops ?? [],
+          });
         }
         return res.status(500).json({ error: result.message });
       }
@@ -5504,13 +5514,24 @@ Return ONLY valid JSON, no markdown.`,
       // currentDay comes from the plan's own dayOfWeek — the recurring schedule —
       // not from a specific visit date. This is the true "current" state.
       let excludedWeekendCount = 0;
+      const ungeocodedStops: { servicePlanId: string; contactId: string; name: string; address: string }[] = [];
       const weeklyStops = dedupedVisits
         .map(visit => {
           const sp = visit.servicePlanId ? planMap.get(visit.servicePlanId) : undefined;
           if (!sp) return null;
           const prop = propertyMap.get(sp.propertyId);
           const contact = contactMap.get(sp.contactId);
-          if (!prop || !prop.latitude || !prop.longitude) return null;
+          if (!prop || !prop.latitude || !prop.longitude) {
+            ungeocodedStops.push({
+              servicePlanId: sp.id,
+              contactId: sp.contactId,
+              name: contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown",
+              address: prop
+                ? [prop.streetAddress, prop.city, prop.state, prop.zipCode].filter(Boolean).join(", ")
+                : "No address",
+            });
+            return null;
+          }
           const planDay = (sp.dayOfWeek || "monday").toLowerCase();
           if (!ACTIVE_DAYS_SET.has(planDay)) {
             excludedWeekendCount++;
@@ -5535,7 +5556,11 @@ Return ONLY valid JSON, no markdown.`,
 
       if (weeklyStops.length < 3) {
         const note = excludedWeekendCount > 0 ? ` (${excludedWeekendCount} weekend stops excluded — enable "Include Saturday" to optimize them)` : "";
-        return res.status(400).json({ error: `Not enough geocoded appointments to optimize${note}. Ensure property addresses are complete.` });
+        return res.status(400).json({
+          error: `Not enough geocoded appointments to optimize${note}. Ensure property addresses are complete.`,
+          geocodeFailure: true,
+          failedStops: ungeocodedStops,
+        });
       }
 
       let startPoint: { latitude: number; longitude: number } | undefined;
@@ -5641,6 +5666,7 @@ Return ONLY valid JSON, no markdown.`,
       res.json({
         ...result,
         excludedWeekendCount,
+        ungeocodedStops,
         laborCost: {
           centsPerMinute: Math.round(laborCentsPerMinute * 10) / 10,
           hourlyRateCents: pricingConfig.techHourlyWageCents,
