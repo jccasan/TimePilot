@@ -744,12 +744,26 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
                                 return (
                                   <div key={rIdx} className="space-y-1.5">
                                     <div className="flex items-center justify-between gap-2">
-                                      <p className="text-xs font-medium flex items-center gap-1.5 min-w-0">
+                                      <p className="text-xs font-medium flex items-center gap-1.5 min-w-0 flex-wrap">
                                         <span
                                           className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
                                           style={{ backgroundColor: ROUTE_COLORS[rIdx % ROUTE_COLORS.length] }}
                                         />
                                         {route.routeLabel}
+                                        {(() => {
+                                          const tech = techId ? teamMembers.find(m => m.id === techId) : null;
+                                          if (tech) {
+                                            return (
+                                              <Badge
+                                                className="text-[10px] px-1.5 py-0 h-4 font-normal bg-primary/10 text-primary border-primary/20"
+                                                data-testid={`badge-tech-${activeWeek.weekNum}-${day.day}-${rIdx}`}
+                                              >
+                                                {tech.firstName} {tech.lastName}
+                                              </Badge>
+                                            );
+                                          }
+                                          return null;
+                                        })()}
                                       </p>
                                       <Select
                                         value={techId || "unassigned"}
