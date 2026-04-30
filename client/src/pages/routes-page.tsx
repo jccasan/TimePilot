@@ -1849,7 +1849,7 @@ export default function RoutesPage() {
                 id="max-stops-input"
                 type="number"
                 min={2}
-                placeholder="—"
+                placeholder="50"
                 value={maxStopsInput}
                 onChange={e => setMaxStopsInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") handleApplyMaxStops(); }}

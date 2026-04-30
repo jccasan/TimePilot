@@ -95,7 +95,7 @@ interface StartPoint {
 
 const WORK_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"];
 const ALL_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-const MAX_STOPS_PER_ROUTE = 25;
+const MAX_STOPS_PER_ROUTE = 50;
 const MIN_STOPS_FOR_OWN_DAY = 3;
 
 interface ZoneMapping {
@@ -626,7 +626,7 @@ export interface AssignStopsResult {
   newRoutes: { id: string; name: string; day: string }[];
 }
 
-const MAX_STOPS_PER_ROUTE_ASSIGN = 25;
+const MAX_STOPS_PER_ROUTE_ASSIGN = 50;
 
 export async function assignNewStopsToRoutes(
   newStops: NewStopInput[],

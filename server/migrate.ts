@@ -36,6 +36,22 @@ export async function runStartupMigrations(): Promise<void> {
         ADD COLUMN IF NOT EXISTS pass_stripe_fees BOOLEAN NOT NULL DEFAULT FALSE
     `);
 
+    // Set the DB-level column default to 50 so new companies get 50 without
+    // needing an explicit value in the INSERT.
+    await client.query(`
+      ALTER TABLE companies
+        ALTER COLUMN max_stops_per_route SET DEFAULT 50
+    `);
+
+    // Raise existing companies that still have the old default of 25 to 50,
+    // preserving any intentional custom values set to other numbers.
+    await client.query(`
+      UPDATE companies
+        SET max_stops_per_route = 50
+      WHERE max_stops_per_route = 25
+         OR max_stops_per_route IS NULL
+    `);
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);
