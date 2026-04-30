@@ -52,6 +52,21 @@ export async function runStartupMigrations(): Promise<void> {
          OR max_stops_per_route IS NULL
     `);
 
+    // One-time data fix: add 25 route credits to Lake Erie Scoopers (production only)
+    // Confirmed pre-fix value: 5. Target: 30. WHERE guard makes this idempotent.
+    // Remove this block after the next production deploy confirms route_credits = 30.
+    if (process.env.NODE_ENV === "production") {
+      const lakeErieResult = await client.query(`
+        UPDATE companies
+          SET route_credits = route_credits + 25
+        WHERE id = '8089c512-bec6-47e1-9678-ec3e3eda4e95'
+          AND route_credits = 5
+      `);
+      if (lakeErieResult.rowCount && lakeErieResult.rowCount > 0) {
+        console.log("[Migrate] Applied +25 route credits to Lake Erie Scoopers (now 30)");
+      }
+    }
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);
