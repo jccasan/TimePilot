@@ -73,6 +73,8 @@ The scheduling data model is refactored into three layers: `agreements` (billing
 
 ## CI / Quality Gates
 
+### TypeScript (`typecheck`)
+
 A `typecheck` validation step is registered and runs `npx tsc --noEmit` against the full project (`client/`, `server/`, `shared/`). It enforces all compiler flags in `tsconfig.json`, including `strict: true` and `noUnusedLocals: true`. TypeScript errors **block merges** — the check must pass before any PR is accepted.
 
 - **Run command**: `npx tsc --noEmit`
@@ -80,6 +82,16 @@ A `typecheck` validation step is registered and runs `npx tsc --noEmit` against 
 - **Registered as**: validation command `typecheck`
 
 Keep the codebase free of TS errors. If you add new imports, remove unused ones before committing.
+
+### ESLint (`lint`)
+
+A `lint` validation step is registered and runs `npx eslint .` against all `.ts` and `.tsx` files. It uses `@typescript-eslint/eslint-plugin` with the recommended ruleset. ESLint **errors block merges** — warnings are acceptable but errors must be resolved.
+
+- **Run command**: `npx eslint .`
+- **Config**: `eslint.config.js` (flat config format, ESLint v10)
+- **Registered as**: validation command `lint`
+
+Rules producing errors are kept to a strict subset; pre-existing patterns (implicit `any`, require imports, namespace usage) are downgraded to warnings since the `typecheck` gate already enforces those. New code introducing ESLint errors will fail the gate and block merges.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

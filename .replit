@@ -51,6 +51,10 @@ args = "Voice Agent Wizard"
 task = "workflow.run"
 args = "stripe-unit-tests"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "lint"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -100,6 +104,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npx vitest run --reporter=verbose"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "lint"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx eslint ."
 
 [workflows.workflow.metadata]
 isValidation = true
