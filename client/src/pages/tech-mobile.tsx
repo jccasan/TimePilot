@@ -184,7 +184,9 @@ export default function TechMobile() {
   const [uploadingVisitId, setUploadingVisitId] = useState<string | null>(null);
   const [uploadingType, setUploadingType] = useState<PhotoUploadType | null>(null);
   const beforeFileInputRef = useRef<HTMLInputElement>(null);
+  const beforeCaptureInputRef = useRef<HTMLInputElement>(null);
   const afterFileInputRef = useRef<HTMLInputElement>(null);
+  const afterCaptureInputRef = useRef<HTMLInputElement>(null);
   const pendingVisitIdRef = useRef<string | null>(null);
   const pendingUploadTypeRef = useRef<PhotoUploadType | null>(null);
   const techPositionRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -201,7 +203,9 @@ export default function TechMobile() {
   const [noGate, setNoGate] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const gateFileInputRef = useRef<HTMLInputElement>(null);
+  const gateCaptureInputRef = useRef<HTMLInputElement>(null);
   const extraFileInputRef = useRef<HTMLInputElement>(null);
+  const extraCaptureInputRef = useRef<HTMLInputElement>(null);
 
   const [onMyWaySending, setOnMyWaySending] = useState<string | null>(null);
   const [onMyWayCooldowns, setOnMyWayCooldowns] = useState<Record<string, number>>({});
@@ -501,13 +505,13 @@ export default function TechMobile() {
     },
   });
 
-  const handlePhotoClick = (visitId: string, type: PhotoUploadType) => {
+  const handlePhotoClick = (visitId: string, type: PhotoUploadType, capture = false) => {
     pendingVisitIdRef.current = visitId;
     pendingUploadTypeRef.current = type;
     if (type === "before") {
-      beforeFileInputRef.current?.click();
+      (capture ? beforeCaptureInputRef : beforeFileInputRef).current?.click();
     } else {
-      afterFileInputRef.current?.click();
+      (capture ? afterCaptureInputRef : afterFileInputRef).current?.click();
     }
   };
 
@@ -971,10 +975,28 @@ export default function TechMobile() {
       <input
         type="file"
         accept="image/*"
+        capture="environment"
+        ref={beforeCaptureInputRef}
+        className="hidden"
+        onChange={handleFileSelected}
+        data-testid="input-photo-capture-before"
+      />
+      <input
+        type="file"
+        accept="image/*"
         ref={afterFileInputRef}
         className="hidden"
         onChange={handleFileSelected}
         data-testid="input-photo-file-after"
+      />
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        ref={afterCaptureInputRef}
+        className="hidden"
+        onChange={handleFileSelected}
+        data-testid="input-photo-capture-after"
       />
 
       {isLoading ? (
@@ -1218,27 +1240,57 @@ export default function TechMobile() {
                         </Button>
                       )}
                       {canUploadGroup && (
-                        <Button
-                          variant="outline"
-                          onClick={() => handlePhotoClick(primaryVisit.id, "before")}
-                          disabled={uploadingVisitId === primaryVisit.id && uploadingType === "before"}
-                          className="min-h-[44px]"
-                          data-testid={`button-photo-before-${primaryVisit.id}`}
-                        >
-                          {uploadingVisitId === primaryVisit.id && uploadingType === "before" ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
-                          Before
-                        </Button>
+                        <div className="flex flex-col gap-1">
+                          <p className="text-xs text-muted-foreground font-medium">Before Photo</p>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="outline"
+                              onClick={() => handlePhotoClick(primaryVisit.id, "before", true)}
+                              disabled={uploadingVisitId === primaryVisit.id && uploadingType === "before"}
+                              className="min-h-[44px] flex-1 px-2 text-xs"
+                              data-testid={`button-photo-before-camera-${primaryVisit.id}`}
+                            >
+                              {uploadingVisitId === primaryVisit.id && uploadingType === "before" ? <Loader2 className="animate-spin mr-1 h-3 w-3" /> : <Camera className="mr-1 h-3 w-3" />}
+                              Take Photo
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => handlePhotoClick(primaryVisit.id, "before", false)}
+                              disabled={uploadingVisitId === primaryVisit.id && uploadingType === "before"}
+                              className="min-h-[44px] flex-1 px-2 text-xs"
+                              data-testid={`button-photo-before-gallery-${primaryVisit.id}`}
+                            >
+                              <ImageIcon className="mr-1 h-3 w-3" />
+                              Library
+                            </Button>
+                          </div>
+                        </div>
                       )}
-                      <Button
-                        variant="outline"
-                        onClick={() => handlePhotoClick(primaryVisit.id, "after")}
-                        disabled={uploadingVisitId === primaryVisit.id && uploadingType === "after"}
-                        className="min-h-[44px]"
-                        data-testid={`button-photo-after-${primaryVisit.id}`}
-                      >
-                        {uploadingVisitId === primaryVisit.id && uploadingType === "after" ? <Loader2 className="animate-spin mr-1 h-4 w-4" /> : <Camera className="mr-1 h-4 w-4" />}
-                        After
-                      </Button>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-xs text-muted-foreground font-medium">After Photo</p>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="outline"
+                            onClick={() => handlePhotoClick(primaryVisit.id, "after", true)}
+                            disabled={uploadingVisitId === primaryVisit.id && uploadingType === "after"}
+                            className="min-h-[44px] flex-1 px-2 text-xs"
+                            data-testid={`button-photo-after-camera-${primaryVisit.id}`}
+                          >
+                            {uploadingVisitId === primaryVisit.id && uploadingType === "after" ? <Loader2 className="animate-spin mr-1 h-3 w-3" /> : <Camera className="mr-1 h-3 w-3" />}
+                            Take Photo
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handlePhotoClick(primaryVisit.id, "after", false)}
+                            disabled={uploadingVisitId === primaryVisit.id && uploadingType === "after"}
+                            className="min-h-[44px] flex-1 px-2 text-xs"
+                            data-testid={`button-photo-after-gallery-${primaryVisit.id}`}
+                          >
+                            <ImageIcon className="mr-1 h-3 w-3" />
+                            Library
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 )}
@@ -1305,6 +1357,15 @@ export default function TechMobile() {
                     onChange={handleGatePhotoCapture}
                     data-testid="input-gate-photo"
                   />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={gateCaptureInputRef}
+                    className="hidden"
+                    onChange={handleGatePhotoCapture}
+                    data-testid="input-gate-photo-capture"
+                  />
                   {gatePhotoPreview ? (
                     <div className="relative">
                       <img
@@ -1324,15 +1385,26 @@ export default function TechMobile() {
                       </Button>
                     </div>
                   ) : (
-                    <Button
-                      variant="outline"
-                      className="w-full h-24 border-dashed"
-                      onClick={() => gateFileInputRef.current?.click()}
-                      data-testid="button-capture-gate-photo"
-                    >
-                      <Camera className="mr-2 h-5 w-5" />
-                      Take Photo or Choose from Library
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 h-16 border-dashed"
+                        onClick={() => gateCaptureInputRef.current?.click()}
+                        data-testid="button-gate-photo-camera"
+                      >
+                        <Camera className="mr-2 h-4 w-4" />
+                        Take Photo
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1 h-16 border-dashed"
+                        onClick={() => gateFileInputRef.current?.click()}
+                        data-testid="button-gate-photo-gallery"
+                      >
+                        <ImageIcon className="mr-2 h-4 w-4" />
+                        Choose from Library
+                      </Button>
+                    </div>
                   )}
                 </div>
 
@@ -1345,6 +1417,15 @@ export default function TechMobile() {
                     className="hidden"
                     onChange={handleExtraPhotoCapture}
                     data-testid="input-extra-photo"
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    ref={extraCaptureInputRef}
+                    className="hidden"
+                    onChange={handleExtraPhotoCapture}
+                    data-testid="input-extra-photo-capture"
                   />
                   {extraFiles.length > 0 && (
                     <div className="grid grid-cols-3 gap-2 mb-2">
@@ -1369,14 +1450,24 @@ export default function TechMobile() {
                       ))}
                     </div>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => extraFileInputRef.current?.click()}
-                    data-testid="button-add-extra-photo"
-                  >
-                    <Plus className="mr-1 h-4 w-4" /> Add Photo
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => extraCaptureInputRef.current?.click()}
+                      data-testid="button-add-extra-photo-camera"
+                    >
+                      <Camera className="mr-1 h-4 w-4" /> Take Photo
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => extraFileInputRef.current?.click()}
+                      data-testid="button-add-extra-photo-gallery"
+                    >
+                      <ImageIcon className="mr-1 h-4 w-4" /> Choose from Library
+                    </Button>
+                  </div>
                 </div>
               </>
             )}
