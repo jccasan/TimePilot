@@ -18,6 +18,7 @@ import { OfflineStatusBar } from "@/components/offline-status-bar";
 import { PendingPhotosIndicator } from "@/components/pending-photos-indicator";
 import { cacheRouteData, getCachedRouteData, addPendingMutation, addPendingPhoto } from "@/lib/offline-store";
 import { isNetworkError } from "@/lib/offline-sync";
+import { compressImage } from "@/lib/compress-image";
 
 type TodayVisit = {
   id: string;
@@ -520,8 +521,10 @@ export default function TechMobile() {
     setUploadingVisitId(visitId);
     setUploadingType(photoType);
 
+    const compressed = await compressImage(file);
+
     try {
-      const objectPath = await uploadFileDirect(file);
+      const objectPath = await uploadFileDirect(compressed);
       const patchField = photoType === "before" ? "proofOfServicePhotoBefore" : "proofOfServicePhoto";
       await apiRequest("PATCH", `/api/visits/${visitId}`, { [patchField]: objectPath });
 
@@ -530,7 +533,7 @@ export default function TechMobile() {
       toast({ title: `${label} photo uploaded`, description: "Photo saved successfully." });
     } catch (err: any) {
       if (isNetworkError(err)) {
-        await addPendingPhoto({ visitId, photoType, blob: file });
+        await addPendingPhoto({ visitId, photoType, blob: compressed });
         offline.refreshPendingCount();
         const label = photoType === "before" ? "Before" : "After";
         toast({ title: `${label} photo saved offline`, description: "Will upload when connection returns." });
@@ -560,25 +563,27 @@ export default function TechMobile() {
     setIsCompleting(false);
   };
 
-  const handleGatePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGatePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    setGatePhoto(file);
+    const compressed = await compressImage(file);
+    setGatePhoto(compressed);
     const reader = new FileReader();
     reader.onload = () => setGatePhotoPreview(reader.result as string);
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(compressed);
   };
 
-  const handleExtraPhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleExtraPhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+    const compressed = await compressImage(file);
     const reader = new FileReader();
     reader.onload = () => {
-      setExtraFiles(prev => [...prev, { file, preview: reader.result as string }]);
+      setExtraFiles(prev => [...prev, { file: compressed, preview: reader.result as string }]);
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(compressed);
   };
 
   const removeExtraPhoto = (index: number) => {

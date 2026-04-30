@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
+import { compressImage } from "@/lib/compress-image";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { Visit, Contact, Property, Route, ServicePricingItem, ServicePlan } from "@shared/schema";
@@ -1358,13 +1359,14 @@ function VisitDetailSheet({
     editMutation.mutate({ visitId: visit.id, data: updates });
   };
 
-  const handleGatePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGatePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setGatePhotoFile(file);
+    const compressed = await compressImage(file);
+    setGatePhotoFile(compressed);
     const reader = new FileReader();
     reader.onload = (ev) => setGatePhotoPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(compressed);
   };
 
   const handleCompleteConfirm = async () => {

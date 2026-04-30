@@ -3,6 +3,7 @@ import { LiveRoutePlayback } from "@/components/live-route-playback";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
+import { compressImage } from "@/lib/compress-image";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import type { Route, ServicePlan, Contact, Property, Visit } from "@shared/schema";
@@ -1287,25 +1288,27 @@ export default function RoutesPage() {
     ? `Hi ${completionContactFirstName}. ${company?.name || "Our team"} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`
     : "";
 
-  const handleGatePhotoCapture = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGatePhotoCapture = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    setGatePhoto(file);
+    const compressed = await compressImage(file);
+    setGatePhoto(compressed);
     const reader = new FileReader();
     reader.onload = () => setGatePhotoPreview(reader.result as string);
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(compressed);
   }, []);
 
-  const handleExtraPhotoCapture = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleExtraPhotoCapture = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+    const compressed = await compressImage(file);
     const reader = new FileReader();
     reader.onload = () => {
-      setExtraFiles(prev => [...prev, { file, preview: reader.result as string }]);
+      setExtraFiles(prev => [...prev, { file: compressed, preview: reader.result as string }]);
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(compressed);
   }, []);
 
   const removeExtraPhoto = useCallback((index: number) => {
