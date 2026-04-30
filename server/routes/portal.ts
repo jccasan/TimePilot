@@ -77,7 +77,7 @@ import {
   reviewResponses,
 } from "@shared/schema";
 
-import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, normalizeQuoteFrequency } from "./shared";
+import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, normalizeQuoteFrequency, provisionPortalAccess } from "./shared";
 
 
 export async function registerPortalRoutes(app: Express): Promise<void> {
@@ -1531,103 +1531,6 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       res.json({ success: true });
     } catch (err) { handleError(res, err); }
   });
-
-  async function provisionPortalAccess(
-    contactId: string,
-    companyId: string,
-    portalBaseUrl: string,
-    opts?: { sendEmail?: boolean; serviceDetails?: { dayOfWeek?: string; frequency?: string; pricePerVisit?: string; nextVisitDate?: string } }
-  ): Promise<{ tempPassword: string; emailSent: boolean }> {
-    const contact = await storage.getContact(contactId, companyId);
-    if (!contact || !contact.email) return { tempPassword: "", emailSent: false };
-
-    const tempPassword = crypto.randomBytes(4).toString("hex") + "A1!";
-    const salt = crypto.randomBytes(16).toString("hex");
-    const portalPasswordHash = await new Promise<string>((resolve, reject) => {
-      crypto.scrypt(tempPassword, salt, 64, (err, key) => {
-        if (err) return reject(err);
-        resolve(`${salt}:${key.toString("hex")}`);
-      });
-    });
-
-    try {
-      await storage.updateContact(contactId, companyId, { hasPortalAccess: true, portalPasswordHash });
-    } catch (dbErr: any) {
-      console.error("[provisionPortalAccess] Failed to update contact:", { contactId, companyId, message: dbErr?.message, stack: dbErr?.stack });
-      throw new Error(`Failed to save portal credentials: ${dbErr?.message || String(dbErr)}`);
-    }
-
-    const company = await storage.getCompany(companyId);
-
-    // Check suppression flag — skip email if company has client notifications suppressed.
-    // sendEmail: true → force send (bypasses suppression, used by batch onboarding send)
-    // sendEmail: false → never send
-    // sendEmail: undefined → respect suppression flag
-    const shouldSend = opts?.sendEmail === true
-      ? true
-      : opts?.sendEmail === false
-        ? false
-        : !(company?.clientNotificationsSuppressed);
-    if (!shouldSend) {
-      console.log(`[provisionPortalAccess] Email suppressed (clientNotificationsSuppressed=true) for contact ${contactId}`);
-      return { tempPassword, emailSent: false };
-    }
-
-    const portalUrl = `${portalBaseUrl}/portal/login`;
-    const serviceDetails = opts?.serviceDetails;
-
-    const serviceSection = serviceDetails ? `
-          <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; margin: 16px 0;">
-            <p style="margin: 0 0 10px 0; font-weight: bold; color: #166534;">Your Service Details:</p>
-            ${serviceDetails.dayOfWeek ? `<p style="margin: 4px 0;">📅 <strong>Service Day:</strong> ${serviceDetails.dayOfWeek}</p>` : ""}
-            ${serviceDetails.frequency ? `<p style="margin: 4px 0;">🔄 <strong>Frequency:</strong> ${serviceDetails.frequency}</p>` : ""}
-            ${serviceDetails.pricePerVisit ? `<p style="margin: 4px 0;">💵 <strong>Price per Visit:</strong> $${serviceDetails.pricePerVisit}</p>` : ""}
-            ${serviceDetails.nextVisitDate ? `<p style="margin: 4px 0;">📆 <strong>Next Visit:</strong> ${serviceDetails.nextVisitDate}</p>` : ""}
-          </div>` : "";
-
-    const serviceText = serviceDetails ? [
-      serviceDetails.dayOfWeek ? `Service Day: ${serviceDetails.dayOfWeek}` : "",
-      serviceDetails.frequency ? `Frequency: ${serviceDetails.frequency}` : "",
-      serviceDetails.pricePerVisit ? `Price per Visit: $${serviceDetails.pricePerVisit}` : "",
-      serviceDetails.nextVisitDate ? `Next Visit: ${serviceDetails.nextVisitDate}` : "",
-    ].filter(Boolean).join("\n") : "";
-
-    const sendResult = await sendEmail({
-      companyId: companyId,
-      contactId: contactId,
-      bypassClientSuppression: opts?.sendEmail === true,
-      to: contact.email,
-      subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
-      senderName: company?.name || undefined,
-      replyTo: company?.email || undefined,
-      text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\n${serviceText ? "Your Service Details:\n" + serviceText + "\n\n" : ""}Please log in and change your password.\n\nThank you!`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
-            <h1 style="color: white; margin: 0;">${company?.name || "ScooPilot"}</h1>
-          </div>
-          <div style="padding: 20px; border: 1px solid #e5e7eb;">
-            <p>Hi ${contact.firstName},</p>
-            <p>You now have access to the client portal.</p>
-            <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
-              <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
-              <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>
-              <p style="margin: 0;">Temporary Password: <strong>${tempPassword}</strong></p>
-            </div>
-            ${serviceSection}
-            <a href="${portalUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Log In to Portal</a>
-            <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${portalUrl}</p>
-            <p style="color: #6b7280; font-size: 14px;">View your service schedule, invoices, and manage your account.</p>
-          </div>
-        </div>
-      `,
-    }).catch((err) => {
-      console.error("Failed to send portal access email:", err);
-      return { success: false as const, error: String(err), suppressed: false as const };
-    });
-
-    return { tempPassword, emailSent: sendResult.success && !sendResult.suppressed };
-  }
 
   // Admin route: generate portal invite link
   app.post("/api/contacts/:id/portal-access", isAuthenticated, async (req: Request, res: Response) => {

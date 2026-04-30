@@ -77,7 +77,7 @@ import {
   reviewResponses,
 } from "@shared/schema";
 
-import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, seedDefaultLeadSources } from "./shared";
+import { isAuthenticated, isAdmin, getCompanyContext, requireRole, getBaseUrl, handleError, sanitizeDecimal, auditLog, p, computeStopHash, clearRouteOptimizationState, notify, qboAutoSync, resolveCoordinatesForAddress, createPropertyWithGeocode, getStopOnlyOnlyContactIds, escapeHtml, seedDefaultLeadSources, normalizeQuoteFrequency } from "./shared";
 
 
 export async function registerQuotesRoutes(app: Express): Promise<void> {
@@ -372,24 +372,6 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       res.status(500).json({ error: err.message });
     }
   });
-
-  function normalizeQuoteFrequency(freq: string | null | undefined): "weekly" | "biweekly" | "monthly" | "onetime" {
-    switch (freq) {
-      case "weekly":
-      case "1x_weekly":
-      case "2x_weekly":
-      case "3x_weekly":
-        return "weekly";
-      case "biweekly":
-        return "biweekly";
-      case "monthly":
-        return "monthly";
-      case "onetime":
-        return "onetime";
-      default:
-        return "weekly";
-    }
-  }
 
   const createQuoteBodySchema = z.object({
     type: z.enum(["residential", "commercial"]),
