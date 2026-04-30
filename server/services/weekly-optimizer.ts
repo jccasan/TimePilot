@@ -1,39 +1,13 @@
-import { haversineDistance, optimizeRoute, fetchDriveTimeMatrix } from "./route-optimizer";
+import { haversineDistance, optimizeRoute, buildChunkedDistMap, ROUTE_MATRIX_LIMIT } from "./route-optimizer";
 
-const START_ID = "__start__";
 type TimeDistMap = Map<string, Map<string, number>>;
-
-function buildTimeDistMap(ids: string[], matrix: number[][]): TimeDistMap {
-  const map: TimeDistMap = new Map();
-  for (let i = 0; i < ids.length; i++) {
-    const inner = new Map<string, number>();
-    for (let j = 0; j < ids.length; j++) {
-      if (i !== j) inner.set(ids[j], matrix[i][j]);
-    }
-    map.set(ids[i], inner);
-  }
-  return map;
-}
 
 async function fetchDistMapForStops(
   stops: { id: string; latitude: number; longitude: number }[],
   startPoint?: { latitude: number; longitude: number }
 ): Promise<TimeDistMap | undefined> {
-  const MATRIX_LIMIT = 25;
-  const totalCoords = stops.length + (startPoint ? 1 : 0);
-  if (totalCoords > MATRIX_LIMIT || totalCoords < 2) return undefined;
-
-  const coords: { latitude: number; longitude: number }[] = [];
-  if (startPoint) coords.push(startPoint);
-  for (const s of stops) coords.push({ latitude: s.latitude, longitude: s.longitude });
-
-  const matrix = await fetchDriveTimeMatrix(coords);
-  if (!matrix) return undefined;
-
-  const ids: string[] = [];
-  if (startPoint) ids.push(START_ID);
-  for (const s of stops) ids.push(s.id);
-  return buildTimeDistMap(ids, matrix);
+  if (stops.length < 1 || stops.length > ROUTE_MATRIX_LIMIT) return undefined;
+  return buildChunkedDistMap(stops, startPoint);
 }
 
 export interface WeeklyStop {

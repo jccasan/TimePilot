@@ -282,33 +282,68 @@ export function optimizeRoute(
 }
 
 /**
- * Async version: fetches the Mapbox Matrix API for real drive times (when ≤25 stops),
+ * Build a TimeDistMap for up to ROUTE_MATRIX_LIMIT stops via Mapbox Matrix API.
+ * The Mapbox Matrix API is capped at 25 coordinates per call, so for larger routes
+ * we chunk: include the start point + up to 24 stops per chunk, merge the results.
+ * - Start→stop and intra-chunk stop→stop edges: real driving time.
+ * - Cross-chunk stop→stop edges: not populated (getDist falls back to haversine).
+ * Returns undefined if the API is unavailable or any chunk fails.
+ */
+export const ROUTE_MATRIX_LIMIT = 50;
+const MAPBOX_MATRIX_CAP = 25; // Hard Mapbox API limit per call
+
+export async function buildChunkedDistMap(
+  stops: Stop[],
+  startPoint?: StartPoint
+): Promise<TimeDistMap | undefined> {
+  if (stops.length < 1 || stops.length > ROUTE_MATRIX_LIMIT) return undefined;
+  const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
+  if (!token) return undefined;
+
+  const map: TimeDistMap = new Map();
+  // Each chunk: start point (1 slot) + up to MAPBOX_MATRIX_CAP-1 stops
+  const chunkSize = startPoint ? MAPBOX_MATRIX_CAP - 1 : MAPBOX_MATRIX_CAP;
+
+  for (let i = 0; i < stops.length; i += chunkSize) {
+    const chunk = stops.slice(i, i + chunkSize);
+    const coords: { latitude: number; longitude: number }[] = [];
+    const chunkIds: string[] = [];
+
+    if (startPoint) {
+      coords.push(startPoint);
+      chunkIds.push(START_ID);
+    }
+    for (const s of chunk) {
+      coords.push({ latitude: s.latitude, longitude: s.longitude });
+      chunkIds.push(s.id);
+    }
+    if (coords.length < 2) break;
+
+    const matrix = await fetchDriveTimeMatrix(coords);
+    if (!matrix) return undefined; // Any chunk failure → full haversine fallback
+
+    for (let ri = 0; ri < chunkIds.length; ri++) {
+      if (!map.has(chunkIds[ri])) map.set(chunkIds[ri], new Map());
+      for (let ci = 0; ci < chunkIds.length; ci++) {
+        if (ri !== ci) map.get(chunkIds[ri])!.set(chunkIds[ci], matrix[ri][ci]);
+      }
+    }
+  }
+
+  return map.size > 0 ? map : undefined;
+}
+
+/**
+ * Async version: fetches the Mapbox Matrix API for real drive times (up to 50 stops),
  * then runs the optimizer using those times. Falls back to haversine silently.
  */
 export async function optimizeRouteAsync(
   stops: Stop[],
   startPoint?: StartPoint
 ): Promise<{ orderedIds: string[]; totalDistance: number }> {
-  let distMap: TimeDistMap | undefined;
-
-  const MATRIX_LIMIT = 25;
-  // Build coords list: start point first (if any), then stops
-  const totalCoords = stops.length + (startPoint ? 1 : 0);
-
-  if (totalCoords <= MATRIX_LIMIT) {
-    const coords: { latitude: number; longitude: number }[] = [];
-    if (startPoint) coords.push(startPoint);
-    for (const s of stops) coords.push({ latitude: s.latitude, longitude: s.longitude });
-
-    const matrix = await fetchDriveTimeMatrix(coords);
-    if (matrix) {
-      const ids: string[] = [];
-      if (startPoint) ids.push(START_ID);
-      for (const s of stops) ids.push(s.id);
-      distMap = buildTimeDistMap(ids, matrix);
-    }
-  }
-  // If no matrix (too many stops or API failure), distMap stays undefined → haversine fallback
+  const distMap = stops.length <= ROUTE_MATRIX_LIMIT
+    ? await buildChunkedDistMap(stops, startPoint)
+    : undefined;
 
   return optimizeRoute(stops, startPoint, distMap);
 }
