@@ -2384,7 +2384,6 @@ export default function RoutesPage() {
           credits={credits}
           monthlyAllowance={monthlyAllowance}
           onNeedCredits={(topUpNeeded) => { setPurchaseTopUpNeeded(topUpNeeded); setShowPurchase(true); }}
-          weekStart={weekStartStr}
         />
       )}
 

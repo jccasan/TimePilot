@@ -127,7 +127,6 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
   credits: number;
   monthlyAllowance?: number;
   onNeedCredits: (topUpNeeded: number) => void;
-  weekStart?: string;
 }) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -159,11 +158,12 @@ export function WeeklyOptimizerPanel({ open, onOpenChange, credits, monthlyAllow
   });
   const liveCredits = applyConfirmPending && freshCreditData != null ? freshCreditData.credits : credits;
 
-  const { data: teamMembers = [] } = useQuery<TeamMember[]>({
+  const { data: allTeamMembers = [] } = useQuery<TeamMember[]>({
     queryKey: ["/api/company/team"],
     staleTime: 5 * 60 * 1000,
     enabled: !!multiWeekResult,
   });
+  const teamMembers = allTeamMembers.filter(m => m.role === "tech");
 
   const totalAcceptedCredits = multiWeekResult
     ? multiWeekResult.weeks
