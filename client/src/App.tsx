@@ -554,7 +554,11 @@ function PortalRouter() {
         <Route path="/portal/verify-email" component={PortalVerifyEmail} />
         <Route path="/portal/client" component={PortalClient} />
         <Route path="/portal/:slug/quotes/:quoteId">
-          {(params: any) => <PortalQuoteView quoteId={params.quoteId} />}
+          {(params: any) => {
+            const searchParams = new URLSearchParams(window.location.search);
+            const token = searchParams.get("token") || "";
+            return <PortalQuoteView quoteId={params.quoteId} token={token} />;
+          }}
         </Route>
         <Route>{() => { window.location.href = "/portal/login"; return null; }}</Route>
       </Switch>

@@ -29,21 +29,24 @@ interface PortalQuote {
   acceptedAt?: string;
 }
 
-export default function PortalQuoteView({ quoteId }: { quoteId: string }) {
+export default function PortalQuoteView({ quoteId, token }: { quoteId: string; token: string }) {
   const [selectedTier, setSelectedTier] = useState<string>("");
 
   const { data, isLoading, error } = useQuery<{ quote: PortalQuote; companyName: string }>({
-    queryKey: ["/api/portal/quotes", quoteId],
+    queryKey: ["/api/portal/quotes", quoteId, token],
     queryFn: async () => {
-      const res = await fetch(`/api/portal/quotes/${quoteId}`);
-      if (!res.ok) throw new Error("Quote not found");
+      const res = await fetch(`/api/portal/quotes/${quoteId}?token=${encodeURIComponent(token)}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Quote not found");
+      }
       return res.json();
     },
   });
 
   const acceptMutation = useMutation({
     mutationFn: async (tier: string) => {
-      const res = await fetch(`/api/portal/quotes/${quoteId}/accept`, {
+      const res = await fetch(`/api/portal/quotes/${quoteId}/accept?token=${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tier }),
@@ -61,7 +64,7 @@ export default function PortalQuoteView({ quoteId }: { quoteId: string }) {
 
   const declineMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/portal/quotes/${quoteId}/decline`, {
+      const res = await fetch(`/api/portal/quotes/${quoteId}/decline?token=${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -95,13 +98,15 @@ export default function PortalQuoteView({ quoteId }: { quoteId: string }) {
   }
 
   if (error || !data) {
+    const errorMsg = (error as Error)?.message;
+    const isAccessDenied = errorMsg?.includes("access token") || errorMsg?.includes("Invalid or missing");
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center p-4">
         <Card className="max-w-md text-center">
           <CardContent className="p-8">
             <AlertTriangle className="h-12 w-12 mx-auto text-amber-500 mb-4" />
-            <h2 className="text-lg font-semibold mb-2">Quote Not Found</h2>
-            <p className="text-muted-foreground">This quote may have been removed or the link is invalid.</p>
+            <h2 className="text-lg font-semibold mb-2">{isAccessDenied ? "Access Denied" : "Quote Not Found"}</h2>
+            <p className="text-muted-foreground">{errorMsg || "This quote may have been removed or the link is invalid."}</p>
           </CardContent>
         </Card>
       </div>

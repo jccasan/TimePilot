@@ -14270,7 +14270,11 @@ Rules:
       };
 
       const slug = (company as any).slug || companyId;
-      const acceptUrl = `${req.protocol}://${req.get("host")}/portal/${slug}/quotes/${quote.id}`;
+      const quoteToken = (quote as any).quoteToken || crypto.randomUUID();
+      if (!(quote as any).quoteToken) {
+        await storage.updateQuote(quote.id, companyId, { quoteToken } as any);
+      }
+      const acceptUrl = `${req.protocol}://${req.get("host")}/portal/${slug}/quotes/${quote.id}?token=${quoteToken}`;
 
       const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : undefined;
 
@@ -15363,9 +15367,13 @@ Rules:
   app.get("/api/portal/quotes/:id", async (req: Request, res: Response) => {
     try {
       const quoteId = p(req.params.id);
+      const providedToken = req.query.token as string | undefined;
       const allQuotes = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
       const quoteRow = allQuotes.rows?.[0];
       if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
+      if (!quoteRow.quote_token || !providedToken || quoteRow.quote_token !== providedToken) {
+        return res.status(403).json({ error: "Invalid or missing quote access token" });
+      }
 
       const isExpired = quoteRow.status === "expired" || (quoteRow.expires_at && new Date(quoteRow.expires_at as string) < new Date());
 
@@ -15408,7 +15416,8 @@ Rules:
   app.post("/api/portal/quotes/:id/accept", async (req: Request, res: Response) => {
     try {
       const quoteId = p(req.params.id);
-      const { tier } = req.body;
+      const { tier, token: bodyToken } = req.body;
+      const providedToken = (req.query.token as string | undefined) || bodyToken;
       if (!tier || !["essential", "premium", "deluxe"].includes(tier)) {
         return res.status(400).json({ error: "Must select a tier: essential, premium, or deluxe" });
       }
@@ -15416,6 +15425,9 @@ Rules:
       const result = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
       const quoteRow = result.rows?.[0];
       if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
+      if (!quoteRow.quote_token || !providedToken || quoteRow.quote_token !== providedToken) {
+        return res.status(403).json({ error: "Invalid or missing quote access token" });
+      }
 
       if (quoteRow.status !== "sent" && quoteRow.status !== "draft") {
         return res.status(400).json({ error: "This quote has already been " + quoteRow.status });
@@ -15483,9 +15495,13 @@ Rules:
   app.post("/api/portal/quotes/:id/decline", async (req: Request, res: Response) => {
     try {
       const quoteId = p(req.params.id);
+      const providedToken = (req.query.token as string | undefined) || req.body.token;
       const result = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
       const quoteRow = result.rows?.[0];
       if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
+      if (!quoteRow.quote_token || !providedToken || quoteRow.quote_token !== providedToken) {
+        return res.status(403).json({ error: "Invalid or missing quote access token" });
+      }
 
       if (quoteRow.status !== "sent" && quoteRow.status !== "draft") {
         return res.status(400).json({ error: "This quote has already been " + quoteRow.status });
@@ -16145,12 +16161,9 @@ Rules:
       }
 
       const property = propertiesList[0];
-      let token = property.onboardingToken;
-
-      if (!token) {
-        token = crypto.randomUUID();
-        await storage.updateProperty(property.id, companyId, { onboardingToken: token });
-      }
+      const tokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const token = crypto.randomUUID();
+      await storage.updateProperty(property.id, companyId, { onboardingToken: token, onboardingTokenExpiresAt: tokenExpiry } as any);
 
       const baseUrl = getBaseUrl(req);
       const onboardingUrl = `${baseUrl}/onboarding/${token}`;
@@ -16222,7 +16235,8 @@ Rules:
 
       const property = propertiesList[0];
       const newToken = crypto.randomUUID();
-      await storage.updateProperty(property.id, companyId, { onboardingToken: newToken });
+      const newTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await storage.updateProperty(property.id, companyId, { onboardingToken: newToken, onboardingTokenExpiresAt: newTokenExpiry } as any);
 
       const baseUrl = getBaseUrl(req);
       const onboardingUrl = `${baseUrl}/onboarding/${newToken}`;
@@ -16275,6 +16289,7 @@ Rules:
     has_dangerous_dog: boolean; dangerous_dog_notes: string | null;
     dog_names: string | null; dog_breeds: string | null;
     onboarding_completed_at: string | null;
+    onboarding_token_expires_at: string | null;
     first_name: string; last_name: string; email: string | null; phone: string | null;
     company_name: string; logo_url: string | null;
   }
@@ -16286,7 +16301,7 @@ Rules:
         SELECT p.id, p.contact_id, p.company_id, p.street_address, p.city, p.state, p.zip_code,
                p.number_of_dogs, p.gate_code, p.special_instructions,
                p.has_dangerous_dog, p.dangerous_dog_notes, p.dog_names, p.dog_breeds,
-               p.onboarding_completed_at,
+               p.onboarding_completed_at, p.onboarding_token_expires_at,
                c.first_name, c.last_name, c.email, c.phone,
                co.name as company_name, co.logo_url
         FROM properties p
@@ -16297,6 +16312,9 @@ Rules:
       `);
       if (!rows.rows.length) return res.status(404).json({ error: "Onboarding link not found or expired" });
       const row = rows.rows[0] as unknown as OnboardingGetRow;
+      if (!row.onboarding_token_expires_at || new Date(row.onboarding_token_expires_at) < new Date()) {
+        return res.status(410).json({ error: "This onboarding link has expired. Please contact your service provider for a new link." });
+      }
       res.json({
         contact: {
           firstName: row.first_name,
@@ -16332,13 +16350,16 @@ Rules:
     try {
       const { token: _token } = req.params; const token = p(_token);
       const rows = await db.execute(sql`
-        SELECT p.id, p.company_id, p.contact_id, p.onboarding_completed_at
+        SELECT p.id, p.company_id, p.contact_id, p.onboarding_completed_at, p.onboarding_token_expires_at
         FROM properties p
         WHERE p.onboarding_token = ${token}
         LIMIT 1
       `);
       if (!rows.rows.length) return res.status(404).json({ error: "Onboarding link not found" });
-      const row = rows.rows[0] as { id: string; company_id: string; contact_id: string; onboarding_completed_at: string | null };
+      const row = rows.rows[0] as { id: string; company_id: string; contact_id: string; onboarding_completed_at: string | null; onboarding_token_expires_at: string | null };
+      if (!row.onboarding_token_expires_at || new Date(row.onboarding_token_expires_at) < new Date()) {
+        return res.status(410).json({ error: "This onboarding link has expired. Please contact your service provider for a new link." });
+      }
       if (row.onboarding_completed_at) {
         return res.status(400).json({ error: "This onboarding form has already been submitted" });
       }

@@ -390,6 +390,7 @@ export const properties = pgTable("properties", {
   hasDangerousDog: boolean("has_dangerous_dog").default(false),
   dangerousDogNotes: text("dangerous_dog_notes"),
   onboardingToken: varchar("onboarding_token", { length: 36 }).unique(),
+  onboardingTokenExpiresAt: timestamp("onboarding_token_expires_at"),
   onboardingCompletedAt: timestamp("onboarding_completed_at"),
   dogNames: text("dog_names"),
   dogBreeds: text("dog_breeds"),
@@ -1785,6 +1786,7 @@ export const quotes = pgTable("quotes", {
   sentAt: timestamp("sent_at"),
   acceptedAt: timestamp("accepted_at"),
   declinedAt: timestamp("declined_at"),
+  quoteToken: varchar("quote_token", { length: 36 }).unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
