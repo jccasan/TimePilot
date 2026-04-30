@@ -5435,39 +5435,46 @@ Return ONLY valid JSON, no markdown.`,
   app.post("/api/routes/optimize-weekly", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { respectZones = false, includeSaturday = false, weekStart } = req.body || {};
+      const { respectZones = false, includeSaturday = false } = req.body || {};
 
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
       const tz = company.timezone || "America/New_York";
 
-      // Determine the week range to analyse — defaults to current week
-      const weekStartDate: string = (typeof weekStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(weekStart))
-        ? weekStart
-        : getCompanyWeekStart(tz);
-      const weekStartObj = new Date(weekStartDate + "T12:00:00Z");
-      const weekEndObj = new Date(weekStartObj);
-      weekEndObj.setUTCDate(weekEndObj.getUTCDate() + 6);
-      const weekEndDate = weekEndObj.toISOString().split("T")[0];
+      // Scan the next 30 days of visits to capture all recurring plans — weekly,
+      // bi-weekly, and monthly customers all appear at least once in this window.
+      const todayStr = getCompanyToday(tz);
+      const windowEndObj = new Date(todayStr + "T12:00:00Z");
+      windowEndObj.setUTCDate(windowEndObj.getUTCDate() + 30);
+      const windowEndDate = windowEndObj.toISOString().split("T")[0];
 
-      // Fetch actual visits for this week — these are the appointments we will optimize
-      const weekVisitsAll = await storage.getVisitsForDateRange(companyId, weekStartDate, weekEndDate);
-      const activeWeekVisits = weekVisitsAll.filter(v => v.status !== "cancelled" && v.servicePlanId);
+      const windowVisitsAll = await storage.getVisitsForDateRange(companyId, todayStr, windowEndDate);
+      const activeWindowVisits = windowVisitsAll.filter(v => v.status !== "cancelled" && v.servicePlanId);
 
-      if (activeWeekVisits.length < 3) {
-        return res.status(400).json({ error: "Need at least 3 active appointments this week to optimize. Generate visits for this week first or select a different week." });
+      if (activeWindowVisits.length < 3) {
+        return res.status(400).json({ error: "Need at least 3 upcoming appointments to optimize. Generate visits for the next several weeks first." });
       }
 
       // Build plan + property maps for geographic data
-      const uniquePlanIds = Array.from(new Set(activeWeekVisits.map(v => v.servicePlanId!)));
       const allPlans = await storage.getServicePlans(companyId, { isActive: true });
       const planMap = new Map(allPlans.map(p => [p.id, p]));
+
+      // Deduplicate: one entry per service plan — captures every active customer
+      // regardless of visit frequency (weekly/bi-weekly/monthly).
+      const seenPlanIds = new Set<string>();
+      const dedupedVisits = activeWindowVisits.filter(v => {
+        if (!v.servicePlanId || seenPlanIds.has(v.servicePlanId)) return false;
+        seenPlanIds.add(v.servicePlanId);
+        return true;
+      });
+
+      const uniquePlanIds = dedupedVisits.map(v => v.servicePlanId!);
 
       const allProperties = await storage.getProperties(companyId);
       let propertyMap = new Map(allProperties.map(p => [p.id, p]));
 
-      // Geocode any missing properties referenced by this week's visits
+      // Geocode any missing properties referenced by upcoming visits
       const plansNeedingGeocode = uniquePlanIds
         .map(id => planMap.get(id))
         .filter((sp): sp is NonNullable<typeof sp> => {
@@ -5489,33 +5496,26 @@ Return ONLY valid JSON, no markdown.`,
 
       const { analyzeWeeklySchedule } = await import("./services/weekly-optimizer");
 
-      // Map each visit to a WeeklyStop — currentDay comes from the visit's actual scheduled date
-      const DAYS_OF_WEEK = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
       const ACTIVE_DAYS_SET = includeSaturday
         ? new Set(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"])
         : new Set(["monday", "tuesday", "wednesday", "thursday", "friday"]);
 
-      // Filter to only visits on active days — prevents Saturday visits from being silently
-      // reassigned to Monday inside the optimizer when includeSaturday is false
+      // Build one WeeklyStop per unique service plan.
+      // currentDay comes from the plan's own dayOfWeek — the recurring schedule —
+      // not from a specific visit date. This is the true "current" state.
       let excludedWeekendCount = 0;
-      const activeWeekVisitsFiltered = activeWeekVisits.filter(visit => {
-        const dow = new Date(visit.scheduledDate + "T12:00:00Z").getUTCDay();
-        const dayName = DAYS_OF_WEEK[dow];
-        if (!ACTIVE_DAYS_SET.has(dayName)) {
-          excludedWeekendCount++;
-          return false;
-        }
-        return true;
-      });
-
-      const weeklyStops = activeWeekVisitsFiltered
+      const weeklyStops = dedupedVisits
         .map(visit => {
           const sp = visit.servicePlanId ? planMap.get(visit.servicePlanId) : undefined;
           if (!sp) return null;
           const prop = propertyMap.get(sp.propertyId);
           const contact = contactMap.get(sp.contactId);
           if (!prop || !prop.latitude || !prop.longitude) return null;
-          const visitDow = new Date(visit.scheduledDate + "T12:00:00Z").getUTCDay();
+          const planDay = (sp.dayOfWeek || "monday").toLowerCase();
+          if (!ACTIVE_DAYS_SET.has(planDay)) {
+            excludedWeekendCount++;
+            return null;
+          }
           return {
             id: sp.id,
             servicePlanId: sp.id,
@@ -5525,7 +5525,7 @@ Return ONLY valid JSON, no markdown.`,
             address: `${prop.streetAddress || ""}${prop.city ? `, ${prop.city}` : ""}`,
             latitude: parseFloat(String(prop.latitude)),
             longitude: parseFloat(String(prop.longitude)),
-            currentDay: DAYS_OF_WEEK[visitDow] || "monday",
+            currentDay: planDay,
             currentRouteId: sp.routeId,
             currentStopOrder: sp.stopOrder,
             zipCode: prop.zipCode || null,
