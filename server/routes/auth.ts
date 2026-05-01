@@ -6,132 +6,24 @@ import { db } from "../db";
 import { eq } from "drizzle-orm";
 import { users, companies } from "@shared/schema";
 import {
-  registerUser,
   loginUser,
   getUserById,
   createPasswordResetToken,
   resetPasswordWithToken,
   changePassword,
-  claimOnboardingEmailSend,
-  resetOnboardingEmailSent,
 } from "../services/app-auth";
-import {
-  sendEmail,
-  sendAdminSignupNotification,
-  buildWelcomeEmailContent,
-} from "../services/email";
-import { checkIpRisk, getClientIp, getCountryCode } from "../services/ip-risk";
+import { sendEmail } from "../services/email";
 
 import { isAuthenticated, handleError, ensureCompanySetup } from "./shared";
 
 export async function registerAuthRoutes(app: Express): Promise<void> {
   // ================ Auth Routes ================
 
-  app.post("/api/auth/register", async (req: Request, res: Response) => {
-    try {
-      const { email, password, firstName, lastName, companyName } = req.body;
-
-      const clientIp = getClientIp(req as any);
-      const cfCountry = (req.headers["cf-ipcountry"] as string | undefined)?.trim().toUpperCase();
-      const [ipRisk, countryCode] = await Promise.all([
-        checkIpRisk(clientIp),
-        getCountryCode(clientIp, cfCountry),
-      ]);
-
-      if (ipRisk.isVpn || ipRisk.isProxy) {
-        console.warn(
-          `[Signup] Blocked VPN/proxy signup from ${clientIp} (type: ${ipRisk.isVpn ? "VPN" : "proxy"}, country: ${countryCode ?? "unknown"}, email: ${email})`
-        );
-        return res.status(403).json({
-          error:
-            "Signups from VPN or proxy connections are not allowed. Please disable your VPN and try again.",
-        });
-      }
-
-      const detectedCountry = countryCode ?? ipRisk.countryCode;
-      const blockedCountries = (process.env.BLOCKED_SIGNUP_COUNTRIES || "")
-        .split(",")
-        .map((c) => c.trim().toUpperCase())
-        .filter(Boolean);
-      if (detectedCountry && blockedCountries.includes(detectedCountry)) {
-        console.warn(
-          `[Signup] Blocked signup from country ${detectedCountry}, IP ${clientIp}, email: ${email}`
-        );
-        return res.status(403).json({ error: "Signups are not available in your region." });
-      }
-
-      const result = await registerUser(email, password, firstName || "", lastName || "");
-      if ("error" in result) {
-        return res.status(400).json({ error: result.error });
-      }
-      (req.session as any).userId = result.user.id;
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => (err ? reject(err) : resolve()));
-      });
-      const { passwordHash: _passwordHash, ...safeUser } = result.user;
-
-      let setupDone = false;
-      let companyInfo: { companyId: string; alreadySetup: boolean } | null = null;
-      try {
-        companyInfo = await ensureCompanySetup(result.user.id, companyName);
-        setupDone = true;
-      } catch (err) {
-        console.error("Setup during register failed:", err);
-      }
-
-      const displayName = [firstName, lastName].filter(Boolean).join(" ") || "there";
-      const protocol = req.headers["x-forwarded-proto"] || "https";
-      const host = req.headers.host || "localhost:5000";
-      const appUrl = `${protocol}://${host}`;
-      const resolvedCompanyName = companyName?.trim() || `${displayName}'s Company`;
-
-      claimOnboardingEmailSend(result.user.id)
-        .then(async (claimed) => {
-          if (!claimed) {
-            console.log(
-              `[Register] Onboarding email already sent for ${maskEmail(email)}, skipping.`
-            );
-            return;
-          }
-          try {
-            const _selfSignupWelcome = buildWelcomeEmailContent({
-              firstName: displayName,
-              companyName: resolvedCompanyName,
-              appUrl,
-            });
-            await sendEmail({
-              to: email,
-              subject: _selfSignupWelcome.subject,
-              text: _selfSignupWelcome.text,
-              html: _selfSignupWelcome.html,
-            });
-            console.log(`[Register] Welcome email sent to ${maskEmail(email)}`);
-          } catch (emailErr) {
-            console.error(
-              `[Register] Failed to send welcome email to ${maskEmail(email)}, resetting flag:`,
-              emailErr
-            );
-            await resetOnboardingEmailSent(result.user.id).catch(() => {});
-          }
-        })
-        .catch((err) => console.error("Failed to claim/send welcome email:", err));
-
-      if (companyInfo && !companyInfo.alreadySetup) {
-        sendAdminSignupNotification({
-          companyName: resolvedCompanyName,
-          ownerEmail: email,
-          ownerName: displayName,
-          tier: "free_trial",
-          source: "Direct Registration",
-        }).catch((err) =>
-          console.error("[Signup Notification] Failed during direct registration:", err)
-        );
-      }
-
-      return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
-    } catch (err) {
-      handleError(res, err);
-    }
+  app.post("/api/auth/register", (_req: Request, res: Response) => {
+    return res.status(410).json({
+      error:
+        "Direct registration is no longer available. Please sign up at the main signup page, which will send you a verification email before creating your account.",
+    });
   });
 
   app.post("/api/auth/login", async (req: Request, res: Response) => {

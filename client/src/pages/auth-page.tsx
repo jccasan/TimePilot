@@ -1,6 +1,14 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardList, Calendar, MapPin, FileText, ExternalLink, ArrowLeft } from "lucide-react";
+import {
+  ClipboardList,
+  Calendar,
+  MapPin,
+  FileText,
+  ExternalLink,
+  ArrowLeft,
+  Mail,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,7 +25,9 @@ const features = [
 ];
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<"login" | "register" | "forgot" | "change-password">("login");
+  const [mode, setMode] = useState<
+    "login" | "register" | "forgot" | "change-password" | "verify-email-sent"
+  >("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -105,11 +115,10 @@ export default function AuthPage() {
 
   const registerMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch("/api/public/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password, firstName, lastName, companyName }),
+        body: JSON.stringify({ email, firstName, lastName, companyName }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -117,14 +126,32 @@ export default function AuthPage() {
       }
       return res.json();
     },
-    onSuccess: (data) => {
-      if (data.sessionToken) {
-        localStorage.setItem("sessionToken", data.sessionToken);
-      }
-      queryClient.setQueryData(["/api/auth/user"], data);
+    onSuccess: () => {
+      setMode("verify-email-sent");
     },
     onError: (error: Error) => {
       toast({ title: "Registration failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const resendVerificationMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/public/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, firstName, lastName, companyName }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to resend email");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Email resent", description: "Check your inbox for the verification link." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -163,6 +190,7 @@ export default function AuthPage() {
   const isPending =
     loginMutation.isPending ||
     registerMutation.isPending ||
+    resendVerificationMutation.isPending ||
     forgotMutation.isPending ||
     changePasswordMutation.isPending;
 
@@ -245,6 +273,41 @@ export default function AuthPage() {
                   {isPending ? "Setting password..." : "Set New Password"}
                 </Button>
               </form>
+            </div>
+          ) : mode === "verify-email-sent" ? (
+            <div className="space-y-4">
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-center space-y-3">
+                <div className="flex justify-center">
+                  <Mail className="h-8 w-8 text-primary" />
+                </div>
+                <p className="font-medium text-lg" data-testid="text-verify-email-sent">
+                  Check your email
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  We sent a verification link to{" "}
+                  <span className="font-medium text-foreground">{email}</span>. Click the link to
+                  activate your account. The link expires in 24 hours.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => resendVerificationMutation.mutate()}
+                disabled={isPending}
+                data-testid="button-resend-verification"
+              >
+                {resendVerificationMutation.isPending ? "Resending..." : "Resend email"}
+              </Button>
+              <div className="text-center">
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground hover:underline"
+                  onClick={() => setMode("login")}
+                  data-testid="button-back-to-login-from-verify"
+                >
+                  <ArrowLeft className="mr-1 h-3 w-3 inline" /> Back to Sign In
+                </button>
+              </div>
             </div>
           ) : mode === "forgot" ? (
             forgotSent ? (
@@ -363,30 +426,31 @@ export default function AuthPage() {
                     data-testid="input-email"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={isRegister ? "At least 8 characters" : "Your password"}
-                    required
-                    minLength={isRegister ? 8 : undefined}
-                    data-testid="input-password"
-                  />
-                </div>
                 {!isRegister && (
-                  <div className="text-right">
-                    <button
-                      type="button"
-                      className="text-sm text-muted-foreground hover:underline"
-                      onClick={() => setMode("forgot")}
-                      data-testid="button-forgot-password"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
+                  <>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="password">Password</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Your password"
+                        required
+                        data-testid="input-password"
+                      />
+                    </div>
+                    <div className="text-right">
+                      <button
+                        type="button"
+                        className="text-sm text-muted-foreground hover:underline"
+                        onClick={() => setMode("forgot")}
+                        data-testid="button-forgot-password"
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+                  </>
                 )}
                 <Button
                   type="submit"
@@ -397,7 +461,7 @@ export default function AuthPage() {
                 >
                   {isPending
                     ? isRegister
-                      ? "Creating account..."
+                      ? "Sending verification..."
                       : "Signing in..."
                     : isRegister
                       ? "Create Account"

@@ -127,43 +127,37 @@ async function runTests() {
   // ==========================================
 
   await test(
-    "Register with missing fields returns 400",
+    "Old register endpoint returns 410 Gone (self-service signup disabled)",
     "Auth",
     async () => {
       const r = await req("POST", "/api/auth/register", {}, { Authorization: "" });
+      assert(r.status === 410, `Expected 410 Gone, got ${r.status}: ${JSON.stringify(r.data)}`);
+      assert(r.data.error, "Expected error message in response");
+    },
+    "No input validation"
+  );
+
+  await test(
+    "Public signup with missing fields returns 400",
+    "Auth",
+    async () => {
+      const r = await req("POST", "/api/public/signup", {}, { Authorization: "" });
       assert(r.status === 400, `Expected 400, got ${r.status}: ${JSON.stringify(r.data)}`);
     },
     "No input validation"
   );
 
   await test(
-    "Register with empty email returns 400",
+    "Public signup with invalid email returns 400",
     "Auth",
     async () => {
       const r = await req(
         "POST",
-        "/api/auth/register",
-        {
-          email: "",
-          password: testPassword,
-        },
-        { Authorization: "" }
-      );
-      assert(r.status === 400, `Expected 400, got ${r.status}: ${JSON.stringify(r.data)}`);
-    },
-    "No input validation"
-  );
-
-  await test(
-    "Register with invalid email format returns 400",
-    "Auth",
-    async () => {
-      const r = await req(
-        "POST",
-        "/api/auth/register",
+        "/api/public/signup",
         {
           email: "not-an-email",
-          password: testPassword,
+          firstName: "Test",
+          companyName: "Test Co",
         },
         { Authorization: "" }
       );
@@ -173,61 +167,27 @@ async function runTests() {
   );
 
   await test(
-    "Register with short password returns 400",
+    "Public signup with already-registered email returns 409 conflict",
     "Auth",
     async () => {
       const r = await req(
         "POST",
-        "/api/auth/register",
+        "/api/public/signup",
         {
-          email: testEmail,
-          password: "short",
-        },
-        { Authorization: "" }
-      );
-      assert(r.status === 400, `Expected 400, got ${r.status}`);
-    },
-    "No input validation"
-  );
-
-  await test(
-    "Register with valid data succeeds",
-    "Auth",
-    async () => {
-      const r = await req(
-        "POST",
-        "/api/auth/register",
-        {
-          email: testEmail,
-          password: testPassword,
+          email: DEMO_EMAIL,
           firstName: "Test",
           lastName: "User",
+          companyName: "Test Co",
         },
         { Authorization: "" }
       );
       if (r.status === 429) return; // rate-limited; skip gracefully
-      assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
-      assert(r.data.email === testEmail, "Email mismatch");
-      assert(!r.data.passwordHash, "Password hash exposed in response");
-      assert(r.data.sessionToken, "No sessionToken returned");
-    },
-    "API keys exposed in code"
+      assert(
+        r.status === 409,
+        `Expected 409 for existing account, got ${r.status}: ${JSON.stringify(r.data)}`
+      );
+    }
   );
-
-  await test("Register duplicate email returns 400", "Auth", async () => {
-    // Use the demo email which is always present in the database.
-    const r = await req(
-      "POST",
-      "/api/auth/register",
-      {
-        email: DEMO_EMAIL,
-        password: testPassword,
-      },
-      { Authorization: "" }
-    );
-    if (r.status === 429) return; // rate-limited; skip gracefully
-    assert(r.status === 400, `Expected 400 for duplicate, got ${r.status}`);
-  });
 
   await test("Login with wrong password returns 401", "Auth", async () => {
     const r = await req(
