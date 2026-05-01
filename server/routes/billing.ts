@@ -142,7 +142,8 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         apiVersion: "2026-01-28.clover" as const,
       });
 
-      const sessionParams: Partial<Record<string, unknown>> = {
+      const sessionParams: import("stripe").Stripe.Checkout.SessionCreateParams = {
+        mode: "payment",
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${baseUrl}/settings?seatAdded=1`,
         cancel_url: `${baseUrl}/settings`,
@@ -158,7 +159,12 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         sessionParams.customer_email = company.email;
       }
 
+      console.log(`[seat-checkout] Creating session for company ${companyId}, priceId=${priceId}`);
       const session = await stripeLib.checkout.sessions.create(sessionParams);
+      console.log(`[seat-checkout] Session created: ${session.id}, url=${session.url ? "ok" : "null"}`);
+      if (!session.url) {
+        return res.status(500).json({ error: "Stripe did not return a checkout URL" });
+      }
       res.json({ url: session.url });
     } catch (err) {
       handleError(res, err);
