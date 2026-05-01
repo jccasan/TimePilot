@@ -9,6 +9,7 @@ import {
   type PriceCalculatorInputs,
   type PriceCalculatorResult,
 } from "./pricing-calculator";
+import { computeJobEconomics, type JobEconomicsResult } from "./job-economics-engine";
 import type { PricingConfig, InsertProfitabilitySnapshot } from "@shared/schema";
 
 export type ProfitabilityStatus = "profitable" | "marginal" | "unprofitable";
@@ -40,6 +41,7 @@ export interface CustomerPropertyProfitability {
   jobProfitMarginPct: number;
   jobProfitPerHourCents: number;
   standardTravelMinutesUsed: number;
+  jobEconomicsV2: JobEconomicsResult;
 }
 
 export interface CustomerProfitability {
@@ -66,6 +68,60 @@ const DEFAULT_PROFITABILITY_CONFIG: ProfitabilityConfig = {
   distanceFromNearestStopMiles: 1.0,
   routeStopsPerMile: undefined,
 };
+
+function getVehicleCostPerMile(config: PricingConfig): number {
+  if (config.vehicleCostPerMileCents > 0) return config.vehicleCostPerMileCents / 100;
+  if (config.vehicleMPG && config.vehicleMPG > 0)
+    return config.averageGasPriceCentsPerGallon / config.vehicleMPG / 100;
+  return 0.65;
+}
+
+function buildEngineInputs(
+  totalPerVisitCents: number,
+  result: PriceCalculatorResult,
+  standardTravelMins: number,
+  distanceMiles: number,
+  fullConfig: PricingConfig,
+  monthlyOverheadCents: number,
+  perVisitOverheadCents: number | undefined
+): Parameters<typeof computeJobEconomics>[0] {
+  const actualTravelMinutes =
+    fullConfig.driveSpeedAverageMph > 0
+      ? (distanceMiles / fullConfig.driveSpeedAverageMph) * 60
+      : 0;
+
+  let engineMonthlyOverhead: number;
+  const engineMonthlyVisits = Math.max(fullConfig.estimatedMonthlyStops, 1);
+  if (perVisitOverheadCents !== undefined) {
+    engineMonthlyOverhead = (perVisitOverheadCents / 100) * engineMonthlyVisits;
+  } else if (monthlyOverheadCents > 0) {
+    engineMonthlyOverhead = monthlyOverheadCents / 100;
+  } else {
+    engineMonthlyOverhead =
+      (fullConfig.advertisingCents +
+        fullConfig.payrollProviderCents +
+        fullConfig.benefitsCents +
+        fullConfig.insuranceCents +
+        fullConfig.softwareCents +
+        fullConfig.otherOverheadCents) /
+      100;
+  }
+
+  return {
+    currentPricePerVisit: totalPerVisitCents / 100,
+    serviceMinutes: result.breakdown.serviceMinutes,
+    targetTravelMinutes: standardTravelMins,
+    actualTravelMinutes,
+    actualTravelMiles: distanceMiles,
+    hourlyWage: fullConfig.techHourlyWageCents / 100,
+    laborBurdenMultiplier: fullConfig.burdenMultiplier,
+    vehicleCostPerMile: getVehicleCostPerMile(fullConfig),
+    estimatedSuppliesPerVisit: result.breakdown.equipmentCostCents / 100,
+    monthlyOverhead: engineMonthlyOverhead,
+    estimatedMonthlyVisits: engineMonthlyVisits,
+    targetMarginPercent: fullConfig.targetProfitMarginPct / 100,
+  };
+}
 
 function getFrequencyVisitsPerMonth(frequency: string): number {
   switch (frequency) {
@@ -207,6 +263,18 @@ export async function calculateCustomerProfitability(
     const jobProfitPerHourCents =
       jobResultMinutes > 0 ? (jobProfitPerVisitCents / jobResultMinutes) * 60 : 0;
 
+    const jobEconomicsV2 = computeJobEconomics(
+      buildEngineInputs(
+        totalPerVisitCents,
+        result,
+        standardTravelMins,
+        distanceMiles,
+        fullConfig,
+        overrideOverhead ?? 0,
+        costOverrides?.overheadAllocationCents
+      )
+    );
+
     propertyResults.push({
       propertyId: property.id,
       propertyAddress: [property.streetAddress, property.city, property.state, property.zipCode]
@@ -236,6 +304,7 @@ export async function calculateCustomerProfitability(
       jobProfitMarginPct: Math.round(jobProfitMarginPct * 100) / 100,
       jobProfitPerHourCents: Math.round(jobProfitPerHourCents),
       standardTravelMinutesUsed: standardTravelMins,
+      jobEconomicsV2,
     });
   }
 
@@ -401,6 +470,18 @@ export async function calculateAllCustomerProfitability(
           ? (contactJobProfitPerVisitCents / contactJobResultMinutes) * 60
           : 0;
 
+      const contactJobEconomicsV2 = computeJobEconomics(
+        buildEngineInputs(
+          totalPerVisitCents,
+          result,
+          contactStandardTravelMins,
+          distanceMiles,
+          contactFullConfig,
+          contactOverhead ?? overrideOverhead ?? 0,
+          contactOverrides?.overheadAllocationCents
+        )
+      );
+
       propertyResults.push({
         propertyId: property.id,
         propertyAddress: [property.streetAddress, property.city, property.state, property.zipCode]
@@ -430,6 +511,7 @@ export async function calculateAllCustomerProfitability(
         jobProfitMarginPct: Math.round(contactJobProfitMarginPct * 100) / 100,
         jobProfitPerHourCents: Math.round(contactJobProfitPerHourCents),
         standardTravelMinutesUsed: contactStandardTravelMins,
+        jobEconomicsV2: contactJobEconomicsV2,
       });
     }
 

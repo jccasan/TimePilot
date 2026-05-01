@@ -1,0 +1,555 @@
+ROLE
+You are a senior SaaS product engineer and financial modeling engineer. You are working on Scoopilot’s job profitability / route economics module for pet waste removal businesses.
+
+GOAL
+Fix the job economics and current route impact calculations so the app no longer mixes pricing economics, actual route profitability, and route-density impact into one misleading number.
+
+The current screen is producing bad outputs because:
+- Revenue is showing $0.00 even when the job should have a price.
+- Profitability is calculated from missing or zero revenue.
+- Labor appears to be calculated only on service time.
+- Travel cost appears to include vehicle cost but not travel labor.
+- Overhead per visit is very high and needs to be clearly labeled as allocated overhead.
+- Recommended price, projected margin, and displayed total cost are inconsistent.
+- “Job Economics” and “Current Route Impact” are being blended instead of separated.
+
+Build this carefully. Do not just patch labels. Fix the underlying calculation model.
+
+==================================================
+SECTION 1: CORE PRINCIPLE
+==================================================
+
+The app must show three separate financial views:
+
+1. JOB PRICE HEALTH
+Purpose:
+Determines whether the job is priced correctly using target route assumptions.
+
+Use this for:
+- Recommended price
+- Pricing warnings
+- Target margin
+- “Should I raise this customer’s price?”
+
+Do NOT use actual current route placement for this metric.
+
+2. CURRENT ROUTE PROFITABILITY
+Purpose:
+Determines whether the job is profitable where it currently sits in today’s route.
+
+Use this for:
+- Route profitability
+- Current route impact
+- Route cleanup
+- Identifying jobs that are too far away or inefficiently sequenced
+
+This view must include actual travel labor and actual vehicle travel cost.
+
+3. ROUTE DENSITY OPPORTUNITY
+Purpose:
+Determines whether the job is actually bad or just poorly routed.
+
+Use this for:
+- Showing excess travel time
+- Showing excess travel cost
+- Telling the owner whether the job should be repriced, moved to a better day, or clustered with nearby work
+
+==================================================
+SECTION 2: REQUIRED INPUTS
+==================================================
+
+Each job needs the following inputs available to the calculation engine:
+
+CUSTOMER / JOB INPUTS
+- currentPricePerVisit
+- serviceMinutes
+- visitFrequency
+- estimatedSuppliesPerVisit
+- customerAddress
+- assignedRouteId
+- assignedDay
+
+LABOR INPUTS
+- hourlyWage
+- laborBurdenMultiplier
+- fullyLoadedLaborRate
+
+Formula:
+fullyLoadedLaborRate = hourlyWage * laborBurdenMultiplier
+
+Example:
+hourlyWage = 15.00
+laborBurdenMultiplier = 1.40
+fullyLoadedLaborRate = 21.00/hr
+
+TRAVEL INPUTS
+- targetTravelMinutes
+- actualTravelMinutes
+- actualTravelMiles
+- vehicleCostPerMile
+- estimatedDistanceFlag if distance is estimated
+
+OVERHEAD INPUTS
+- monthlyOverhead
+- estimatedMonthlyVisits
+- allocatedOverheadPerVisit
+
+Formula:
+allocatedOverheadPerVisit = monthlyOverhead / estimatedMonthlyVisits
+
+TARGET PRICING INPUTS
+- targetMarginPercent
+Default: 31%
+- roundingIncrement
+Default: $1.00
+
+==================================================
+SECTION 3: FORMULAS
+==================================================
+
+A. SERVICE LABOR COST
+
+serviceLaborCost = (serviceMinutes / 60) * fullyLoadedLaborRate
+
+Example:
+10 minutes at $21/hr:
+10 / 60 * 21 = $3.50
+
+B. TARGET TRAVEL COST
+
+Target travel is used for pricing health only.
+
+targetTravelLaborCost = (targetTravelMinutes / 60) * fullyLoadedLaborRate
+
+targetTravelVehicleCost = targetTravelMiles * vehicleCostPerMile
+
+If targetTravelMiles is unavailable, estimate it from actual miles proportionally if safe:
+targetTravelMiles = actualTravelMiles * (targetTravelMinutes / actualTravelMinutes)
+
+If actualTravelMinutes is 0 or missing, use 0 for targetTravelVehicleCost and show a warning:
+“Target travel mileage unavailable.”
+
+targetTravelCost = targetTravelLaborCost + targetTravelVehicleCost
+
+C. ACTUAL ROUTE TRAVEL COST
+
+Actual travel is used for current route profitability only.
+
+actualTravelLaborCost = (actualTravelMinutes / 60) * fullyLoadedLaborRate
+
+actualTravelVehicleCost = actualTravelMiles * vehicleCostPerMile
+
+actualTravelCost = actualTravelLaborCost + actualTravelVehicleCost
+
+D. ALLOCATED OVERHEAD
+
+allocatedOverheadPerVisit = monthlyOverhead / estimatedMonthlyVisits
+
+Validation:
+If estimatedMonthlyVisits is missing, null, or 0:
+- Do not divide by zero.
+- Set allocatedOverheadPerVisit to 0.
+- Show warning:
+“Overhead allocation unavailable because estimated monthly visits is missing.”
+
+E. JOB PRICE HEALTH COST
+
+targetCostPerVisit =
+  serviceLaborCost
+  + targetTravelCost
+  + estimatedSuppliesPerVisit
+  + allocatedOverheadPerVisit
+
+recommendedPrice =
+  targetCostPerVisit / (1 - targetMarginPercent)
+
+Round recommendedPrice up to the nearest roundingIncrement.
+
+Example:
+targetCostPerVisit = 28.39
+targetMarginPercent = 0.31
+recommendedPrice = 28.39 / 0.69 = 41.14
+rounded recommendedPrice = 42.00 if rounding up to nearest $1
+OR 41.00 only if using normal rounding.
+
+Important:
+Use consistent rounding rules.
+Preferred rule:
+Round UP to nearest $1 so the target margin is not accidentally undercut.
+
+projectedMargin =
+  (recommendedPrice - targetCostPerVisit) / recommendedPrice
+
+F. CURRENT ROUTE PROFITABILITY
+
+actualCostPerVisit =
+  serviceLaborCost
+  + actualTravelCost
+  + estimatedSuppliesPerVisit
+  + allocatedOverheadPerVisit
+
+actualProfitPerVisit =
+  currentPricePerVisit - actualCostPerVisit
+
+actualMargin =
+  actualProfitPerVisit / currentPricePerVisit
+
+If currentPricePerVisit is missing or 0:
+- Do not show margin as 0.0%.
+- Show “N/A”
+- Show warning:
+“Current price is missing, so actual profit and margin cannot be calculated.”
+
+G. EFFECTIVE HOURLY RATE
+
+Do not calculate effective hourly rate using profit only unless clearly labeled.
+
+actualJobMinutes =
+  serviceMinutes + actualTravelMinutes
+
+targetJobMinutes =
+  serviceMinutes + targetTravelMinutes
+
+actualRevenuePerHour =
+  currentPricePerVisit / (actualJobMinutes / 60)
+
+actualProfitPerHour =
+  actualProfitPerVisit / (actualJobMinutes / 60)
+
+targetRevenuePerHour =
+  recommendedPrice / (targetJobMinutes / 60)
+
+targetProfitPerHour =
+  (recommendedPrice - targetCostPerVisit) / (targetJobMinutes / 60)
+
+If currentPricePerVisit is missing or 0:
+- actualRevenuePerHour = N/A
+- actualProfitPerHour = N/A
+
+H. ROUTE DENSITY OPPORTUNITY
+
+excessTravelMinutes =
+  max(actualTravelMinutes - targetTravelMinutes, 0)
+
+excessTravelLaborCost =
+  (excessTravelMinutes / 60) * fullyLoadedLaborRate
+
+excessTravelVehicleCost =
+  max(actualTravelMiles - targetTravelMiles, 0) * vehicleCostPerMile
+
+excessTravelCost =
+  excessTravelLaborCost + excessTravelVehicleCost
+
+densityOpportunityText logic:
+
+If currentPricePerVisit is missing or 0:
+“Set a current price before judging route profitability.”
+
+Else if actualMargin < targetMarginPercent and excessTravelMinutes > 5:
+“This job may not be underpriced. It may be badly routed. Try moving it to a denser route/day before raising price.”
+
+Else if actualMargin < targetMarginPercent and excessTravelMinutes <= 5:
+“This job appears underpriced even with reasonable route density.”
+
+Else:
+“This job is profitable in its current route position.”
+
+==================================================
+SECTION 4: UI REQUIREMENTS
+==================================================
+
+Replace the existing confusing layout with three clearly separated cards.
+
+CARD 1: JOB PRICE HEALTH
+Subtitle:
+“Uses target travel assumptions for pricing.”
+
+Show:
+- Current price
+- Target cost per visit
+- Recommended price
+- Required price change
+- Projected margin at recommended price
+
+Cost breakdown:
+- Service labor
+- Target travel labor
+- Target vehicle cost
+- Supplies
+- Allocated overhead
+
+Warnings:
+- If current price is missing: “Current price missing.”
+- If current price is below recommended price: “Price adjustment recommended.”
+- If allocated overhead is unusually high, show: “High overhead allocation. Check monthly visits and overhead assumptions.”
+
+High overhead threshold:
+allocatedOverheadPerVisit > serviceLaborCost + targetTravelCost + supplies
+
+CARD 2: CURRENT ROUTE PROFITABILITY
+Subtitle:
+“Uses actual route placement.”
+
+Show:
+- Current price
+- Actual cost per visit
+- Actual profit per visit
+- Actual margin
+- Actual revenue per hour
+- Actual profit per hour
+
+Cost breakdown:
+- Service labor
+- Actual travel labor
+- Actual vehicle cost
+- Supplies
+- Allocated overhead
+
+Warnings:
+- If currentPricePerVisit is 0 or missing, show N/A instead of fake margin.
+- If actual margin is negative, highlight as “Losing money in current route position.”
+- If actual margin is below target, highlight as “Below target margin.”
+
+CARD 3: ROUTE DENSITY OPPORTUNITY
+Subtitle:
+“Shows whether the issue is pricing or route placement.”
+
+Show:
+- Target travel minutes
+- Actual travel minutes
+- Excess travel minutes
+- Excess travel cost
+- Actual miles
+- Target estimated miles if available
+- Recommended action
+
+Recommended action logic:
+1. Missing price:
+“Set customer price first.”
+
+2. Excess travel high and margin low:
+“Move this job to a denser route/day before raising the customer’s price.”
+
+3. Excess travel low and margin low:
+“Raise price or reduce service cost.”
+
+4. Margin healthy:
+“Keep price. Route position is acceptable.”
+
+==================================================
+SECTION 5: LABELING FIXES
+==================================================
+
+Use clear labels.
+
+Do NOT label one number as simply “Profit/Visit” unless the calculation context is obvious.
+
+Use:
+- Target profit per visit
+- Actual profit per visit
+- Projected margin
+- Actual margin
+- Target cost per visit
+- Actual cost per visit
+
+Do NOT show 0.0% margin when revenue is missing.
+Use:
+N/A
+
+Do NOT show negative hourly rate unless it is based on a valid current price and valid actual profit.
+
+==================================================
+SECTION 6: VALIDATION RULES
+==================================================
+
+Add defensive validation:
+
+If currentPricePerVisit is null, undefined, blank, or 0:
+- current price displays as “Not set”
+- actual profit displays as “N/A”
+- actual margin displays as “N/A”
+- actual revenue/hour displays as “N/A”
+- actual profit/hour displays as “N/A”
+
+If serviceMinutes is missing:
+- default to 10
+- show warning: “Service minutes defaulted to 10.”
+
+If hourlyWage is missing:
+- default to 15
+- show warning: “Hourly wage defaulted to $15/hr.”
+
+If laborBurdenMultiplier is missing:
+- default to 1.4
+- show warning: “Labor burden defaulted to 1.4x.”
+
+If targetMarginPercent is missing:
+- default to 31%
+
+If estimatedMonthlyVisits is missing or 0:
+- allocated overhead = 0
+- show warning
+
+If monthlyOverhead exists but estimatedMonthlyVisits is missing:
+- show warning:
+“Monthly overhead exists but cannot be allocated without estimated monthly visits.”
+
+==================================================
+SECTION 7: REQUIRED OUTPUT FORMAT
+==================================================
+
+The calculation function should return a clean object like this:
+
+{
+  inputs: {
+    currentPricePerVisit,
+    serviceMinutes,
+    targetTravelMinutes,
+    actualTravelMinutes,
+    actualTravelMiles,
+    hourlyWage,
+    laborBurdenMultiplier,
+    fullyLoadedLaborRate,
+    vehicleCostPerMile,
+    estimatedSuppliesPerVisit,
+    monthlyOverhead,
+    estimatedMonthlyVisits,
+    targetMarginPercent
+  },
+  jobPriceHealth: {
+    serviceLaborCost,
+    targetTravelLaborCost,
+    targetTravelVehicleCost,
+    targetTravelCost,
+    allocatedOverheadPerVisit,
+    targetCostPerVisit,
+    recommendedPrice,
+    requiredPriceChange,
+    projectedMargin
+  },
+  currentRouteProfitability: {
+    serviceLaborCost,
+    actualTravelLaborCost,
+    actualTravelVehicleCost,
+    actualTravelCost,
+    allocatedOverheadPerVisit,
+    actualCostPerVisit,
+    actualProfitPerVisit,
+    actualMargin,
+    actualRevenuePerHour,
+    actualProfitPerHour
+  },
+  routeDensityOpportunity: {
+    targetTravelMinutes,
+    actualTravelMinutes,
+    excessTravelMinutes,
+    excessTravelLaborCost,
+    excessTravelVehicleCost,
+    excessTravelCost,
+    recommendedAction
+  },
+  warnings: []
+}
+
+==================================================
+SECTION 8: TEST CASES
+==================================================
+
+Add unit tests or calculation test fixtures for these scenarios.
+
+TEST 1: Missing current price
+Inputs:
+currentPricePerVisit = 0
+serviceMinutes = 10
+targetTravelMinutes = 3
+actualTravelMinutes = 12
+actualTravelMiles = 1
+hourlyWage = 15
+laborBurdenMultiplier = 1.4
+vehicleCostPerMile = 0.65
+supplies = 0.13
+monthlyOverhead = 2411
+estimatedMonthlyVisits = 100
+targetMarginPercent = 0.31
+
+Expected:
+- actual margin = N/A
+- actual profit = N/A
+- current price warning shown
+- recommended price still calculated from target cost
+
+TEST 2: Valid current price
+Same as above, but:
+currentPricePerVisit = 41
+
+Expected:
+- actual cost includes service labor + actual travel labor + actual vehicle cost + supplies + overhead
+- actual margin is valid
+- actual profit is valid
+- no fake 0.0% margin
+
+TEST 3: High overhead
+monthlyOverhead = 2411
+estimatedMonthlyVisits = 100
+
+Expected:
+- overhead per visit = 24.11
+- high overhead warning shown
+
+TEST 4: Scaled overhead
+monthlyOverhead = 2411
+estimatedMonthlyVisits = 600
+
+Expected:
+- overhead per visit = 4.02
+- recommended price much lower
+- no high overhead warning unless threshold still triggered
+
+TEST 5: Route density problem
+currentPricePerVisit = 35
+targetTravelMinutes = 3
+actualTravelMinutes = 15
+
+Expected:
+- route density card recommends moving job to denser route/day before raising price
+
+TEST 6: Underpriced problem
+currentPricePerVisit = 25
+targetTravelMinutes = 3
+actualTravelMinutes = 4
+
+Expected:
+- route density card recommends raising price or reducing service cost
+
+==================================================
+SECTION 9: ACCEPTANCE CRITERIA
+==================================================
+
+This task is complete only when:
+
+1. Revenue is never silently treated as $0 unless the job is truly free.
+2. Missing price does not produce fake margins.
+3. Recommended price uses target cost, not actual route cost.
+4. Current route profitability uses actual route travel labor and vehicle cost.
+5. Travel labor and vehicle cost are shown separately.
+6. Overhead allocation is clearly labeled and validated.
+7. Projected margin matches the displayed recommended price and target cost.
+8. The UI clearly separates pricing health, route profitability, and route density opportunity.
+9. The calculation object is easy to audit.
+10. Tests pass for all listed scenarios.
+
+==================================================
+SECTION 10: IMPORTANT PRODUCT INTENT
+==================================================
+
+Do not make the app tell users to raise prices simply because a job is badly routed.
+
+A job can be:
+- correctly priced but badly routed
+- underpriced even on a good route
+- profitable only when clustered
+- unprofitable because overhead allocation is too high at low business volume
+
+The app must help the owner understand which one is true.
+
+Build the calculation engine and UI around that distinction.

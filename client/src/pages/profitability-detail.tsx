@@ -96,6 +96,67 @@ interface CalculatorResult {
   derived: CalcDerived;
 }
 
+interface JobEconomicsInputsV2 {
+  currentPricePerVisit: number;
+  serviceMinutes: number;
+  targetTravelMinutes: number;
+  actualTravelMinutes: number;
+  actualTravelMiles: number;
+  hourlyWage: number;
+  laborBurdenMultiplier: number;
+  fullyLoadedLaborRate: number;
+  vehicleCostPerMile: number;
+  estimatedSuppliesPerVisit: number;
+  monthlyOverhead: number;
+  estimatedMonthlyVisits: number;
+  targetMarginPercent: number;
+}
+
+interface JobPriceHealth {
+  serviceLaborCost: number;
+  targetTravelLaborCost: number;
+  targetTravelVehicleCost: number;
+  targetTravelCost: number;
+  allocatedOverheadPerVisit: number;
+  targetCostPerVisit: number;
+  recommendedPrice: number;
+  requiredPriceChange: number;
+  projectedMargin: number;
+  targetTravelMiles: number | null;
+}
+
+interface CurrentRouteProfitability {
+  serviceLaborCost: number;
+  actualTravelLaborCost: number;
+  actualTravelVehicleCost: number;
+  actualTravelCost: number;
+  allocatedOverheadPerVisit: number;
+  actualCostPerVisit: number;
+  actualProfitPerVisit: number | null;
+  actualMargin: number | null;
+  actualRevenuePerHour: number | null;
+  actualProfitPerHour: number | null;
+}
+
+interface RouteDensityOpportunity {
+  targetTravelMinutes: number;
+  actualTravelMinutes: number;
+  targetTravelMiles: number | null;
+  excessTravelMinutes: number;
+  excessTravelLaborCost: number;
+  excessTravelVehicleCost: number;
+  excessTravelCost: number;
+  recommendedAction: string;
+}
+
+interface JobEconomicsV2 {
+  inputs: JobEconomicsInputsV2;
+  jobPriceHealth: JobPriceHealth;
+  currentRouteProfitability: CurrentRouteProfitability;
+  routeDensityOpportunity: RouteDensityOpportunity;
+  warnings: string[];
+}
+
 interface PropertyProfitability {
   propertyId: string;
   propertyAddress: string;
@@ -118,6 +179,7 @@ interface PropertyProfitability {
   jobProfitMarginPct?: number;
   jobProfitPerHourCents?: number;
   standardTravelMinutesUsed?: number;
+  jobEconomicsV2?: JobEconomicsV2;
 }
 
 interface CustomerProfitabilityData {
@@ -536,6 +598,457 @@ function getDiagnosticInfo(type: DiagnosticType): DiagnosticInfo {
   }
 }
 
+function EconCostItem({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div>
+      <p
+        className={`text-[10px] ${highlight ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}
+      >
+        {label}
+      </p>
+      <p className={`text-xs font-medium ${highlight ? "text-amber-700 dark:text-amber-300" : ""}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function JobEconomicsCards({
+  v2,
+  propertyId,
+  formatCents,
+}: {
+  v2: JobEconomicsV2;
+  propertyId: string;
+  formatCents: (cents: number) => string;
+}) {
+  const fd = (dollars: number) => formatCents(Math.round(dollars * 100));
+  const {
+    jobPriceHealth: jph,
+    currentRouteProfitability: crp,
+    routeDensityOpportunity: rdo,
+    warnings,
+    inputs,
+  } = v2;
+  const hasMissingPrice = inputs.currentPricePerVisit <= 0;
+  const targetMarginPct = inputs.targetMarginPercent * 100;
+  const hasHighOverhead = warnings.some((w) => w.includes("High overhead"));
+
+  return (
+    <div className="space-y-3">
+      {/* Card 1: Job Price Health */}
+      <div
+        className="rounded-md border p-3 space-y-3"
+        data-testid={`card-job-price-health-${propertyId}`}
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5" />
+            Job Price Health
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            Uses target travel assumptions for pricing.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div>
+            <p className="text-[10px] text-muted-foreground">Current Price</p>
+            <p className="text-sm font-medium" data-testid={`text-current-price-${propertyId}`}>
+              {hasMissingPrice ? (
+                <span className="text-muted-foreground italic">Not set</span>
+              ) : (
+                fd(inputs.currentPricePerVisit)
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Target Cost/Visit</p>
+            <p className="text-sm font-medium">{fd(jph.targetCostPerVisit)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Recommended Price</p>
+            <p
+              className="text-sm font-medium text-green-600 dark:text-green-400"
+              data-testid={`text-recommended-price-${propertyId}`}
+            >
+              {fd(jph.recommendedPrice)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Projected Margin</p>
+            <p className="text-sm font-medium">{formatPct(jph.projectedMargin * 100)}</p>
+          </div>
+        </div>
+
+        {!hasMissingPrice && (
+          <div
+            className={`text-xs flex items-center gap-1.5 ${jph.requiredPriceChange > 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400"}`}
+            data-testid={`text-job-profit-${propertyId}`}
+          >
+            {jph.requiredPriceChange > 0 ? (
+              <>
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Price adjustment recommended: +{fd(jph.requiredPriceChange)}
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                Price is at or above recommended
+              </>
+            )}
+          </div>
+        )}
+
+        <div>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
+            Cost breakdown
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+            <EconCostItem label="Service labor" value={fd(jph.serviceLaborCost)} />
+            <EconCostItem label="Travel labor" value={fd(jph.targetTravelLaborCost)} />
+            <EconCostItem label="Vehicle cost" value={fd(jph.targetTravelVehicleCost)} />
+            <EconCostItem label="Supplies" value={fd(inputs.estimatedSuppliesPerVisit)} />
+            <EconCostItem
+              label="Allocated overhead"
+              value={fd(jph.allocatedOverheadPerVisit)}
+              highlight={hasHighOverhead}
+            />
+          </div>
+        </div>
+
+        {hasHighOverhead && (
+          <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3 shrink-0" />
+            High overhead allocation. Check monthly visits and overhead assumptions.
+          </p>
+        )}
+      </div>
+
+      {/* Card 2: Current Route Profitability */}
+      <div
+        className="rounded-md border p-3 space-y-3"
+        data-testid={`card-route-profitability-${propertyId}`}
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <Route className="h-3.5 w-3.5" />
+            Current Route Profitability
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">Uses actual route placement.</p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div>
+            <p className="text-[10px] text-muted-foreground">Current Price</p>
+            <p className="text-sm font-medium" data-testid={`text-revenue-${propertyId}`}>
+              {hasMissingPrice ? (
+                <span className="text-muted-foreground italic">Not set</span>
+              ) : (
+                fd(inputs.currentPricePerVisit)
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Actual Cost/Visit</p>
+            <p className="text-sm font-medium" data-testid={`text-cost-${propertyId}`}>
+              {fd(crp.actualCostPerVisit)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Actual Profit/Visit</p>
+            <p
+              className={`text-sm font-medium ${crp.actualProfitPerVisit === null ? "" : crp.actualProfitPerVisit < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}
+              data-testid={`text-profit-${propertyId}`}
+            >
+              {crp.actualProfitPerVisit === null ? (
+                <span className="text-muted-foreground">N/A</span>
+              ) : (
+                fd(crp.actualProfitPerVisit)
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Actual Margin</p>
+            <p
+              className={`text-sm font-medium ${crp.actualMargin === null ? "" : crp.actualMargin < 0 ? "text-red-600 dark:text-red-400" : crp.actualMargin < inputs.targetMarginPercent ? "text-amber-600 dark:text-amber-400" : ""}`}
+              data-testid={`text-profit-hour-${propertyId}`}
+            >
+              {crp.actualMargin === null ? (
+                <span className="text-muted-foreground">N/A</span>
+              ) : (
+                formatPct(crp.actualMargin * 100)
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Revenue/Hour</p>
+            <p className="text-sm font-medium">
+              {crp.actualRevenuePerHour === null ? (
+                <span className="text-muted-foreground">N/A</span>
+              ) : (
+                `${fd(crp.actualRevenuePerHour)}/hr`
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Profit/Hour</p>
+            <p
+              className={`text-sm font-medium ${crp.actualProfitPerHour !== null && crp.actualProfitPerHour < 0 ? "text-red-600 dark:text-red-400" : ""}`}
+            >
+              {crp.actualProfitPerHour === null ? (
+                <span className="text-muted-foreground">N/A</span>
+              ) : (
+                `${fd(crp.actualProfitPerHour)}/hr`
+              )}
+            </p>
+          </div>
+        </div>
+
+        {crp.actualMargin !== null && crp.actualMargin < 0 && (
+          <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            Losing money in current route position.
+          </div>
+        )}
+        {crp.actualMargin !== null &&
+          crp.actualMargin >= 0 &&
+          crp.actualMargin < inputs.targetMarginPercent && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              Below target margin ({formatPct(targetMarginPct)}).
+            </div>
+          )}
+
+        <div>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
+            Cost breakdown
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+            <EconCostItem label="Service labor" value={fd(crp.serviceLaborCost)} />
+            <EconCostItem label="Travel labor" value={fd(crp.actualTravelLaborCost)} />
+            <EconCostItem label="Vehicle cost" value={fd(crp.actualTravelVehicleCost)} />
+            <EconCostItem label="Supplies" value={fd(inputs.estimatedSuppliesPerVisit)} />
+            <EconCostItem label="Allocated overhead" value={fd(crp.allocatedOverheadPerVisit)} />
+          </div>
+        </div>
+      </div>
+
+      {/* Card 3: Route Density Opportunity */}
+      <div
+        className="rounded-md border p-3 space-y-3"
+        data-testid={`card-route-density-${propertyId}`}
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5" />
+            Route Density Opportunity
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            Shows whether the issue is pricing or route placement.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div>
+            <p className="text-[10px] text-muted-foreground">Target Travel</p>
+            <p className="font-medium">{Math.round(rdo.targetTravelMinutes)} min</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Actual Travel</p>
+            <p className="font-medium">{Math.round(rdo.actualTravelMinutes)} min</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Excess Travel</p>
+            <p
+              className={`font-medium ${rdo.excessTravelMinutes > 5 ? "text-amber-600 dark:text-amber-400" : ""}`}
+            >
+              {Math.round(rdo.excessTravelMinutes)} min
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground">Excess Cost</p>
+            <p
+              className={`font-medium ${rdo.excessTravelCost > 0.005 ? "text-amber-600 dark:text-amber-400" : ""}`}
+            >
+              {fd(rdo.excessTravelCost)}
+            </p>
+          </div>
+        </div>
+
+        {inputs.actualTravelMiles > 0 && (
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <p className="text-[10px] text-muted-foreground">Actual Miles</p>
+              <p className="font-medium">{inputs.actualTravelMiles.toFixed(2)} mi</p>
+            </div>
+            {rdo.targetTravelMiles !== null && (
+              <div>
+                <p className="text-[10px] text-muted-foreground">Target Est. Miles</p>
+                <p className="font-medium">{rdo.targetTravelMiles.toFixed(2)} mi</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div
+          className={`flex items-start gap-2 p-2 rounded-md text-xs ${
+            hasMissingPrice
+              ? "bg-muted/50 text-muted-foreground"
+              : rdo.excessTravelMinutes > 5 &&
+                  crp.actualMargin !== null &&
+                  crp.actualMargin < inputs.targetMarginPercent
+                ? "bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400"
+                : crp.actualMargin !== null && crp.actualMargin < inputs.targetMarginPercent
+                  ? "bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400"
+                  : "bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400"
+          }`}
+          data-testid={`text-density-action-${propertyId}`}
+        >
+          <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span>{rdo.recommendedAction}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LegacyEconomicsCards({
+  prop,
+  formatCents,
+}: {
+  prop: PropertyProfitability;
+  formatCents: (cents: number) => string;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="rounded-md border p-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <Zap className="h-3.5 w-3.5" />
+            Job Economics
+            {prop.standardTravelMinutesUsed !== undefined && (
+              <span className="normal-case font-normal">
+                ({prop.standardTravelMinutesUsed} min target travel)
+              </span>
+            )}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[11px] text-muted-foreground">Revenue/Visit</p>
+              <p className="text-sm font-medium">{formatCents(prop.revenuePerVisitCents)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">Cost/Visit</p>
+              <p className="text-sm font-medium">
+                {formatCents(prop.jobCostPerVisitCents ?? prop.costPerVisitCents)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">Profit/Visit</p>
+              <p
+                className={`text-sm font-medium ${(prop.jobProfitPerVisitCents ?? prop.profitPerVisitCents) < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}
+              >
+                {formatCents(prop.jobProfitPerVisitCents ?? prop.profitPerVisitCents)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">Margin / Ideal $/hr</p>
+              <p
+                className={`text-sm font-medium ${(prop.jobProfitMarginPct ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}
+              >
+                {formatPct(prop.jobProfitMarginPct ?? 0)} ·{" "}
+                {formatCents(prop.jobProfitPerHourCents ?? 0)}/hr
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-md border p-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <Route className="h-3.5 w-3.5" />
+            Current Route Impact
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[11px] text-muted-foreground">Revenue/Visit</p>
+              <p className="text-sm font-medium">{formatCents(prop.revenuePerVisitCents)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">Cost/Visit</p>
+              <p className="text-sm font-medium">{formatCents(prop.costPerVisitCents)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">Profit/Visit</p>
+              <p
+                className={`text-sm font-medium ${prop.profitPerVisitCents < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}
+              >
+                {formatCents(prop.profitPerVisitCents)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">Margin / Actual $/hr</p>
+              <p
+                className={`text-sm font-medium ${prop.profitPerHourCents < 0 ? "text-red-600 dark:text-red-400" : ""}`}
+              >
+                {formatPct(prop.profitMarginPct)} · {formatCents(prop.profitPerHourCents)}/hr
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground mb-2">Cost Breakdown (Current Route)</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="flex items-center gap-1.5">
+            <DollarSign className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[11px] text-muted-foreground">Labor</p>
+              <p className="text-xs font-medium">
+                {formatCents(prop.costBreakdown.laborCostCents)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Truck className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[11px] text-muted-foreground">Travel</p>
+              <p className="text-xs font-medium">
+                {formatCents(prop.costBreakdown.travelCostCents)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Wrench className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[11px] text-muted-foreground">Supplies</p>
+              <p className="text-xs font-medium">
+                {formatCents(prop.costBreakdown.equipmentCostCents)}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <div>
+              <p className="text-[11px] text-muted-foreground">Overhead</p>
+              <p className="text-xs font-medium">
+                {formatCents(prop.costBreakdown.overheadCostCents)}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contactId: string }) {
   const { formatMoney } = useCurrency();
   const formatCents = (cents: number) => {
@@ -619,131 +1132,15 @@ function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contac
             );
           })()}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="rounded-md border p-3 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-              <Zap className="h-3.5 w-3.5" />
-              Job Economics
-              {prop.standardTravelMinutesUsed !== undefined && (
-                <span className="normal-case font-normal">
-                  ({prop.standardTravelMinutesUsed} min target travel)
-                </span>
-              )}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="text-[11px] text-muted-foreground">Revenue/Visit</p>
-                <p className="text-sm font-medium">{formatCents(prop.revenuePerVisitCents)}</p>
-              </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground">Cost/Visit</p>
-                <p className="text-sm font-medium">
-                  {formatCents(prop.jobCostPerVisitCents ?? prop.costPerVisitCents)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground">Profit/Visit</p>
-                <p
-                  className={`text-sm font-medium ${(prop.jobProfitPerVisitCents ?? prop.profitPerVisitCents) < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}
-                  data-testid={`text-job-profit-${prop.propertyId}`}
-                >
-                  {formatCents(prop.jobProfitPerVisitCents ?? prop.profitPerVisitCents)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground">Margin / Ideal $/hr</p>
-                <p
-                  className={`text-sm font-medium ${(prop.jobProfitMarginPct ?? 0) < 0 ? "text-red-600 dark:text-red-400" : ""}`}
-                  data-testid={`text-job-profit-hour-${prop.propertyId}`}
-                >
-                  {formatPct(prop.jobProfitMarginPct ?? 0)} ·{" "}
-                  {formatCents(prop.jobProfitPerHourCents ?? 0)}/hr
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-md border p-3 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-              <Route className="h-3.5 w-3.5" />
-              Current Route Impact
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="text-[11px] text-muted-foreground">Revenue/Visit</p>
-                <p className="text-sm font-medium" data-testid={`text-revenue-${prop.propertyId}`}>
-                  {formatCents(prop.revenuePerVisitCents)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground">Cost/Visit</p>
-                <p className="text-sm font-medium" data-testid={`text-cost-${prop.propertyId}`}>
-                  {formatCents(prop.costPerVisitCents)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground">Profit/Visit</p>
-                <p
-                  className={`text-sm font-medium ${prop.profitPerVisitCents < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}
-                  data-testid={`text-profit-${prop.propertyId}`}
-                >
-                  {formatCents(prop.profitPerVisitCents)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] text-muted-foreground">Margin / Actual $/hr</p>
-                <p
-                  className={`text-sm font-medium ${prop.profitPerHourCents < 0 ? "text-red-600 dark:text-red-400" : ""}`}
-                  data-testid={`text-profit-hour-${prop.propertyId}`}
-                >
-                  {formatPct(prop.profitMarginPct)} · {formatCents(prop.profitPerHourCents)}/hr
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <p className="text-xs text-muted-foreground mb-2">Cost Breakdown (Current Route)</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div className="flex items-center gap-1.5">
-              <DollarSign className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">Labor</p>
-                <p className="text-xs font-medium">
-                  {formatCents(prop.costBreakdown.laborCostCents)}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Truck className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">Travel</p>
-                <p className="text-xs font-medium">
-                  {formatCents(prop.costBreakdown.travelCostCents)}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Wrench className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">Supplies</p>
-                <p className="text-xs font-medium">
-                  {formatCents(prop.costBreakdown.equipmentCostCents)}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <div>
-                <p className="text-[11px] text-muted-foreground">Overhead</p>
-                <p className="text-xs font-medium">
-                  {formatCents(prop.costBreakdown.overheadCostCents)}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+        {prop.jobEconomicsV2 ? (
+          <JobEconomicsCards
+            v2={prop.jobEconomicsV2}
+            propertyId={prop.propertyId}
+            formatCents={formatCents}
+          />
+        ) : (
+          <LegacyEconomicsCards prop={prop} formatCents={formatCents} />
+        )}
 
         {prop.calculatorResult && <ShowCalculationPanel calc={prop.calculatorResult} />}
 
