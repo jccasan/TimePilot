@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, DollarSign, Loader2 } from "lucide-react";
+import { formatMoneyForCurrency } from "@/hooks/use-currency";
 
 interface PublicInvoice {
   invoiceNumber: string;
@@ -16,6 +17,7 @@ interface PublicInvoice {
   logoUrl: string;
   contactName: string;
   stripeEnabled: boolean;
+  currency: string;
 }
 
 const TIP_OPTIONS = [1, 3, 5, 10];
@@ -55,6 +57,8 @@ export default function InvoicePayPage() {
   const tipValue = customTip ? parseFloat(customTip) || 0 : (selectedTip ?? 0);
   const chargeTotal = invoiceTotal + tipValue;
   const canPay = invoice?.stripeEnabled && chargeTotal >= 0.5;
+  const currency = invoice?.currency || "usd";
+  const fmt = (amount: number) => formatMoneyForCurrency(amount, currency);
 
   const handlePay = async () => {
     if (!id) return;
@@ -141,7 +145,7 @@ export default function InvoicePayPage() {
         <div className="bg-gray-50 rounded-lg p-3 space-y-1.5 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Amount Due</span>
-            <span className="font-semibold">${invoiceTotal.toFixed(2)}</span>
+            <span className="font-semibold">{fmt(invoiceTotal)}</span>
           </div>
           {invoice.contactName && (
             <div className="flex justify-between">
@@ -180,7 +184,7 @@ export default function InvoicePayPage() {
                     }}
                     data-testid={`button-tip-${amt}`}
                   >
-                    ${amt}
+                    {fmt(amt)}
                   </Button>
                 ))}
               </div>
@@ -215,14 +219,14 @@ export default function InvoicePayPage() {
 
             <div className="flex justify-between text-sm font-semibold">
               <span>Total Charge</span>
-              <span data-testid="text-total-charge">${chargeTotal.toFixed(2)}</span>
+              <span data-testid="text-total-charge">{fmt(chargeTotal)}</span>
             </div>
 
             {!canPay && chargeTotal < 0.5 && (
               <p className="text-xs text-amber-600 text-center">
                 {invoiceTotal === 0
-                  ? "Please add a tip of at least $0.50 to pay online."
-                  : "Minimum charge is $0.50."}
+                  ? `Please add a tip of at least ${fmt(0.5)} to pay online.`
+                  : `Minimum charge is ${fmt(0.5)}.`}
               </p>
             )}
 
@@ -238,7 +242,7 @@ export default function InvoicePayPage() {
                   Processing...
                 </>
               ) : (
-                `Pay $${chargeTotal.toFixed(2)}`
+                `Pay ${fmt(chargeTotal)}`
               )}
             </Button>
           </>

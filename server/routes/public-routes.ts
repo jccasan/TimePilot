@@ -677,6 +677,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         logoUrl: company?.logoUrl || "",
         contactName: contact ? `${contact.firstName} ${contact.lastName || ""}`.trim() : "",
         stripeEnabled,
+        currency: company?.currency || "usd",
       });
     } catch (err) {
       handleError(res, err);
