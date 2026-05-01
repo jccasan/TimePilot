@@ -520,6 +520,7 @@ function formatDateLabel(dateStr: string): string {
 function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void }) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const { formatMoney } = useCurrency();
   const [showUpcoming, setShowUpcoming] = useState(false);
   const [showAutopayList, setShowAutopayList] = useState(false);
   const [miscFilter, setMiscFilter] = useState<
@@ -712,11 +713,7 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
               <div>
                 <p className="text-sm text-muted-foreground font-medium">Upcoming Charges (7d)</p>
                 <p className="text-3xl font-bold mt-1">
-                  $
-                  {(health.upcomingChargesTotal / 100).toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {formatMoney(health.upcomingChargesTotal / 100)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   across {health.upcomingChargesCustomers} customer
@@ -857,11 +854,7 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
                     <TableCell className="font-medium">{formatDateLabel(row.date)}</TableCell>
                     <TableCell className="text-center">{row.customers}</TableCell>
                     <TableCell className="text-right font-semibold">
-                      $
-                      {(row.totalCents / 100).toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {formatMoney(row.totalCents / 100)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -1561,10 +1554,7 @@ export default function Invoices() {
       setGenerateAllContactIds(null);
       setSelectedUninvoicedIds(new Set());
       if (data.created > 0) {
-        const dollarStr = data.totalDollars.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        });
+        const dollarStr = formatMoney(data.totalDollars);
         if (variables.sendAfterGenerate) {
           const sentN = data.sent ?? 0;
           const failedN = data.failed ?? 0;
@@ -1572,10 +1562,10 @@ export default function Invoices() {
             failedN > 0
               ? `${data.created} invoice${data.created !== 1 ? "s" : ""} created, ${sentN} sent, ${failedN} failed to send`
               : `${data.created} invoice${data.created !== 1 ? "s" : ""} created and sent to ${sentN} customer${sentN !== 1 ? "s" : ""}`;
-          toast({ title: `$${dollarStr} generated and sent`, description: sentDesc });
+          toast({ title: `${dollarStr} generated and sent`, description: sentDesc });
         } else {
           toast({
-            title: `$${dollarStr} in invoices generated`,
+            title: `${dollarStr} in invoices generated`,
             description: `${data.created} invoice${data.created !== 1 ? "s" : ""} created`,
           });
         }
@@ -1645,7 +1635,7 @@ export default function Invoices() {
         queryClient.invalidateQueries({ queryKey: ["/api/company/uninvoiced-summary"] });
         toast({
           title: `${eligible.length} invoice${eligible.length !== 1 ? "s" : ""} charged`,
-          description: `$${totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} collected via autopay.`,
+          description: `${formatMoney(totalAmount)} collected via autopay.`,
         });
         setSelectedIds(new Set());
         return;
@@ -2682,11 +2672,7 @@ export default function Invoices() {
                   className="text-2xl font-bold text-emerald-600 dark:text-emerald-400"
                   data-testid="stat-this-week-revenue"
                 >
-                  $
-                  {revenueDashboard.thisWeekRevenue.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {formatMoney(revenueDashboard.thisWeekRevenue)}
                 </p>
               </div>
               <TrendingUp className="h-8 w-8 text-emerald-500 opacity-70" />
@@ -2704,11 +2690,7 @@ export default function Invoices() {
                   className="text-2xl font-bold text-amber-600 dark:text-amber-400"
                   data-testid="stat-outstanding-balance"
                 >
-                  $
-                  {revenueDashboard.outstandingBalance.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {formatMoney(revenueDashboard.outstandingBalance)}
                 </p>
               </div>
               <Clock className="h-8 w-8 text-amber-500 opacity-70" />
@@ -2726,11 +2708,7 @@ export default function Invoices() {
                   className="text-2xl font-bold text-red-600 dark:text-red-400"
                   data-testid="stat-overdue-amount"
                 >
-                  $
-                  {revenueDashboard.overdueAmount.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {formatMoney(revenueDashboard.overdueAmount)}
                 </p>
               </div>
               <AlertTriangle className="h-8 w-8 text-red-500 opacity-70" />
@@ -2748,11 +2726,7 @@ export default function Invoices() {
                   className="text-2xl font-bold text-blue-600 dark:text-blue-400"
                   data-testid="stat-collected-week"
                 >
-                  $
-                  {revenueDashboard.collectedThisWeek.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {formatMoney(revenueDashboard.collectedThisWeek)}
                 </p>
               </div>
               <CheckCircle2 className="h-8 w-8 text-blue-500 opacity-70" />
@@ -3386,12 +3360,7 @@ export default function Invoices() {
             Unpaid
             {tabBadges.unpaid.count > 0 && (
               <span className="ml-1.5 text-xs font-normal opacity-80">
-                ({tabBadges.unpaid.count} · $
-                {tabBadges.unpaid.total.toLocaleString("en-US", {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
-                })}
-                )
+                ({tabBadges.unpaid.count} · {formatMoney(tabBadges.unpaid.total)})
               </span>
             )}
           </TabsTrigger>
@@ -3399,12 +3368,7 @@ export default function Invoices() {
             Overdue
             {tabBadges.overdue.count > 0 && (
               <span className="ml-1.5 text-xs font-normal opacity-80">
-                ({tabBadges.overdue.count} · $
-                {tabBadges.overdue.total.toLocaleString("en-US", {
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
-                })}
-                )
+                ({tabBadges.overdue.count} · {formatMoney(tabBadges.overdue.total)})
               </span>
             )}
           </TabsTrigger>

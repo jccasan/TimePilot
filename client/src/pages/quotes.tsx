@@ -102,6 +102,7 @@ function TierPreviewCards({
   selectedTier?: string;
   onSelectTier?: (tier: string) => void;
 }) {
+  const { formatMoney } = useCurrency();
   const tiers = [
     {
       key: "essential",
@@ -151,7 +152,7 @@ function TierPreviewCards({
           <div className="text-center mb-3">
             <p className="text-sm font-medium text-muted-foreground">{tier.name}</p>
             <p className="text-2xl font-bold">
-              ${tier.price.toFixed(2)}
+              {formatMoney(tier.price)}
               <span className="text-xs font-normal text-muted-foreground">/visit</span>
             </p>
           </div>
@@ -176,6 +177,7 @@ function TierPreviewCards({
 
 export default function Quotes() {
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [contactFilter, setContactFilter] = useState("all");
@@ -369,7 +371,7 @@ export default function Quotes() {
               <DollarSign className="h-4 w-4 text-green-600" />
               <div>
                 <p className="text-2xl font-bold" data-testid="text-stat-value">
-                  ${stats.totalValue.toFixed(0)}
+                  {formatMoney(stats.totalValue)}
                 </p>
                 <p className="text-xs text-muted-foreground">Won Value/visit</p>
               </div>
@@ -509,12 +511,12 @@ export default function Quotes() {
                         <div className="text-sm">
                           {quote.selectedPrice ? (
                             <span className="font-semibold text-green-700">
-                              ${parseFloat(quote.selectedPrice).toFixed(2)}/visit
+                              {formatMoney(parseFloat(quote.selectedPrice))}/visit
                             </span>
                           ) : (
                             <span>
-                              ${parseFloat(quote.essentialPrice || "0").toFixed(0)}–$
-                              {parseFloat(quote.deluxePrice || "0").toFixed(0)}
+                              {formatMoney(parseFloat(quote.essentialPrice || "0"))}–
+                              {formatMoney(parseFloat(quote.deluxePrice || "0"))}
                             </span>
                           )}
                         </div>
@@ -1579,19 +1581,20 @@ function CreateEditQuoteDialog({
                   </h4>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
-                      {stationCount} stations x ${livePricing.breakdown.stationRate?.toFixed(2)}
+                      {stationCount} stations x{" "}
+                      {formatMoney(livePricing.breakdown.stationRate ?? 0)}
                     </span>
                     <span className="font-medium">
-                      ${livePricing.breakdown.stationCost?.toFixed(2)}
+                      {formatMoney(livePricing.breakdown.stationCost ?? 0)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
-                      Labor ({livePricing.breakdown.totalLaborHours} hrs x {crewSize} crew @ $
-                      {livePricing.breakdown.crewRate?.toFixed(2)}/hr)
+                      Labor ({livePricing.breakdown.totalLaborHours} hrs x {crewSize} crew @{" "}
+                      {formatMoney(livePricing.breakdown.crewRate ?? 0)}/hr)
                     </span>
                     <span className="font-medium">
-                      ${livePricing.breakdown.laborCost?.toFixed(2)}
+                      {formatMoney(livePricing.breakdown.laborCost ?? 0)}
                     </span>
                   </div>
                   {Number(mileageDistance) > 0 && (
@@ -1601,7 +1604,7 @@ function CreateEditQuoteDialog({
                         {livePricing.breakdown.mileageRate?.toFixed(3)})
                       </span>
                       <span className="font-medium">
-                        ${livePricing.breakdown.mileageCost?.toFixed(2)}
+                        {formatMoney(livePricing.breakdown.mileageCost ?? 0)}
                       </span>
                     </div>
                   )}
