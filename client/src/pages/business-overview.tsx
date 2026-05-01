@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
 import {
   DollarSign,
   Users,
@@ -553,7 +552,6 @@ export default function BusinessOverview() {
   function handleOpenEmailModal() {
     setRecipientEmail(currentUser?.email || "");
     setEmailModalOpen(true);
-  }
   }
 
   return (
@@ -1708,7 +1706,7 @@ export default function BusinessOverview() {
               onClick={() => emailMutation.mutate(recipientEmail)}
               disabled={emailMutation.isPending || !recipientEmail.trim()}
               data-testid="button-confirm-email-report"
-              >
+            >
               {emailMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
