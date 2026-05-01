@@ -605,6 +605,49 @@ export async function createUsageRecord(
   });
 }
 
+// Cache the event_name for STRIPE_SMS_METER_ID so we only fetch it once per process.
+let _smsEventName: string | null = null;
+
+async function getSmsEventName(): Promise<string | null> {
+  if (_smsEventName) return _smsEventName;
+  const meterId = process.env.STRIPE_SMS_METER_ID;
+  if (!meterId) return null;
+  try {
+    const stripe = getStripe();
+    const meter = await stripe.billing.meters.retrieve(meterId);
+    _smsEventName = meter.event_name;
+    console.log(`[Stripe SMS Meter] Resolved event_name="${_smsEventName}" from meter ${meterId}`);
+    return _smsEventName;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[Stripe SMS Meter] Could not retrieve meter ${meterId}: ${msg}`);
+    return null;
+  }
+}
+
+export async function reportSmsUsage(
+  stripeSubscriptionId: string,
+  segments: number
+): Promise<void> {
+  if (!isStripeConfigured() || !stripeSubscriptionId) return;
+  const eventName = await getSmsEventName();
+  if (!eventName) {
+    console.warn("[Stripe SMS Meter] STRIPE_SMS_METER_ID not configured or unresolvable — skipping SMS usage report");
+    return;
+  }
+  try {
+    const stripe = getStripe();
+    const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    const customerId =
+      typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+    await createUsageRecord(customerId, eventName, segments);
+    console.log(`[Stripe SMS Meter] Reported ${segments} segment(s) under event "${eventName}" for customer ${customerId}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[Stripe SMS Meter] Failed to report usage: ${msg}`);
+  }
+}
+
 export async function reportMeteredUsageSet(
   stripeSubscriptionId: string,
   eventType: string,
