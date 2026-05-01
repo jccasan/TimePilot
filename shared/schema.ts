@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   pgTable,
   varchar,
@@ -339,8 +338,8 @@ export const companies = pgTable("companies", {
   reminderSettings: jsonb("reminder_settings").$type<ReminderRule[]>(),
   invoiceReminderSettings: jsonb("invoice_reminder_settings").$type<InvoiceReminderSettings>(),
   autoVisitsEnabled: boolean("auto_visits_enabled").notNull().default(false),
-  dashboardLayout: jsonb("dashboard_layout").$type<any>(),
-  settingsLayout: jsonb("settings_layout").$type<any>(),
+  dashboardLayout: jsonb("dashboard_layout").$type<Record<string, unknown>>(),
+  settingsLayout: jsonb("settings_layout").$type<Record<string, unknown>>(),
   dashboardNotes: text("dashboard_notes"),
   aiImportMappingEnabled: boolean("ai_import_mapping_enabled").notNull().default(true),
   roverAiEnabled: boolean("rover_ai_enabled").notNull().default(true),
@@ -953,7 +952,7 @@ export const automationRules = pgTable(
     actionConfig: jsonb("action_config")
       .$type<{
         type: "create_task" | "send_email" | "send_webhook" | "run_skill";
-        params: Record<string, any>;
+        params: Record<string, unknown>;
       }>()
       .notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1107,7 +1106,7 @@ export const messages = pgTable(
     body: text("body").notNull(),
     htmlBody: text("html_body"),
     externalId: varchar("external_id", { length: 255 }),
-    metadata: jsonb("metadata").$type<Record<string, any>>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     sentBy: varchar("sent_by").references(() => users.id),
     errorMessage: text("error_message"),
     isRead: boolean("is_read").notNull().default(false),
@@ -1184,7 +1183,7 @@ export const servicePricing = pgTable(
     unit: varchar("unit", { length: 50 }).notNull().default("per_visit"),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
-    metadata: jsonb("metadata").$type<Record<string, any>>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -1702,7 +1701,7 @@ export const usageEvents = pgTable(
       .references(() => companies.id, { onDelete: "cascade" }),
     eventType: usageEventTypeEnum("event_type").notNull(),
     quantity: integer("quantity").notNull().default(1),
-    metadata: jsonb("metadata").$type<Record<string, any>>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     recordedAt: timestamp("recorded_at").defaultNow().notNull(),
   },
   (table) => [
@@ -1753,7 +1752,7 @@ export const voiceCalls = pgTable(
     durationMinutes: integer("duration_minutes").notNull().default(0),
     outcome: varchar("outcome", { length: 50 }),
     summary: text("summary"),
-    metadata: jsonb("metadata").$type<Record<string, any>>(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
@@ -2029,7 +2028,7 @@ export const activityLog = pgTable(
     contactId: varchar("contact_id").references(() => contacts.id, { onDelete: "cascade" }),
     userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
     action: activityActionEnum("action").notNull(),
-    details: jsonb("details").$type<Record<string, any>>(),
+    details: jsonb("details").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
@@ -2062,7 +2061,7 @@ export const webhookDeliveries = pgTable(
       .notNull()
       .references(() => webhooks.id, { onDelete: "cascade" }),
     event: varchar("event", { length: 100 }).notNull(),
-    payload: jsonb("payload").$type<Record<string, any>>().notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
     status: webhookDeliveryStatusEnum("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     lastAttempt: timestamp("last_attempt"),
@@ -2100,7 +2099,10 @@ export const auditTrail = pgTable(
     entityType: varchar("entity_type", { length: 50 }).notNull(),
     entityId: varchar("entity_id", { length: 255 }).notNull(),
     action: auditActionEnum("action").notNull(),
-    changes: jsonb("changes").$type<{ old?: Record<string, any>; new?: Record<string, any> }>(),
+    changes: jsonb("changes").$type<{
+      old?: Record<string, unknown>;
+      new?: Record<string, unknown>;
+    }>(),
     ipAddress: varchar("ip_address", { length: 45 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
@@ -2148,9 +2150,9 @@ export const importRuns = pgTable(
     importedRows: integer("imported_rows").notNull().default(0),
     skippedRows: integer("skipped_rows").notNull().default(0),
     errors: jsonb("errors").$type<Array<{ row: number; field?: string; message: string }>>(),
-    mappingConfig: jsonb("mapping_config").$type<Record<string, any>>(),
-    aiSuggestions: jsonb("ai_suggestions").$type<Record<string, any>>(),
-    userOverrides: jsonb("user_overrides").$type<Record<string, any>>(),
+    mappingConfig: jsonb("mapping_config").$type<Record<string, unknown>>(),
+    aiSuggestions: jsonb("ai_suggestions").$type<Record<string, unknown>>(),
+    userOverrides: jsonb("user_overrides").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     completedAt: timestamp("completed_at"),
   },
@@ -2249,8 +2251,8 @@ export const priceRecommendations = pgTable(
     serviceMinutes: decimal("service_minutes", { precision: 10, scale: 2 }),
     travelMinutes: decimal("travel_minutes", { precision: 10, scale: 2 }),
     densityMultiplier: decimal("density_multiplier", { precision: 5, scale: 3 }),
-    breakdownJson: jsonb("breakdown_json").$type<Record<string, any>>(),
-    inputsJson: jsonb("inputs_json").$type<Record<string, any>>(),
+    breakdownJson: jsonb("breakdown_json").$type<Record<string, unknown>>(),
+    inputsJson: jsonb("inputs_json").$type<Record<string, unknown>>(),
     calculatedAt: timestamp("calculated_at").defaultNow().notNull(),
     calculationVersion: varchar("calculation_version", { length: 20 }).notNull().default("1.0"),
     createdByUserId: varchar("created_by_user_id"),
@@ -2308,7 +2310,7 @@ export const profitabilitySnapshots = pgTable(
     avgRevenuePerVisitCents: integer("avg_revenue_per_visit_cents").notNull().default(0),
     avgCostPerVisitCents: integer("avg_cost_per_visit_cents").notNull().default(0),
     status: profitabilityStatusEnum("status").notNull().default("profitable"),
-    breakdownJson: jsonb("breakdown_json").$type<Record<string, any>>(),
+    breakdownJson: jsonb("breakdown_json").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
@@ -2684,7 +2686,7 @@ export const quotes = pgTable(
     essentialFeatures: jsonb("essential_features").$type<string[]>(),
     premiumFeatures: jsonb("premium_features").$type<string[]>(),
     deluxeFeatures: jsonb("deluxe_features").$type<string[]>(),
-    pricingBreakdown: jsonb("pricing_breakdown").$type<Record<string, any>>(),
+    pricingBreakdown: jsonb("pricing_breakdown").$type<Record<string, unknown>>(),
     images: jsonb("images").$type<{ url: string; caption: string; sqft?: number }[]>(),
     notes: text("notes"),
     internalNotes: text("internal_notes"),

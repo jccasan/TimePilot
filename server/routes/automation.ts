@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
@@ -123,7 +122,7 @@ export async function registerAutomationRoutes(app: Express): Promise<void> {
         scopes: req.body.scopes || [],
         isActive: true,
         expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
-      } as any);
+      } as unknown as import("@shared/schema").InsertApiKey);
 
       const { userId } = await getCompanyContext(req);
       auditLog(

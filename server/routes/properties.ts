@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { geocodeAddress } from "../services/geocode";
@@ -51,8 +50,8 @@ export async function registerPropertiesRoutes(app: Express): Promise<void> {
           parsed.zipCode
         );
         if (coords) {
-          (parsed as any).latitude = coords.latitude;
-          (parsed as any).longitude = coords.longitude;
+          (parsed as Record<string, unknown>).latitude = coords.latitude;
+          (parsed as Record<string, unknown>).longitude = coords.longitude;
         } else {
           geocodeFailed = true;
         }

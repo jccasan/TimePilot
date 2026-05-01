@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -60,7 +59,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         csvRows.push(
           csvContactHeaders
             .map((h) => {
-              const val = (c as any)[h] ?? "";
+              const val = (c as Record<string, unknown>)[h] ?? "";
               return `"${String(val).replace(/"/g, '""')}"`;
             })
             .join(",")
@@ -201,7 +200,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const existingSources = await storage.getLeadSources(companyId);
       const sourceNames = new Set(existingSources.map((s) => s.name.toLowerCase()));
 
-      const rows: any[] = [];
+      const rows: Record<string, string>[] = [];
       const rawRows: string[][] = [];
       const issues: { row: number; field: string; message: string }[] = [];
       const newLeadSources: string[] = [];
@@ -287,7 +286,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
 
       const existingSources = await storage.getLeadSources(companyId);
       const sourceNames = new Set(existingSources.map((s) => s.name.toLowerCase()));
-      const imported: any[] = [];
+      const imported: Record<string, unknown>[] = [];
       const errors: string[] = [];
       const addedLeadSources: string[] = [];
 
@@ -324,7 +323,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
             referralSource: row.referralSource || null,
             status: row.status || "lead",
             notes: row.notes || null,
-          } as any);
+          } as unknown as import("@shared/schema").InsertContact);
 
           if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
             await createPropertyWithGeocode({
@@ -340,8 +339,8 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
           }
 
           imported.push(contact);
-        } catch (rowErr: any) {
-          errors.push(`Row ${i + 1}: ${rowErr.message}`);
+        } catch (rowErr: unknown) {
+          errors.push(`Row ${i + 1}: ${rowErr instanceof Error ? rowErr.message : String(rowErr)}`);
         }
       }
 
@@ -409,7 +408,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       }
 
       const headers = parseCsvLine(lines[0]).map((h: string) => h.replace(/"/g, "").trim());
-      const imported: any[] = [];
+      const imported: Record<string, unknown>[] = [];
       const errors: string[] = [];
       const addedLeadSources: string[] = [];
 
@@ -418,7 +417,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
 
       for (let i = 1; i < lines.length; i++) {
         const values = parseCsvLine(lines[i]);
-        const row: any = {};
+        const row: Record<string, string> = {};
         headers.forEach((h: string, idx: number) => {
           row[h] = values[idx] || "";
         });
@@ -454,7 +453,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
             referralSource: row.referralSource || null,
             status: row.status || "lead",
             notes: row.notes || null,
-          } as any);
+          } as unknown as import("@shared/schema").InsertContact);
 
           if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
             await createPropertyWithGeocode({
@@ -470,8 +469,8 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
           }
 
           imported.push(contact);
-        } catch (rowErr: any) {
-          errors.push(`Row ${i + 1}: ${rowErr.message}`);
+        } catch (rowErr: unknown) {
+          errors.push(`Row ${i + 1}: ${rowErr instanceof Error ? rowErr.message : String(rowErr)}`);
         }
       }
 
@@ -848,7 +847,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
           if (!contact) continue;
           const plans = await storage.getServicePlans(companyId, { contactId, isActive: true });
           for (const plan of plans) {
-            const updates: Record<string, any> = {};
+            const updates: Record<string, unknown> = {};
             if (frequency) updates.frequency = frequency;
             if (dayOfWeek) {
               updates.dayOfWeek = dayOfWeek;
@@ -858,7 +857,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
                 if (matchingRoute) updates.routeId = matchingRoute.id;
               }
             }
-            await storage.updateServicePlan(plan.id, companyId, updates as any);
+            await storage.updateServicePlan(plan.id, companyId, updates);
             plansUpdated++;
           }
         }
@@ -1131,7 +1130,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         })();
       }
 
-      let planAddOns: any[] = [];
+      let planAddOns: unknown[] = [];
       if (addOns && Array.isArray(addOns)) {
         const validatedAddOns = await validateAndResolveAddOns(addOns, companyId);
         planAddOns = await storage.setServicePlanAddOns(plan.id, validatedAddOns);

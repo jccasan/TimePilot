@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   eq,
   and,
@@ -191,6 +190,40 @@ import {
   type RetellWebhookRepair,
   type InsertRetellWebhookRepair,
 } from "@shared/schema";
+
+export interface CustomerProfitabilityEntry {
+  contactId: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  propertyCount: number;
+  revenueCentsPerMonth: number;
+  costCentsPerMonth: number;
+  profitCentsPerMonth: number;
+  profitMarginPct: number;
+  status: "profitable" | "marginal" | "unprofitable";
+  planCount: number;
+}
+
+export interface RouteProfitabilityEntry {
+  routeId: string;
+  routeName: string | null;
+  dayOfWeek: string | null;
+  technicianId: string | null;
+  totalStops: number;
+  totalRevenueCents: number;
+  totalCostCents: number;
+  totalProfitCents: number;
+  avgMarginPct: number;
+  customers: {
+    contactId: string;
+    firstName: string;
+    lastName: string;
+    revenueCents: number;
+    costCents: number;
+  }[];
+}
 
 export interface IStorage {
   // Companies
@@ -428,8 +461,8 @@ export interface IStorage {
     companyId: string;
     ruleId?: string;
     trigger: string;
-    payload?: any;
-    result?: any;
+    payload?: unknown;
+    result?: unknown;
   }): Promise<void>;
 
   // API Keys
@@ -627,14 +660,30 @@ export interface IStorage {
   ): Promise<AuditTrail[]>;
 
   // Bulk operations
-  bulkUpdateContacts(ids: string[], companyId: string, data: Partial<any>): Promise<number>;
+  bulkUpdateContacts(
+    ids: string[],
+    companyId: string,
+    data: Partial<InsertContact>
+  ): Promise<number>;
   bulkDeleteContacts(ids: string[], companyId: string): Promise<number>;
 
   // Search
-  searchContacts(companyId: string, term: string): Promise<any[]>;
-  searchProperties(companyId: string, term: string): Promise<any[]>;
-  searchInvoices(companyId: string, term: string): Promise<any[]>;
-  searchRoutes(companyId: string, term: string): Promise<any[]>;
+  searchContacts(
+    companyId: string,
+    term: string
+  ): Promise<Pick<Contact, "id" | "firstName" | "lastName" | "email" | "phone" | "status">[]>;
+  searchProperties(
+    companyId: string,
+    term: string
+  ): Promise<Pick<Property, "id" | "streetAddress" | "city" | "contactId">[]>;
+  searchInvoices(
+    companyId: string,
+    term: string
+  ): Promise<Pick<Invoice, "id" | "invoiceNumber" | "status" | "total" | "contactId">[]>;
+  searchRoutes(
+    companyId: string,
+    term: string
+  ): Promise<Pick<Route, "id" | "name" | "dayOfWeek">[]>;
 
   // Import Runs
   createImportRun(data: InsertImportRun): Promise<ImportRun>;
@@ -682,8 +731,8 @@ export interface IStorage {
   ): Promise<ProfitabilitySnapshot | undefined>;
   createProfitabilitySnapshot(data: InsertProfitabilitySnapshot): Promise<ProfitabilitySnapshot>;
   deleteProfitabilitySnapshots(companyId: string, olderThan?: string): Promise<void>;
-  getCustomerProfitabilitySummary(companyId: string): Promise<any[]>;
-  getRouteProfitabilitySummary(companyId: string): Promise<any[]>;
+  getCustomerProfitabilitySummary(companyId: string): Promise<CustomerProfitabilityEntry[]>;
+  getRouteProfitabilitySummary(companyId: string): Promise<RouteProfitabilityEntry[]>;
 
   // Overhead Costs
   getOverheadCosts(companyId: string): Promise<OverheadCost[]>;
@@ -866,7 +915,7 @@ export interface IStorage {
 
   // Autocomplete Cache
   getAutocompleteCache(queryKey: string): Promise<AutocompleteCache | undefined>;
-  setAutocompleteCache(queryKey: string, results: any[]): Promise<void>;
+  setAutocompleteCache(queryKey: string, results: unknown[]): Promise<void>;
   pruneAutocompleteCache(olderThanDays: number): Promise<void>;
 }
 
@@ -1010,7 +1059,10 @@ export class DatabaseStorage implements IStorage {
     filters?: { status?: string; search?: string }
   ): Promise<Contact[]> {
     const conditions = [eq(contacts.companyId, companyId)];
-    if (filters?.status) conditions.push(eq(contacts.status, filters.status as any));
+    if (filters?.status)
+      conditions.push(
+        eq(contacts.status, filters.status as (typeof contacts.$inferSelect)["status"])
+      );
     if (filters?.search) {
       conditions.push(
         or(
@@ -1167,7 +1219,10 @@ export class DatabaseStorage implements IStorage {
 
   async getRoutes(companyId: string, dayOfWeek?: string): Promise<Route[]> {
     const conditions = [eq(routes.companyId, companyId)];
-    if (dayOfWeek) conditions.push(eq(routes.dayOfWeek, dayOfWeek as any));
+    if (dayOfWeek)
+      conditions.push(
+        eq(routes.dayOfWeek, dayOfWeek as Exclude<(typeof routes.$inferSelect)["dayOfWeek"], null>)
+      );
     return db
       .select()
       .from(routes)
@@ -1778,7 +1833,8 @@ export class DatabaseStorage implements IStorage {
     const conditions = [eq(visits.companyId, companyId)];
     if (filters?.date) conditions.push(eq(visits.scheduledDate, filters.date));
     if (filters?.routeId) conditions.push(eq(visits.routeId, filters.routeId));
-    if (filters?.status) conditions.push(eq(visits.status, filters.status as any));
+    if (filters?.status)
+      conditions.push(eq(visits.status, filters.status as (typeof visits.$inferSelect)["status"]));
     return db
       .select()
       .from(visits)
@@ -1897,7 +1953,10 @@ export class DatabaseStorage implements IStorage {
   ): Promise<Invoice[]> {
     const conditions = [eq(invoices.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(invoices.contactId, filters.contactId));
-    if (filters?.status) conditions.push(eq(invoices.status, filters.status as any));
+    if (filters?.status)
+      conditions.push(
+        eq(invoices.status, filters.status as (typeof invoices.$inferSelect)["status"])
+      );
     return db
       .select()
       .from(invoices)
@@ -2316,7 +2375,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(automationRules.companyId, companyId),
-          eq(automationRules.trigger, trigger as any),
+          eq(automationRules.trigger, trigger as (typeof automationRules.$inferSelect)["trigger"]),
           eq(automationRules.isActive, true)
         )
       );
@@ -2326,8 +2385,8 @@ export class DatabaseStorage implements IStorage {
     companyId: string;
     ruleId?: string;
     trigger: string;
-    payload?: any;
-    result?: any;
+    payload?: unknown;
+    result?: unknown;
   }): Promise<void> {
     await db.insert(automationEventLogs).values(data);
   }
@@ -2440,7 +2499,10 @@ export class DatabaseStorage implements IStorage {
   // ================ Service Pricing ================
   async getServicePricing(companyId: string, category?: string): Promise<ServicePricingItem[]> {
     const conditions = [eq(servicePricing.companyId, companyId)];
-    if (category) conditions.push(eq(servicePricing.category, category as any));
+    if (category)
+      conditions.push(
+        eq(servicePricing.category, category as (typeof servicePricing.$inferSelect)["category"])
+      );
     return db
       .select()
       .from(servicePricing)
@@ -2745,8 +2807,14 @@ export class DatabaseStorage implements IStorage {
       conditions.push(gte(messages.createdAt, cutoff));
     }
     if (filters?.contactId) conditions.push(eq(messages.contactId, filters.contactId));
-    if (filters?.channel) conditions.push(eq(messages.channel, filters.channel as any));
-    if (filters?.direction) conditions.push(eq(messages.direction, filters.direction as any));
+    if (filters?.channel)
+      conditions.push(
+        eq(messages.channel, filters.channel as (typeof messages.$inferSelect)["channel"])
+      );
+    if (filters?.direction)
+      conditions.push(
+        eq(messages.direction, filters.direction as (typeof messages.$inferSelect)["direction"])
+      );
     if (filters?.isRead !== undefined) conditions.push(eq(messages.isRead, filters.isRead));
     if (filters?.phone) {
       conditions.push(
@@ -2870,7 +2938,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateMessageStatus(id: string, status: string, errorMessage?: string): Promise<Message> {
-    const updateData: any = { status };
+    const updateData: Partial<typeof messages.$inferInsert> = {
+      status: status as (typeof messages.$inferSelect)["status"],
+    };
     if (errorMessage) updateData.errorMessage = errorMessage;
     const [msg] = await db.update(messages).set(updateData).where(eq(messages.id, id)).returning();
     return msg;
@@ -2966,9 +3036,12 @@ export class DatabaseStorage implements IStorage {
       customMaxUsers?: number | null;
     }
   ): Promise<Company> {
-    const setData: Record<string, any> = { subscriptionTier: tier as any };
+    const setData: Partial<typeof companies.$inferInsert> = {
+      subscriptionTier: tier as (typeof companies.$inferSelect)["subscriptionTier"],
+    };
     if (opts?.subscriptionStatus !== undefined)
-      setData.subscriptionStatus = opts.subscriptionStatus as any;
+      setData.subscriptionStatus =
+        opts.subscriptionStatus as (typeof companies.$inferSelect)["subscriptionStatus"];
     if (opts?.trialEndsAt !== undefined) setData.trialEndsAt = opts.trialEndsAt;
     if (opts?.customMaxUsers !== undefined) setData.customMaxUsers = opts.customMaxUsers;
     const [updated] = await db
@@ -3384,7 +3457,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ================ Bulk Operations ================
-  async bulkUpdateContacts(ids: string[], companyId: string, data: Partial<any>): Promise<number> {
+  async bulkUpdateContacts(
+    ids: string[],
+    companyId: string,
+    data: Partial<InsertContact>
+  ): Promise<number> {
     await db
       .update(contacts)
       .set({ ...data, updatedAt: new Date() })
@@ -3399,7 +3476,10 @@ export class DatabaseStorage implements IStorage {
     return ids.length;
   }
 
-  async searchContacts(companyId: string, term: string): Promise<any[]> {
+  async searchContacts(
+    companyId: string,
+    term: string
+  ): Promise<Pick<Contact, "id" | "firstName" | "lastName" | "email" | "phone" | "status">[]> {
     return db
       .select({
         id: contacts.id,
@@ -3424,7 +3504,10 @@ export class DatabaseStorage implements IStorage {
       .limit(10);
   }
 
-  async searchProperties(companyId: string, term: string): Promise<any[]> {
+  async searchProperties(
+    companyId: string,
+    term: string
+  ): Promise<Pick<Property, "id" | "streetAddress" | "city" | "contactId">[]> {
     return db
       .select({
         id: properties.id,
@@ -3445,7 +3528,10 @@ export class DatabaseStorage implements IStorage {
       .limit(10);
   }
 
-  async searchInvoices(companyId: string, term: string): Promise<any[]> {
+  async searchInvoices(
+    companyId: string,
+    term: string
+  ): Promise<Pick<Invoice, "id" | "invoiceNumber" | "status" | "total" | "contactId">[]> {
     return db
       .select({
         id: invoices.id,
@@ -3467,7 +3553,10 @@ export class DatabaseStorage implements IStorage {
       .limit(10);
   }
 
-  async searchRoutes(companyId: string, term: string): Promise<any[]> {
+  async searchRoutes(
+    companyId: string,
+    term: string
+  ): Promise<Pick<Route, "id" | "name" | "dayOfWeek">[]> {
     return db
       .select({ id: routes.id, name: routes.name, dayOfWeek: routes.dayOfWeek })
       .from(routes)
@@ -3533,7 +3622,12 @@ export class DatabaseStorage implements IStorage {
   ): Promise<InvoicePayment[]> {
     const conditions = [eq(invoicePayments.companyId, companyId)];
     if (filters?.source) {
-      conditions.push(eq(invoicePayments.source, filters.source as any));
+      conditions.push(
+        eq(
+          invoicePayments.source,
+          filters.source as (typeof invoicePayments.$inferSelect)["source"]
+        )
+      );
     }
     return db
       .select()
@@ -3657,7 +3751,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(profitabilitySnapshots).where(and(...conditions));
   }
 
-  async getCustomerProfitabilitySummary(companyId: string): Promise<any[]> {
+  async getCustomerProfitabilitySummary(companyId: string): Promise<CustomerProfitabilityEntry[]> {
     const activeContacts = await db
       .select({
         id: contacts.id,
@@ -3682,7 +3776,7 @@ export class DatabaseStorage implements IStorage {
 
     const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
-    const result: any[] = [];
+    const result: CustomerProfitabilityEntry[] = [];
 
     for (const contact of activeContacts) {
       const contactPlans = activePlans.filter((p) => p.contactId === contact.id);
@@ -3745,7 +3839,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getRouteProfitabilitySummary(companyId: string): Promise<any[]> {
+  async getRouteProfitabilitySummary(companyId: string): Promise<RouteProfitabilityEntry[]> {
     const companyRoutes = await db.select().from(routes).where(eq(routes.companyId, companyId));
     const activePlans = await db
       .select()
@@ -3762,7 +3856,7 @@ export class DatabaseStorage implements IStorage {
 
     const contactMap = new Map(allContacts.map((c) => [c.id, c]));
 
-    const result: any[] = [];
+    const result: RouteProfitabilityEntry[] = [];
 
     for (const route of companyRoutes) {
       const routePlans = activePlans.filter((p) => p.routeId === route.id);
@@ -3927,7 +4021,10 @@ export class DatabaseStorage implements IStorage {
   ): Promise<Estimate[]> {
     const conditions = [eq(estimates.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(estimates.contactId, filters.contactId));
-    if (filters?.status) conditions.push(eq(estimates.status, filters.status as any));
+    if (filters?.status)
+      conditions.push(
+        eq(estimates.status, filters.status as (typeof estimates.$inferSelect)["status"])
+      );
     return db
       .select()
       .from(estimates)
@@ -3971,7 +4068,13 @@ export class DatabaseStorage implements IStorage {
   ): Promise<ServiceChangeRequest[]> {
     const conditions = [eq(serviceChangeRequests.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(serviceChangeRequests.contactId, filters.contactId));
-    if (filters?.status) conditions.push(eq(serviceChangeRequests.status, filters.status as any));
+    if (filters?.status)
+      conditions.push(
+        eq(
+          serviceChangeRequests.status,
+          filters.status as (typeof serviceChangeRequests.$inferSelect)["status"]
+        )
+      );
     return db
       .select()
       .from(serviceChangeRequests)
@@ -4221,8 +4324,10 @@ export class DatabaseStorage implements IStorage {
     filters?: { status?: string; type?: string; contactId?: string }
   ): Promise<Quote[]> {
     const conditions = [eq(quotes.companyId, companyId)];
-    if (filters?.status) conditions.push(eq(quotes.status, filters.status as any));
-    if (filters?.type) conditions.push(eq(quotes.type, filters.type as any));
+    if (filters?.status)
+      conditions.push(eq(quotes.status, filters.status as (typeof quotes.$inferSelect)["status"]));
+    if (filters?.type)
+      conditions.push(eq(quotes.type, filters.type as (typeof quotes.$inferSelect)["type"]));
     if (filters?.contactId) conditions.push(eq(quotes.contactId, filters.contactId));
     return db
       .select()
@@ -4661,7 +4766,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async setAutocompleteCache(queryKey: string, results: any[]): Promise<void> {
+  async setAutocompleteCache(queryKey: string, results: unknown[]): Promise<void> {
     await db
       .insert(autocompleteCacheTable)
       .values({ queryKey, results, cachedAt: new Date() })

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
@@ -7,7 +6,7 @@ import { getCompanyToday, getCompanyWeekStart } from "../utils/company-date";
 import { createCustomerSession } from "../services/stripe";
 import { getRouteMetricsWithLegs } from "../services/route-optimizer";
 import { geocodeAddress } from "../services/geocode";
-import { TIER_CONFIG, insertRouteSchema } from "@shared/schema";
+import { TIER_CONFIG, insertRouteSchema, type InsertRoute } from "@shared/schema";
 
 import {
   isAuthenticated,
@@ -97,11 +96,15 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           .json({ error: `Invalid dayOfWeek. Must be one of: ${validDays.join(", ")}` });
       }
       const allowed = ["name", "dayOfWeek", "technicianId", "color"];
-      const updates: any = {};
+      const updates: Partial<Record<string, unknown>> = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
       }
-      const route = await storage.updateRoute(p(req.params.id), companyId, updates);
+      const route = await storage.updateRoute(
+        p(req.params.id),
+        companyId,
+        updates as Partial<InsertRoute>
+      );
       res.json(route);
     } catch (err) {
       handleError(res, err);
@@ -158,7 +161,8 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const company = await storage.getCompany(companyId);
       const demoUnlimited =
-        !!(company as any).demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
+        !!(company as Record<string, unknown>).demoUnlimitedCredits &&
+        (await getDemoCompanyId()) === companyId;
       const tier = (company?.subscriptionTier ?? "tier_1") as keyof typeof TIER_CONFIG;
       const monthlyAllowance = TIER_CONFIG[tier]?.monthlyOptimizerCredits ?? 20;
       res.json({
@@ -182,7 +186,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const currentCredits = company?.routeCredits ?? 0;
       const updated = await storage.updateCompany(companyId, {
         routeCredits: currentCredits + amount,
-      } as any);
+      });
       res.json({ credits: updated.routeCredits });
     } catch (err) {
       handleError(res, err);
@@ -663,7 +667,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
             }
           }
           routesSplit++;
-        } catch (splitErr: any) {
+        } catch (splitErr: unknown) {
           console.error(`[apply-max-stops] Failed to split route ${route.name}:`, splitErr);
           errors.push(route.name);
         }
@@ -1284,7 +1288,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         if (!company) return res.status(404).json({ error: "Company not found" });
 
         // Demo unlimited-credits bypass (mirrors /api/routes/:id/optimize)
-        const demoUnlimitedCredits = !!(company as any).demoUnlimitedCredits;
+        const demoUnlimitedCredits = !!(company as Record<string, unknown>).demoUnlimitedCredits;
         const isDemoCompanyForCredits =
           demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
 

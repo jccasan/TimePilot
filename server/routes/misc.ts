@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
@@ -320,19 +319,19 @@ export async function registerMiscRoutes(app: Express): Promise<void> {
                   metadata: { contactId: contact.id, channel: "sms", stopId: stop.stopId },
                 });
               }
-            } catch (err: any) {
+            } catch (err: unknown) {
               results.push({
                 contactName: stop.contactName,
                 channel: "sms",
                 success: false,
-                error: err.message,
+                error: err instanceof Error ? err.message : String(err),
               });
               await storage.createSystemMessage({
                 companyId,
                 type: "bulk_notify_failure",
                 severity: "error",
                 title: `SMS failed: ${stop.contactName}`,
-                body: `Exception sending SMS to ${stop.contactName}: ${err.message}`,
+                body: `Exception sending SMS to ${stop.contactName}: ${err instanceof Error ? err.message : String(err)}`,
                 metadata: { contactId: contact.id, channel: "sms", stopId: stop.stopId },
               });
             }
@@ -388,19 +387,19 @@ export async function registerMiscRoutes(app: Express): Promise<void> {
                   metadata: { contactId: contact.id, channel: "email", stopId: stop.stopId },
                 });
               }
-            } catch (err: any) {
+            } catch (err: unknown) {
               results.push({
                 contactName: stop.contactName,
                 channel: "email",
                 success: false,
-                error: err.message,
+                error: err instanceof Error ? err.message : String(err),
               });
               await storage.createSystemMessage({
                 companyId,
                 type: "bulk_notify_failure",
                 severity: "error",
                 title: `Email failed: ${stop.contactName}`,
-                body: `Exception sending email to ${stop.contactName}: ${err.message}`,
+                body: `Exception sending email to ${stop.contactName}: ${err instanceof Error ? err.message : String(err)}`,
                 metadata: { contactId: contact.id, channel: "email", stopId: stop.stopId },
               });
             }

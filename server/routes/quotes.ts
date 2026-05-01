@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { maskEmail } from "../utils/pii";
 import { storage } from "../storage";
@@ -69,8 +68,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         if (existingCompanies.length > 0) {
           const existingCompany = await storage.getCompany(existingCompanies[0].companyId);
           if (existingCompany) {
-            const updateData: Record<string, unknown> = {};
-            if (stripe_customer_id) updateData.stripeCustomerId = stripe_customer_id;
+            const updateData: Partial<Record<string, unknown>> = {};
             if (stripe_subscription_id) updateData.stripeSubscriptionId = stripe_subscription_id;
             if (plan) updateData.subscriptionTier = plan;
             updateData.subscriptionStatus = "trialing";
@@ -300,9 +298,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           width,
           height,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error generating yard image:", err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
       }
     }
   );
@@ -355,24 +353,24 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           .status(400)
           .json({ error: "Invalid quote type. Must be 'residential' or 'commercial'." });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error calculating pricing:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
   app.get("/api/quotes", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const filters: any = {};
-      if (req.query.status) filters.status = req.query.status;
-      if (req.query.type) filters.type = req.query.type;
-      if (req.query.contactId) filters.contactId = req.query.contactId;
+      const filters: { status?: string; type?: string; contactId?: string } = {};
+      if (req.query.status) filters.status = String(req.query.status);
+      if (req.query.type) filters.type = String(req.query.type);
+      if (req.query.contactId) filters.contactId = String(req.query.contactId);
       const quotesList = await storage.getQuotes(companyId, filters);
       res.json(quotesList);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error listing quotes:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -382,9 +380,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       const quote = await storage.getQuote(p(req.params.id), companyId);
       if (!quote) return res.status(404).json({ error: "Quote not found" });
       res.json(quote);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error getting quote:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -524,9 +522,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         }
       }
       res.status(201).json(quote);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error creating quote:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -543,7 +541,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           .json({ error: "Invalid quote data", details: parsed.error.flatten() });
       }
 
-      const updateData = { ...parsed.data } as Record<string, any>;
+      const updateData = { ...parsed.data } as Record<string, unknown>;
       if (updateData.quoteNumber === null || updateData.quoteNumber === undefined) {
         delete updateData.quoteNumber;
       }
@@ -554,9 +552,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         updateData as Partial<InsertQuote>
       );
       res.json(quote);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error updating quote:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -567,9 +565,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       if (!existing) return res.status(404).json({ error: "Quote not found" });
       await storage.deleteQuote(p(req.params.id), companyId);
       res.json({ success: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error deleting quote:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -633,9 +631,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       }
 
       res.json({ quote: updatedQuote, servicePlan });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error accepting quote:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -659,17 +657,18 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         essentialFeatures: (quote.essentialFeatures as string[]) || [],
         premiumFeatures: (quote.premiumFeatures as string[]) || [],
         deluxeFeatures: (quote.deluxeFeatures as string[]) || [],
-        breakdown: (quote.pricingBreakdown as Record<string, any>) || {},
+        breakdown: (quote.pricingBreakdown as Record<string, unknown>) || {},
       };
 
-      const slug = (company as any).slug || companyId;
+      const slug = ((company as Record<string, unknown>).slug as string) || companyId;
       const acceptUrl = `${req.protocol}://${req.get("host")}/portal/${slug}/quotes/${quote.id}`;
 
       const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : undefined;
 
       const renderData = {
         companyName: company.name,
-        companyEmail: (company as any).email || undefined,
+        companyEmail:
+          ((company as Record<string, unknown>).email as string | undefined) || undefined,
         companyPhone: company.phone || undefined,
         companyLogo: logoUrl,
         contactName: quote.contactName || "Customer",
@@ -690,7 +689,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           : renderResidentialProposalHtml(renderData);
 
       const sendVia = req.body.sendVia || "email";
-      const results: any = { sent: [] };
+      const results: { sent: string[]; emailError?: string; smsError?: string } = { sent: [] };
 
       if ((sendVia === "email" || sendVia === "both") && quote.contactEmail) {
         try {
@@ -705,9 +704,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
             replyTo: company.email || undefined,
           });
           results.sent.push("email");
-        } catch (emailErr: any) {
+        } catch (emailErr: unknown) {
           console.error("Failed to send quote email:", emailErr);
-          results.emailError = emailErr.message;
+          results.emailError = emailErr instanceof Error ? emailErr.message : String(emailErr);
         }
       }
 
@@ -732,9 +731,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
             });
           }
           results.sent.push("sms");
-        } catch (smsErr: any) {
+        } catch (smsErr: unknown) {
           console.error("Failed to send quote SMS:", smsErr);
-          results.smsError = smsErr.message;
+          results.smsError = smsErr instanceof Error ? smsErr.message : String(smsErr);
         }
       }
 
@@ -743,12 +742,12 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         status: "sent",
         sentAt: new Date(),
         expiresAt,
-      } as any);
+      } as Partial<import("@shared/schema").InsertQuote>);
 
       res.json({ ...results, quote: updatedQuote });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error sending quote:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -768,14 +767,15 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         essentialFeatures: (quote.essentialFeatures as string[]) || [],
         premiumFeatures: (quote.premiumFeatures as string[]) || [],
         deluxeFeatures: (quote.deluxeFeatures as string[]) || [],
-        breakdown: (quote.pricingBreakdown as Record<string, any>) || {},
+        breakdown: (quote.pricingBreakdown as Record<string, unknown>) || {},
       };
 
       const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : undefined;
 
       const renderData = {
         companyName: company.name,
-        companyEmail: (company as any).email || undefined,
+        companyEmail:
+          ((company as Record<string, unknown>).email as string | undefined) || undefined,
         companyPhone: company.phone || undefined,
         companyLogo: logoUrl,
         contactName: quote.contactName || "Customer",
@@ -796,9 +796,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
 
       res.setHeader("Content-Type", "text/html");
       res.send(html);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error previewing quote:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -821,12 +821,13 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           essentialFeatures: (quote.essentialFeatures as string[]) || [],
           premiumFeatures: (quote.premiumFeatures as string[]) || [],
           deluxeFeatures: (quote.deluxeFeatures as string[]) || [],
-          breakdown: (quote.pricingBreakdown as Record<string, any>) || {},
+          breakdown: (quote.pricingBreakdown as Record<string, unknown>) || {},
         };
 
         const docData = {
           companyName: company.name,
-          companyEmail: (company as any).email || undefined,
+          companyEmail:
+            ((company as Record<string, unknown>).email as string | undefined) || undefined,
           companyPhone: company.phone || undefined,
           contactName: quote.contactName || "Customer",
           quoteNumber: quote.quoteNumber,
@@ -865,9 +866,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         } else {
           res.status(400).json({ error: "Invalid format. Use 'pdf' or 'docx'." });
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error generating quote download:", err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
       }
     }
   );

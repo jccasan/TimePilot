@@ -1,11 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { maskEmail } from "../utils/pii";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql, eq, and } from "drizzle-orm";
-import { companies, contacts, quoteFormEvents } from "@shared/schema";
+import { companies, contacts, quoteFormEvents, servicePlans } from "@shared/schema";
 import { calculatePrice, type PriceCalculatorInputs } from "../services/pricing-calculator";
 import { z } from "zod";
 import {
@@ -63,7 +62,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: "Company name must be at least 2 characters" });
       }
 
-      const clientIp = getClientIp(req as any);
+      const clientIp = getClientIp(req);
       const cfCountry = (req.headers["cf-ipcountry"] as string | undefined)?.trim().toUpperCase();
       const [ipRisk, countryCode] = await Promise.all([
         checkIpRisk(clientIp),
@@ -219,7 +218,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       const tempPassword = crypto.randomBytes(6).toString("base64url");
 
       // --- GeoIP + VPN detection ---
-      const verifyClientIp = getClientIp(req as any);
+      const verifyClientIp = getClientIp(req);
       const verifyCfCountry = (req.headers["cf-ipcountry"] as string | undefined)
         ?.trim()
         .toUpperCase();
@@ -1487,7 +1486,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         const pricingInputs: PriceCalculatorInputs = {
           yardSizeAcres: yardSizeMap[yardSize] || 0.1,
           dogCount: numberOfDogs,
-          serviceFrequency: serviceFrequency as any,
+          serviceFrequency: serviceFrequency as (typeof servicePlans.$inferSelect)["frequency"],
           yardDifficulty: "flat",
           distanceFromNearestStopMiles: 0.5,
         };

@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
+import type Stripe from "stripe";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -20,6 +20,7 @@ import {
   usageEvents,
   auditTrail,
   visits,
+  importRuns,
 } from "@shared/schema";
 import {
   getUserById,
@@ -118,11 +119,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       if (!currentPassword || !newPassword)
         return res.status(400).json({ error: "Both passwords required" });
       const { changeAdminPassword } = await import("../services/admin-auth");
-      const result = await changeAdminPassword(
-        (req as any).adminUser.userId,
-        currentPassword,
-        newPassword
-      );
+      const result = await changeAdminPassword(req.adminUser!.userId, currentPassword, newPassword);
       if (result.error) return res.status(400).json({ error: result.error });
       res.json({ ok: true });
     } catch (err) {
@@ -132,8 +129,8 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
 
   app.get("/api/admin/check", isAdmin, async (req: Request, res: Response) => {
     const { isPasswordExpired } = await import("../services/admin-auth");
-    const expired = await isPasswordExpired((req as any).adminUser.userId);
-    res.json({ isAdmin: true, email: (req as any).adminUser.email, mustChangePassword: expired });
+    const expired = await isPasswordExpired(req.adminUser!.userId);
+    res.json({ isAdmin: true, email: req.adminUser!.email, mustChangePassword: expired });
   });
 
   app.get("/api/admin/stats", isAdmin, async (_req: Request, res: Response) => {
@@ -164,7 +161,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       try {
         const { companyId } = req.body;
         if (!companyId) return res.status(400).json({ error: "companyId is required" });
-        const adminUserId = (req as any).adminUser.userId;
+        const adminUserId = req.adminUser!.userId;
         const exception = await storage.resolveMessageException(
           p(req.params.id),
           adminUserId,
@@ -231,7 +228,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     isAdmin,
     async (req: Request, res: Response) => {
       try {
-        const adminUserId = (req as any).adminUser.userId;
+        const adminUserId = req.adminUser!.userId;
         const exception = await storage.dismissMessageException(p(req.params.id), adminUserId);
         if (!exception)
           return res.status(404).json({ error: "Exception not found or already resolved" });
@@ -246,7 +243,19 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     try {
       const now = new Date();
       const thresholds = [3, 5, 7, 14];
-      const result: Record<string, any[]> = {};
+      const result: Record<
+        string,
+        {
+          userId: string;
+          email: string | null;
+          firstName: string | null;
+          lastName: string | null;
+          lastLoginAt: Date | null;
+          companyId: string;
+          companyName: string | null;
+          role: string;
+        }[]
+      > = {};
       for (const days of thresholds) {
         const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
         const rows = await db
@@ -313,7 +322,8 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
 
           const tierKey = c.subscriptionTier as keyof typeof tierCfg;
           const tierMaxUsers = tierCfg[tierKey]?.maxUsers || 1;
-          const maxUsers = (c as any).customMaxUsers ?? tierMaxUsers;
+          const maxUsers =
+            ((c as Record<string, unknown>).customMaxUsers as number | undefined) ?? tierMaxUsers;
           const nearLimit = activeUserCount >= Math.ceil(maxUsers * 0.8);
 
           return {
@@ -552,10 +562,12 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
                 );
               }
             }
-          } catch (migErr: any) {
-            companyResult.errors.push(`Contact ${contact.id}: ${migErr.message}`);
+          } catch (migErr: unknown) {
+            companyResult.errors.push(
+              `Contact ${contact.id}: ${migErr instanceof Error ? migErr.message : String(migErr)}`
+            );
             console.error(
-              `[Stripe Migration] Failed to migrate contact ${contact.id}: ${migErr.message}`
+              `[Stripe Migration] Failed to migrate contact ${contact.id}: ${migErr instanceof Error ? migErr.message : String(migErr)}`
             );
           }
         }
@@ -685,7 +697,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       if (company.subscriptionStatus === "cancelled") {
         return res.status(400).json({ error: "Account is already cancelled" });
       }
-      if ((company as any).cancelAtPeriodEnd) {
+      if ((company as Record<string, unknown>).cancelAtPeriodEnd) {
         return res.status(400).json({ error: "Account cancellation is already scheduled" });
       }
       // Cancel Stripe subscription if one exists — schedule at period end so tenant keeps access
@@ -696,7 +708,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
           const stripeKey = process.env.STRIPE_SECRET_KEY;
           if (stripeKey) {
             const stripeInstance = new StripeLib(stripeKey, {
-              apiVersion: "2026-01-28.clover" as any,
+              apiVersion: "2026-01-28.clover" as Stripe.LatestApiVersion,
             });
             const updated = await stripeInstance.subscriptions.update(
               company.stripeSubscriptionId,
@@ -707,25 +719,26 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
               `[Admin] Scheduled Stripe subscription ${company.stripeSubscriptionId} for cancellation at period end (${scheduledCancelAt?.toISOString()}) for company "${company.name}"`
             );
           }
-        } catch (stripeErr: any) {
-          if (stripeErr?.code !== "resource_missing") {
+        } catch (stripeErr: unknown) {
+          const se = stripeErr as { code?: string; message?: string };
+          if (se.code !== "resource_missing") {
             console.warn(
               `[Admin] Stripe cancel_at_period_end failed for ${company.name}:`,
-              stripeErr.message
+              se.message
             );
           }
         }
         // Mark as pending cancellation in DB — status stays active so tenant keeps access
         await db
           .update(companies)
-          .set({ cancelAtPeriodEnd: true, cancelAt: scheduledCancelAt } as any)
+          .set({ cancelAtPeriodEnd: true, cancelAt: scheduledCancelAt })
           .where(eq(companies.id, p(req.params.id)));
         await logAdminAudit(req, "cancel_account_scheduled", "company", p(req.params.id), {
           reason: req.body.reason || null,
           cancelAt: scheduledCancelAt,
         });
         console.log(
-          `[Admin] Account "${company.name}" (${p(req.params.id)}) scheduled for cancellation at period end by ${(req as any).adminUser?.email}`
+          `[Admin] Account "${company.name}" (${p(req.params.id)}) scheduled for cancellation at period end by ${req.adminUser?.email}`
         );
         return res.json({ ok: true, companyName: company.name, scheduledCancelAt });
       }
@@ -745,7 +758,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         reason: req.body.reason || null,
       });
       console.log(
-        `[Admin] Account "${company.name}" (${p(req.params.id)}) cancelled immediately (no Stripe sub) by ${(req as any).adminUser?.email}`
+        `[Admin] Account "${company.name}" (${p(req.params.id)}) cancelled immediately (no Stripe sub) by ${req.adminUser?.email}`
       );
       res.json({ ok: true, companyName: company.name });
     } catch (err) {
@@ -757,7 +770,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     try {
       const company = await storage.getCompany(p(req.params.id));
       if (!company) return res.status(404).json({ error: "Company not found" });
-      if (!(company as any).cancelAtPeriodEnd) {
+      if (!(company as Record<string, unknown>).cancelAtPeriodEnd) {
         return res
           .status(400)
           .json({ error: "Account does not have a scheduled cancellation to undo" });
@@ -768,7 +781,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
           try {
             const StripeLib = (await import("stripe")).default;
             const stripeInstance = new StripeLib(stripeKey, {
-              apiVersion: "2026-01-28.clover" as any,
+              apiVersion: "2026-01-28.clover" as Stripe.LatestApiVersion,
             });
             await stripeInstance.subscriptions.update(company.stripeSubscriptionId, {
               cancel_at_period_end: false,
@@ -776,16 +789,14 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
             console.log(
               `[Admin] Reversed scheduled cancellation for Stripe subscription ${company.stripeSubscriptionId} for company "${company.name}"`
             );
-          } catch (stripeErr: any) {
-            if (stripeErr?.code === "resource_missing") {
+          } catch (stripeErr: unknown) {
+            const se = stripeErr as { code?: string; message?: string };
+            if (se.code === "resource_missing") {
               console.warn(
                 `[Admin] Stripe subscription not found for ${company.name}, clearing local state only`
               );
             } else {
-              console.error(
-                `[Admin] Stripe reactivate failed for ${company.name}:`,
-                stripeErr.message
-              );
+              console.error(`[Admin] Stripe reactivate failed for ${company.name}:`, se.message);
               return res.status(502).json({
                 error:
                   "Failed to reverse cancellation in Stripe. Please try again or contact support.",
@@ -795,7 +806,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         }
         await db
           .update(companies)
-          .set({ cancelAtPeriodEnd: false, cancelAt: null } as any)
+          .set({ cancelAtPeriodEnd: false, cancelAt: null })
           .where(eq(companies.id, p(req.params.id)));
       } else {
         await storage.updateCompanySubscription(
@@ -807,12 +818,15 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         );
         await db
           .update(companies)
-          .set({ cancelAtPeriodEnd: false, cancelAt: null, canceledAt: null } as any)
+          .set({ cancelAtPeriodEnd: false, cancelAt: null, canceledAt: null } as Record<
+            string,
+            unknown
+          >)
           .where(eq(companies.id, p(req.params.id)));
       }
       await logAdminAudit(req, "reactivate_account", "company", p(req.params.id), {});
       console.log(
-        `[Admin] Account "${company.name}" (${p(req.params.id)}) reactivated by ${(req as any).adminUser?.email}`
+        `[Admin] Account "${company.name}" (${p(req.params.id)}) reactivated by ${req.adminUser?.email}`
       );
       return res.json({ ok: true, companyName: company.name });
     } catch (err) {
@@ -897,7 +911,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         .set({
           subscriptionStatus: "trialing",
           trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-        } as any)
+        } as Partial<typeof companies.$inferInsert>)
         .where(eq(companies.id, p(req.params.id)));
 
       await logAdminAudit(req, "approve_account", "company", p(req.params.id), {});
@@ -939,7 +953,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       }
 
       console.log(
-        `[Admin] Account "${company.name}" (${p(req.params.id)}) approved by ${(req as any).adminUser?.email}`
+        `[Admin] Account "${company.name}" (${p(req.params.id)}) approved by ${req.adminUser?.email}`
       );
       res.json({ ok: true, companyName: company.name });
     } catch (err) {
@@ -1007,7 +1021,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         rejectionNote: rejectionNote || null,
       });
       console.log(
-        `[Admin] Account "${company.name}" (${p(req.params.id)}) rejected and deleted by ${(req as any).adminUser?.email}`
+        `[Admin] Account "${company.name}" (${p(req.params.id)}) rejected and deleted by ${req.adminUser?.email}`
       );
       res.json({ ok: true, companyName: company.name });
     } catch (err) {
@@ -1078,7 +1092,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
           .set({ passwordHash: hash, mustChangePassword: true })
           .where(eq(usersTable.id, userId));
         console.log(
-          `[Admin] Password reset for user ${user.email} (${userId}) by ${(req as any).adminUser?.email}`
+          `[Admin] Password reset for user ${user.email} (${userId}) by ${req.adminUser?.email}`
         );
         res.json({ ok: true, email: user.email, tempPassword: password });
       } catch (err) {
@@ -1135,7 +1149,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         }
 
         console.log(
-          `[Admin] Password reset email sent to ${user.email} by ${(req as any).adminUser?.email}`
+          `[Admin] Password reset email sent to ${user.email} by ${req.adminUser?.email}`
         );
         res.json({ ok: true, email: user.email });
       } catch (err) {
@@ -1210,9 +1224,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
           .set({ passwordHash: hash, mustChangePassword: true })
           .where(eq(usersTable.id, userId));
 
-        console.log(
-          `[Admin] Credentials sent to ${user.email} by ${(req as any).adminUser?.email}`
-        );
+        console.log(`[Admin] Credentials sent to ${user.email} by ${req.adminUser?.email}`);
         res.json({ ok: true, email: user.email });
       } catch (err) {
         handleError(res, err);
@@ -1227,7 +1239,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       if (!company) return res.status(404).json({ error: "Company not found" });
 
       const { name, email, phone, address, routeCredits } = req.body;
-      const updates: Record<string, any> = {};
+      const updates: Record<string, unknown> = {};
       if (name !== undefined) {
         if (typeof name !== "string" || name.trim().length < 2)
           return res.status(400).json({ error: "Company name must be at least 2 characters" });
@@ -1260,7 +1272,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       await db.update(companiesTable).set(updates).where(eq(companiesTable.id, companyId));
 
       if (updates.routeCredits !== undefined) {
-        const adminEmail = (req as any).adminUser?.email || "unknown";
+        const adminEmail = req.adminUser?.email || "unknown";
         await db
           .insert(auditTrail)
           .values({
@@ -1279,7 +1291,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         await db
           .insert(adminAuditLogs)
           .values({
-            adminUserId: (req as any).adminUser?.id || null,
+            adminUserId: req.adminUser?.userId || null,
             adminEmail,
             action: "update_route_credits",
             resourceType: "company",
@@ -1291,7 +1303,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       }
 
       console.log(
-        `[Admin] Company ${companyId} updated by ${(req as any).adminUser?.email}: ${JSON.stringify(updates)}`
+        `[Admin] Company ${companyId} updated by ${req.adminUser?.email}: ${JSON.stringify(updates)}`
       );
       res.json({ ok: true, ...updates });
     } catch (err) {
@@ -1311,7 +1323,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         if (!cu) return res.status(404).json({ error: "User not found in this company" });
 
         const { firstName, lastName, email, role } = req.body;
-        const userUpdates: Record<string, any> = {};
+        const userUpdates: Record<string, unknown> = {};
         if (firstName !== undefined) userUpdates.firstName = firstName?.trim() || null;
         if (lastName !== undefined) userUpdates.lastName = lastName?.trim() || null;
         if (email !== undefined) {
@@ -1341,18 +1353,18 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
             );
         }
 
-        const oldData: Record<string, any> = {};
-        const newData: Record<string, any> = {};
+        const oldData: Record<string, unknown> = {};
+        const newData: Record<string, unknown> = {};
         if (firstName !== undefined) {
-          oldData.firstName = (cu as any).firstName;
+          oldData.firstName = (cu as Record<string, unknown>).firstName;
           newData.firstName = firstName?.trim() || null;
         }
         if (lastName !== undefined) {
-          oldData.lastName = (cu as any).lastName;
+          oldData.lastName = (cu as Record<string, unknown>).lastName;
           newData.lastName = lastName?.trim() || null;
         }
         if (email !== undefined) {
-          oldData.email = (cu as any).email;
+          oldData.email = (cu as Record<string, unknown>).email;
           newData.email = email.toLowerCase().trim();
         }
         if (role !== undefined) {
@@ -1369,13 +1381,13 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
             old: oldData,
             new: newData,
             actor: "platform_admin",
-            adminEmail: (req as any).adminUser?.email,
+            adminEmail: req.adminUser?.email,
           },
           req.ip || undefined
         );
 
         console.log(
-          `[Admin] User ${userId} in company ${companyId} updated by ${(req as any).adminUser?.email}`
+          `[Admin] User ${userId} in company ${companyId} updated by ${req.adminUser?.email}`
         );
         res.json({ ok: true });
       } catch (err) {
@@ -1410,7 +1422,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       });
 
       console.log(
-        `[Admin] Tenant "${company.name}" (${companyId}) deleted by ${(req as any).adminUser?.email}`
+        `[Admin] Tenant "${company.name}" (${companyId}) deleted by ${req.adminUser?.email}`
       );
       res.json({ ok: true, deletedCompany: company.name });
     } catch (err) {
@@ -1434,7 +1446,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const note = await storage.createAdminNote({
         companyId: p(req.params.id),
         content,
-        createdBy: (req as any).adminUser.email,
+        createdBy: req.adminUser!.email,
       });
       res.json(note);
     } catch (err) {
@@ -1632,7 +1644,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         {
           tables: Object.keys(exportData).filter((k) => k !== "exportedAt"),
           actor: "platform_admin",
-          adminEmail: (req as any).adminUser?.email,
+          adminEmail: req.adminUser?.email,
         },
         req.ip || undefined
       );
@@ -1743,9 +1755,9 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     action: string,
     resourceType?: string,
     resourceId?: string,
-    details?: any
+    details?: Record<string, unknown>
   ) {
-    const adminUser = (req as any).adminUser;
+    const adminUser = req.adminUser;
     if (!adminUser) return;
     const ip =
       req.headers["x-forwarded-for"]?.toString().split(",")[0]?.trim() ||
@@ -1872,7 +1884,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
   app.patch("/api/admin/subscription-tiers/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const { name, maxUsers, price, isActive } = req.body;
-      const updates: any = { updatedAt: new Date() };
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
       if (name !== undefined) updates.name = name;
       if (maxUsers !== undefined) updates.maxUsers = parseInt(maxUsers);
       if (price !== undefined) updates.price = parseFloat(price).toFixed(2);
@@ -1954,9 +1966,12 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         }
 
         const fileHash = hashFileContent(csvText);
+
+        const platformImportType =
+          `${result.platform}_contacts` as unknown as (typeof importRuns.$inferSelect)["type"];
         const importRun = await storage.createImportRun({
           companyId,
-          type: `${result.platform}_contacts` as any,
+          type: platformImportType,
           status: "processing",
           fileName: `${result.platform}-contacts.csv`,
           fileHash,
@@ -2267,8 +2282,8 @@ Respond with exactly one category from the list above and nothing else.`;
       const { targetSchema } = req.body;
       let headers: string[];
       let rows: string[][];
-      let mappings: any[];
-      let transformations: any[];
+      let mappings: Array<{ csvColumn: string; internalField: string }>;
+      let transformations: Array<{ field: string; type: string; params?: Record<string, unknown> }>;
 
       if (req.body.csvText) {
         const parsed = parseCSVUtil(req.body.csvText);
@@ -2325,8 +2340,8 @@ Respond with exactly one category from the list above and nothing else.`;
       const { targetSchema } = req.body;
       let headers: string[];
       let rows: string[][];
-      let mappings: any[];
-      let transformations: any[];
+      let mappings: Array<{ csvColumn: string; internalField: string }>;
+      let transformations: Array<{ field: string; type: string; params?: Record<string, unknown> }>;
       let fileHash: string;
 
       if (req.body.csvText) {
@@ -2354,9 +2369,11 @@ Respond with exactly one category from the list above and nothing else.`;
             : "csv_contacts";
 
       const mappingConfig = { mappings, transformations };
+
+      const typedImportType = importType as unknown as (typeof importRuns.$inferSelect)["type"];
       const importRun = await storage.createImportRun({
         companyId,
-        type: importType as any,
+        type: typedImportType,
         status: "processing",
         fileName: req.body.fileName || "import.csv",
         fileHash,
@@ -2440,9 +2457,9 @@ Respond with exactly one category from the list above and nothing else.`;
     legacyHeaders: false,
     validate: { xForwardedForHeader: false, default: true },
     keyGenerator: (req: Request) => {
-      const apiKeyAuth = (req as any)._apiKeyAuth as { userId: string } | undefined;
+      const apiKeyAuth = req._apiKeyAuth as { userId: string } | undefined;
       if (apiKeyAuth?.userId) return `api:${apiKeyAuth.userId}`;
-      const sessionUserId = (req.session as any)?.userId;
+      const sessionUserId = req.session.userId;
       if (sessionUserId) return `session:${sessionUserId}`;
       return "unauthenticated";
     },
@@ -2464,15 +2481,15 @@ Respond with exactly one category from the list above and nothing else.`;
         aiEnabled: company?.roverAiEnabled ?? false,
         aiKeyConfigured: aiKeyAvailable,
       });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
   app.post(
     "/api/rover/chat",
     isAuthenticated,
-    roverRateLimiter as any,
+    roverRateLimiter as import("express").RequestHandler,
     async (req: Request, res: Response) => {
       try {
         const { userId, companyId } = await getCompanyContext(req);
@@ -2508,10 +2525,12 @@ Respond with exactly one category from the list above and nothing else.`;
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Connection", "keep-alive");
 
-        const sanitizedMessages = chatMessages.slice(-20).map((m: any) => ({
-          role: m.role === "user" ? ("user" as const) : ("assistant" as const),
-          content: String(m.content).slice(0, 2000),
-        }));
+        const sanitizedMessages = chatMessages
+          .slice(-20)
+          .map((m: { role?: unknown; content?: unknown }) => ({
+            role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+            content: String(m.content).slice(0, 2000),
+          }));
 
         const { streamRoverChat } = await import("../services/rover-ai");
 

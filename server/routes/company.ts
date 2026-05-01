@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -10,6 +9,8 @@ import {
   reminderLogs,
   messages as messagesTable,
   type Message,
+  type InsertCompany,
+  type InsertCompanyUser,
 } from "@shared/schema";
 import { ObjectStorageService } from "../replit_integrations/object_storage";
 import { getUserById, changePassword } from "../services/app-auth";
@@ -41,7 +42,7 @@ const _objStorage = new ObjectStorageService();
 export async function registerCompanyRoutes(app: Express): Promise<void> {
   // ================ Company Routes ================
 
-  function sanitizeCompany(company: any) {
+  function sanitizeCompany(company: Record<string, unknown>) {
     if (!company) return company;
     const {
       telnyxApiKey,
@@ -77,9 +78,9 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
             console.warn("[Logo ACL backfill] Failed to set public ACL:", err?.message);
           });
       }
-      const sanitized = sanitizeCompany(company) as any;
+      const sanitized = sanitizeCompany(company) as Record<string, unknown>;
       // Demo bypass: expose unlimited tier and force all feature flags
-      if ((company as any).demoBypassLimits) {
+      if ((company as Record<string, unknown>).demoBypassLimits) {
         const demoId = await getDemoCompanyId();
         if (demoId === companyId) {
           sanitized.subscriptionTier = "tier_10_plus";
@@ -87,7 +88,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
           sanitized.roverAiEnabled = true;
           sanitized.remindersEnabled = true;
           sanitized.aiImportMappingEnabled = true;
-          sanitized.routeCredits = (company as any).demoUnlimitedCredits
+          sanitized.routeCredits = (company as Record<string, unknown>).demoUnlimitedCredits
             ? 999999
             : sanitized.routeCredits;
         }
@@ -365,11 +366,11 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "onboardingCompleteSentAt",
         "passStripeFees",
       ];
-      const updates: any = {};
-      for (const key of allowed) {
+      const updates: Partial<Record<keyof InsertCompany, unknown>> = {};
+      for (const key of allowed as (keyof InsertCompany)[]) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
       }
-      if (updates.timezone && !validTimezones.includes(updates.timezone)) {
+      if (updates.timezone && !validTimezones.includes(updates.timezone as string)) {
         return res.status(400).json({ error: "Invalid timezone" });
       }
       const validBillingCadences = ["per_visit", "weekly", "monthly", "manual"];
@@ -380,15 +381,21 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "send_invoice",
         "review_only",
       ];
-      if (updates.billingCadence && !validBillingCadences.includes(updates.billingCadence)) {
+      if (
+        updates.billingCadence &&
+        !validBillingCadences.includes(updates.billingCadence as string)
+      ) {
         return res.status(400).json({ error: "Invalid billingCadence" });
       }
-      if (updates.billingTrigger && !validBillingTriggers.includes(updates.billingTrigger)) {
+      if (
+        updates.billingTrigger &&
+        !validBillingTriggers.includes(updates.billingTrigger as string)
+      ) {
         return res.status(400).json({ error: "Invalid billingTrigger" });
       }
       if (
         updates.defaultPaymentBehavior &&
-        !validPaymentBehaviors.includes(updates.defaultPaymentBehavior)
+        !validPaymentBehaviors.includes(updates.defaultPaymentBehavior as string)
       ) {
         return res.status(400).json({ error: "Invalid defaultPaymentBehavior" });
       }
@@ -442,7 +449,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         }
       }
       if (updates.invoiceReminderSettings) {
-        const s = updates.invoiceReminderSettings;
+        const s = updates.invoiceReminderSettings as Record<string, unknown>;
         if (
           !Array.isArray(s.preDueDays) ||
           s.preDueDays.some((d: unknown) => typeof d !== "number" || d < 0)
@@ -485,7 +492,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         }
         updates.venmoHandle = raw || null;
       }
-      const company = await storage.updateCompany(companyId, updates);
+      const company = await storage.updateCompany(companyId, updates as Partial<InsertCompany>);
       // Mark the new logo as public so it can be served via /objects/ without auth.
       // Awaited so the ACL is committed before the response reaches the client,
       // preventing a transient 403 on the very first image load after upload.
@@ -502,7 +509,11 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "company",
         companyId,
         "update",
-        { old: sanitizeCompany(existing), new: sanitizeCompany(company) },
+
+        {
+          old: sanitizeCompany(existing as unknown as Record<string, unknown>),
+          new: sanitizeCompany(company as unknown as Record<string, unknown>),
+        },
         req.ip
       );
       res.json(sanitizeCompany(company));
@@ -523,11 +534,11 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       res.json({
         isDemo: true,
         settings: {
-          unlimitedCredits: !!(company as any).demoUnlimitedCredits,
-          bypassLimits: !!(company as any).demoBypassLimits,
-          autoCompleteToday: !!(company as any).demoAutoCompleteToday,
-          autoPayInvoices: !!(company as any).demoAutoPayInvoices,
-          livePlaybackEnabled: !!(company as any).demoLivePlaybackEnabled,
+          unlimitedCredits: !!(company as Record<string, unknown>).demoUnlimitedCredits,
+          bypassLimits: !!(company as Record<string, unknown>).demoBypassLimits,
+          autoCompleteToday: !!(company as Record<string, unknown>).demoAutoCompleteToday,
+          autoPayInvoices: !!(company as Record<string, unknown>).demoAutoPayInvoices,
+          livePlaybackEnabled: !!(company as Record<string, unknown>).demoLivePlaybackEnabled,
         },
       });
     } catch (err) {
@@ -554,11 +565,12 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         autoPayInvoices: "demoAutoPayInvoices",
         livePlaybackEnabled: "demoLivePlaybackEnabled",
       };
-      const updates: any = {};
+      const updates: Partial<Record<keyof InsertCompany, unknown>> = {};
       for (const k of allowed) {
-        if (req.body[k] !== undefined) updates[keyMap[k]] = !!req.body[k];
+        const col = keyMap[k] as keyof InsertCompany;
+        if (req.body[k] !== undefined) updates[col] = !!req.body[k];
       }
-      const company = await storage.updateCompany(companyId, updates);
+      const company = await storage.updateCompany(companyId, updates as Partial<InsertCompany>);
       res.json({ ok: true, company: sanitizeCompany(company) });
     } catch (err) {
       handleError(res, err);
@@ -690,7 +702,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         role: userRole,
         phone,
         companyId,
-      } as any);
+      } as unknown as InsertCompanyUser);
       res.status(201).json(cu);
     } catch (err) {
       handleError(res, err);
@@ -1132,13 +1144,14 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       if (!resp.ok) {
         return res.json({ available: false, reason: "Weather service unavailable" });
       }
-      const data = (await resp.json()) as any;
-      const days = (data.daily?.time || []).map((date: string, i: number) => ({
-        date,
-        tempMax: data.daily.temperature_2m_max?.[i] ?? null,
-        tempMin: data.daily.temperature_2m_min?.[i] ?? null,
-        precipProbability: data.daily.precipitation_probability_max?.[i] ?? null,
-        weatherCode: data.daily.weathercode?.[i] ?? null,
+      const data = (await resp.json()) as Record<string, unknown>;
+      const daily = data.daily as Record<string, unknown[]> | undefined;
+      const days = (daily?.time || []).map((date: unknown, i: number) => ({
+        date: date as string,
+        tempMax: daily?.temperature_2m_max?.[i] ?? null,
+        tempMin: daily?.temperature_2m_min?.[i] ?? null,
+        precipProbability: daily?.precipitation_probability_max?.[i] ?? null,
+        weatherCode: daily?.weathercode?.[i] ?? null,
       }));
       res.json({ available: true, days });
     } catch (err) {

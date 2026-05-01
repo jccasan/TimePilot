@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { maskEmail } from "../utils/pii";
 import { storage } from "../storage";
@@ -33,7 +32,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       if ("error" in result) {
         return res.status(401).json({ error: result.error });
       }
-      (req.session as any).userId = result.user.id;
+      req.session.userId = result.user.id;
       await db
         .update(users)
         .set({ lastLoginAt: new Date() })
@@ -63,7 +62,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.get("/api/auth/user", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session as any).userId;
+      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ message: "User not found" });
       const { passwordHash: _passwordHash, ...safeUser } = user;
@@ -89,7 +88,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
     isAuthenticated,
     async (req: Request, res: Response) => {
       try {
-        const userId = (req.session as any).userId;
+        const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
         const { url } = req.body;
         if (!url || typeof url !== "string") {
           return res.status(400).json({ error: "URL is required" });
@@ -125,7 +124,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.get("/api/tours/status", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session as any).userId;
+      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ error: "Not found" });
       return res.json({ completions: user.tourCompletions || {} });
@@ -136,7 +135,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.post("/api/tours/complete", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session as any).userId;
+      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
       const { tourId, version } = req.body;
       if (!tourId || typeof tourId !== "string")
         return res.status(400).json({ error: "tourId is required" });
@@ -147,7 +146,10 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       if (version && typeof version === "string") {
         completions[`${tourId}_version`] = version;
       }
-      await db.update(users).set({ tourCompletions: completions }).where(eq(users.id, userId));
+      await db
+        .update(users)
+        .set({ tourCompletions: completions as Record<string, string> })
+        .where(eq(users.id, userId));
       return res.json({ ok: true, completions });
     } catch (err) {
       handleError(res, err);
@@ -156,10 +158,10 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.get("/api/tutorials/progress", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session as any).userId;
+      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ error: "Not found" });
-      const completions = (user.tourCompletions as Record<string, any>) || {};
+      const completions = ((user.tourCompletions as unknown) || {}) as Record<string, unknown>;
       const progress: Record<string, { currentStep: number; completed: boolean; version: string }> =
         {};
       for (const key of Object.keys(completions)) {
@@ -167,7 +169,11 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
           const tutorialId = key.replace("_progress", "");
           const stored = completions[key];
           if (stored && typeof stored === "object") {
-            progress[tutorialId] = stored;
+            progress[tutorialId] = stored as {
+              currentStep: number;
+              completed: boolean;
+              version: string;
+            };
           }
         }
       }
@@ -179,7 +185,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.post("/api/tutorials/progress", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session as any).userId;
+      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
       const { tutorialId, currentStep, completed, version } = req.body;
       if (!tutorialId || typeof tutorialId !== "string")
         return res.status(400).json({ error: "tutorialId required" });
@@ -187,7 +193,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: "currentStep required" });
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ error: "Not found" });
-      const completions = (user.tourCompletions as Record<string, any>) || {};
+      const completions = ((user.tourCompletions as unknown) || {}) as Record<string, unknown>;
       const progressKey = `${tutorialId}_progress`;
       completions[progressKey] = {
         currentStep,
@@ -198,7 +204,10 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         completions[tutorialId] = new Date().toISOString();
         if (version) completions[`${tutorialId}_version`] = version;
       }
-      await db.update(users).set({ tourCompletions: completions }).where(eq(users.id, userId));
+      await db
+        .update(users)
+        .set({ tourCompletions: completions as Record<string, string> })
+        .where(eq(users.id, userId));
       return res.json({ ok: true, progress: completions[progressKey] });
     } catch (err) {
       handleError(res, err);
@@ -305,7 +314,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.post("/api/auth/change-password", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session as any)?.userId;
+      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const { newPassword } = req.body;
       if (!newPassword) return res.status(400).json({ error: "New password is required" });

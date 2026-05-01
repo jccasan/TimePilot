@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { registerRetellWebhook, getRetellAgentWebhookUrl, getAppBaseUrl } from "../services/retell";
-import { insertWebhookSchema } from "@shared/schema";
+import { insertWebhookSchema, type Contact } from "@shared/schema";
 
 import {
   isAuthenticated,
@@ -293,7 +292,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(" ") || "";
 
-      let contact: any = null;
+      let contact: Contact | undefined = undefined;
       if (phone || email) {
         const allContacts = await storage.getContacts(tenantId);
         if (phone) {

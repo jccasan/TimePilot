@@ -1,10 +1,17 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql, eq, and, or } from "drizzle-orm";
-import { users, companyUsers, companies, routes, qboSyncLogs } from "@shared/schema";
+import {
+  users,
+  companyUsers,
+  companies,
+  routes,
+  qboSyncLogs,
+  notifications,
+  type InsertProperty,
+} from "@shared/schema";
 import { getUserById } from "../services/app-auth";
 import type { RequestHandler } from "express";
 import { sendEmail } from "../services/email";
@@ -18,7 +25,7 @@ export const CHANGE_PASSWORD_EXEMPT_PATHS = [
 ];
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
-  let userId = (req.session as any)?.userId;
+  let userId = req.session.userId;
   let authMethod = userId ? "session-cookie" : "none";
   if (!userId) {
     const authHeader = req.headers.authorization;
@@ -28,10 +35,10 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
         sql`SELECT sess FROM sessions WHERE sid = ${token} AND expire > NOW()`
       );
       if (sessionRow.rows.length > 0) {
-        const sess = sessionRow.rows[0].sess as any;
+        const sess = sessionRow.rows[0].sess as { userId?: string };
         if (sess?.userId) {
           userId = sess.userId;
-          (req.session as any).userId = userId;
+          req.session.userId = userId;
           authMethod = "bearer-token";
           // Update lastLoginAt at most once per day for bearer-token sessions so the
           // admin inactive-users dashboard reflects real activity even for users who
@@ -72,7 +79,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
           companyUsers_.find((cu) => cu.role === "admin" && cu.isActive !== false);
         if (ownerOrAdmin) {
           userId = ownerOrAdmin.userId;
-          (req as any)._apiKeyAuth = {
+          req._apiKeyAuth = {
             userId: ownerOrAdmin.userId,
             companyId: apiKey.companyId,
             role: ownerOrAdmin.role,
@@ -98,13 +105,13 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 };
 
 export async function getCompanyContext(req: Request) {
-  const apiKeyAuth = (req as any)._apiKeyAuth as
+  const apiKeyAuth = req._apiKeyAuth as
     | { userId: string; companyId: string; role: string }
     | undefined;
   if (apiKeyAuth) {
     return { userId: apiKeyAuth.userId, companyId: apiKeyAuth.companyId, role: apiKeyAuth.role };
   }
-  const userId = (req.session as any)?.userId;
+  const userId = req.session.userId;
   if (!userId) {
     throw { status: 401, message: "Not authenticated" };
   }
@@ -128,21 +135,25 @@ export function getBaseUrl(req: Request): string {
   return `${proto === "http" && !host.startsWith("localhost") ? "https" : proto}://${host}`;
 }
 
-export function handleError(res: Response, err: any) {
-  if (err && typeof err === "object" && "status" in err) {
-    return res.status(err.status).json({ error: err.message });
+export function handleError(res: Response, err: unknown) {
+  const e = err as Record<string, unknown>;
+  if (e && typeof e === "object" && typeof e.status === "number") {
+    return res.status(e.status).json({ error: e.message });
   }
-  if (err?.name === "ZodError" || err?.constructor?.name === "ZodError") {
-    const issues = err.issues || err.errors || [];
-    const message = issues.map((i: any) => `${i.path?.join(".")}: ${i.message}`).join("; ");
+  if (e?.name === "ZodError" || (e?.constructor as { name?: string })?.name === "ZodError") {
+    const rawIssues = (e?.issues ?? e?.errors ?? []) as Array<{
+      path?: string[];
+      message: string;
+    }>;
+    const message = rawIssues.map((i) => `${i.path?.join(".")}: ${i.message}`).join("; ");
     return res.status(400).json({ error: message || "Validation error" });
   }
   console.error(err);
   return res.status(500).json({ error: "Internal server error" });
 }
 
-export function sanitizeDecimal(value: any): string {
-  const n = parseFloat(value);
+export function sanitizeDecimal(value: unknown): string {
+  const n = parseFloat(String(value));
   return isNaN(n) ? "0.00" : n.toFixed(2);
 }
 
@@ -152,7 +163,7 @@ export function auditLog(
   entityType: string,
   entityId: string,
   action: string,
-  changes?: any,
+  changes?: Record<string, unknown>,
   ipAddress?: string
 ) {
   storage
@@ -162,7 +173,7 @@ export function auditLog(
       entityType,
       entityId,
       action: action as "create" | "update" | "delete" | "void",
-      changes: changes || {},
+      changes: (changes || {}) as { old?: Record<string, unknown>; new?: Record<string, unknown> },
       ipAddress: ipAddress || null,
     })
     .catch(console.error);
@@ -220,7 +231,7 @@ export function notify(
   storage
     .createNotification({
       companyId,
-      type: type as any,
+      type: type as (typeof notifications.$inferSelect)["type"],
       title,
       message,
       isRead: false,
@@ -325,7 +336,7 @@ export function qboAutoSync(
         if (type === "invoice") await syncInvoiceToQbo(companyId, entityId);
         else if (type === "payment") await syncPaymentToQbo(companyId, entityId);
         else if (type === "contact") await syncContactToQbo(companyId, entityId);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(`[QBO auto-sync] ${type} ${entityId} failed:`, err);
         db.insert(qboSyncLogs)
           .values({
@@ -334,7 +345,7 @@ export function qboAutoSync(
             entityId,
             action: "auto_sync",
             status: "error",
-            errorMessage: err?.message || String(err),
+            errorMessage: err instanceof Error ? err.message : String(err),
           })
           .catch(console.error);
       }
@@ -401,7 +412,7 @@ export async function createPropertyWithGeocode(data: {
       data.longitude = coords.longitude;
     }
   }
-  return storage.createProperty(data as any);
+  return storage.createProperty(data as InsertProperty);
 }
 
 export function getStopOnlyOnlyContactIds(
@@ -430,7 +441,7 @@ export async function isAdmin(req: Request, res: Response, next: NextFunction) {
   const { validateAdminSession } = await import("../services/admin-auth");
   const session = await validateAdminSession(token);
   if (!session) return res.status(401).json({ error: "Invalid or expired session" });
-  (req as any).adminUser = session;
+  req.adminUser = session;
   next();
 }
 
@@ -555,12 +566,13 @@ export async function buildVisitLineItemsWithAddOns(
   return lineItems;
 }
 
-export async function validateAndResolveAddOns(addOns: any[], companyId: string) {
+export async function validateAndResolveAddOns(addOns: unknown[], companyId: string) {
   if (!Array.isArray(addOns)) return [];
   const pricingItems = await storage.getServicePricing(companyId);
   const validAddOns: { servicePricingId: string; name: string; price: string }[] = [];
   const seen = new Set<string>();
-  for (const addon of addOns) {
+  for (const raw of addOns) {
+    const addon = raw as { servicePricingId?: string };
     if (!addon.servicePricingId || seen.has(addon.servicePricingId)) continue;
     const item = pricingItems.find(
       (p) => p.id === addon.servicePricingId && p.category === "add_on" && p.isActive
@@ -670,14 +682,16 @@ export async function provisionPortalAccess(
       hasPortalAccess: true,
       portalPasswordHash,
     });
-  } catch (dbErr: any) {
+  } catch (dbErr: unknown) {
+    const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+    const stack = dbErr instanceof Error ? dbErr.stack : undefined;
     console.error("[provisionPortalAccess] Failed to update contact:", {
       contactId,
       companyId,
-      message: dbErr?.message,
-      stack: dbErr?.stack,
+      message: msg,
+      stack,
     });
-    throw new Error(`Failed to save portal credentials: ${dbErr?.message || String(dbErr)}`);
+    throw new Error(`Failed to save portal credentials: ${msg}`);
   }
 
   const company = await storage.getCompany(companyId);

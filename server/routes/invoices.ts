@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { type Visit } from "@shared/schema";
+import { type Visit, type Invoice } from "@shared/schema";
 import { sendEmail } from "../services/email";
 import {
   isStripeConfigured,
@@ -16,7 +15,11 @@ import {
   getDefaultTemplatePath,
   getDefaultThemePath,
 } from "../invoice-engine/invoice.render";
-import { insertInvoiceSchema, insertInvoiceLineItemSchema } from "@shared/schema";
+import {
+  insertInvoiceSchema,
+  insertInvoiceLineItemSchema,
+  invoices as invoicesTable,
+} from "@shared/schema";
 
 import {
   isAuthenticated,
@@ -85,15 +88,16 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       const company = await storage.getCompany(companyId);
 
       let subtotal = 0;
-      const processedLineItems: any[] = [];
+      const processedLineItems: Record<string, unknown>[] = [];
       if (lineItems && Array.isArray(lineItems)) {
         for (const item of lineItems) {
-          const qty = parseInt(item.quantity) || 1;
-          const unitPrice = parseFloat(item.unitPrice) || 0;
+          const typedItem = item as Record<string, unknown>;
+          const qty = parseInt(typedItem.quantity as string) || 1;
+          const unitPrice = parseFloat(typedItem.unitPrice as string) || 0;
           const lineTotal = qty * unitPrice;
           subtotal += lineTotal;
           processedLineItems.push({
-            ...item,
+            ...typedItem,
             quantity: qty,
             unitPrice: unitPrice.toFixed(2),
             total: lineTotal.toFixed(2),
@@ -144,18 +148,21 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
       const createdLineItems = [];
       for (const item of processedLineItems) {
-        const parsedItem = insertInvoiceLineItemSchema.parse({ ...item, invoiceId: invoice.id });
+        const parsedItem = insertInvoiceLineItemSchema.parse({
+          ...(item as Record<string, unknown>),
+          invoiceId: invoice.id,
+        });
         const lineItem = await storage.createInvoiceLineItem(parsedItem);
         createdLineItems.push(lineItem);
       }
 
       const visitIdsToMark = createdLineItems
-        .map((li: any) => li.visitId)
+        .map((li) => li.visitId)
         .filter((vid: string | null | undefined) => !!vid);
       if (visitIdsToMark.length > 0) {
         for (const vid of visitIdsToMark) {
           try {
-            await storage.updateVisit(vid, companyId, { invoiceId: invoice.id } as any);
+            if (vid) await storage.updateVisit(vid, companyId, { invoiceId: invoice.id });
           } catch (_e) {}
         }
       }
@@ -205,7 +212,7 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       const contact = await storage.getContact(contactId, companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-      let billableVisits: any[] = [];
+      let billableVisits: Visit[] = [];
       if (mode === "completed" || contact.invoiceTiming === "after_service") {
         billableVisits = await storage.getUninvoicedCompletedVisits(
           companyId,
@@ -380,22 +387,19 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         voidedIds.push(draftId);
       }
 
-      const allLineItems = submittedItems.map((mi: any) => {
-        const qty = parseInt(mi.quantity) || 1;
-        const price = parseFloat(mi.unitPrice || "0");
+      const allLineItems = (submittedItems as Record<string, unknown>[]).map((mi) => {
+        const qty = parseInt(mi.quantity as string) || 1;
+        const price = parseFloat((mi.unitPrice as string) || "0");
         return {
-          description: mi.description || "",
+          description: (mi.description as string) || "",
           quantity: qty,
           unitPrice: price.toFixed(2),
           total: (qty * price).toFixed(2),
-          visitId: mi.visitId ?? undefined,
+          visitId: (mi.visitId as string | undefined) ?? undefined,
         };
       });
 
-      let subtotal = allLineItems.reduce(
-        (sum: number, item: any) => sum + parseFloat(item.total),
-        0
-      );
+      let subtotal = allLineItems.reduce((sum: number, item) => sum + parseFloat(item.total), 0);
       let totalAmount = subtotal;
       const discVal = parseFloat(discountValue || "0");
       const discType =
@@ -439,16 +443,16 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         allLineItems
       );
 
-      const newVisitIds = new Set(
-        allLineItems.filter((i: any) => i.visitId).map((i: any) => i.visitId)
-      );
+      const newVisitIds = new Set(allLineItems.filter((i) => i.visitId).map((i) => i.visitId));
 
       for (const draftId of voidedIds) {
-        await storage.updateInvoice(draftId, companyId, { status: "voided" as any });
+        await storage.updateInvoice(draftId, companyId, {
+          status: "voided" as (typeof invoicesTable.$inferSelect)["status"],
+        });
         const items = await storage.getInvoiceLineItems(draftId);
         for (const item of items) {
           if (item.visitId && !newVisitIds.has(item.visitId)) {
-            await storage.updateVisit(item.visitId, companyId, { invoiceId: null as any });
+            await storage.updateVisit(item.visitId, companyId, { invoiceId: null });
           }
         }
       }
@@ -540,7 +544,9 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
           const draftInv = await storage.getInvoice(draftId, companyId);
           if (!draftInv || draftInv.contactId !== contactId || draftInv.status !== "draft")
             continue;
-          await storage.updateInvoice(draftId, companyId, { status: "voided" as any });
+          await storage.updateInvoice(draftId, companyId, {
+            status: "voided" as Invoice["status"],
+          });
           // Re-link any visits from the voided draft that aren't in the new invoice
           const draftItems = await storage.getInvoiceLineItems(draftId);
           for (const item of draftItems) {
@@ -654,7 +660,7 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
       // Void originals and re-link visits to the merged invoice
       for (const inv of validInvoices) {
-        await storage.updateInvoice(inv!.id, companyId, { status: "voided" as any });
+        await storage.updateInvoice(inv!.id, companyId, { status: "voided" as Invoice["status"] });
       }
       for (const visitId of newVisitIds) {
         await storage.updateVisit(visitId, companyId, { invoiceId: merged.id });
@@ -702,7 +708,7 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
           return d.toISOString().split("T")[0];
         })();
 
-        const createdInvoices: any[] = [];
+        const createdInvoices: Record<string, unknown>[] = [];
         let sentCount = 0;
         let failedCount = 0;
 
@@ -784,7 +790,9 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
             // Void the absorbed drafts and re-link their visits
             const newVisitIds = new Set(visitsToInvoice.map((v) => v.id));
             for (const draft of existingDrafts) {
-              await storage.updateInvoice(draft.id, companyId, { status: "voided" as any });
+              await storage.updateInvoice(draft.id, companyId, {
+                status: "voided" as Invoice["status"],
+              });
               const draftItems = await storage.getInvoiceLineItems(draft.id);
               for (const item of draftItems) {
                 if (item.visitId && !newVisitIds.has(item.visitId)) {
@@ -1018,7 +1026,7 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         }
 
         const totalDollars = createdInvoices.reduce(
-          (sum, inv) => sum + parseFloat(inv.total || "0"),
+          (sum, inv) => sum + parseFloat((inv.total as string) || "0"),
           0
         );
         const response: Record<string, unknown> = {
@@ -1129,8 +1137,8 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
         let subtotal = 0;
         for (const item of lineItems) {
-          const qty = parseInt(item.quantity) || 1;
-          const unitPrice = parseFloat(item.unitPrice) || 0;
+          const qty = parseInt(item.quantity as string) || 1;
+          const unitPrice = parseFloat(item.unitPrice as string) || 0;
           const lineTotal = qty * unitPrice;
           subtotal += lineTotal;
           await storage.createInvoiceLineItem({

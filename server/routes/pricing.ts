@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import {
@@ -431,7 +430,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         const pricing = await storage.getServicePricing(companyId);
         const recurringItems = pricing.filter(
           (p) =>
-            p.category === "recurring_service" && p.isActive && !(p.metadata as any)?.callForQuote
+            p.category === "recurring_service" &&
+            p.isActive &&
+            !(p.metadata as Record<string, unknown>)?.callForQuote
         );
 
         const existingPackages = await storage.getServicePackages(companyId);
@@ -642,7 +643,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           if (prop.measuredYardSqft) {
             acres = sqftToAcres(prop.measuredYardSqft);
           } else {
-            const parsed = parseLotSizeStringToAcres((prop as any).lotSize);
+            const parsed = parseLotSizeStringToAcres(
+              (prop as Record<string, unknown>).lotSize as string | undefined
+            );
             acres = parsed !== null ? parsed : yardSizeLabelToAcres(prop.yardSize);
           }
         }
@@ -691,7 +694,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
             if (prop.measuredYardSqft) {
               acres = sqftToAcres(prop.measuredYardSqft);
             } else {
-              const parsed = parseLotSizeStringToAcres((prop as any).lotSize);
+              const parsed = parseLotSizeStringToAcres(
+                (prop as Record<string, unknown>).lotSize as string | undefined
+              );
               acres = parsed !== null ? parsed : yardSizeLabelToAcres(prop.yardSize);
             }
           }
@@ -730,8 +735,8 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           serviceMinutes: String(result.breakdown.serviceMinutes),
           travelMinutes: String(result.breakdown.travelMinutes),
           densityMultiplier: String(result.breakdown.densityMultiplier),
-          breakdownJson: result.breakdown as any,
-          inputsJson: result.inputsUsed as any,
+          breakdownJson: result.breakdown as unknown as Record<string, unknown>,
+          inputsJson: result.inputsUsed as unknown as Record<string, unknown>,
           calculationVersion: "1.0",
           createdByUserId: userId,
           source: "manual",
@@ -1123,15 +1128,17 @@ Rules:
         });
 
         const raw = completion.choices[0]?.message?.content ?? "{}";
-        let parsed: any;
+        let parsed: unknown;
         try {
           parsed = JSON.parse(raw);
         } catch {
           return res.status(503).json({ message: "Failed to parse AI response" });
         }
 
-        const healthScore = typeof parsed.healthScore === "number" ? parsed.healthScore : null;
-        const verdict = typeof parsed.verdict === "string" ? parsed.verdict : "";
+        const typedParsed = parsed as Record<string, unknown>;
+        const healthScore =
+          typeof typedParsed.healthScore === "number" ? typedParsed.healthScore : null;
+        const verdict = typeof typedParsed.verdict === "string" ? typedParsed.verdict : "";
 
         let scoreDelta: number | null = null;
         if (healthScore !== null) {
@@ -1146,9 +1153,12 @@ Rules:
           await storage.saveBusinessAssessment({ companyId, score: healthScore, verdict });
         }
 
-        res.json({ ...parsed, scoreDelta });
+        res.json({ ...(parsed as Record<string, unknown>), scoreDelta });
       } catch (err) {
-        if ((err as any)?.status === 429 || (err as any)?.code === "insufficient_quota") {
+        if (
+          (err as { status?: number; code?: string })?.status === 429 ||
+          (err as { code?: string })?.code === "insufficient_quota"
+        ) {
           return res.status(503).json({ message: "AI service temporarily unavailable" });
         }
         handleError(res, err);
@@ -1201,11 +1211,12 @@ Rules:
           p(req.params.contactId)
         );
         res.json({ suggestions });
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const errObj = err as { status?: number; code?: string; message?: string };
         if (
-          err?.status === 429 ||
-          err?.code === "insufficient_quota" ||
-          (err?.message && err.message.includes("OpenAI"))
+          errObj.status === 429 ||
+          errObj.code === "insufficient_quota" ||
+          (errObj.message && errObj.message.includes("OpenAI"))
         ) {
           return res
             .status(503)
@@ -1737,7 +1748,7 @@ Rules:
     try {
       const { companyId } = await getCompanyContext(req);
       const id = p(req.params.id);
-      const updates: Record<string, any> = {};
+      const updates: Record<string, unknown> = {};
       if (typeof req.body.name === "string") updates.name = req.body.name.trim();
       if (typeof req.body.monthlyCostCents === "number" && req.body.monthlyCostCents >= 0) {
         updates.monthlyCostCents = Math.round(req.body.monthlyCostCents);
@@ -1995,10 +2006,10 @@ Rules:
         }
 
         const company = await storage.getCompany(companyId);
-        const config = (company?.pricingConfig as any) || {};
-        const gasPriceCents = config.averageGasPriceCentsPerGallon ?? 350;
-        const mpg = config.vehicleMPG ?? null;
-        const costPerMileCents = config.vehicleCostPerMileCents ?? 65;
+        const config = (company?.pricingConfig as unknown as Record<string, unknown>) || {};
+        const gasPriceCents = (config.averageGasPriceCentsPerGallon as number | undefined) ?? 350;
+        const mpg = (config.vehicleMPG as number | undefined) ?? null;
+        const costPerMileCents = (config.vehicleCostPerMileCents as number | undefined) ?? 65;
 
         const effectiveCostPerMileCents =
           mpg && mpg > 0 ? Math.round(gasPriceCents / mpg) : costPerMileCents;

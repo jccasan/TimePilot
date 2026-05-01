@@ -42,4 +42,10 @@ export default [
       "no-console": "off",
     },
   },
+  {
+    files: ["server/**/*.ts", "shared/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+    },
+  },
 ];

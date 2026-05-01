@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -8,6 +7,7 @@ import {
   contacts,
   properties,
   qboSyncLogs,
+  routes,
   servicePlans as servicePlansTable,
   agreements as agreementsTable,
   jobs as jobsTable,
@@ -106,10 +106,10 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
         .where(eq(companies.id, companyId));
 
       return res.redirect("/settings?qbo=connected");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("QBO callback error:", err);
       return res.redirect(
-        `/settings?qbo=error&msg=${encodeURIComponent(err.message || "auth_failed")}`
+        `/settings?qbo=error&msg=${encodeURIComponent((err instanceof Error ? err.message : String(err)) || "auth_failed")}`
       );
     }
   });
@@ -198,8 +198,10 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
           await syncPaymentToQbo(companyId, logEntry.entityId);
         }
         return res.json({ success: true });
-      } catch (retryErr: any) {
-        return res.status(422).json({ error: retryErr.message });
+      } catch (retryErr: unknown) {
+        return res
+          .status(422)
+          .json({ error: retryErr instanceof Error ? retryErr.message : String(retryErr) });
       }
     } catch (err) {
       handleError(res, err);
@@ -247,7 +249,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   app.get("/api/voice/lookup", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
-      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      if (!req._apiKeyAuth) requireRole(role, ["owner", "admin"]);
       const phone = ((req.query.phone as string) || "").replace(/[^\d+]/g, "");
       if (!phone || phone.length < 7) {
         return res.json({ found: false, message: "No matching customer found" });
@@ -328,7 +330,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   app.get("/api/voice/calls", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
-      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      if (!req._apiKeyAuth) requireRole(role, ["owner", "admin"]);
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
       const calls = await storage.getVoiceCalls(companyId, limit);
       res.json(calls);
@@ -340,7 +342,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   app.get("/api/voice/availability", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
-      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      if (!req._apiKeyAuth) requireRole(role, ["owner", "admin"]);
       const dayFilter = req.query.dayOfWeek as string | undefined;
       const zipCode = req.query.zipCode as string | undefined;
       const allRoutes = await storage.getRoutes(companyId);
@@ -390,7 +392,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   app.post("/api/voice/book", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
-      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      if (!req._apiKeyAuth) requireRole(role, ["owner", "admin"]);
       const {
         firstName,
         lastName,
@@ -565,7 +567,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   app.post("/api/voice/pause", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
-      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      if (!req._apiKeyAuth) requireRole(role, ["owner", "admin"]);
       const { contactId, servicePlanId, startDate, endDate, reason } = req.body;
       if (!startDate || !endDate) {
         return res.status(400).json({ error: "startDate and endDate are required (YYYY-MM-DD)" });
@@ -616,7 +618,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   app.post("/api/voice/resume", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
-      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      if (!req._apiKeyAuth) requireRole(role, ["owner", "admin"]);
       const { contactId, servicePlanId } = req.body;
       let planIds: string[] = [];
       if (servicePlanId) {
@@ -655,7 +657,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   app.post("/api/voice/reschedule", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
-      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      if (!req._apiKeyAuth) requireRole(role, ["owner", "admin"]);
       const { servicePlanId, contactId, newDayOfWeek } = req.body;
       const validDays = [
         "monday",
@@ -702,7 +704,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       }
       for (const plan of plans) {
         await storage.updateServicePlan(plan.id, companyId, {
-          dayOfWeek: newDayOfWeek as any,
+          dayOfWeek: newDayOfWeek as (typeof routes.$inferSelect)["dayOfWeek"],
           routeId: newRouteId,
         });
       }
@@ -721,7 +723,7 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   app.post("/api/voice/cancel", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);
-      if (!(req as any)._apiKeyAuth) requireRole(role, ["owner", "admin"]);
+      if (!req._apiKeyAuth) requireRole(role, ["owner", "admin"]);
       const { contactId, reason } = req.body;
       if (!contactId) {
         return res.status(400).json({ error: "contactId is required" });
@@ -732,11 +734,11 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       for (const plan of plans) {
         await storage.updateServicePlan(plan.id, companyId, {
           isActive: false,
-          jobStatus: "cancelled" as any,
+          jobStatus: "cancelled" as (typeof servicePlansTable.$inferSelect)["jobStatus"],
         });
       }
       await storage.updateContact(contactId, companyId, {
-        status: "cancelled" as any,
+        status: "cancelled" as (typeof contacts.$inferSelect)["status"],
         notes: contact.notes
           ? `${contact.notes}\n[Voice agent] Cancelled: ${reason || "No reason provided"}`
           : `[Voice agent] Cancelled: ${reason || "No reason provided"}`,

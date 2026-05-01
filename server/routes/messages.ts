@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response, NextFunction } from "express";
 import { maskEmail, maskPhone } from "../utils/pii";
 import multer from "multer";
@@ -388,22 +387,23 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
     "/api/messages/mms",
     isAuthenticated,
     (req: Request, res: Response, next: NextFunction) => {
-      mmsUpload.array("media", MMS_MAX_ATTACHMENTS)(req, res, (err: any) => {
+      mmsUpload.array("media", MMS_MAX_ATTACHMENTS)(req, res, (err: unknown) => {
         if (err) {
-          if (err.code === "LIMIT_FILE_SIZE") {
+          const uploadErr = err as { code?: string; message?: string };
+          if (uploadErr.code === "LIMIT_FILE_SIZE") {
             return res.status(400).json({
               error: `File too large. Maximum per file: ${Math.round(MMS_MAX_PER_FILE / 1024 / 1024)}MB`,
             });
           }
-          if (err.code === "LIMIT_FILE_COUNT") {
+          if (uploadErr.code === "LIMIT_FILE_COUNT") {
             return res
               .status(400)
               .json({ error: `Too many files. Maximum: ${MMS_MAX_ATTACHMENTS}` });
           }
-          if (err.code === "LIMIT_UNEXPECTED_FILE") {
+          if (uploadErr.code === "LIMIT_UNEXPECTED_FILE") {
             return res.status(400).json({ error: "Unexpected file field" });
           }
-          return res.status(400).json({ error: err.message || "File upload error" });
+          return res.status(400).json({ error: uploadErr.message || "File upload error" });
         }
         next();
       });
@@ -1175,7 +1175,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
   app.post(
     "/api/webhooks/sendgrid/inbound",
     (req: Request, res: Response, next: NextFunction) => {
-      inboundEmailUpload.any()(req, res, (err: any) => {
+      inboundEmailUpload.any()(req, res, (err: unknown) => {
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_FILE_SIZE") {
             console.warn(
@@ -1429,8 +1429,11 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
           return res.status(401).json({ error: "Missing signature" });
         }
         const crypto = await import("crypto");
-        const rawBody = (req as any).rawBody;
-        const hash = crypto.createHmac("sha256", verifierToken).update(rawBody).digest("base64");
+        const rawBody = (req as Request & { rawBody?: string }).rawBody;
+        const hash = crypto
+          .createHmac("sha256", verifierToken)
+          .update(rawBody ?? "")
+          .digest("base64");
         const hashBuf = Buffer.from(hash);
         const sigBuf = Buffer.from(signature);
         if (hashBuf.length !== sigBuf.length || !crypto.timingSafeEqual(hashBuf, sigBuf)) {
@@ -1466,7 +1469,11 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
               `[QBO Webhook] realmId=${realmId} company=${companyId} operation=${entity.operation} entity=${entity.name} id=${entity.id}`
             );
             processWebhookEntity(companyId, entity.name, String(entity.id), entity.operation).catch(
-              (err: any) => console.error(`[QBO Webhook] Async processing failed:`, err.message)
+              (err: unknown) =>
+                console.error(
+                  `[QBO Webhook] Async processing failed:`,
+                  err instanceof Error ? err.message : String(err)
+                )
             );
           }
         }
@@ -1489,7 +1496,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
           return res.status(200).json({ ok: true });
         }
         const crypto = await import("crypto");
-        const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+        const rawBody = (req as Request & { rawBody?: string }).rawBody || JSON.stringify(req.body);
         const expectedSignature = crypto
           .createHmac("sha256", retellApiKey)
           .update(rawBody)
@@ -1542,7 +1549,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
             outcome,
             summary,
             metadata: {
-              ...((existing.metadata as Record<string, any>) || {}),
+              ...((existing.metadata as Record<string, unknown>) || {}),
               callAnalysis: callData.call_analysis,
             },
           });

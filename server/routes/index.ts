@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { type Server } from "http";
 import crypto from "crypto";
@@ -49,8 +48,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Resolve the caller's stable identity from all supported auth mechanisms.
       // For staff sessions the identity is the userId; for portal sessions it is
       // the contactId (set in session cookie at login so img-tag requests work).
-      const sess = req.session as any;
-      let callerUserId: string | undefined = sess?.userId || sess?.portalContactId;
+      let callerUserId: string | undefined = req.session.userId || req.session.portalContactId;
 
       if (!callerUserId) {
         const authHeader = req.headers.authorization;
@@ -140,7 +138,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const subscriptionGate: RequestHandler = async (req, res, next) => {
     if (req.method === "OPTIONS") return next();
     if (isGateExempt(req.path, req.method)) return next();
-    const sessionUserId = (req.session as any)?.userId;
+    const sessionUserId = req.session.userId;
     const hasApiKey = !!req.headers["x-api-key"];
     const authHeader = req.headers.authorization;
     const hasBearerToken = authHeader?.startsWith("Bearer ");

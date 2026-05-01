@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
+import type Stripe from "stripe";
 import { maskEmail, maskPhone } from "../utils/pii";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -310,7 +310,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         currency: company?.currency || "usd",
       });
 
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         paymentAttempts: (invoice.paymentAttempts || 0) + 1,
         lastPaymentAttempt: new Date(),
       };
@@ -430,7 +430,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
 
       if (!accountId) {
         accountId = await createConnectAccount(companyId, company.name, company.email || "");
-        await storage.updateCompany(companyId, { stripeConnectAccountId: accountId } as any);
+        await storage.updateCompany(companyId, { stripeConnectAccountId: accountId });
       }
 
       const protocol = req.get("host")?.includes("localhost") ? "http" : "https";
@@ -468,7 +468,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         if (accountStatus.chargesEnabled !== company.stripeConnectOnboarded) {
           await storage.updateCompany(companyId, {
             stripeConnectOnboarded: accountStatus.chargesEnabled,
-          } as any);
+          });
         }
 
         return res.json({
@@ -503,10 +503,11 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         try {
           const url = await createConnectLoginLink(company.stripeConnectAccountId);
           res.json({ url });
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const stripeE = err as { message?: string; type?: string };
           if (
-            err.message?.includes("not a Standard account") ||
-            err.type === "StripeInvalidRequestError"
+            stripeE.message?.includes("not a Standard account") ||
+            stripeE.type === "StripeInvalidRequestError"
           ) {
             const protocol = req.get("host")?.includes("localhost") ? "http" : "https";
             const baseUrl = `${protocol}://${req.get("host")}`;
@@ -535,7 +536,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         await storage.updateCompany(companyId, {
           stripeConnectAccountId: null,
           stripeConnectOnboarded: false,
-        } as any);
+        });
         res.json({ ok: true });
       } catch (err) {
         handleError(res, err);
@@ -557,7 +558,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       }
 
       let event;
-      const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+      const rawBody = (req as Request & { rawBody?: string }).rawBody || JSON.stringify(req.body);
       for (const secret of secrets) {
         try {
           event = constructWebhookEvent(rawBody, sig, secret);
@@ -571,7 +572,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: "Webhook signature verification failed" });
       }
 
-      const connectAccountId = (event as any).account as string | undefined;
+      const connectAccountId = (event as Stripe.Event & { account?: string }).account;
       if (connectAccountId) {
         console.log(
           `[Stripe Webhook] Connect event ${event.id} (${event.type}) from account ${connectAccountId}`
@@ -589,7 +590,10 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       }
 
       if (event.type === "checkout.session.completed") {
-        const session = event.data.object as any;
+        const session = event.data.object as Stripe.Checkout.Session & {
+          metadata?: Record<string, string>;
+          line_items?: { data: Array<{ quantity?: number | null }> };
+        };
         const meta = session.metadata || {};
         const tenantId = meta.tenant_id;
 
@@ -627,16 +631,16 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   console.log(
                     `[Retell] Cloned agent "${effectiveAgentId}" for company "${company.name}" (${company.id})`
                   );
-                } catch (agentErr: any) {
+                } catch (agentErr: unknown) {
                   console.warn(
-                    `[Retell] Failed to clone agent for company "${company.name}" (${company.id}): ${agentErr.message}`
+                    `[Retell] Failed to clone agent for company "${company.name}" (${company.id}): ${agentErr instanceof Error ? agentErr.message : String(agentErr)}`
                   );
                   effectiveAgentId = process.env.RETELL_AGENT_ID || null;
                   notify(
                     tenantId,
                     "system_warning",
                     "Voice Agent Setup Incomplete",
-                    `Your voice plan is active but a dedicated AI agent could not be created (${agentErr.message}). Your account is using the shared agent in the meantime. Please contact support to resolve this.`,
+                    `Your voice plan is active but a dedicated AI agent could not be created (${agentErr instanceof Error ? agentErr.message : String(agentErr)}). Your account is using the shared agent in the meantime. Please contact support to resolve this.`,
                     `/settings`
                   );
                 }
@@ -679,15 +683,15 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                     console.log(
                       `[Retell] Provisioned number ${maskPhone(dedicatedPhoneNumber)} for company "${company.name}" (${company.id})`
                     );
-                  } catch (phoneErr: any) {
+                  } catch (phoneErr: unknown) {
                     console.warn(
-                      `[Retell] Failed to provision phone number for company "${company.name}" (${company.id}): ${phoneErr.message}`
+                      `[Retell] Failed to provision phone number for company "${company.name}" (${company.id}): ${phoneErr instanceof Error ? phoneErr.message : String(phoneErr)}`
                     );
                     notify(
                       tenantId,
                       "system_warning",
                       "Phone Number Setup Failed",
-                      `Your voice plan is active but we could not automatically provision a phone number (${phoneErr.message}). Please contact support to complete setup.`,
+                      `Your voice plan is active but we could not automatically provision a phone number (${phoneErr instanceof Error ? phoneErr.message : String(phoneErr)}). Please contact support to complete setup.`,
                       `/settings`
                     );
                   }
@@ -709,15 +713,15 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   console.log(
                     `[Retell KB] Created knowledge base "${kbId}" for company "${company.name}" (${company.id}) from ${businessWebsite}`
                   );
-                } catch (kbErr: any) {
+                } catch (kbErr: unknown) {
                   console.warn(
-                    `[Retell KB] Failed to seed knowledge base for company "${company.name}" (${company.id}): ${kbErr.message}`
+                    `[Retell KB] Failed to seed knowledge base for company "${company.name}" (${company.id}): ${kbErr instanceof Error ? kbErr.message : String(kbErr)}`
                   );
                   notify(
                     tenantId,
                     "system_warning",
                     "Knowledge Base Setup Failed",
-                    `Voice plan activated but knowledge base creation from "${businessWebsite}" failed. Please set it up manually. Error: ${kbErr.message}`,
+                    `Voice plan activated but knowledge base creation from "${businessWebsite}" failed. Please set it up manually. Error: ${kbErr instanceof Error ? kbErr.message : String(kbErr)}`,
                     `/settings`
                   );
                 }
@@ -731,15 +735,15 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               if (!kbId && effectiveAgentId) {
                 try {
                   await registerRetellWebhook(effectiveAgentId);
-                } catch (whErr: any) {
+                } catch (whErr: unknown) {
                   console.warn(
-                    `[Retell] Failed to register webhook for agent ${effectiveAgentId}: ${whErr.message}`
+                    `[Retell] Failed to register webhook for agent ${effectiveAgentId}: ${whErr instanceof Error ? whErr.message : String(whErr)}`
                   );
                   notify(
                     tenantId,
                     "system_warning",
                     "Call Tracking Setup Incomplete",
-                    `Voice plan activated but the call-event webhook could not be registered (agent: ${effectiveAgentId}). Call tracking may not work until this is resolved. Please contact support or check Settings. Error: ${whErr.message}`,
+                    `Voice plan activated but the call-event webhook could not be registered (agent: ${effectiveAgentId}). Call tracking may not work until this is resolved. Please contact support or check Settings. Error: ${whErr instanceof Error ? whErr.message : String(whErr)}`,
                     `/settings`
                   );
                 }
@@ -773,7 +777,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   .set({
                     status: "paid" as const,
                     paidAt: new Date(),
-                    stripePaymentIntentId: session.payment_intent,
+                    stripePaymentIntentId: session.payment_intent as string | null,
                     tipAmount,
                     updatedAt: new Date(),
                   })
@@ -809,7 +813,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                     .set({
                       status: "paid" as const,
                       paidAt: new Date(),
-                      stripePaymentIntentId: session.payment_intent,
+                      stripePaymentIntentId: session.payment_intent as string | null,
                       tipAmount,
                       updatedAt: new Date(),
                     })
@@ -851,14 +855,14 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           try {
             const seatCompany = await storage.getCompany(meta.companyId);
             if (seatCompany) {
-              const qty = (session as any).line_items?.data?.[0]?.quantity ?? 1;
+              const qty = session.line_items?.data?.[0]?.quantity ?? 1;
               const tierConfig = (await import("@shared/schema")).TIER_CONFIG;
               const tierMax =
                 tierConfig[seatCompany.subscriptionTier as keyof typeof tierConfig]?.maxUsers || 1;
               const currentMax = seatCompany.customMaxUsers ?? tierMax;
               await storage.updateCompany(meta.companyId, {
                 customMaxUsers: currentMax + qty,
-              } as any);
+              });
               console.log(
                 `[Stripe Seats] Added ${qty} seat(s) to company "${seatCompany.name}" (${meta.companyId}). New max: ${currentMax + qty}`
               );
@@ -867,9 +871,9 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 `[Stripe Seats] seat_purchase: company ${meta.companyId} not found (session ${session.id})`
               );
             }
-          } catch (seatErr: any) {
+          } catch (seatErr: unknown) {
             console.error(
-              `[Stripe Seats] Failed to process seat purchase (session ${session.id}): ${seatErr.message}`
+              `[Stripe Seats] Failed to process seat purchase (session ${session.id}): ${seatErr instanceof Error ? seatErr.message : String(seatErr)}`
             );
           }
         }
@@ -882,20 +886,25 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           try {
             const { default: StripeLib } = await import("stripe");
             const stripeLib = new StripeLib(process.env.STRIPE_SECRET_KEY!, {
-              apiVersion: "2026-01-28.clover" as any,
+              apiVersion: "2026-01-28.clover" as Stripe.LatestApiVersion,
             });
             const fullSession = await stripeLib.checkout.sessions.retrieve(session.id, {
               expand: ["line_items.data.price.product"],
             });
             let creditsToAdd = 0;
             for (const item of fullSession.line_items?.data ?? []) {
-              const product = (item.price as any)?.product;
+              const product = (item.price as Stripe.Price & { product?: unknown })?.product;
+              const stripeProduct = product as
+                | Stripe.Product
+                | Stripe.DeletedProduct
+                | null
+                | undefined;
               if (
-                product &&
-                typeof product === "object" &&
-                product.metadata?.type === "route_credits"
+                stripeProduct &&
+                !("deleted" in stripeProduct) &&
+                stripeProduct.metadata?.type === "route_credits"
               ) {
-                const credits = parseInt(product.metadata.credits ?? "0", 10);
+                const credits = parseInt(stripeProduct.metadata.credits ?? "0", 10);
                 creditsToAdd += credits * (item.quantity ?? 1);
               }
             }
@@ -903,7 +912,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               const company = await storage.getCompany(refCompanyId);
               if (company) {
                 const newTotal = (company.routeCredits ?? 0) + creditsToAdd;
-                await storage.updateCompany(refCompanyId, { routeCredits: newTotal } as any);
+                await storage.updateCompany(refCompanyId, { routeCredits: newTotal });
                 console.log(
                   `[Stripe Credits] Added ${creditsToAdd} route credits to company "${company.name}" (${refCompanyId}). New total: ${newTotal}`
                 );
@@ -913,16 +922,18 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 );
               }
             }
-          } catch (creditErr: any) {
+          } catch (creditErr: unknown) {
             console.error(
-              `[Stripe Credits] Failed to process route credit purchase (session ${session.id}): ${creditErr.message}`
+              `[Stripe Credits] Failed to process route credit purchase (session ${session.id}): ${creditErr instanceof Error ? creditErr.message : String(creditErr)}`
             );
           }
         }
       }
 
       if (event.type === "payment_intent.succeeded") {
-        const pi = event.data.object as any;
+        const pi = event.data.object as Stripe.PaymentIntent & {
+          metadata?: Record<string, string>;
+        };
         const invoiceId = pi.metadata?.invoiceId;
         if (invoiceId) {
           const piTenantId = pi.metadata?.tenant_id;
@@ -1003,7 +1014,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       }
 
       if (event.type === "account.updated") {
-        const account = event.data.object as any;
+        const account = event.data.object as Stripe.Account;
         const accountId = account.id;
         if (accountId) {
           const company = await storage.getCompanyByStripeConnectAccountId(accountId);
@@ -1012,7 +1023,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             if (isOnboarded !== company.stripeConnectOnboarded) {
               await storage.updateCompany(company.id, {
                 stripeConnectOnboarded: isOnboarded,
-              } as any);
+              });
               console.log(
                 `[Stripe Connect] Company ${company.name} (${company.id}) onboarded=${isOnboarded}`
               );

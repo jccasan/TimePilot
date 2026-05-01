@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import crypto from "crypto";
 import fs from "fs";
@@ -6,6 +5,13 @@ import path from "path";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
+import {
+  servicePlans as servicePlansTable,
+  type InsertContact,
+  type InsertProperty,
+  type Visit,
+  type InvoiceLineItem,
+} from "@shared/schema";
 import { sendEmail } from "../services/email";
 import {
   isStripeConfigured,
@@ -112,7 +118,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       // Store contactId in session cookie so browser img tag requests (which cannot
       // send Authorization headers) are still authenticated for /objects/ downloads.
-      (req.session as any).portalContactId = foundContact.id;
+      req.session.portalContactId = foundContact.id;
       await new Promise<void>((resolve, reject) =>
         req.session.save((err) => (err ? reject(err) : resolve()))
       );
@@ -361,7 +367,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           pricePerVisit: p.pricePerVisit,
           isActive: p.isActive,
         })),
-        upcomingVisits: myVisits.map((v: any) => ({
+        upcomingVisits: myVisits.map((v: Visit) => ({
           id: v.id,
           scheduledDate: v.scheduledDate,
           status: v.status,
@@ -556,11 +562,11 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const allVisits = await storage.getVisitsForDateRange(companyId, pastDate, today);
       const pastVisits = allVisits
         .filter(
-          (v: any) =>
+          (v: Visit) =>
             planIds.has(v.servicePlanId) &&
             (v.status === "completed" || v.status === "skipped" || v.status === "cancelled")
         )
-        .sort((a: any, b: any) => b.scheduledDate.localeCompare(a.scheduledDate));
+        .sort((a: Visit, b: Visit) => (b.scheduledDate ?? "").localeCompare(a.scheduledDate ?? ""));
 
       const props = await storage.getProperties(companyId, contactId);
 
@@ -569,7 +575,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const start = (page - 1) * limit;
 
       res.json({
-        visits: pastVisits.slice(start, start + limit).map((v: any) => ({
+        visits: pastVisits.slice(start, start + limit).map((v: Visit) => ({
           id: v.id,
           scheduledDate: v.scheduledDate,
           status: v.status,
@@ -675,7 +681,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const { sessionId } = await getPortalContext(req);
       await storage.deletePortalSession(sessionId);
       // Clear portal identity from session cookie to revoke object download access.
-      delete (req.session as any).portalContactId;
+      delete req.session.portalContactId;
       await new Promise<void>((resolve, reject) =>
         req.session.save((err) => (err ? reject(err) : resolve()))
       );
@@ -700,8 +706,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const { contactId, companyId } = await getPortalContext(req);
       const contact = await storage.getContactById(contactId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
-      const updates: any = {};
-      if (req.body.numberOfDogs !== undefined) updates.numberOfDogs = Number(req.body.numberOfDogs);
+      const updates: Partial<Record<string, unknown>> = {};
       if (req.body.firstName !== undefined) updates.firstName = String(req.body.firstName).trim();
       if (req.body.lastName !== undefined) updates.lastName = String(req.body.lastName).trim();
       if (req.body.phone !== undefined) updates.phone = String(req.body.phone).trim() || null;
@@ -710,6 +715,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       if (req.body.city !== undefined) updates.city = String(req.body.city).trim();
       if (req.body.state !== undefined) updates.state = String(req.body.state).trim();
       if (req.body.zipCode !== undefined) updates.zipCode = String(req.body.zipCode).trim();
+      if (req.body.numberOfDogs !== undefined) updates.numberOfDogs = Number(req.body.numberOfDogs);
       let pendingEmailChange: string | null = null;
       if (req.body.email !== undefined) {
         const newEmail = String(req.body.email).trim().toLowerCase();
@@ -718,7 +724,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         }
       }
       if (Object.keys(updates).length > 0) {
-        await storage.updateContact(contactId, companyId, updates);
+        await storage.updateContact(contactId, companyId, updates as Partial<InsertContact>);
       }
       if (req.body.properties && Array.isArray(req.body.properties)) {
         for (const prop of req.body.properties) {
@@ -728,7 +734,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
               return res.status(403).json({ error: "Not authorized to update this property" });
             }
             if (existing) {
-              const propUpdates: any = {};
+              const propUpdates: Partial<InsertProperty> = {};
               if (prop.gateCode !== undefined) propUpdates.gateCode = prop.gateCode;
               if (prop.specialInstructions !== undefined)
                 propUpdates.specialInstructions = prop.specialInstructions;
@@ -858,9 +864,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const baseUrl = getBaseUrl(req);
       const Stripe = (await import("stripe")).default;
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-        apiVersion: "2025-04-30.basil" as any,
+        apiVersion: "2025-04-30.basil" as unknown as import("stripe").Stripe.LatestApiVersion,
       });
-      const setupOpts: Record<string, any> = {};
+      const setupOpts: { stripeAccount?: string } = {};
       if (connectAcct) {
         setupOpts.stripeAccount = connectAcct;
       }
@@ -1135,9 +1141,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       const company = await storage.getCompany(quoteRow.company_id as string);
       res.json({ quote: safeQuote, companyName: company?.name || "Service Provider" });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error fetching portal quote:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -1210,9 +1216,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       }
 
       res.json({ success: true, tier, price: selectedPrice });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error accepting quote:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -1236,9 +1242,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       `);
 
       res.json({ success: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error declining quote:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -1382,12 +1388,12 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       const visitsWithPhotos = allVisits
         .filter(
-          (v: any) =>
+          (v: Visit) =>
             planIds.has(v.servicePlanId) && (v.proofOfServicePhoto || v.proofOfServicePhotoBefore)
         )
-        .sort((a: any, b: any) => b.scheduledDate.localeCompare(a.scheduledDate))
+        .sort((a: Visit, b: Visit) => (b.scheduledDate ?? "").localeCompare(a.scheduledDate ?? ""))
         .slice(0, 50)
-        .map((v: any) => ({
+        .map((v: Visit) => ({
           id: v.id,
           scheduledDate: v.scheduledDate,
           propertyAddress: props.find((p) => p.id === v.propertyId)?.streetAddress || "",
@@ -1729,11 +1735,13 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         } else if (request.servicePlanId && request.requestedValue) {
           if (request.requestType === "frequency_change") {
             await storage.updateServicePlan(request.servicePlanId, companyId, {
-              frequency: request.requestedValue as any,
+              frequency:
+                request.requestedValue as (typeof servicePlansTable.$inferSelect)["frequency"],
             });
           } else if (request.requestType === "day_change") {
             await storage.updateServicePlan(request.servicePlanId, companyId, {
-              dayOfWeek: request.requestedValue as any,
+              dayOfWeek:
+                request.requestedValue as (typeof servicePlansTable.$inferSelect)["dayOfWeek"],
             });
           }
         }
@@ -1791,11 +1799,12 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           success: true,
           message: "Portal access enabled. Temporary password has been emailed to the customer.",
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const e = err as Partial<Error>;
         console.error("[portal-access/provision] Unhandled error:", {
-          message: err?.message,
-          stack: err?.stack,
-          name: err?.name,
+          message: e.message,
+          stack: e.stack,
+          name: e.name,
         });
         handleError(res, err);
       }
@@ -1883,16 +1892,16 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
         try {
           await storage.updateContact(p(req.params.id), companyId, { portalPasswordHash });
-        } catch (dbErr: any) {
+        } catch (dbErr: unknown) {
           console.error("[portal-access/resend] Failed to update contact:", {
             contactId: p(req.params.id),
             companyId,
-            message: dbErr?.message,
-            stack: dbErr?.stack,
-            name: dbErr?.name,
+            message: dbErr instanceof Error ? dbErr.message : String(dbErr),
+            stack: dbErr instanceof Error ? dbErr.stack : undefined,
+            name: dbErr instanceof Error ? dbErr.name : undefined,
           });
           throw new Error(
-            `Failed to save new portal credentials: ${dbErr?.message || String(dbErr)}`
+            `Failed to save new portal credentials: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`
           );
         }
 
@@ -1933,11 +1942,12 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           success: true,
           message: "Portal link with new credentials has been emailed to the customer.",
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const e2 = err as Partial<Error>;
         console.error("[portal-access/resend] Unhandled error:", {
-          message: err?.message,
-          stack: err?.stack,
-          name: err?.name,
+          message: e2.message,
+          stack: e2.stack,
+          name: e2.name,
         });
         handleError(res, err);
       }
@@ -2255,7 +2265,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
               updated.preferredTiming = "24h_before";
           }
           await storage.updateContact(row.contact_id, row.company_id, {
-            reminderPreferences: updated as any,
+            reminderPreferences: updated as unknown as NonNullable<
+              import("@shared/schema").Contact["reminderPreferences"]
+            >,
           });
         }
       }
@@ -2364,9 +2376,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
             );
 
             sent++;
-          } catch (e: any) {
+          } catch (e: unknown) {
             skipped++;
-            errors.push(e.message || "Unknown error");
+            errors.push(e instanceof Error ? e.message : "Unknown error");
           }
         }
 
@@ -2417,11 +2429,15 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         "showLogo",
         "logoPosition",
       ];
-      const filtered: any = {};
+      const filtered: Record<string, unknown> = {};
+      const typedTheme = theme as Record<string, unknown>;
       for (const key of allowed) {
-        if (theme[key] !== undefined) filtered[key] = theme[key];
+        if (typedTheme[key] !== undefined) filtered[key] = typedTheme[key];
       }
-      if (filtered.logoPosition && !["left", "center", "right"].includes(filtered.logoPosition)) {
+      if (
+        filtered.logoPosition &&
+        !["left", "center", "right"].includes(filtered.logoPosition as string)
+      ) {
         return res.status(400).json({ error: "Invalid logoPosition" });
       }
       if (filtered.showLogo !== undefined) filtered.showLogo = Boolean(filtered.showLogo);
@@ -2451,8 +2467,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const html = renderInvoice(tpl, theme, computed);
       res.setHeader("Content-Type", "text/html");
       res.send(html);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -2514,7 +2530,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         isStripeConfigured() && parseFloat(invoice.total) > 0 && invoice.status !== "paid";
       const previewPaymentUrl = hasStripe ? "#preview" : "";
 
-      const invoiceData: any = {
+      const invoiceData: Record<string, unknown> = {
         business: {
           name: company?.name || "",
           address: company?.address || "",
@@ -2540,7 +2556,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         billing_address: billingAddr,
         service_address: serviceAddrObj,
         show_service_address: showServiceAddress ? serviceAddrObj : null,
-        line_items: lineItems.map((li: any) => ({
+        line_items: lineItems.map((li: InvoiceLineItem) => ({
           description: li.description,
           details: "",
           qty: li.quantity,

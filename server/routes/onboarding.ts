@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
+import type { Contact, Property, ServicePlan } from "@shared/schema";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { getUserByEmail, createUserWithTempPassword } from "../services/app-auth";
@@ -21,7 +21,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
 
   app.post("/api/setup", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session as any).userId;
+      const userId = req.session.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const result = await ensureCompanySetup(userId);
       const demoId = await getDemoCompanyId();
@@ -49,9 +49,9 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
       const hasRoutes = routesList.length > 0;
       const hasServicePlans = plansList.length > 0;
 
-      let firstContact: any = null;
-      let firstProperty: any = null;
-      let firstServicePlan: any = null;
+      let firstContact: Contact | null = null;
+      let firstProperty: Property | null = null;
+      let firstServicePlan: ServicePlan | null = null;
       if (hasContacts) {
         firstContact = contactsList[0];
         const props = await storage.getProperties(companyId, firstContact.id);
@@ -64,7 +64,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
       let hasPriceRecommendation = false;
       if (firstProperty) {
         const recs = await storage.getPriceRecommendations(companyId);
-        hasPriceRecommendation = recs.some((r: any) => r.propertyId === firstProperty.id);
+        hasPriceRecommendation = recs.some((r) => r.propertyId === firstProperty.id);
       }
 
       const steps = [
@@ -537,9 +537,9 @@ Return ONLY valid JSON, no markdown.`,
           return lower.includes("dog") || lower.includes("pet");
         });
 
-        const pricingData: any[] = [];
+        const pricingData: unknown[] = [];
         for (const row of rows) {
-          const entry: any = {};
+          const entry: Record<string, unknown> = {};
           for (let i = 0; i < headers.length; i++) {
             entry[headers[i]] = row[i] || "";
           }

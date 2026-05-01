@@ -1,10 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql, eq, and } from "drizzle-orm";
-import { contacts, reminderLogs } from "@shared/schema";
+import { contacts, reminderLogs, type InsertVisit } from "@shared/schema";
 import { ObjectStorageService } from "../replit_integrations/object_storage";
 import { sendEmail } from "../services/email";
 import {
@@ -505,17 +504,19 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         "extraPhotos",
         "technicianNotes",
       ];
-      const updates: any = {};
-      for (const key of allowedFields) {
-        if (req.body[key] !== undefined) updates[key] = req.body[key];
+      const updates: Partial<InsertVisit> = {};
+      for (const key of allowedFields as (keyof InsertVisit)[]) {
+        if (req.body[key] !== undefined) (updates as Record<string, unknown>)[key] = req.body[key];
       }
       if (req.body.status === "completed") {
-        updates.completedBy = userId;
+        (updates as Record<string, unknown>).completedBy = userId;
       }
       const timestampFields = ["startedAt", "completedAt"];
-      for (const field of timestampFields) {
+      for (const field of timestampFields as (keyof InsertVisit)[]) {
         if (field in updates && updates[field] !== null) {
-          updates[field] = new Date(updates[field]);
+          (updates as Record<string, unknown>)[field] = new Date(
+            (updates as Record<string, unknown>)[field] as string | number
+          );
         }
       }
       let visit: Awaited<ReturnType<typeof storage.updateVisit>>;
@@ -697,7 +698,7 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       onMyWayCooldowns.set(cooldownKey, Date.now());
 
       try {
-        await storage.updateVisit(p(req.params.id), companyId, { enRouteAt: new Date() } as any);
+        await storage.updateVisit(p(req.params.id), companyId, { enRouteAt: new Date() });
       } catch (stampErr) {
         console.error("Failed to stamp enRouteAt on visit:", stampErr);
       }
@@ -934,8 +935,8 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
           console.error("Review request check failed:", reviewErr);
         }
 
-        let completionSmsResult: any = null;
-        let etaSmsResult: any = null;
+        let completionSmsResult: { success: boolean; messageSid?: string } | null = null;
+        let etaSmsResult: { success: boolean; messageSid?: string } | null = null;
 
         const todayStr = new Date().toISOString().split("T")[0];
         const isScheduledForToday = visit.scheduledDate === todayStr;
@@ -1113,7 +1114,7 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         sunday: 0,
       };
 
-      const created: any[] = [];
+      const created: unknown[] = [];
       const start = new Date(startDate + "T00:00:00Z");
       const end = new Date(endDate + "T00:00:00Z");
 

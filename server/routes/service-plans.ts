@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -308,7 +307,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         })();
       }
 
-      let planAddOns: any[] = [];
+      let planAddOns: unknown[] = [];
       if (req.body.addOns && Array.isArray(req.body.addOns)) {
         const validatedAddOns = await validateAndResolveAddOns(req.body.addOns, companyId);
         planAddOns = await storage.setServicePlanAddOns(plan.id, validatedAddOns);
@@ -604,7 +603,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         "pausedAt",
         "discount",
       ];
-      const body: Record<string, any> = {};
+      const body: Record<string, unknown> = {};
       for (const key of allowedFields) {
         if (req.body[key] !== undefined) body[key] = req.body[key];
       }
@@ -614,7 +613,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
 
       const dayChanged = body.dayOfWeek && body.dayOfWeek !== existing.dayOfWeek;
       if (dayChanged && !body.routeId) {
-        const dayRoutes = await storage.getRoutes(companyId, body.dayOfWeek);
+        const dayRoutes = await storage.getRoutes(companyId, body.dayOfWeek as string | undefined);
         if (dayRoutes.length > 0) {
           const allPlans = await storage.getServicePlans(companyId, { isActive: true });
           let bestRoute = dayRoutes[0];
@@ -637,7 +636,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       }
       if (body.routeId && body.routeId !== existing.routeId && body.stopOrder === undefined) {
         const routeStops = await storage.getServicePlans(companyId, {
-          routeId: body.routeId,
+          routeId: (body.routeId as string | null | undefined) ?? undefined,
           isActive: true,
         });
         const maxOrder = routeStops.reduce((m, s) => Math.max(m, s.stopOrder ?? 0), 0);
@@ -645,14 +644,14 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       }
 
       if (body.routeId && !body.dayOfWeek) {
-        const targetRoute = await storage.getRoute(body.routeId, companyId);
+        const targetRoute = await storage.getRoute(body.routeId as string, companyId);
         if (targetRoute) {
           body.dayOfWeek = targetRoute.dayOfWeek;
         }
       }
 
       const { addOns: addOnsData } = req.body;
-      const updateBody = body;
+      const updateBody = body as Partial<import("@shared/schema").InsertServicePlan>;
       const plan = await storage.updateServicePlan(p(req.params.id), companyId, updateBody);
       const { userId } = await getCompanyContext(req);
       auditLog(
@@ -719,7 +718,8 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       if (routeIdChanged || dayChanged2 || deactivated) {
         const routesToClear = new Set<string>();
         if (existing.routeId) routesToClear.add(existing.routeId);
-        if (body.routeId && body.routeId !== existing.routeId) routesToClear.add(body.routeId);
+        if (body.routeId && body.routeId !== existing.routeId)
+          routesToClear.add(body.routeId as string);
         for (const rId of Array.from(routesToClear)) {
           clearRouteOptimizationState(rId, companyId).catch(console.error);
         }
@@ -728,7 +728,8 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       if (routeIdChanged || deactivated) {
         const routesToRenumber = new Set<string>();
         if (existing.routeId) routesToRenumber.add(existing.routeId);
-        if (body.routeId && body.routeId !== existing.routeId) routesToRenumber.add(body.routeId);
+        if (body.routeId && body.routeId !== existing.routeId)
+          routesToRenumber.add(body.routeId as string);
         for (const rId of Array.from(routesToRenumber)) {
           await storage.renumberRouteStops(rId, companyId);
         }
@@ -1110,7 +1111,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       const existing = zones.find((z) => z.id === p(req.params.id));
       if (!existing) return res.status(404).json({ error: "Service zone not found" });
       const { dayOfWeek, label, isActive, priceSurchargePercent } = req.body;
-      const updates: any = {};
+      const updates: Partial<import("@shared/schema").InsertServiceZone> = {};
       if (dayOfWeek !== undefined) updates.dayOfWeek = dayOfWeek;
       if (label !== undefined) updates.label = label;
       if (isActive !== undefined) updates.isActive = isActive;

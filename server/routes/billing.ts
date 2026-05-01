@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -140,11 +139,10 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       const baseUrl = getBaseUrl(req);
       const { default: StripeLib } = await import("stripe");
       const stripeLib = new StripeLib(process.env.STRIPE_SECRET_KEY!, {
-        apiVersion: "2026-01-28.clover" as any,
+        apiVersion: "2026-01-28.clover" as const,
       });
 
-      const sessionParams: any = {
-        mode: "payment",
+      const sessionParams: Partial<Record<string, unknown>> = {
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${baseUrl}/settings?seatAdded=1`,
         cancel_url: `${baseUrl}/settings`,
@@ -436,7 +434,10 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       tenantId: companyId,
       currency: company?.currency || "usd",
     });
-    const updateData: Record<string, unknown> = {
+    const updateData: Partial<Record<keyof import("@shared/schema").InsertInvoice, unknown>> & {
+      paidAt?: Date | null;
+      lastPaymentAttempt?: Date | null;
+    } = {
       paymentAttempts: (invoice.paymentAttempts || 0) + 1,
       lastPaymentAttempt: new Date(),
     };
@@ -586,7 +587,8 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
           name: config.name,
           price: stripePrices?.[tier] ?? config.price,
           maxUsers: config.maxUsers,
-          maxContacts: (config as any).maxContacts ?? null,
+          maxContacts:
+            ((config as Record<string, unknown>).maxContacts as number | null | undefined) ?? null,
         };
       }
       res.json(result);
@@ -755,9 +757,23 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       const response = await fetch(url);
       if (!response.ok) return res.json([]);
       const data = await response.json();
-      const features = (data.features || []).map((f: any) => {
-        const props = f.properties || {};
-        const ctx = props.context || {};
+      type GeoContext = Record<string, { name?: string; region_code?: string } | undefined>;
+      type GeoFeature = {
+        id?: string;
+        geometry?: { coordinates?: [number, number] };
+        properties?: {
+          place_formatted?: string;
+          coordinates?: { latitude?: number; longitude?: number };
+          name?: string;
+          region_code?: string;
+          context?: GeoContext;
+          full_address?: string;
+          address?: string;
+        };
+      };
+      const features = ((data.features || []) as GeoFeature[]).map((f) => {
+        const props = f.properties ?? {};
+        const ctx: GeoContext = props.context ?? {};
         const coords = f.geometry?.coordinates;
         const fullAddr = props.full_address || "";
 
@@ -1043,8 +1059,10 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
 
         // Sort by scheduledTime ascending
         enriched.sort((a, b) => {
-          const tA = (a as any).scheduledTime ?? "00:00";
-          const tB = (b as any).scheduledTime ?? "00:00";
+          const tA =
+            ((a as Record<string, unknown>).scheduledTime as string | undefined) ?? "00:00";
+          const tB =
+            ((b as Record<string, unknown>).scheduledTime as string | undefined) ?? "00:00";
           return tA.localeCompare(tB);
         });
 
@@ -1056,7 +1074,14 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         };
 
         const sumPrices = (vs: typeof enriched) =>
-          vs.reduce((s, v) => s + parseFloat((v as any).pricePerVisit || "0"), 0);
+          vs.reduce(
+            (s, v) =>
+              s +
+              parseFloat(
+                ((v as Record<string, unknown>).pricePerVisit as string | undefined) || "0"
+              ),
+            0
+          );
 
         const nonCancelled = enriched.filter((v) => v.status !== "cancelled");
         const completedVisits = enriched.filter((v) => v.status === "completed");
