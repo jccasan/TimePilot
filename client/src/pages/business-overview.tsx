@@ -832,6 +832,137 @@ export default function BusinessOverview() {
                 </div>
               </div>
 
+              {/* Executive Summary */}
+              {assessment.executiveSummary && (
+                <div data-testid="panel-executive-summary" className="space-y-4">
+                  <h3 className="text-sm font-semibold">Executive Summary</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {assessment.executiveSummary.topThingsWorking &&
+                      assessment.executiveSummary.topThingsWorking.length > 0 && (
+                        <div className="rounded-lg border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 p-3">
+                          <p className="text-xs font-semibold text-green-700 dark:text-green-400 mb-2 uppercase tracking-wide">
+                            Top Things Working
+                          </p>
+                          <ul className="space-y-1">
+                            {assessment.executiveSummary.topThingsWorking.map((item, i) => (
+                              <li
+                                key={i}
+                                className="text-xs text-green-900 dark:text-green-300 flex gap-1.5"
+                                data-testid={`exec-working-${i}`}
+                              >
+                                <span className="mt-0.5 shrink-0 text-green-500">•</span>
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    {assessment.executiveSummary.topProblems &&
+                      assessment.executiveSummary.topProblems.length > 0 && (
+                        <div className="rounded-lg border bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 p-3">
+                          <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-2 uppercase tracking-wide">
+                            Top Problems
+                          </p>
+                          <ul className="space-y-1">
+                            {assessment.executiveSummary.topProblems.map((item, i) => (
+                              <li
+                                key={i}
+                                className="text-xs text-red-900 dark:text-red-300 flex gap-1.5"
+                                data-testid={`exec-problem-${i}`}
+                              >
+                                <span className="mt-0.5 shrink-0 text-red-500">•</span>
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    {assessment.executiveSummary.topActionsFirst &&
+                      assessment.executiveSummary.topActionsFirst.length > 0 && (
+                        <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 p-3">
+                          <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-2 uppercase tracking-wide">
+                            Top Actions First
+                          </p>
+                          <ul className="space-y-1">
+                            {assessment.executiveSummary.topActionsFirst.map((item, i) => (
+                              <li
+                                key={i}
+                                className="text-xs text-blue-900 dark:text-blue-300 flex gap-1.5"
+                                data-testid={`exec-action-${i}`}
+                              >
+                                <span className="mt-0.5 shrink-0 text-blue-500">•</span>
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {assessment.executiveSummary.biggestRisk && (
+                      <div
+                        className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20 p-3 flex gap-3"
+                        data-testid="callout-biggest-risk"
+                      >
+                        <div className="shrink-0 mt-0.5">
+                          <svg
+                            className="h-4 w-4 text-orange-500"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                            />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-orange-700 dark:text-orange-400 mb-1 uppercase tracking-wide">
+                            Biggest Risk
+                          </p>
+                          <p className="text-xs text-orange-900 dark:text-orange-300">
+                            {assessment.executiveSummary.biggestRisk}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {assessment.executiveSummary.fastestWayToImprove && (
+                      <div
+                        className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/20 p-3 flex gap-3"
+                        data-testid="callout-fastest-improve"
+                      >
+                        <div className="shrink-0 mt-0.5">
+                          <svg
+                            className="h-4 w-4 text-indigo-500"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M13 10V3L4 14h7v7l9-11h-7z"
+                            />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-400 mb-1 uppercase tracking-wide">
+                            Fastest Way to Improve
+                          </p>
+                          <p className="text-xs text-indigo-900 dark:text-indigo-300">
+                            {assessment.executiveSummary.fastestWayToImprove}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Score Breakdown Table */}
               {assessment.scoreBreakdown && assessment.scoreBreakdown.length > 0 && (
                 <div data-testid="panel-score-breakdown">
