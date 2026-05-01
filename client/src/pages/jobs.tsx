@@ -4,6 +4,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import type { ServicePlan, Contact, Property } from "@shared/schema";
 
 type ServicePricingItem = {
@@ -151,6 +152,7 @@ function JobForm({
   submitLabel: string;
 }) {
   const tz = useCompanyTimezone();
+  const { formatMoney } = useCurrency();
   const [jobType, setJobType] = useState<string>(initial?.jobType || "one_off");
   const [contactId, setContactId] = useState(initial?.contactId || "");
   const [propertyId, setPropertyId] = useState(initial?.propertyId || "");
@@ -333,7 +335,7 @@ function JobForm({
                 <span className="text-sm font-medium">{svc.name}</span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">
-                    ${parseFloat(svc.price || "0").toFixed(2)}
+                    {formatMoney(parseFloat(svc.price || "0"))}
                   </span>
                   <Button
                     type="button"
@@ -359,7 +361,7 @@ function JobForm({
               <SelectContent>
                 {activeServices.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
-                    {s.name} — ${parseFloat(s.basePrice).toFixed(2)}
+                    {s.name} — {formatMoney(parseFloat(s.basePrice))}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -409,7 +411,7 @@ function JobForm({
             Total per Visit
           </Label>
           <span className="text-sm font-semibold" data-testid="text-total-price">
-            ${(parseFloat(totalPrice) || 0).toFixed(2)}
+            {formatMoney(parseFloat(totalPrice) || 0)}
           </span>
         </div>
       </div>
@@ -729,6 +731,7 @@ function CancelAllDialog({
 
 export default function Jobs() {
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
   const [createOpen, setCreateOpen] = useState(false);
   const [editJob, setEditJob] = useState<ServicePlan | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -1113,7 +1116,7 @@ export default function Jobs() {
                           </span>
                         )}
                         <span className="text-xs text-muted-foreground">
-                          ${(Number(job.pricePerVisit) || 0).toFixed(2)}/visit
+                          {formatMoney(Number(job.pricePerVisit) || 0)}/visit
                         </span>
                       </div>
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap text-xs text-muted-foreground">

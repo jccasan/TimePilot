@@ -96,6 +96,7 @@ import { useUpload } from "@/hooks/use-upload";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
+import { useAddressLabels } from "@/hooks/use-address-labels";
 import {
   Globe,
   Copy,
@@ -4523,6 +4524,12 @@ function BillingDefaultsSection({ company }: { company: Company | null | undefin
 }
 
 export default function Settings() {
+  const { stateLabel, zipLabel } = useAddressLabels();
+  const contactFields = CONTACT_FIELDS.map((f) => {
+    if (f.key === "state") return { ...f, label: stateLabel };
+    if (f.key === "zipCode") return { ...f, label: zipLabel };
+    return f;
+  });
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -6345,7 +6352,7 @@ export default function Settings() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__skip__">-- Skip this column --</SelectItem>
-                        {CONTACT_FIELDS.map((f) => (
+                        {contactFields.map((f) => (
                           <SelectItem key={f.key} value={f.key}>
                             {f.label}
                           </SelectItem>
@@ -6391,18 +6398,20 @@ export default function Settings() {
                 <thead className="bg-muted/50 sticky top-0">
                   <tr>
                     <th className="p-2 text-left font-medium w-8">#</th>
-                    {CONTACT_FIELDS.filter((f) => importRows.some((r) => r[f.key])).map((f) => (
-                      <th key={f.key} className="p-2 text-left font-medium whitespace-nowrap">
-                        {f.label}
-                      </th>
-                    ))}
+                    {contactFields
+                      .filter((f) => importRows.some((r) => r[f.key]))
+                      .map((f) => (
+                        <th key={f.key} className="p-2 text-left font-medium whitespace-nowrap">
+                          {f.label}
+                        </th>
+                      ))}
                     <th className="p-2 w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {importRows.map((row, rowIdx) => {
                     const hasName = row.firstName && row.lastName;
-                    const visibleFields = CONTACT_FIELDS.filter((f) =>
+                    const visibleFields = contactFields.filter((f) =>
                       importRows.some((r) => r[f.key])
                     );
                     return (

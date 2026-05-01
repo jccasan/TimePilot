@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,12 +143,6 @@ interface ProfitabilitySnapshot {
   profitCents: number;
   profitMarginPct: string;
   visitCount: number;
-}
-
-function formatCents(cents: number): string {
-  const abs = Math.abs(cents);
-  const formatted = `$${(abs / 100).toFixed(2)}`;
-  return cents < 0 ? `-${formatted}` : formatted;
 }
 
 function formatPct(pct: number): string {
@@ -542,6 +537,11 @@ function getDiagnosticInfo(type: DiagnosticType): DiagnosticInfo {
 }
 
 function PropertyCard({ prop, contactId }: { prop: PropertyProfitability; contactId: string }) {
+  const { formatMoney } = useCurrency();
+  const formatCents = (cents: number) => {
+    const sign = cents < 0 ? "-" : "";
+    return sign + formatMoney(Math.abs(cents) / 100);
+  };
   const isUnprofitable = prop.profitMarginPct < 0;
   const isMarginal = prop.profitMarginPct >= 0 && prop.profitMarginPct <= 15;
   const priceDiff = prop.recommendedPriceCents - prop.revenuePerVisitCents;
@@ -919,6 +919,11 @@ function ProfitTrendChart({ contactId }: { contactId: string }) {
 export default function ProfitabilityDetail() {
   const { contactId } = useParams<{ contactId: string }>();
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
+  const formatCents = (cents: number) => {
+    const sign = cents < 0 ? "-" : "";
+    return sign + formatMoney(Math.abs(cents) / 100);
+  };
 
   const { data: profitData, isLoading } = useQuery<CustomerProfitabilityData>({
     queryKey: ["/api/profitability/customer", contactId],

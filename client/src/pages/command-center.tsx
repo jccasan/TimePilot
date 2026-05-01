@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useCurrency } from "@/hooks/use-currency";
 import { Link, useLocation, useSearch } from "wouter";
 import { format } from "date-fns";
 import {
@@ -85,10 +86,6 @@ interface CommandCenterStats {
     totalInvoiced: number;
     totalPaid: number;
   };
-}
-
-function formatCurrency(val: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);
 }
 
 function formatTime(time?: string | null) {
@@ -245,6 +242,7 @@ function buildTechGroups(visits: CommandCenterVisit[]): TechGroup[] {
 }
 
 export default function CommandCenter() {
+  const { formatMoney: formatCurrency } = useCurrency();
   const [, navigate] = useLocation();
   const searchString = useSearch();
   const todayDate = new Date();

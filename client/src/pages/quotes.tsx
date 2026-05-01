@@ -6,6 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import type { Quote, Contact, Property } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -741,6 +742,7 @@ function CreateEditQuoteDialog({
 }) {
   const tz = useCompanyTimezone();
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
   const isEdit = !!quote;
 
   const [quoteType, setQuoteType] = useState<"residential" | "commercial">(
@@ -1606,30 +1608,43 @@ function CreateEditQuoteDialog({
                   {Number(dumpFee) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Dump fee</span>
-                      <span className="font-medium">${Number(dumpFee).toFixed(2)}</span>
+                      <span className="font-medium">{formatMoney(Number(dumpFee))}</span>
                     </div>
                   )}
 
                   <div className="border-t border-slate-300 dark:border-slate-600 pt-2 mt-2 flex justify-between font-semibold">
                     <span>Subtotal (Your Costs)</span>
-                    <span>${livePricing.breakdown.costSubtotal?.toFixed(2)}</span>
+                    <span>
+                      {livePricing.breakdown.costSubtotal != null
+                        ? formatMoney(livePricing.breakdown.costSubtotal)
+                        : "—"}
+                    </span>
                   </div>
 
                   <div className="flex justify-between text-muted-foreground">
                     <span>Markup ({markupPct}%)</span>
-                    <span>+ ${livePricing.breakdown.markupFee?.toFixed(2)}</span>
+                    <span>
+                      +{" "}
+                      {livePricing.breakdown.markupFee != null
+                        ? formatMoney(livePricing.breakdown.markupFee)
+                        : "—"}
+                    </span>
                   </div>
 
                   <div className="border-t border-slate-400 dark:border-slate-500 pt-2 mt-1 flex justify-between font-bold text-base">
                     <span>Grand Total (per visit)</span>
                     <span className="text-green-700 dark:text-green-400">
-                      ${livePricing.essential.toFixed(2)}
+                      {formatMoney(livePricing.essential)}
                     </span>
                   </div>
 
                   <div className="flex justify-between text-xs text-muted-foreground pt-1">
                     <span>Est. Monthly ({livePricing.breakdown.visitsPerMonth} visits)</span>
-                    <span>${livePricing.breakdown.monthlyEstimate?.toFixed(2)}</span>
+                    <span>
+                      {livePricing.breakdown.monthlyEstimate != null
+                        ? formatMoney(livePricing.breakdown.monthlyEstimate)
+                        : "—"}
+                    </span>
                   </div>
                   {isInitialClean && (
                     <div className="flex justify-between items-center text-xs text-amber-700 dark:text-amber-400 font-medium">

@@ -1140,7 +1140,11 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       };
 
       const company = await storage.getCompany(quoteRow.company_id as string);
-      res.json({ quote: safeQuote, companyName: company?.name || "Service Provider" });
+      res.json({
+        quote: safeQuote,
+        companyName: company?.name || "Service Provider",
+        companyCurrency: company?.currency || "usd",
+      });
     } catch (err: unknown) {
       console.error("Error fetching portal quote:", err);
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });

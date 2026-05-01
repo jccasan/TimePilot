@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import type {
   ServicePricingItem,
   ServicePackage,
@@ -105,6 +106,7 @@ function EditablePriceCell({
   onSave: (id: string, data: Partial<ServicePricingItem>) => void;
   disabled?: boolean;
 }) {
+  const { formatMoney } = useCurrency();
   const [editing, setEditing] = useState(false);
   const [price, setPrice] = useState(item.basePrice);
   const meta = (item.metadata as Record<string, unknown>) || {};
@@ -165,7 +167,7 @@ function EditablePriceCell({
       className="font-semibold text-left hover-elevate rounded-md px-2 py-1"
       data-testid={`button-edit-price-${item.id}`}
     >
-      ${parseFloat(item.basePrice).toFixed(2)}
+      {formatMoney(parseFloat(item.basePrice))}
     </button>
   );
 }
@@ -466,6 +468,7 @@ function PricingRulesPanel({
 
 export default function Pricing() {
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
   const [activeTab, setActiveTab] = useState("recurring_service");
   const [pricingDialogOpen, setPricingDialogOpen] = useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
@@ -1342,7 +1345,7 @@ export default function Pricing() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <p className="text-xl font-bold">${parseFloat(pkg.basePrice).toFixed(2)}</p>
+                      <p className="text-xl font-bold">{formatMoney(parseFloat(pkg.basePrice))}</p>
                       <span className="text-sm text-muted-foreground">
                         /{pkg.frequency === "one_time" ? "one-time" : pkg.frequency}
                       </span>

@@ -6,6 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { compressImage } from "@/lib/compress-image";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
+import { useCurrency } from "@/hooks/use-currency";
 import { useToast } from "@/hooks/use-toast";
 import type { Route, ServicePlan, Contact, Property, Visit } from "@shared/schema";
 type RouteWithOptStatus = Route & { isOptimizedCurrent?: boolean };
@@ -292,6 +293,7 @@ function DraggableStop({
   isHighlighted?: boolean;
   displayIndex?: number;
 }) {
+  const { formatMoney } = useCurrency();
   const contact = contacts.find((c) => c.id === stop.contactId);
   const property = properties.find((p) => p.id === stop.propertyId);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -546,7 +548,7 @@ function DraggableStop({
                 {contact.numberOfDogs}
               </span>
             )}
-            <span>${(Number(stop.pricePerVisit) || 0).toFixed(2)}</span>
+            <span>{formatMoney(Number(stop.pricePerVisit) || 0)}</span>
           </div>
         </div>
       </div>
@@ -677,6 +679,7 @@ function RouteCard({
   selectedStopId?: string | null;
   highlightedStopIds?: Set<string>;
 }) {
+  const { formatMoney } = useCurrency();
   const tech = team.find((t) => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
   const totalRevenue = stops.reduce((sum, s) => sum + Number(s.pricePerVisit), 0);
@@ -784,7 +787,7 @@ function RouteCard({
               {tech.firstName} {tech.lastName}
             </span>
           )}
-          <span>${totalRevenue.toFixed(2)}</span>
+          <span>{formatMoney(totalRevenue)}</span>
           {metricsLoading && <Loader2 className="h-3 w-3 animate-spin" />}
           {metrics && metrics.totalDistance > 0 && (
             <span
@@ -978,6 +981,7 @@ function RouteVisitDetailSheet({
   onRequestComplete?: (visitId: string, contactName: string, address: string) => void;
 }) {
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [enRouteSending, setEnRouteSending] = useState(false);
 
@@ -1210,7 +1214,7 @@ function RouteVisitDetailSheet({
               <div>
                 <p className="text-xs text-muted-foreground">Amount</p>
                 <p className="text-sm font-medium" data-testid="text-route-visit-amount">
-                  ${pricePerVisit.toFixed(2)}
+                  {formatMoney(pricePerVisit)}
                 </p>
               </div>
             </div>

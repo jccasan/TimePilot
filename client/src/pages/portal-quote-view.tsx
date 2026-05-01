@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { formatMoneyForCurrency } from "@/hooks/use-currency";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +42,11 @@ interface PortalQuote {
 export default function PortalQuoteView({ quoteId, token }: { quoteId: string; token: string }) {
   const [selectedTier, setSelectedTier] = useState<string>("");
 
-  const { data, isLoading, error } = useQuery<{ quote: PortalQuote; companyName: string }>({
+  const { data, isLoading, error } = useQuery<{
+    quote: PortalQuote;
+    companyName: string;
+    companyCurrency: string;
+  }>({
     queryKey: ["/api/portal/quotes", quoteId, token],
     queryFn: async () => {
       const res = await fetch(`/api/portal/quotes/${quoteId}?token=${encodeURIComponent(token)}`);
@@ -94,6 +99,9 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     },
   });
 
+  const companyCurrency = (data?.companyCurrency || "usd").toLowerCase();
+  const formatMoney = (amount: number) => formatMoneyForCurrency(amount, companyCurrency);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
@@ -145,7 +153,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
             <p className="text-muted-foreground mb-4">
               Thank you, {quote.contactName}. You selected the{" "}
               <strong className="capitalize">{quote.selectedTier}</strong> plan at{" "}
-              <strong>${parseFloat(quote.selectedPrice || "0").toFixed(2)}/visit</strong>.
+              <strong>{formatMoney(parseFloat(quote.selectedPrice || "0"))}/visit</strong>.
             </p>
             <p className="text-sm text-muted-foreground">
               {companyName} will reach out to schedule your first service.
@@ -308,7 +316,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
               <div className="p-6 text-center">
                 <p className="text-sm font-medium text-muted-foreground mb-1">{tier.name}</p>
                 <p className={`text-3xl font-bold ${tier.textColor} mb-4`}>
-                  ${tier.price.toFixed(2)}
+                  {formatMoney(tier.price)}
                   <span className="text-sm font-normal text-muted-foreground">/visit</span>
                 </p>
                 <ul className="space-y-2 text-left">
@@ -335,8 +343,8 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
           <Card className="mb-6 border-amber-200 bg-amber-50">
             <CardContent className="p-4">
               <p className="text-sm text-amber-800">
-                <strong>Initial Clean Fee:</strong> $
-                {parseFloat(quote.initialCleanFee || "0").toFixed(2)} (one-time) — Covers
+                <strong>Initial Clean Fee:</strong>{" "}
+                {formatMoney(parseFloat(quote.initialCleanFee || "0"))} (one-time) — Covers
                 first-visit deep clean.
               </p>
             </CardContent>

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useCurrency } from "@/hooks/use-currency";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -152,12 +153,6 @@ const ROUTE_COLORS = [
   "#f97316",
 ];
 
-function formatDollars(cents: number): string {
-  const abs = Math.abs(cents);
-  const formatted = `$${(abs / 100).toFixed(2)}`;
-  return cents < 0 ? `-${formatted}` : formatted;
-}
-
 function statusBadge(status: "profitable" | "marginal" | "unprofitable") {
   const variants: Record<string, string> = {
     profitable: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
@@ -232,6 +227,11 @@ function buildOptimizedMapRoutes(optResult: OptResult, view: "current" | "propos
 
 export default function RouteProfitMaps() {
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
+  const formatDollars = (cents: number) => {
+    const sign = cents < 0 ? "-" : "";
+    return sign + formatMoney(Math.abs(cents) / 100);
+  };
   const [viewMode, setViewMode] = useState<ViewMode>("stops");
   const [dayFilter, setDayFilter] = useState<DayFilter>("all");
   const [statusFilter, setStatusFilter] = useState<
@@ -618,10 +618,10 @@ export default function RouteProfitMaps() {
                 >
                   <span>
                     {optResult.fuelCost.source === "gas_mpg"
-                      ? `$${(optResult.fuelCost.gasPriceCentsPerGallon / 100).toFixed(2)}/gal, ${optResult.fuelCost.vehicleMPG} MPG`
+                      ? `${formatDollars(optResult.fuelCost.gasPriceCentsPerGallon)}/gal, ${optResult.fuelCost.vehicleMPG} MPG`
                       : `${formatDollars(optResult.fuelCost.centsPerMile)}/mi`}
                     {optResult.laborCost
-                      ? ` | $${(optResult.laborCost.burdenedHourlyRateCents / 100).toFixed(2)}/hr`
+                      ? ` | ${formatDollars(optResult.laborCost.burdenedHourlyRateCents)}/hr`
                       : ""}
                   </span>
                 </div>
@@ -1289,6 +1289,11 @@ function ComparisonSidebar({
   onCommit: () => void;
   isCommitting: boolean;
 }) {
+  const { formatMoney } = useCurrency();
+  const formatDollars = (cents: number) => {
+    const sign = cents < 0 ? "-" : "";
+    return sign + formatMoney(Math.abs(cents) / 100);
+  };
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const currentSchedule = optResult.current;

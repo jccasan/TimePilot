@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -135,12 +136,6 @@ interface CompetitorAnalysisResult {
   overallMarketAvgCents: number;
 }
 
-function formatDollars(cents: number): string {
-  const abs = Math.abs(cents);
-  const formatted = `$${(abs / 100).toFixed(2)}`;
-  return cents < 0 ? `-${formatted}` : formatted;
-}
-
 function marginColor(pct: number): string {
   if (pct >= 15) return "text-green-600 dark:text-green-400";
   if (pct >= 0) return "text-yellow-600 dark:text-yellow-400";
@@ -172,6 +167,11 @@ function positionBadge(position: string) {
 
 export default function AIPricingOptimizer() {
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
+  const formatDollars = (cents: number) => {
+    const sign = cents < 0 ? "-" : "";
+    return sign + formatMoney(Math.abs(cents) / 100);
+  };
   const [activeTab, setActiveTab] = useState("simulator");
 
   const [targetMarginPct, setTargetMarginPct] = useState(30);

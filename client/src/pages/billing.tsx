@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useCurrency } from "@/hooks/use-currency";
 import { TIER_CONFIG, VOICE_PLAN_CONFIG } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -80,6 +81,7 @@ const tierKeys = (Object.keys(TIER_CONFIG) as Array<keyof typeof TIER_CONFIG>).f
 
 export default function Billing() {
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
 
   const { data: subscription, isLoading: subLoading } = useQuery<SubscriptionInfo>({
     queryKey: ["/api/billing/subscription"],
@@ -194,7 +196,7 @@ export default function Billing() {
               </Badge>
             </div>
             <p className="text-muted-foreground" data-testid="text-current-price">
-              ${subscription.price.toFixed(2)}/month
+              {formatMoney(subscription.price)}/month
             </p>
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
@@ -324,7 +326,7 @@ export default function Billing() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <p className="text-2xl font-bold" data-testid={`text-price-${key}`}>
-                    ${displayPrice.toFixed(2)}
+                    {formatMoney(displayPrice)}
                     <span className="text-sm font-normal text-muted-foreground">/mo</span>
                   </p>
                   {displayMaxContacts !== null ? (
@@ -366,7 +368,7 @@ export default function Billing() {
                 {subscription.voicePlan.includedMinutes} minutes included/mo
               </p>
               <p className="text-sm text-muted-foreground">
-                ${subscription.voicePlan.overageRate.toFixed(2)}/min overage
+                {formatMoney(subscription.voicePlan.overageRate)}/min overage
               </p>
               {subscription.voicePlan.dedicatedPhoneNumber ? (
                 <p className="text-sm font-medium" data-testid="text-dedicated-phone">
@@ -422,7 +424,7 @@ export default function Billing() {
                     </div>
                     <ul className="text-sm text-muted-foreground space-y-1">
                       <li>{config.includedMinutes} minutes included</li>
-                      <li>${config.overageRate.toFixed(2)}/min overage</li>
+                      <li>{formatMoney(config.overageRate)}/min overage</li>
                     </ul>
                     <Button
                       className="w-full"

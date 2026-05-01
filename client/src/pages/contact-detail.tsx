@@ -8,6 +8,8 @@ import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
+import { useAddressLabels } from "@/hooks/use-address-labels";
+import { useCurrency } from "@/hooks/use-currency";
 import { useToast } from "@/hooks/use-toast";
 import type {
   Contact,
@@ -154,6 +156,7 @@ export default function ContactDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { stateLabel, zipLabel } = useAddressLabels();
   const [editing, setEditing] = useState(false);
   const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
   const [measurePropertyId, setMeasurePropertyId] = useState<string | null>(null);
@@ -645,13 +648,13 @@ export default function ContactDetail() {
                   data-testid="input-edit-city"
                 />
                 <Input
-                  placeholder="State"
+                  placeholder={stateLabel}
                   value={editForm.state || ""}
                   onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
                   data-testid="input-edit-state"
                 />
                 <Input
-                  placeholder="Zip Code"
+                  placeholder={zipLabel}
                   value={editForm.zipCode || ""}
                   onChange={(e) => setEditForm({ ...editForm, zipCode: e.target.value })}
                   data-testid="input-edit-zip-code"
@@ -901,7 +904,7 @@ export default function ContactDetail() {
                       name="state"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>State</FormLabel>
+                          <FormLabel>{stateLabel}</FormLabel>
                           <FormControl>
                             <Input {...field} data-testid="input-state" />
                           </FormControl>
@@ -915,7 +918,7 @@ export default function ContactDetail() {
                     name="zipCode"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Zip Code</FormLabel>
+                        <FormLabel>{zipLabel}</FormLabel>
                         <FormControl>
                           <Input {...field} data-testid="input-zip" />
                         </FormControl>
@@ -1228,7 +1231,7 @@ export default function ContactDetail() {
                                   name="state"
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel className="text-xs">State</FormLabel>
+                                      <FormLabel className="text-xs">{stateLabel}</FormLabel>
                                       <FormControl>
                                         <Input
                                           {...field}
@@ -1245,7 +1248,7 @@ export default function ContactDetail() {
                                   name="zipCode"
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel className="text-xs">Zip</FormLabel>
+                                      <FormLabel className="text-xs">{zipLabel}</FormLabel>
                                       <FormControl>
                                         <Input
                                           {...field}
@@ -2269,6 +2272,7 @@ function CostBreakdownBar({
   breakdown: PropertyProfitData["costBreakdown"];
   totalCost: number;
 }) {
+  const { formatMoney } = useCurrency();
   if (!breakdown || totalCost <= 0) return null;
   const items = [
     { label: "Labor", cents: breakdown.laborCostCents, color: "bg-blue-500" },
@@ -2292,7 +2296,7 @@ function CostBreakdownBar({
             key={item.label}
             className={item.label === dominant.label ? "font-semibold text-foreground" : ""}
           >
-            {item.label}: ${(item.cents / 100).toFixed(2)}
+            {item.label}: {formatMoney(item.cents / 100)}
             {item.label === dominant.label && " (highest)"}
           </span>
         ))}
@@ -2915,6 +2919,7 @@ function ProfitabilityIndicator({
   contactId: string;
   contactStatus: string;
 }) {
+  const { formatMoney } = useCurrency();
   const [expanded, setExpanded] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const { data, isLoading, isError } = useQuery<{
@@ -2952,7 +2957,7 @@ function ProfitabilityIndicator({
   }
   if (isError || !data) return null;
 
-  const centsToDisplay = (cents: number) => `$${(Math.abs(cents) / 100).toFixed(2)}`;
+  const centsToDisplay = (cents: number) => formatMoney(Math.abs(cents) / 100);
 
   const statusConfig: Record<string, { label: string; badgeClass: string }> = {
     profitable: {
@@ -3677,6 +3682,7 @@ function InlinePriceSuggestion({
   pricePerVisit: string;
   onUsePrice: (price: string) => void;
 }) {
+  const { formatMoney } = useCurrency();
   if (calcLoading) {
     return (
       <div
@@ -3710,7 +3716,7 @@ function InlinePriceSuggestion({
           onClick={() => onUsePrice(minimumDollars)}
           data-testid="badge-price-minimum"
         >
-          Min ${minimumDollars}
+          Min {formatMoney(calcResult.minimumPriceCents / 100)}
         </Badge>
         <Badge
           variant="default"
@@ -3718,7 +3724,8 @@ function InlinePriceSuggestion({
           onClick={() => onUsePrice(recommendedDollars)}
           data-testid="badge-price-recommended"
         >
-          <TrendingUp className="h-3 w-3 mr-1" />${recommendedDollars}
+          <TrendingUp className="h-3 w-3 mr-1" />
+          {formatMoney(calcResult.recommendedPriceCents / 100)}
         </Badge>
         <Badge
           variant="outline"
@@ -3726,7 +3733,7 @@ function InlinePriceSuggestion({
           onClick={() => onUsePrice(premiumDollars)}
           data-testid="badge-price-premium"
         >
-          Premium ${premiumDollars}
+          Premium {formatMoney(calcResult.premiumPriceCents / 100)}
         </Badge>
       </div>
 
@@ -3739,9 +3746,9 @@ function InlinePriceSuggestion({
           <div className="text-xs">
             <p className="font-medium text-destructive">Below cost</p>
             <p className="text-muted-foreground">
-              Entered price ${pricePerVisit} is below the estimated minimum cost of $
-              {minimumDollars}/visit. You may lose $
-              {((calcResult.minimumPriceCents - enteredCents) / 100).toFixed(2)} per visit.
+              Entered price {formatMoney(parseFloat(pricePerVisit))} is below the estimated minimum
+              cost of {formatMoney(calcResult.minimumPriceCents / 100)}/visit. You may lose{" "}
+              {formatMoney((calcResult.minimumPriceCents - enteredCents) / 100)} per visit.
             </p>
           </div>
         </div>
@@ -3749,8 +3756,8 @@ function InlinePriceSuggestion({
 
       {calcResult.profitWarning && enteredCents > 0 && !isBelowMinimum && (
         <p className="text-xs text-muted-foreground" data-testid="text-profit-info">
-          {calcResult.profitWarning.message} ($
-          {(calcResult.profitWarning.profitPerHourCents / 100).toFixed(2)}/hr)
+          {calcResult.profitWarning.message} (
+          {formatMoney(calcResult.profitWarning.profitPerHourCents / 100)}/hr)
         </p>
       )}
     </div>
@@ -3844,6 +3851,7 @@ function ServicePlansCard({
 }) {
   const tz = useCompanyTimezone();
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<ServicePlan | null>(null);
 
@@ -4398,20 +4406,20 @@ function ServicePlansCard({
             >
               <div className="flex justify-between">
                 <span>Base price</span>
-                <span>${parseFloat(basePrice || "0").toFixed(2)}</span>
+                <span>{formatMoney(parseFloat(basePrice || "0"))}</span>
               </div>
               {(selectedAddOns || []).map((id) => {
                 const item = addOnPricing.find((p) => p.id === id);
                 return item ? (
                   <div key={id} className="flex justify-between text-muted-foreground">
                     <span>+ {item.name}</span>
-                    <span>${parseFloat(item.basePrice).toFixed(2)}</span>
+                    <span>{formatMoney(parseFloat(item.basePrice))}</span>
                   </div>
                 ) : null;
               })}
               <div className="flex justify-between font-medium border-t pt-1">
                 <span>Total per visit</span>
-                <span>${totalPerVisit.toFixed(2)}</span>
+                <span>{formatMoney(totalPerVisit)}</span>
               </div>
             </div>
           )}
@@ -4772,15 +4780,15 @@ function ServicePlansCard({
                               <div className="text-xs text-muted-foreground">
                                 {plan.addOns.map((a) => (
                                   <span key={a.id} className="inline-block mr-2">
-                                    + {a.name} (${a.price})
+                                    + {a.name} ({formatMoney(parseFloat(a.price))})
                                   </span>
                                 ))}
                                 <p className="font-medium text-foreground text-sm mt-0.5">
-                                  Total: $
-                                  {(
+                                  Total:{" "}
+                                  {formatMoney(
                                     parseFloat(plan.pricePerVisit) +
-                                    plan.addOns.reduce((s, a) => s + parseFloat(a.price), 0)
-                                  ).toFixed(2)}
+                                      plan.addOns.reduce((s, a) => s + parseFloat(a.price), 0)
+                                  )}
                                   /visit
                                 </p>
                               </div>
@@ -5892,6 +5900,7 @@ function SuggestionsCard({ contactId }: { contactId: string }) {
 }
 
 function BillingHistoryCard({ contactId }: { contactId: string }) {
+  const { formatMoney } = useCurrency();
   const [generateOpen, setGenerateOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<"outstanding" | "paid" | null>(null);
   const [, navigate] = useLocation();
@@ -5975,7 +5984,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
             >
               <p className="text-xs text-muted-foreground mb-1">Uninvoiced</p>
               <p className="text-lg font-bold text-orange-600 dark:text-orange-400">
-                ${(uninvoicedData?.totalDollars ?? 0).toFixed(2)}
+                {formatMoney(uninvoicedData?.totalDollars ?? 0)}
               </p>
               <p className="text-[10px] text-muted-foreground">
                 {uninvoicedData?.visits?.length ?? 0} visits
@@ -5992,7 +6001,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
             >
               <p className="text-xs text-muted-foreground mb-1">Outstanding</p>
               <p className="text-lg font-bold text-amber-600 dark:text-amber-400">
-                ${totalOutstanding.toFixed(2)}
+                {formatMoney(totalOutstanding)}
               </p>
             </div>
             <div
@@ -6006,7 +6015,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
             >
               <p className="text-xs text-muted-foreground mb-1">Paid</p>
               <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                ${totalPaid.toFixed(2)}
+                {formatMoney(totalPaid)}
               </p>
             </div>
           </div>
@@ -6056,7 +6065,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-medium tabular-nums">
-                        ${(parseFloat(v.pricePerVisit) || 0).toFixed(2)}
+                        {formatMoney(parseFloat(v.pricePerVisit) || 0)}
                       </span>
                       <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
@@ -6110,7 +6119,7 @@ function BillingHistoryCard({ contactId }: { contactId: string }) {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium tabular-nums">
-                      ${parseFloat(inv.total).toFixed(2)}
+                      {formatMoney(parseFloat(inv.total))}
                     </span>
                     <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>

@@ -928,6 +928,37 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             );
           }
         }
+
+        // Auto-set account locale from subscription checkout currency.
+        // Only applies to subscription checkouts (plan_tier in metadata) for an existing tenant.
+        if (
+          tenantId &&
+          meta.plan_tier &&
+          !meta.invoiceId &&
+          meta.checkout_type !== "voice_addon" &&
+          meta.type !== "seat_purchase"
+        ) {
+          try {
+            const sessionCurrency = (session.currency || "").toLowerCase();
+            if (sessionCurrency === "cad" || sessionCurrency === "usd") {
+              const localeCompany = await storage.getCompany(tenantId);
+              if (localeCompany && localeCompany.currency === "usd") {
+                const localeUpdates: Partial<typeof companies.$inferInsert> = {
+                  country: sessionCurrency === "cad" ? "ca" : "us",
+                  currency: sessionCurrency === "cad" ? "cad" : "usd",
+                };
+                await storage.updateCompany(tenantId, localeUpdates);
+                console.log(
+                  `[Stripe Locale] Set company "${localeCompany.name}" (${tenantId}) locale to ${localeUpdates.country}/${localeUpdates.currency} from checkout currency=${sessionCurrency}`
+                );
+              }
+            }
+          } catch (localeErr: unknown) {
+            console.error(
+              `[Stripe Locale] Failed to update locale for company ${tenantId} (session ${session.id}): ${localeErr instanceof Error ? localeErr.message : String(localeErr)}`
+            );
+          }
+        }
       }
 
       if (event.type === "payment_intent.succeeded") {
@@ -1046,6 +1077,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           id: string;
           customer: string;
           status: string;
+          currency?: string;
           metadata: Record<string, string>;
           trial_end?: number | null;
           items?: { data?: Array<{ id: string }> };
@@ -1095,6 +1127,13 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           tier_10_plus: "tier_10_plus",
         };
         const planTier = tierMap[meta.plan_tier] || "tier_1";
+
+        // Derive locale from the subscription currency (set by Stripe based on checkout currency)
+        const subCurrency = (subscription.currency || "").toLowerCase();
+        const localeFromSub =
+          subCurrency === "cad"
+            ? { country: "ca" as const, currency: "cad" as const }
+            : { country: "us" as const, currency: "usd" as const };
 
         if (meta.tenant_id) {
           const company = await storage.getCompany(meta.tenant_id);
@@ -1181,6 +1220,8 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 stripeCustomerId: subscription.customer,
                 stripeSubscriptionId: subscription.id,
                 subscriptionUpdatedAt: eventTs,
+                country: localeFromSub.country,
+                currency: localeFromSub.currency,
               };
               if (subscription.trial_end) {
                 createData.trialEndsAt = new Date(subscription.trial_end * 1000);
@@ -1210,6 +1251,8 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               stripeCustomerId: subscription.customer,
               stripeSubscriptionId: subscription.id,
               subscriptionUpdatedAt: eventTs,
+              country: localeFromSub.country,
+              currency: localeFromSub.currency,
             };
             if (subscription.trial_end) {
               createData2.trialEndsAt = new Date(subscription.trial_end * 1000);

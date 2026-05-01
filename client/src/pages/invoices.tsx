@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 import type {
   Invoice,
   Contact,
@@ -144,10 +145,6 @@ function formatPaymentDate(dateStr: string | Date): string {
   return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
-function formatCents(cents: number): string {
-  return (cents / 100).toFixed(2);
-}
-
 function PaymentHistorySection({
   invoiceId,
   invoiceTotal,
@@ -155,6 +152,7 @@ function PaymentHistorySection({
   invoiceId: string;
   invoiceTotal: number;
 }) {
+  const { formatMoney } = useCurrency();
   const { data: payments, isLoading } = useQuery<InvoicePayment[]>({
     queryKey: ["/api/invoices", invoiceId, "payments"],
     enabled: !!invoiceId,
@@ -215,7 +213,7 @@ function PaymentHistorySection({
                       className="text-xs py-2 text-right"
                       data-testid={`text-payment-amount-${payment.id}`}
                     >
-                      ${formatCents(payment.amountCents)}
+                      {formatMoney(payment.amountCents / 100)}
                     </TableCell>
                     <TableCell
                       className="text-xs py-2"
@@ -256,7 +254,7 @@ function PaymentHistorySection({
               >
                 <span className="text-muted-foreground">Balance Remaining:</span>
                 <span className="font-semibold text-orange-600 dark:text-orange-400">
-                  ${formatCents(balanceRemainingCents)}
+                  {formatMoney(balanceRemainingCents / 100)}
                 </span>
               </div>
             )}
@@ -267,7 +265,7 @@ function PaymentHistorySection({
             >
               <span className="text-muted-foreground">Total Paid:</span>
               <span className="font-semibold text-green-600 dark:text-green-400">
-                ${formatCents(totalPaidCents)}
+                {formatMoney(totalPaidCents / 100)}
               </span>
             </div>
           </>
@@ -431,6 +429,7 @@ function CollectionsPanel({
 }
 
 function UninvoicedVisitBreakdown({ contactId }: { contactId: string }) {
+  const { formatMoney } = useCurrency();
   const { data, isLoading } = useQuery<{
     visits: {
       id: string;
@@ -486,7 +485,7 @@ function UninvoicedVisitBreakdown({ contactId }: { contactId: string }) {
               )}
             </div>
             <span className="font-medium text-foreground shrink-0 ml-3">
-              ${parseFloat(visit.pricePerVisit).toFixed(2)}
+              {formatMoney(parseFloat(visit.pricePerVisit))}
             </span>
           </div>
         ))}
@@ -1030,6 +1029,7 @@ function getInitialTab(): string {
 
 export default function Invoices() {
   const { toast } = useToast();
+  const { formatMoney } = useCurrency();
   const { startTutorial, isTutorialCompleted } = useTutorialContext();
   const [statusFilter, setStatusFilter] = useState(getInitialTab);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -2192,7 +2192,7 @@ export default function Invoices() {
             {invoice.dueDate}
             {isOverdue ? " (Overdue)" : ""}
           </TableCell>
-          <TableCell className="font-semibold">${Number(invoice.total).toFixed(2)}</TableCell>
+          <TableCell className="font-semibold">{formatMoney(Number(invoice.total))}</TableCell>
           <TableCell>
             <Badge variant="secondary" className={invoiceStatusColors[invoice.status] || ""}>
               {invoiceStatusLabels[invoice.status] || invoice.status}
@@ -2308,7 +2308,7 @@ export default function Invoices() {
               {list.length}
             </Badge>
           </div>
-          <span className="text-sm font-medium">${sectionTotal.toFixed(2)}</span>
+          <span className="text-sm font-medium">{formatMoney(sectionTotal)}</span>
         </div>
         {isExpanded && list.length > 0 && (
           <Table>
@@ -2475,7 +2475,7 @@ export default function Invoices() {
                             onClick={() => addServiceItem(p)}
                             data-testid={`button-add-pricing-${p.id}`}
                           >
-                            {p.name} (${parseFloat(p.basePrice).toFixed(2)})
+                            {p.name} ({formatMoney(parseFloat(p.basePrice))})
                           </Button>
                         ))}
                       </div>
@@ -2557,10 +2557,9 @@ export default function Invoices() {
                                   className="font-medium text-sm leading-9"
                                   data-testid={`text-line-total-${idx}`}
                                 >
-                                  $
-                                  {(
+                                  {formatMoney(
                                     (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0)
-                                  ).toFixed(2)}
+                                  )}
                                 </p>
                               </div>
                               <Button
@@ -2625,7 +2624,7 @@ export default function Invoices() {
                   <CardContent className="p-3 space-y-1">
                     <div className="flex flex-wrap justify-between gap-1 text-sm">
                       <span className="text-muted-foreground">Subtotal:</span>
-                      <span data-testid="text-calc-subtotal">${subtotal.toFixed(2)}</span>
+                      <span data-testid="text-calc-subtotal">{formatMoney(subtotal)}</span>
                     </div>
                     {discountAmount > 0 && (
                       <div className="flex flex-wrap justify-between gap-1 text-sm">
@@ -2634,19 +2633,19 @@ export default function Invoices() {
                           className="text-red-600 dark:text-red-400"
                           data-testid="text-calc-discount"
                         >
-                          -${discountAmount.toFixed(2)}
+                          -{formatMoney(discountAmount)}
                         </span>
                       </div>
                     )}
                     {taxAmount > 0 && (
                       <div className="flex flex-wrap justify-between gap-1 text-sm">
                         <span className="text-muted-foreground">Tax ({parsedTaxRate}%):</span>
-                        <span data-testid="text-calc-tax">${taxAmount.toFixed(2)}</span>
+                        <span data-testid="text-calc-tax">{formatMoney(taxAmount)}</span>
                       </div>
                     )}
                     <div className="flex flex-wrap justify-between gap-1 font-semibold border-t pt-1">
                       <span>Total:</span>
-                      <span data-testid="text-calc-total">${total.toFixed(2)}</span>
+                      <span data-testid="text-calc-total">{formatMoney(total)}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -3038,8 +3037,8 @@ export default function Invoices() {
           <DialogHeader>
             <DialogTitle>Merge {mergeSelectedInfo?.count ?? 0} Invoices?</DialogTitle>
             <DialogDescription>
-              {mergeSelectedInfo?.count ?? 0} invoices totaling $
-              {(mergeSelectedInfo?.total ?? 0).toFixed(2)} will be combined into one new draft. The
+              {mergeSelectedInfo?.count ?? 0} invoices totaling{" "}
+              {formatMoney(mergeSelectedInfo?.total ?? 0)} will be combined into one new draft. The
               originals will be voided.
             </DialogDescription>
           </DialogHeader>
@@ -3091,14 +3090,14 @@ export default function Invoices() {
               ?
             </DialogTitle>
             <DialogDescription>
-              This will create invoices totaling $
-              {generateAllContactIds
-                ? (
-                    uninvoicedSummary?.byContact
+              This will create invoices totaling{" "}
+              {formatMoney(
+                generateAllContactIds
+                  ? (uninvoicedSummary?.byContact
                       .filter((c) => generateAllContactIds.includes(c.contactId))
-                      .reduce((s, c) => s + c.totalDollars, 0) ?? 0
-                  ).toFixed(2)
-                : (uninvoicedSummary?.totalDollars.toFixed(2) ?? "0.00")}{" "}
+                      .reduce((s, c) => s + c.totalDollars, 0) ?? 0)
+                  : (uninvoicedSummary?.totalDollars ?? 0)
+              )}{" "}
               for{" "}
               {generateAllContactIds
                 ? generateAllContactIds.length
@@ -3185,7 +3184,7 @@ export default function Invoices() {
                   <span className="font-semibold text-foreground">{uninvoicedSummary.count}</span>{" "}
                   visits · Total:{" "}
                   <span className="font-semibold text-foreground">
-                    ${uninvoicedSummary.totalDollars.toFixed(2)}
+                    {formatMoney(uninvoicedSummary.totalDollars)}
                   </span>
                 </div>
                 {sortedUninvoicedByContact.map((entry) => {
@@ -3214,7 +3213,7 @@ export default function Invoices() {
                           {entry.count} visit{entry.count !== 1 ? "s" : ""}
                         </p>
                       </div>
-                      <span className="font-semibold">${entry.totalDollars.toFixed(2)}</span>
+                      <span className="font-semibold">{formatMoney(entry.totalDollars)}</span>
                     </div>
                   );
                 })}
@@ -3228,7 +3227,7 @@ export default function Invoices() {
                   data-testid="button-generate-from-preview"
                 >
                   <Zap className="mr-2 h-4 w-4" />
-                  Generate All (${uninvoicedSummary.totalDollars.toFixed(2)})
+                  Generate All ({formatMoney(uninvoicedSummary.totalDollars)})
                 </Button>
               </>
             ) : (
@@ -3456,7 +3455,7 @@ export default function Invoices() {
                         {uninvoicedSummary.count !== 1 ? "s" : ""} ready to invoice
                       </p>
                       <p className="text-2xl font-bold text-primary mt-0.5">
-                        Total: ${uninvoicedSummary.totalDollars.toFixed(2)}
+                        Total: {formatMoney(uninvoicedSummary.totalDollars)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -3476,7 +3475,7 @@ export default function Invoices() {
                         ) : (
                           <Zap className="mr-2 h-4 w-4" />
                         )}
-                        Generate All (${uninvoicedSummary.totalDollars.toFixed(0)})
+                        Generate All ({formatMoney(uninvoicedSummary.totalDollars)})
                       </Button>
                       <Button
                         size="default"
@@ -3588,8 +3587,8 @@ export default function Invoices() {
                           ) : (
                             <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                           )}
-                          {entry.count} visit{entry.count !== 1 ? "s" : ""} · $
-                          {entry.totalDollars.toFixed(2)}
+                          {entry.count} visit{entry.count !== 1 ? "s" : ""} ·{" "}
+                          {formatMoney(entry.totalDollars)}
                         </button>
                       </div>
                       <Button
@@ -3777,7 +3776,7 @@ export default function Invoices() {
                       className="font-semibold"
                       data-testid={`text-invoice-total-${invoice.id}`}
                     >
-                      ${Number(invoice.total).toFixed(2)}
+                      {formatMoney(Number(invoice.total))}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -4404,7 +4403,7 @@ export default function Invoices() {
                           <SelectContent>
                             {activePricing.map((p) => (
                               <SelectItem key={p.id} value={p.id}>
-                                {p.name} (${parseFloat(p.basePrice).toFixed(2)})
+                                {p.name} ({formatMoney(parseFloat(p.basePrice))})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -4468,10 +4467,9 @@ export default function Invoices() {
                           <div className="w-20 text-right">
                             <Label className="text-xs">Total</Label>
                             <p className="font-medium text-sm leading-9">
-                              $
-                              {(
+                              {formatMoney(
                                 (parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0)
-                              ).toFixed(2)}
+                              )}
                             </p>
                           </div>
                           <Button
@@ -4546,25 +4544,25 @@ export default function Invoices() {
                     <CardContent className="p-3 space-y-1 text-sm">
                       <div className="flex flex-wrap justify-between gap-1">
                         <span className="text-muted-foreground">Subtotal:</span>
-                        <span>${editSubtotal.toFixed(2)}</span>
+                        <span>{formatMoney(editSubtotal)}</span>
                       </div>
                       {editDiscountAmount > 0 && (
                         <div className="flex flex-wrap justify-between gap-1">
                           <span className="text-muted-foreground">Discount:</span>
                           <span className="text-red-600 dark:text-red-400">
-                            -${editDiscountAmount.toFixed(2)}
+                            -{formatMoney(editDiscountAmount)}
                           </span>
                         </div>
                       )}
                       {editTaxAmount > 0 && (
                         <div className="flex flex-wrap justify-between gap-1">
                           <span className="text-muted-foreground">Tax ({editParsedTaxRate}%):</span>
-                          <span>${editTaxAmount.toFixed(2)}</span>
+                          <span>{formatMoney(editTaxAmount)}</span>
                         </div>
                       )}
                       <div className="flex flex-wrap justify-between gap-1 font-semibold border-t pt-1">
                         <span>Total:</span>
-                        <span>${editTotal.toFixed(2)}</span>
+                        <span>{formatMoney(editTotal)}</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -4601,8 +4599,8 @@ export default function Invoices() {
                           >
                             <span>{li.description}</span>
                             <span>
-                              {li.quantity} x ${Number(li.unitPrice).toFixed(2)} = $
-                              {Number(li.total).toFixed(2)}
+                              {li.quantity} x {formatMoney(Number(li.unitPrice))} ={" "}
+                              {formatMoney(Number(li.total))}
                             </span>
                           </div>
                         ))}
@@ -4621,7 +4619,7 @@ export default function Invoices() {
                     <CardContent className="p-3 space-y-1 text-sm">
                       <div className="flex flex-wrap justify-between gap-1">
                         <span className="text-muted-foreground">Subtotal:</span>
-                        <span>${Number(selectedInvoice.subtotal).toFixed(2)}</span>
+                        <span>{formatMoney(Number(selectedInvoice.subtotal))}</span>
                       </div>
                       {Number(selectedInvoice.discountAmount) > 0 && (
                         <div className="flex flex-wrap justify-between gap-1">
@@ -4629,11 +4627,11 @@ export default function Invoices() {
                             Discount (
                             {selectedInvoice.discountType === "percent"
                               ? `${selectedInvoice.discountValue}%`
-                              : `$${Number(selectedInvoice.discountValue).toFixed(2)}`}
+                              : formatMoney(Number(selectedInvoice.discountValue))}
                             ):
                           </span>
                           <span className="text-red-600 dark:text-red-400">
-                            -${Number(selectedInvoice.discountAmount).toFixed(2)}
+                            -{formatMoney(Number(selectedInvoice.discountAmount))}
                           </span>
                         </div>
                       )}
@@ -4642,12 +4640,12 @@ export default function Invoices() {
                           <span className="text-muted-foreground">
                             Tax ({selectedInvoice.taxRate}%):
                           </span>
-                          <span>${Number(selectedInvoice.tax).toFixed(2)}</span>
+                          <span>{formatMoney(Number(selectedInvoice.tax))}</span>
                         </div>
                       )}
                       <div className="flex flex-wrap justify-between gap-1 font-semibold border-t pt-1">
                         <span>Total:</span>
-                        <span>${Number(selectedInvoice.total).toFixed(2)}</span>
+                        <span>{formatMoney(Number(selectedInvoice.total))}</span>
                       </div>
                     </CardContent>
                   </Card>

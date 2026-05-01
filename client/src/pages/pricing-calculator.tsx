@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useCurrency } from "@/hooks/use-currency";
+import { useAddressLabels } from "@/hooks/use-address-labels";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -223,9 +225,7 @@ interface CalculatorResult {
   inputsUsed: any;
 }
 
-function formatDollars(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+// formatDollars is now a locale-aware helper created inside ResultsDisplay
 
 function formatMinutes(mins: number): string {
   return `${mins.toFixed(1)} min`;
@@ -257,6 +257,16 @@ function LabelWithInfo({ label, info }: { label: string; info: string }) {
 
 function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSaved: () => void }) {
   const { toast } = useToast();
+  const { country } = useAddressLabels();
+  const isCanada = country === "ca";
+  const gasLabel = isCanada ? "Gas Price (CA$/litre)" : "Gas Price ($/gallon)";
+  const gasInfo = isCanada
+    ? "The average price you pay for gas per litre. Used to estimate fuel costs per km if you don't set a flat vehicle cost per km."
+    : "The average price you pay for gas. Used to estimate fuel costs per mile if you don't set a flat vehicle cost per mile.";
+  const vehicleLabel = isCanada ? "Vehicle Cost (CA$/km)" : "Vehicle Cost ($/mile)";
+  const vehicleInfo = isCanada
+    ? "The total cost to operate your vehicle per km, including gas, maintenance, insurance, and depreciation. If set, this is used instead of calculating from gas price."
+    : "The total cost to operate your vehicle per mile, including gas, maintenance, insurance, and depreciation. The IRS standard rate is around $0.67/mile. If set, this is used instead of calculating from gas price.";
 
   const form = useForm({
     resolver: zodResolver(pricingConfigSchema),
@@ -430,10 +440,7 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        <LabelWithInfo
-                          label="Gas Price ($/gallon)"
-                          info="The average price you pay for gas. Used to estimate fuel costs per mile if you don't set a flat vehicle cost per mile."
-                        />
+                        <LabelWithInfo label={gasLabel} info={gasInfo} />
                       </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" {...field} data-testid="input-gas-price" />
@@ -448,10 +455,7 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>
-                        <LabelWithInfo
-                          label="Vehicle Cost ($/mile)"
-                          info="The total cost to operate your vehicle per mile, including gas, maintenance, insurance, and depreciation. The IRS standard rate is around $0.67/mile. If set, this is used instead of calculating from gas price."
-                        />
+                        <LabelWithInfo label={vehicleLabel} info={vehicleInfo} />
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -1321,6 +1325,8 @@ function CalculatorPanel() {
 }
 
 function ResultsDisplay({ result }: { result: CalculatorResult }) {
+  const { formatMoney } = useCurrency();
+  const formatDollars = (cents: number) => formatMoney(cents / 100);
   const { breakdown, derived } = result;
 
   const totalCost =

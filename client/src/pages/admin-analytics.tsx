@@ -58,11 +58,7 @@ import {
 import { TIER_CONFIG } from "@shared/schema";
 import { useState, useMemo } from "react";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
-
-function fmt(n: number | undefined, decimals = 2): string {
-  if (n === undefined || n === null || isNaN(n)) return "$0.00";
-  return `$${n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
-}
+import { useCurrency } from "@/hooks/use-currency";
 
 function pct(n: number | undefined): string {
   if (n === undefined || n === null || isNaN(n)) return "0%";
@@ -123,6 +119,8 @@ function StatCard({
 }
 
 function ExecutiveTab({ onDrillDown }: { onDrillDown: (tab: string) => void }) {
+  const { formatMoney } = useCurrency();
+  const fmt = (n?: number) => formatMoney(n ?? 0);
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/analytics/executive"],
     queryFn: adminFetchFn("/api/admin/analytics/executive"),
@@ -214,6 +212,8 @@ function ExecutiveTab({ onDrillDown }: { onDrillDown: (tab: string) => void }) {
 }
 
 function AccountsTab() {
+  const { formatMoney } = useCurrency();
+  const fmt = (n?: number) => formatMoney(n ?? 0);
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
 
@@ -348,6 +348,8 @@ function AccountsTab() {
 }
 
 function BillingTab() {
+  const { formatMoney } = useCurrency();
+  const fmt = (n?: number) => formatMoney(n ?? 0);
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/analytics/billing"],
     queryFn: adminFetchFn("/api/admin/analytics/billing"),
@@ -665,6 +667,8 @@ function ActivationTab() {
 }
 
 function MessagingTab() {
+  const { formatMoney } = useCurrency();
+  const fmt = (n?: number) => formatMoney(n ?? 0);
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/analytics/messaging-costs"],
     queryFn: adminFetchFn("/api/admin/analytics/messaging-costs"),
@@ -831,6 +835,8 @@ function MessagingTab() {
 }
 
 function UnitEconomicsTab() {
+  const { formatMoney } = useCurrency();
+  const fmt = (n?: number) => formatMoney(n ?? 0);
   const { data, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/analytics/unit-economics"],
     queryFn: adminFetchFn("/api/admin/analytics/unit-economics"),
@@ -1857,6 +1863,8 @@ function MiniSparkline({ daily, days }: { daily: Record<string, number>; days: n
 }
 
 function ApiUsageTab() {
+  const { formatMoney } = useCurrency();
+  const fmt = (n?: number) => formatMoney(n ?? 0);
   const [days, setDays] = useState(30);
   const { data, isLoading } = useQuery<ApiUsageData>({
     queryKey: ["/api/admin/api-usage", days],
