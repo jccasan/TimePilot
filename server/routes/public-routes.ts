@@ -21,6 +21,7 @@ import {
   ensureConnectedCustomer,
   createSetupIntent,
   retrieveSetupIntent,
+  getCustomerPaymentMethods,
 } from "../services/stripe";
 import { checkIpRisk, getClientIp, getCountryCode } from "../services/ip-risk";
 import { calculateQuotePricing, type ResidentialQuoteInput } from "../services/quote-pricing";
@@ -1645,7 +1646,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
   app.post("/api/public/portal/setup-intent", async (req: Request, res: Response) => {
     try {
-      const { contactId, slug } = req.body;
+      const { contactId, slug, forceNew } = req.body;
       if (!contactId || typeof contactId !== "string") {
         return res.status(400).json({ error: "contactId is required" });
       }
@@ -1677,6 +1678,19 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
       if (wasRecreated || !contact.stripeCustomerId) {
         await storage.updateContact(contact.id, company.id, { stripeCustomerId: customerId });
+      }
+
+      if (!forceNew) {
+        const existingMethods = await getCustomerPaymentMethods(customerId, connectAcct);
+        if (existingMethods.length > 0) {
+          const card = existingMethods[0];
+          return res.json({
+            cardOnFile: {
+              last4: card.last4,
+              brand: card.brand,
+            },
+          });
+        }
       }
 
       const { clientSecret } = await createSetupIntent(customerId, connectAcct);

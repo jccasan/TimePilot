@@ -662,6 +662,8 @@ export default function SignupWidget() {
   const [pendingQuoteResult, setPendingQuoteResult] = useState<QuoteResult | null>(null);
   const [setupClientSecret, setSetupClientSecret] = useState<string | null>(null);
   const [setupIntentError, setSetupIntentError] = useState<string | null>(null);
+  const [cardOnFile, setCardOnFile] = useState<{ last4: string; brand: string } | null>(null);
+  const [useNewCard, setUseNewCard] = useState(false);
 
   const {
     data: company,
@@ -824,7 +826,9 @@ export default function SignupWidget() {
         })
           .then((res) => res.json())
           .then((json) => {
-            if (json.clientSecret) {
+            if (json.cardOnFile) {
+              setCardOnFile(json.cardOnFile);
+            } else if (json.clientSecret) {
               setSetupClientSecret(json.clientSecret);
             } else {
               setSetupIntentError(json.error || "Failed to initialize card setup.");
@@ -1083,52 +1087,142 @@ export default function SignupWidget() {
               <p className="text-sm mt-1 text-white/80">Secure Card Setup</p>
             </div>
             <CardContent className="p-6 space-y-5">
-              <div className="text-center space-y-1">
-                <p className="text-sm font-medium">Save a card to complete your signup</p>
-                <p className="text-xs text-muted-foreground">
-                  Your card will not be charged today.
-                </p>
-              </div>
-              {setupIntentError && (
+              {cardOnFile && !useNewCard ? (
                 <div
-                  className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200"
-                  data-testid="text-setup-intent-error"
+                  className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300"
+                  data-testid="card-on-file-section"
                 >
-                  <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700">{setupIntentError}</p>
-                </div>
-              )}
-              {!setupClientSecret && !setupIntentError && (
-                <div
-                  className="flex flex-col items-center gap-3 py-8"
-                  data-testid="loading-setup-intent"
-                >
-                  <Loader2
-                    className="h-8 w-8 animate-spin"
-                    style={{ color: brandStyles.accentText }}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Setting up secure card collection...
-                  </p>
-                </div>
-              )}
-              {setupClientSecret && stripePromise && (
-                <Elements stripe={stripePromise} options={{ clientSecret: setupClientSecret }}>
-                  <CardSetupForm
-                    clientSecret={setupClientSecret}
-                    contactId={pendingQuoteResult.contactId}
-                    slug={slug}
-                    brandStyles={brandStyles}
-                    onSuccess={() => {
-                      setQuoteResult(pendingQuoteResult);
-                      track("quote_shown", 4);
+                  <div className="text-center space-y-1">
+                    <h2 className="text-xl font-bold">Payment Info</h2>
+                    <p className="text-sm text-muted-foreground">
+                      We already have a card saved for your account.
+                    </p>
+                  </div>
+                  <div
+                    className="flex items-center gap-4 p-4 rounded-xl border"
+                    style={{
+                      borderColor: brandStyles.lightBorder,
+                      backgroundColor: brandStyles.lightBg,
                     }}
-                    onBack={() => {
-                      setSetupClientSecret(null);
-                      setPendingQuoteResult(null);
-                    }}
-                  />
-                </Elements>
+                    data-testid="text-card-on-file"
+                  >
+                    <div
+                      className="flex items-center justify-center w-10 h-10 rounded-full"
+                      style={{ backgroundColor: brandStyles.checkBg }}
+                    >
+                      <CreditCard className="h-5 w-5" style={{ color: brandStyles.accentText }} />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold capitalize">{cardOnFile.brand} card</p>
+                      <p className="text-sm text-muted-foreground">
+                        Card on file ending in ••••{cardOnFile.last4}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1 h-12 text-sm"
+                      onClick={() => {
+                        setSetupIntentError(null);
+                        setUseNewCard(true);
+                        fetch("/api/public/portal/setup-intent", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            contactId: pendingQuoteResult.contactId,
+                            slug,
+                            forceNew: true,
+                          }),
+                        })
+                          .then((r) => r.json())
+                          .then((json) => {
+                            if (json.clientSecret) {
+                              setCardOnFile(null);
+                              setSetupClientSecret(json.clientSecret);
+                            } else {
+                              setUseNewCard(false);
+                              setSetupIntentError(json.error || "Failed to initialize card setup.");
+                            }
+                          })
+                          .catch(() => {
+                            setUseNewCard(false);
+                            setSetupIntentError(
+                              "Failed to initialize card setup. Please try again."
+                            );
+                          });
+                      }}
+                      data-testid="button-use-different-card"
+                    >
+                      Use a different card
+                    </Button>
+                    <Button
+                      type="button"
+                      className="flex-[2] text-white h-12 text-base font-semibold"
+                      style={{ backgroundColor: brandStyles.buttonBg }}
+                      onClick={() => {
+                        setQuoteResult(pendingQuoteResult);
+                        track("quote_shown", 4);
+                      }}
+                      data-testid="button-use-card-on-file"
+                    >
+                      <CheckCircle2 className="h-5 w-5 mr-2" /> Use this card
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-medium">Save a card to complete your signup</p>
+                    <p className="text-xs text-muted-foreground">
+                      Your card will not be charged today.
+                    </p>
+                  </div>
+                  {setupIntentError && (
+                    <div
+                      className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200"
+                      data-testid="text-setup-intent-error"
+                    >
+                      <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-red-700">{setupIntentError}</p>
+                    </div>
+                  )}
+                  {!setupClientSecret && !setupIntentError && (
+                    <div
+                      className="flex flex-col items-center gap-3 py-8"
+                      data-testid="loading-setup-intent"
+                    >
+                      <Loader2
+                        className="h-8 w-8 animate-spin"
+                        style={{ color: brandStyles.accentText }}
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Setting up secure card collection...
+                      </p>
+                    </div>
+                  )}
+                  {setupClientSecret && stripePromise && (
+                    <Elements stripe={stripePromise} options={{ clientSecret: setupClientSecret }}>
+                      <CardSetupForm
+                        clientSecret={setupClientSecret}
+                        contactId={pendingQuoteResult.contactId}
+                        slug={slug}
+                        brandStyles={brandStyles}
+                        onSuccess={() => {
+                          setQuoteResult(pendingQuoteResult);
+                          track("quote_shown", 4);
+                        }}
+                        onBack={() => {
+                          setSetupClientSecret(null);
+                          setPendingQuoteResult(null);
+                          setCardOnFile(null);
+                          setUseNewCard(false);
+                        }}
+                      />
+                    </Elements>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
