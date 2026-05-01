@@ -568,6 +568,21 @@ async function ensureMaxStopsSchema() {
   }
 }
 
+async function ensureMinStopsPerDaySchema() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(
+      `ALTER TABLE companies ADD COLUMN IF NOT EXISTS min_stops_per_day INTEGER DEFAULT 3;`
+    );
+    console.log("[Migration] min_stops_per_day column verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure min_stops_per_day:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function repairDuplicateStopOrders() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -2822,6 +2837,7 @@ async function seedLakeErieScoopersAccount() {
   await ensureMmsSchema();
   await ensureAttachmentsSchema();
   await ensureMaxStopsSchema();
+  await ensureMinStopsPerDaySchema();
   await ensureCanadaMarketColumns();
   await migrateServicePlansToAgreementsAndJobs();
   await repairServicePlanDayOfWeek();

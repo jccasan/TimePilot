@@ -296,6 +296,7 @@ export async function analyzeWeeklySchedule(
     zones?: ZoneMapping[];
     includeSaturday?: boolean;
     maxStopsPerDay?: number;
+    minStopsPerDay?: number;
     numTechs?: number;
   } = {}
 ): Promise<WeeklyOptimizationResult> {
@@ -304,6 +305,7 @@ export async function analyzeWeeklySchedule(
     zones = [],
     includeSaturday = false,
     maxStopsPerDay,
+    minStopsPerDay,
     numTechs,
   } = options;
   const activeDays = includeSaturday ? ALL_DAYS : WORK_DAYS;
@@ -375,7 +377,13 @@ export async function analyzeWeeklySchedule(
       proposedTotalMinutes += totalMinutes;
     }
   } else {
-    const clustersByDay = assignByGeoClustering(stops, activeDays, startPoint, maxStopsPerDay);
+    const clustersByDay = assignByGeoClustering(
+      stops,
+      activeDays,
+      startPoint,
+      maxStopsPerDay,
+      minStopsPerDay
+    );
     for (const day of activeDays) {
       const dayClusters = clustersByDay.get(day) || [];
       const dayStops = dayClusters.flat();
@@ -538,7 +546,7 @@ function findOptimalK(stops: WeeklyStop[], maxK: number): number {
   const d1 = totalIntraClusterDistance(kMeansClustering(stops, 1));
   if (d1 === 0) return 1;
 
-  const GAIN_THRESHOLD = 0.1;
+  const GAIN_THRESHOLD = 0.18;
 
   let prevDist = d1;
   let optK = 1;
@@ -598,7 +606,8 @@ function assignByGeoClustering(
   stops: WeeklyStop[],
   activeDays: string[],
   startPoint?: StartPoint,
-  maxStopsPerDay?: number
+  maxStopsPerDay?: number,
+  minStopsPerDay?: number
 ): Map<string, WeeklyStop[][]> {
   const result = new Map<string, WeeklyStop[][]>();
   for (const day of activeDays) {
@@ -618,7 +627,11 @@ function assignByGeoClustering(
   // Threshold scales with route size: ~1/3 of the average stops-per-day,
   // floored at MIN_STOPS_FOR_OWN_DAY so tiny companies aren't over-merged.
   const avgStopsPerDay = stops.length / activeDays.length;
-  const minClusterSize = Math.max(MIN_STOPS_FOR_OWN_DAY, Math.floor(avgStopsPerDay * 0.33));
+  const computedMin = Math.max(MIN_STOPS_FOR_OWN_DAY, Math.floor(avgStopsPerDay * 0.33));
+  const minClusterSize =
+    minStopsPerDay != null && minStopsPerDay > 0
+      ? Math.max(minStopsPerDay, computedMin)
+      : computedMin;
   clusters = mergeSmallClusters(clusters, minClusterSize);
 
   const orderedClusters = startPoint

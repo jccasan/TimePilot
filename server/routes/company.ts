@@ -351,6 +351,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "telnyxMessagingProfileId",
         "venmoHandle",
         "maxStopsPerRoute",
+        "minStopsPerDay",
         "country",
         "currency",
         "taxRatePercent",

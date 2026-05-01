@@ -872,12 +872,15 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         company.maxStopsPerRoute && company.maxStopsPerRoute > 0
           ? company.maxStopsPerRoute
           : undefined;
+      const minStopsPerDay =
+        company.minStopsPerDay && company.minStopsPerDay > 0 ? company.minStopsPerDay : undefined;
 
       const result = await analyzeWeeklySchedule(weeklyStops, startPoint, {
         respectZones,
         zones,
         includeSaturday,
         maxStopsPerDay,
+        minStopsPerDay,
       });
 
       const { calculateAllCustomerProfitability } =
@@ -1061,6 +1064,8 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           company.maxStopsPerRoute && company.maxStopsPerRoute > 0
             ? company.maxStopsPerRoute
             : undefined;
+        const minStopsPerDay =
+          company.minStopsPerDay && company.minStopsPerDay > 0 ? company.minStopsPerDay : undefined;
 
         const ACTIVE_DAYS_SET = includeSaturday
           ? new Set(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"])
@@ -1201,6 +1206,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
             zones,
             includeSaturday,
             maxStopsPerDay,
+            minStopsPerDay,
             numTechs,
           });
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -267,6 +269,41 @@ export function WeeklyOptimizerPanel({
     message: string;
     failedStops: UngeocodedStop[];
   } | null>(null);
+
+  const [minStopsInput, setMinStopsInput] = useState<string>("");
+
+  const { data: company } = useQuery<{ minStopsPerDay?: number | null }>({
+    queryKey: ["/api/company"],
+  });
+
+  useEffect(() => {
+    if (company?.minStopsPerDay != null) {
+      setMinStopsInput(String(company.minStopsPerDay));
+    }
+  }, [company?.minStopsPerDay]);
+
+  const saveMinStopsMutation = useMutation({
+    mutationFn: async (value: number | null) => {
+      await apiRequest("PATCH", "/api/company", { minStopsPerDay: value });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "Minimum stops per day updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not save setting.", variant: "destructive" });
+    },
+  });
+
+  const handleSaveMinStops = () => {
+    const val = minStopsInput.trim();
+    const num = val === "" ? null : parseInt(val, 10);
+    if (val !== "" && (isNaN(num!) || num! < 1)) {
+      toast({ title: "Invalid value", description: "Enter a number ≥ 1.", variant: "destructive" });
+      return;
+    }
+    saveMinStopsMutation.mutate(num);
+  };
 
   const { data: freshCreditData } = useQuery<{ credits: number; monthlyAllowance: number }>({
     queryKey: ["/api/route-credits"],
@@ -795,6 +832,47 @@ export function WeeklyOptimizerPanel({
                   onCheckedChange={setIncludeSaturday}
                   data-testid="switch-include-saturday"
                 />
+              </div>
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <p className="text-sm font-medium">Min stops per day</p>
+                  <p className="text-xs text-muted-foreground">
+                    Merge days with fewer than this many stops
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="min-stops-input" className="sr-only">
+                    Min stops per day
+                  </Label>
+                  <Input
+                    id="min-stops-input"
+                    type="number"
+                    min={1}
+                    placeholder="3"
+                    value={minStopsInput}
+                    onChange={(e) => setMinStopsInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveMinStops();
+                    }}
+                    className="w-16 h-8 text-xs"
+                    data-testid="input-min-stops-per-day"
+                    disabled={saveMinStopsMutation.isPending}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs px-2"
+                    onClick={handleSaveMinStops}
+                    disabled={saveMinStopsMutation.isPending}
+                    data-testid="button-save-min-stops"
+                  >
+                    {saveMinStopsMutation.isPending ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
 

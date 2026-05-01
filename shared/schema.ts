@@ -395,6 +395,7 @@ export const companies = pgTable("companies", {
   billingTrigger: text("billing_trigger").notNull().default("after_job"),
   defaultPaymentBehavior: text("default_payment_behavior").notNull().default("send_invoice"),
   maxStopsPerRoute: integer("max_stops_per_route").default(50),
+  minStopsPerDay: integer("min_stops_per_day").default(3),
   customMaxUsers: integer("custom_max_users"),
   messageRetentionDays: integer("message_retention_days").notNull().default(30),
   country: varchar("country", { length: 5 }).notNull().default("us"),
