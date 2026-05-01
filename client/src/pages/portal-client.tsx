@@ -420,6 +420,8 @@ export default function PortalClient() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [autoPayEnabled, setAutoPayEnabled] = useState(false);
   const [confirmDisableAutoPay, setConfirmDisableAutoPay] = useState(false);
+  const [removeCardConfirm, setRemoveCardConfirm] = useState<string | null>(null);
+  const [removingCard, setRemovingCard] = useState(false);
   const [addingCard, setAddingCard] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referralCount, setReferralCount] = useState(0);
@@ -602,6 +604,27 @@ export default function PortalClient() {
 
     loadData();
   }, [token]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("card_added") === "1") {
+      window.history.replaceState({}, "", window.location.pathname);
+      setActiveTab("billing");
+      portalFetch("/api/portal/payment-methods")
+        .then((data: { methods: PaymentMethod[]; autoPayEnabled: boolean }) => {
+          setPaymentMethods(data.methods || []);
+          setAutoPayEnabled(data.autoPayEnabled || false);
+          toast({ title: "Card added", description: "Your new payment method has been saved." });
+        })
+        .catch(() => {
+          toast({
+            title: "Card may have been added",
+            description: "Please refresh the page to see your updated payment methods.",
+            variant: "destructive",
+          });
+        });
+    }
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -854,13 +877,22 @@ export default function PortalClient() {
     }
   };
 
-  const handleRemoveCard = async (methodId: string) => {
+  const handleRemoveCard = (methodId: string) => {
+    setRemoveCardConfirm(methodId);
+  };
+
+  const handleConfirmRemoveCard = async () => {
+    if (!removeCardConfirm) return;
+    setRemovingCard(true);
     try {
-      await portalFetch(`/api/portal/payment-methods/${methodId}`, { method: "DELETE" });
-      setPaymentMethods((prev) => prev.filter((m) => m.id !== methodId));
+      await portalFetch(`/api/portal/payment-methods/${removeCardConfirm}`, { method: "DELETE" });
+      setPaymentMethods((prev) => prev.filter((m) => m.id !== removeCardConfirm));
       toast({ title: "Card removed", description: "Payment method has been removed." });
+      setRemoveCardConfirm(null);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setRemovingCard(false);
     }
   };
 
@@ -2232,7 +2264,7 @@ export default function PortalClient() {
             <Separator />
 
             <section>
-              <SectionHeader title="Your Payment Method" description="Manage your cards on file" />
+              <SectionHeader title="Your Payment Methods" description="Manage your cards on file" />
               <Card>
                 <CardContent className="pt-4 space-y-4">
                   {paymentMethods.length > 0 ? (
@@ -2351,6 +2383,46 @@ export default function PortalClient() {
                 </Card>
               </section>
             )}
+
+            <Dialog
+              open={!!removeCardConfirm}
+              onOpenChange={(open) => {
+                if (!open) setRemoveCardConfirm(null);
+              }}
+            >
+              <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Remove Card?</DialogTitle>
+                  <DialogDescription>
+                    {(() => {
+                      const card = paymentMethods.find((m) => m.id === removeCardConfirm);
+                      return card
+                        ? `Are you sure you want to remove your ${card.brand} card ending in ${card.last4}? This cannot be undone.`
+                        : "Are you sure you want to remove this payment method?";
+                    })()}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setRemoveCardConfirm(null)}
+                    data-testid="button-cancel-remove-card"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={handleConfirmRemoveCard}
+                    disabled={removingCard}
+                    data-testid="button-confirm-remove-card"
+                  >
+                    {removingCard ? "Removing..." : "Remove Card"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <Dialog
               open={confirmDisableAutoPay}
