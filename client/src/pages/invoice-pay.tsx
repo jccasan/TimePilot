@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, DollarSign, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { formatMoneyForCurrency } from "@/hooks/use-currency";
 
 interface PublicInvoice {
@@ -21,6 +21,16 @@ interface PublicInvoice {
 }
 
 const TIP_OPTIONS = [1, 3, 5, 10];
+
+function getCurrencySymbol(currency: string): string {
+  const formatted = new Intl.NumberFormat("en", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(0);
+  return formatted.replace(/[\d\s,.']/g, "").trim();
+}
 
 function getInvoiceIdFromPath(): string | undefined {
   const match = window.location.pathname.match(/^\/invoice\/([^/]+)\/pay$/);
@@ -196,14 +206,16 @@ export default function InvoicePayPage() {
                   Custom:
                 </Label>
                 <div className="relative flex-1">
-                  <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground leading-none">
+                    {getCurrencySymbol(currency)}
+                  </span>
                   <Input
                     id="custom-tip"
                     type="number"
                     min="0"
                     step="0.01"
                     placeholder="0.00"
-                    className="pl-7"
+                    className="pl-10"
                     value={customTip}
                     onChange={(e) => {
                       setCustomTip(e.target.value);
