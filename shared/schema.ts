@@ -233,7 +233,7 @@ export const TIER_CONFIG = {
     monthlyOptimizerCredits: 5,
   },
   tier_starter: {
-    name: "Starter",
+    name: "Bootstrap",
     maxUsers: 1,
     maxContacts: 10 as number | null,
     price: 10,
