@@ -275,11 +275,128 @@
     overflow: visible !important;
   }
 
-  .grid {
+  /* ── Assessment card starts on a new page ── */
+  [data-testid="card-ai-assessment"] {
+    break-before: page;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* ── Keep each major assessment section together ── */
+  [data-testid="assessment-results"] > * {
     break-inside: avoid;
   }
 
-  [data-testid="card-ai-assessment"] {
+  [data-testid="panel-score-breakdown"] {
+    break-inside: avoid;
+    margin-top: 1em;
+  }
+
+  [data-testid="panel-cfo"],
+  [data-testid="panel-coo"] {
+    break-inside: avoid;
+  }
+
+  [data-testid="panel-what-working"],
+  [data-testid="panel-what-not-working"] {
+    break-inside: avoid;
+  }
+
+  /* Action plan gets its own page so columns don't split */
+  [data-testid="panel-action-plan"] {
     break-before: page;
+    break-inside: avoid;
+  }
+
+  [data-testid="panel-stop-start-continue"] {
+    break-inside: avoid;
+    margin-top: 1em;
+  }
+
+  [data-testid="panel-recommendations"] {
+    break-inside: avoid;
+  }
+
+  [data-testid="panel-final-summary"] {
+    break-inside: avoid;
+    margin-top: 1em;
+  }
+
+  [data-testid="panel-missing-data"] {
+    break-inside: avoid;
+  }
+
+  /* Individual recommendation rows stay together */
+  [data-testid^="recommendation-"] {
+    break-inside: avoid;
+  }
+
+  /* Working / not-working cards stay together */
+  [data-testid^="working-item-"],
+  [data-testid^="not-working-item-"] {
+    break-inside: avoid;
+  }
+
+  /* Score breakdown rows */
+  [data-testid^="score-row-"] {
+    break-inside: avoid;
+  }
+
+  /* Grid layouts: allow columns to collapse to single column in print */
+  .grid {
+    display: block !important;
+  }
+
+  .grid > * {
+    width: 100% !important;
+    margin-bottom: 0.75em;
+    break-inside: avoid;
+  }
+
+  /* Tables */
+  table {
+    width: 100% !important;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    padding: 4px 6px !important;
+    font-size: 10pt !important;
+  }
+
+  /* Hidden assessment column (Assessment text) shows in print */
+  .hidden.md\:table-cell {
+    display: table-cell !important;
+  }
+
+  /* Badges / colored text should still be visible */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Score ring */
+  [data-testid="chart-score-history"] {
+    display: none !important;
+  }
+}
+
+/* ── Assessment-only PDF mode (applied via JS before window.print()) ── */
+@media print {
+  body.print-assessment-only
+    .business-overview-print-area
+    > *:not([data-testid="card-ai-assessment"]):not(.print-report-meta) {
+    display: none !important;
+  }
+
+  body.print-assessment-only [data-testid="card-ai-assessment"] {
+    break-before: avoid !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  body.print-assessment-only .print-report-meta {
+    display: block !important;
   }
 }

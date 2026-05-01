@@ -20,6 +20,7 @@ import {
   ArrowUp,
   ArrowDown,
   Printer,
+  Download,
   RefreshCw,
   Clock,
   ThumbsUp,
@@ -369,6 +370,12 @@ export default function BusinessOverview() {
     window.print();
   }
 
+  function handleDownloadAssessmentPDF() {
+    document.body.classList.add("print-assessment-only");
+    window.print();
+    document.body.classList.remove("print-assessment-only");
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full business-overview-print-area">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -384,16 +391,30 @@ export default function BusinessOverview() {
             Key metrics and AI-powered health assessment for your business
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handlePrint}
-          className="print:hidden"
-          data-testid="button-print-report"
-        >
-          <Printer className="mr-1.5 h-4 w-4" />
-          Print Report
-        </Button>
+        <div className="flex items-center gap-2 print:hidden">
+          {assessment && !isAssessmentLoading && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadAssessmentPDF}
+              data-testid="button-download-assessment-pdf"
+              title="Download a PDF of just the AI Assessment report"
+            >
+              <Download className="mr-1.5 h-4 w-4" />
+              Download PDF
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePrint}
+            data-testid="button-print-report"
+            title="Print the full Business Overview page"
+          >
+            <Printer className="mr-1.5 h-4 w-4" />
+            Print Report
+          </Button>
+        </div>
       </div>
       <div
         className="print-report-meta text-xs text-muted-foreground pb-2 border-b"
