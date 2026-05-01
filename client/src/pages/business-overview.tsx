@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useCurrency } from "@/hooks/use-currency";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -72,15 +73,6 @@ type AssessmentHistoryEntry = {
   createdAt: string;
 };
 
-function fmt(n: number): string {
-  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
-  return `$${n.toFixed(0)}`;
-}
-
-function fmtFull(n: number): string {
-  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 function KpiCard({
   title,
   value,
@@ -118,6 +110,7 @@ function KpiCard({
 }
 
 function ChartTooltipContent({ active, payload, label, prefix }: any) {
+  const { formatMoney } = useCurrency();
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-md border bg-background p-2 shadow-md text-xs">
@@ -131,7 +124,9 @@ function ChartTooltipContent({ active, payload, label, prefix }: any) {
             />
             {entry.name}
           </span>
-          <span className="font-medium">{prefix === "$" ? fmtFull(entry.value) : entry.value}</span>
+          <span className="font-medium">
+            {prefix === "$" ? formatMoney(entry.value) : entry.value}
+          </span>
         </div>
       ))}
     </div>
@@ -195,6 +190,16 @@ function HealthScoreRing({ score }: { score: number }) {
 }
 
 export default function BusinessOverview() {
+  const { formatMoney } = useCurrency();
+  const fmtAxis = (n: number): string => {
+    if (n >= 1000)
+      return (
+        formatMoney(n / 1000)
+          .replace(/\.(\d)0$/, ".$1")
+          .replace(/\.00$/, ".0") + "k"
+      );
+    return formatMoney(Math.round(n)).replace(/\.\d+$/, "");
+  };
   const [assessmentKey, setAssessmentKey] = useState(0);
   const [hasRequestedAssessment, setHasRequestedAssessment] = useState(false);
 
@@ -254,8 +259,10 @@ export default function BusinessOverview() {
   const { kpis, monthlyRevenue, customerAcquisition, profitabilityMix, weeklyCompletion } = data;
   const mrrDisplay =
     kpis.mrrCents >= 100000
-      ? `$${(kpis.mrrCents / 100 / 1000).toFixed(1)}k`
-      : `$${(kpis.mrrCents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+      ? formatMoney(kpis.mrrCents / 100 / 1000)
+          .replace(/\.(\d)0$/, ".$1")
+          .replace(/\.00$/, ".0") + "k"
+      : formatMoney(Math.round(kpis.mrrCents / 100)).replace(/\.\d+$/, "");
 
   const marginColor =
     kpis.avgProfitMarginPct >= 20
@@ -373,7 +380,7 @@ export default function BusinessOverview() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} width={48} />
+                <YAxis tickFormatter={(v) => fmtAxis(v)} tick={{ fontSize: 11 }} width={48} />
                 <Tooltip content={<ChartTooltipContent prefix="$" />} />
                 <Area
                   type="monotone"

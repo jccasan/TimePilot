@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useQuery } from "@tanstack/react-query";
+import { useCurrency } from "@/hooks/use-currency";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -99,15 +100,6 @@ const CHART_COLORS = [
   "#06b6d4",
 ];
 
-function fmt(n: number): string {
-  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
-  return `$${n.toFixed(0)}`;
-}
-
-function fmtFull(n: number): string {
-  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 function KpiCard({
   title,
   value,
@@ -167,6 +159,7 @@ function KpiCard({
 }
 
 function ChartTooltipContent({ active, payload, label, prefix }: any) {
+  const { formatMoney } = useCurrency();
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-md border bg-background p-2 shadow-md text-xs">
@@ -180,7 +173,9 @@ function ChartTooltipContent({ active, payload, label, prefix }: any) {
             />
             {entry.name}
           </span>
-          <span className="font-medium">{prefix === "$" ? fmtFull(entry.value) : entry.value}</span>
+          <span className="font-medium">
+            {prefix === "$" ? formatMoney(entry.value) : entry.value}
+          </span>
         </div>
       ))}
     </div>
@@ -188,6 +183,16 @@ function ChartTooltipContent({ active, payload, label, prefix }: any) {
 }
 
 export default function Analytics() {
+  const { formatMoney } = useCurrency();
+  const fmtAxis = (n: number): string => {
+    if (n >= 1000)
+      return (
+        formatMoney(n / 1000)
+          .replace(/\.(\d)0$/, ".$1")
+          .replace(/\.00$/, ".0") + "k"
+      );
+    return formatMoney(Math.round(n)).replace(/\.\d+$/, "");
+  };
   const { data, isLoading } = useQuery<AnalyticsData>({
     queryKey: ["/api/analytics/dashboard"],
   });
@@ -234,8 +239,8 @@ export default function Analytics() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           title="This Month Revenue"
-          value={fmtFull(kpis.thisMonthRevenue)}
-          subtitle={`Last month: ${fmtFull(kpis.lastMonthRevenue)}`}
+          value={formatMoney(kpis.thisMonthRevenue)}
+          subtitle={`Last month: ${formatMoney(kpis.lastMonthRevenue)}`}
           icon={DollarSign}
           trend={kpis.revenueGrowth}
           trendLabel="vs last month"
@@ -254,7 +259,7 @@ export default function Analytics() {
         />
         <KpiCard
           title="Outstanding Balance"
-          value={fmtFull(kpis.totalOutstanding)}
+          value={formatMoney(kpis.totalOutstanding)}
           subtitle="Unpaid invoices"
           icon={Target}
         />
@@ -285,7 +290,7 @@ export default function Analytics() {
                   stroke="hsl(var(--border))"
                 />
                 <YAxis
-                  tickFormatter={fmt}
+                  tickFormatter={fmtAxis}
                   tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                   stroke="hsl(var(--border))"
                 />
@@ -658,7 +663,7 @@ export default function Analytics() {
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Avg Price/Visit</p>
                 <p className="text-xl font-bold" data-testid="text-avg-price-per-visit">
-                  {fmtFull(data.avgServiceCost.avgPricePerVisit)}
+                  {formatMoney(data.avgServiceCost.avgPricePerVisit)}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   {data.avgServiceCost.activeServicePlans} active plans
@@ -667,7 +672,7 @@ export default function Analytics() {
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Avg Invoice</p>
                 <p className="text-xl font-bold" data-testid="text-avg-invoice">
-                  {fmtFull(data.avgServiceCost.avgInvoiceAmount)}
+                  {formatMoney(data.avgServiceCost.avgInvoiceAmount)}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   {data.avgServiceCost.totalPaidInvoices} paid invoices
@@ -685,7 +690,7 @@ export default function Analytics() {
                       <div key={yr.year} className="space-y-0.5">
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">{yr.year}</span>
-                          <span className="font-medium">{fmtFull(yr.revenue)}</span>
+                          <span className="font-medium">{formatMoney(yr.revenue)}</span>
                         </div>
                         <div className="h-2 bg-muted rounded-full overflow-hidden">
                           <div
