@@ -308,6 +308,19 @@ export default function AuthPage() {
                   <ArrowLeft className="mr-1 h-3 w-3 inline" /> Back to Sign In
                 </button>
               </div>
+              <p
+                className="text-xs text-center text-muted-foreground"
+                data-testid="text-blocked-support-hint"
+              >
+                Think you were blocked by mistake?{" "}
+                <a
+                  href="mailto:support@scoopilot.com"
+                  className="underline hover:text-foreground"
+                  data-testid="link-blocked-support-email"
+                >
+                  Contact support@scoopilot.com
+                </a>
+              </p>
             </div>
           ) : mode === "forgot" ? (
             forgotSent ? (

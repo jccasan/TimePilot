@@ -43,7 +43,10 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     max: process.env.NODE_ENV === "production" ? 5 : 500,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many signup attempts, please try again later" },
+    message: {
+      error:
+        "Too many signup attempts, please try again in 15 minutes. If you need immediate help, contact us at support@scoopilot.com.",
+    },
   });
 
   app.post("/api/public/signup", signupLimiter, async (req: Request, res: Response) => {
@@ -73,7 +76,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         );
         return res.status(403).json({
           error:
-            "Signups from VPN or proxy connections are not allowed. Please disable your VPN and try again.",
+            "Signups from VPN or proxy connections are not allowed. Please disable your VPN and try again. If you believe this is an error, contact us at support@scoopilot.com.",
         });
       }
 
@@ -86,7 +89,10 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         console.warn(
           `[Signup] Blocked signup from country ${detectedCountry}, IP ${clientIp}, email: ${email}`
         );
-        return res.status(403).json({ error: "Signups are not available in your region." });
+        return res.status(403).json({
+          error:
+            "Signups are not available in your region. If you believe this is an error, contact us at support@scoopilot.com.",
+        });
       }
 
       const existingUser = await getUserByEmail(email.toLowerCase());
