@@ -1348,6 +1348,83 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     smsOptIn: z.boolean().optional().default(false),
   });
 
+  const contactLookupRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+  app.get("/api/public/contact-lookup/:slug", async (req: Request, res: Response) => {
+    try {
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const entry = contactLookupRateLimit.get(clientIp);
+      if (entry && entry.resetAt > now) {
+        if (entry.count >= 10) {
+          return res.status(429).json({ error: "Too many requests. Please try again later." });
+        }
+        entry.count++;
+      } else {
+        contactLookupRateLimit.set(clientIp, { count: 1, resetAt: now + 60 * 60 * 1000 });
+      }
+
+      const slug = p(req.params.slug);
+      const company = await storage.getCompanyBySlug(slug);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const email = req.query.email;
+      const zip = req.query.zip;
+
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ error: "Email is required" });
+      }
+      if (!zip || typeof zip !== "string") {
+        return res.status(400).json({ error: "ZIP code is required" });
+      }
+
+      const normalizedEmail = email.trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail)) {
+        return res.status(400).json({ error: "Invalid email" });
+      }
+
+      const normalizedZip = zip.trim().slice(0, 5);
+      if (!/^\d{5}$/.test(normalizedZip)) {
+        return res.status(400).json({ error: "Invalid ZIP code" });
+      }
+
+      const [contact] = await db
+        .select({
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+          streetAddress: contacts.streetAddress,
+          city: contacts.city,
+          state: contacts.state,
+          zipCode: contacts.zipCode,
+        })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.companyId, company.id),
+            sql`LOWER(TRIM(${contacts.email})) = ${normalizedEmail}`,
+            eq(contacts.zipCode, normalizedZip)
+          )
+        )
+        .limit(1);
+
+      if (!contact) {
+        return res.json({ found: false });
+      }
+
+      return res.json({
+        found: true,
+        firstName: contact.firstName || "",
+        lastName: contact.lastName || "",
+        streetAddress: contact.streetAddress || "",
+        city: contact.city || "",
+        state: contact.state || "",
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   const publicLeadRateLimit = new Map<string, { count: number; resetAt: number }>();
 
   app.post("/api/public/leads/:slug", async (req: Request, res: Response) => {
