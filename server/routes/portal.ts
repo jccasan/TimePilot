@@ -338,6 +338,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         zipCode: contact.zipCode || "",
         companyName: company?.name || "",
         pendingEmail: contact.pendingEmail || null,
+        currency: company?.currency || "usd",
       });
     } catch (err) {
       handleError(res, err);
@@ -812,6 +813,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           companyName: company?.name || "",
           numberOfDogs: updatedContact!.numberOfDogs,
           pendingEmail: updatedContact!.pendingEmail || null,
+          currency: company?.currency || "usd",
         },
       });
     } catch (err) {

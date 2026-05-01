@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { formatMoneyForCurrency } from "@/hooks/use-currency";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useLocation } from "wouter";
@@ -78,6 +79,7 @@ interface PortalProfile {
   companyName: string;
   numberOfDogs?: number;
   pendingEmail?: string | null;
+  currency?: string;
 }
 
 interface PortalProperty {
@@ -1087,6 +1089,17 @@ export default function PortalClient() {
   const totalPages = Math.ceil(pastVisitsTotal / 20);
   const activePlan = schedule?.servicePlans?.find((p) => p.isActive);
   const nextVisit = schedule?.upcomingVisits?.[0];
+  const currency = (profile?.currency || "usd").toLowerCase();
+  const formatMoney = (amount: number) => formatMoneyForCurrency(amount, currency);
+  const currencySymbol = (() => {
+    const formatted = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency.toUpperCase(),
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(0);
+    return formatted.replace(/[\d\s,.']/g, "").trim();
+  })();
 
   if (loading) {
     return (
@@ -1373,7 +1386,7 @@ export default function PortalClient() {
               <SummaryCard
                 icon={DollarSign}
                 label="Amount Due"
-                value={balanceDue > 0 ? `$${balanceDue.toFixed(2)}` : "All clear"}
+                value={balanceDue > 0 ? formatMoney(balanceDue) : "All clear"}
                 sublabel={
                   balanceDue > 0
                     ? `${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length > 1 ? "s" : ""}`
@@ -1395,7 +1408,7 @@ export default function PortalClient() {
                 }
                 sublabel={
                   activePlan
-                    ? `${activePlan.dayOfWeek ? activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1) + "s" : ""} - $${(Number(activePlan.pricePerVisit) || 0).toFixed(2)}/visit`
+                    ? `${activePlan.dayOfWeek ? activePlan.dayOfWeek.charAt(0).toUpperCase() + activePlan.dayOfWeek.slice(1) + "s" : ""} - ${formatMoney(Number(activePlan.pricePerVisit) || 0)}/visit`
                     : undefined
                 }
                 accent="bg-primary/10 text-primary"
@@ -1483,7 +1496,7 @@ export default function PortalClient() {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-medium">
-                          ${(Number(plan.pricePerVisit) || 0).toFixed(2)}/visit
+                          {formatMoney(Number(plan.pricePerVisit) || 0)}/visit
                         </span>
                         <Badge
                           variant="secondary"
@@ -1647,7 +1660,7 @@ export default function PortalClient() {
                               </p>
                             )}
                             <p className="text-lg font-bold text-primary mt-2">
-                              ${(Number(plan.pricePerVisit) || 0).toFixed(2)}
+                              {formatMoney(Number(plan.pricePerVisit) || 0)}
                               <span className="text-xs font-normal text-muted-foreground">
                                 /visit
                               </span>
@@ -2072,7 +2085,7 @@ export default function PortalClient() {
                                     <td className="p-2">{item.description}</td>
                                     <td className="p-2 text-center">{item.quantity}</td>
                                     <td className="p-2 text-right">
-                                      ${Number(item.total).toFixed(2)}
+                                      {formatMoney(Number(item.total))}
                                     </td>
                                   </tr>
                                 ))}
@@ -2082,7 +2095,7 @@ export default function PortalClient() {
                         )}
                         <div className="flex items-center justify-between pt-2 border-t">
                           <p className="text-lg font-bold">
-                            Total: ${(est.totalCents / 100).toFixed(2)}
+                            Total: {formatMoney(est.totalCents / 100)}
                           </p>
                         </div>
                         <Textarea
@@ -2161,14 +2174,14 @@ export default function PortalClient() {
                                 className="text-sm font-semibold"
                                 data-testid={`text-invoice-total-${inv.id}`}
                               >
-                                ${Number(inv.total).toFixed(2)}
+                                {formatMoney(Number(inv.total))}
                               </p>
                               {Number(inv.tipAmount) > 0 && (
                                 <p
                                   className="text-xs text-green-600 dark:text-green-400"
                                   data-testid={`text-invoice-tip-${inv.id}`}
                                 >
-                                  + ${Number(inv.tipAmount).toFixed(2)} tip
+                                  + {formatMoney(Number(inv.tipAmount))} tip
                                 </p>
                               )}
                               <Badge
@@ -2365,7 +2378,7 @@ export default function PortalClient() {
                         <div>
                           <p className="text-sm font-medium">{est.description}</p>
                           <p className="text-xs text-muted-foreground">
-                            ${(est.totalCents / 100).toFixed(2)}
+                            {formatMoney(est.totalCents / 100)}
                           </p>
                         </div>
                         <Badge
@@ -2479,7 +2492,7 @@ export default function PortalClient() {
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Invoice Total</span>
                       <span className="font-semibold" data-testid="text-tip-invoice-total">
-                        ${Number(tipDialogInvoice.total).toFixed(2)}
+                        {formatMoney(Number(tipDialogInvoice.total))}
                       </span>
                     </div>
                     <div className="space-y-2">
@@ -2498,7 +2511,7 @@ export default function PortalClient() {
                             }}
                             data-testid={`button-tip-${amt}`}
                           >
-                            {amt === 0 ? "No Tip" : `$${amt}`}
+                            {amt === 0 ? "No Tip" : formatMoney(amt)}
                           </Button>
                         ))}
                       </div>
@@ -2510,7 +2523,9 @@ export default function PortalClient() {
                           Custom:
                         </Label>
                         <div className="relative flex-1">
-                          <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground leading-none">
+                            {currencySymbol}
+                          </span>
                           <Input
                             id="custom-tip"
                             type="number"
@@ -2538,14 +2553,14 @@ export default function PortalClient() {
                           <div className="flex justify-between text-sm font-semibold">
                             <span>Total Charge</span>
                             <span data-testid="text-tip-total-charge">
-                              ${totalCharge.toFixed(2)}
+                              {formatMoney(totalCharge)}
                             </span>
                           </div>
                           {isBelowMinimum && (
                             <p className="text-xs text-amber-600 text-center">
                               {Number(tipDialogInvoice.total) === 0
-                                ? "Please add a tip of at least $0.50 to pay online."
-                                : "Minimum charge is $0.50."}
+                                ? `Please add a tip of at least ${formatMoney(0.5)} to pay online.`
+                                : `Minimum charge is ${formatMoney(0.5)}.`}
                             </p>
                           )}
                           <Button
