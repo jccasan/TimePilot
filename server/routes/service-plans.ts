@@ -610,6 +610,11 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       if (body.routeId === "") body.routeId = null;
       if (body.pricePerVisit !== undefined)
         body.pricePerVisit = sanitizeDecimal(body.pricePerVisit);
+      // pausedAt is a timestamp column — Drizzle requires a Date object, not a string.
+      if (body.pausedAt !== undefined && body.pausedAt !== null) {
+        const d = new Date(body.pausedAt as string);
+        body.pausedAt = isNaN(d.getTime()) ? null : d;
+      }
 
       const dayChanged = body.dayOfWeek && body.dayOfWeek !== existing.dayOfWeek;
       if (dayChanged && !body.routeId) {
