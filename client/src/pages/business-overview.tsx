@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -8,6 +8,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import {
   DollarSign,
   Users,
@@ -34,6 +45,7 @@ import {
   Tag,
   Megaphone,
   Lightbulb,
+  Mail,
 } from "lucide-react";
 import {
   AreaChart,
@@ -283,6 +295,8 @@ export default function BusinessOverview() {
   const [assessmentKey, setAssessmentKey] = useState(0);
   const [hasRequestedAssessment, setHasRequestedAssessment] = useState(false);
   const [forceRefresh, setForceRefresh] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState("");
 
   const { data, isLoading } = useQuery<BusinessOverviewData>({
     queryKey: ["/api/business-overview"],
@@ -315,6 +329,38 @@ export default function BusinessOverview() {
   const { data: assessmentHistory } = useQuery<AssessmentHistoryEntry[]>({
     queryKey: ["/api/business-overview/assessment-history"],
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: currentUser } = useQuery<{ email?: string }>({
+    queryKey: ["/api/auth/user"],
+    staleTime: Infinity,
+  });
+
+  const emailMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const res = await apiRequest("POST", "/api/business-overview/assessment/email", {
+        recipientEmail: email || undefined,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to send email");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setEmailModalOpen(false);
+      toast({
+        title: "Report sent",
+        description: `The AI Assessment PDF was sent to ${data.to}.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Failed to send",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
   });
 
   if (isLoading) {
@@ -504,6 +550,12 @@ export default function BusinessOverview() {
     }, 400);
   }
 
+  function handleOpenEmailModal() {
+    setRecipientEmail(currentUser?.email || "");
+    setEmailModalOpen(true);
+  }
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full business-overview-print-area">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -521,16 +573,28 @@ export default function BusinessOverview() {
         </div>
         <div className="flex items-center gap-2 print:hidden">
           {assessment && !isAssessmentLoading && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownloadAssessmentPDF}
-              data-testid="button-download-assessment-pdf"
-              title="Download a PDF of just the AI Assessment report"
-            >
-              <Download className="mr-1.5 h-4 w-4" />
-              Download PDF
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadAssessmentPDF}
+                data-testid="button-download-assessment-pdf"
+                title="Download a PDF of just the AI Assessment report"
+              >
+                <Download className="mr-1.5 h-4 w-4" />
+                Download PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenEmailModal}
+                data-testid="button-email-assessment-report"
+                title="Email the AI Assessment report as a PDF attachment"
+              >
+                <Mail className="mr-1.5 h-4 w-4" />
+                Email Report
+              </Button>
+            </>
           )}
           <Button
             variant="outline"
@@ -1611,6 +1675,55 @@ export default function BusinessOverview() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
+        <DialogContent data-testid="dialog-email-report">
+          <DialogHeader>
+            <DialogTitle>Email Assessment Report</DialogTitle>
+            <DialogDescription>
+              The AI Assessment report will be sent as a PDF attachment to the email address below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="email-recipient">Recipient Email</Label>
+            <Input
+              id="email-recipient"
+              type="email"
+              placeholder="you@example.com"
+              value={recipientEmail}
+              onChange={(e) => setRecipientEmail(e.target.value)}
+              data-testid="input-email-recipient"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEmailModalOpen(false)}
+              data-testid="button-cancel-email-report"
+              disabled={emailMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => emailMutation.mutate(recipientEmail)}
+              disabled={emailMutation.isPending || !recipientEmail.trim()}
+              data-testid="button-confirm-email-report"
+              >
+              {emailMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending…
+                </>
+              ) : (
+                <>
+                  <Mail className="mr-2 h-4 w-4" />
+                  Send Report
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
