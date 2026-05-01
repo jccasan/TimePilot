@@ -1622,6 +1622,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
     try {
       const { companyId, userId } = await getCompanyContext(req);
       const invoiceId = p(req.params.id);
+      console.log(`[send-email] Starting send for invoice ${invoiceId}`);
       const result = await sendInvoiceEmail(invoiceId, companyId, {
         sentBy: userId,
         baseUrl: getBaseUrl(req),
@@ -1643,6 +1644,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         paymentUrl: result.paymentUrl || null,
       });
     } catch (err) {
+      console.error("[send-email] Unhandled error in send-email handler:", err);
       handleError(res, err);
     }
   });
