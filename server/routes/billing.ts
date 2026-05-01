@@ -161,7 +161,9 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
 
       console.log(`[seat-checkout] Creating session for company ${companyId}, priceId=${priceId}`);
       const session = await stripeLib.checkout.sessions.create(sessionParams);
-      console.log(`[seat-checkout] Session created: ${session.id}, url=${session.url ? "ok" : "null"}`);
+      console.log(
+        `[seat-checkout] Session created: ${session.id}, url=${session.url ? "ok" : "null"}`
+      );
       if (!session.url) {
         return res.status(500).json({ error: "Stripe did not return a checkout URL" });
       }
