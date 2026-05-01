@@ -1083,20 +1083,114 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           paidInvoiceCount: paidInvoices.length,
         };
 
-        const systemPrompt = `You are a business performance analyst (CFO + COO dual perspective) for a pet waste removal company.
-You will receive a fact sheet with key business metrics. Produce a structured assessment in JSON.
+        const crypto = await import("crypto");
+        const factSheetJson = JSON.stringify(factSheet, Object.keys(factSheet).sort());
+        const currentHash = crypto.createHash("sha256").update(factSheetJson).digest("hex");
 
-Return exactly this JSON shape:
+        const forceRefresh = req.query.force === "true";
+
+        if (!forceRefresh) {
+          const recentHistory = await storage.getBusinessAssessments(companyId, 1);
+          const cached = recentHistory[0];
+          if (cached && cached.factSheetHash === currentHash && cached.fullResult) {
+            const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+            const allHistory = await storage.getBusinessAssessments(companyId, 50);
+            const priorMonthAssessment = allHistory.find(
+              (h) => h.id !== cached.id && new Date(h.createdAt) < currentMonthStart
+            );
+            const scoreDelta = priorMonthAssessment
+              ? cached.score - priorMonthAssessment.score
+              : null;
+            return res.json({
+              ...cached.fullResult,
+              scoreDelta,
+              cachedAt: cached.createdAt,
+              fromCache: true,
+            });
+          }
+        }
+
+        const fsModule = await import("fs");
+        const pathModule = await import("path");
+        const promptFilePath = pathModule.join(
+          process.cwd(),
+          "attached_assets",
+          "Pasted-ROLE-You-are-an-AI-Business-Assessor-for-pet-waste-remo_1777668951167.txt"
+        );
+        let basePromptContent = "";
+        try {
+          basePromptContent = fsModule.readFileSync(promptFilePath, "utf-8");
+        } catch {
+          basePromptContent =
+            "You are an AI Business Assessor for pet waste removal / poop scooping businesses. You act as a combined COO, CFO, route-operations consultant, and growth strategist for small service businesses. Evaluate the business using hard-hitting, neutral, business-owner-level judgment.";
+        }
+
+        const systemPrompt =
+          basePromptContent +
+          `
+
+---
+
+JSON OUTPUT OVERRIDE:
+Ignore the "REQUIRED OUTPUT FORMAT" markdown structure described above. Instead, return your complete assessment as a single valid JSON object with EXACTLY these fields:
 {
-  "healthScore": <integer 0-100>,
-  "verdict": "<2-3 sentence executive summary of overall business health>",
+  "healthScore": <integer 0-100 equal to sum of all scoreBreakdown scores>,
+  "verdict": "<2-3 sentence bottom-line verdict on real condition of business>",
+  "businessStage": "<one of: Idea stage | Pre-revenue setup | Early revenue | Owner-operator route business | Small team route business | Growth-stage route business | Mature local operator | Distressed business>",
+  "primaryServiceModel": "<one of: Weekly recurring | Biweekly recurring | Monthly recurring | One-time cleanups | Mixed recurring and one-time | Pet waste removal plus add-ons | Other>",
+  "rating": "<one of: Excellent | Strong | Good but uneven | Viable but fragile | Weak | High-risk | Structurally poor | Not currently viable>",
+  "confidenceLevel": "<High | Medium | Low>",
+  "executiveSummary": {
+    "topThingsWorking": ["<item 1>", "<item 2>", "<item 3>"],
+    "topProblems": ["<item 1>", "<item 2>", "<item 3>"],
+    "topActionsFirst": ["<action 1>", "<action 2>", "<action 3>"],
+    "biggestRisk": "<single biggest business risk>",
+    "fastestWayToImprove": "<one action most likely to improve score within 30-60 days>"
+  },
+  "scoreBreakdown": [
+    { "category": "Recurring Revenue Quality", "score": <0-15>, "max": 15, "assessment": "<specific assessment with numbers>" },
+    { "category": "Route Density and Territory Efficiency", "score": <0-15>, "max": 15, "assessment": "<specific assessment>" },
+    { "category": "Gross Margin / Unit Economics", "score": <0-15>, "max": 15, "assessment": "<specific assessment>" },
+    { "category": "Pricing Power and Plan Structure", "score": <0-10>, "max": 10, "assessment": "<specific assessment>" },
+    { "category": "Operating Efficiency", "score": <0-10>, "max": 10, "assessment": "<specific assessment>" },
+    { "category": "Billing and Cash Flow", "score": <0-10>, "max": 10, "assessment": "<specific assessment>" },
+    { "category": "Sales and Marketing Engine", "score": <0-10>, "max": 10, "assessment": "<specific assessment>" },
+    { "category": "Customer Retention and Service Quality", "score": <0-5>, "max": 5, "assessment": "<specific assessment>" },
+    { "category": "Scalability and Owner Dependency", "score": <0-5>, "max": 5, "assessment": "<specific assessment>" },
+    { "category": "Risk Profile", "score": <0-5>, "max": 5, "assessment": "<specific assessment>" }
+  ],
+  "whatIsWorking": [
+    { "name": "<name>", "observation": "<specific observation>", "evidenceLabel": "<Evidence-based|Inference|Insufficient data>", "whyItMatters": "<why it matters>", "recommendation": "<Keep|Strengthen|Monitor>" }
+  ],
+  "whatIsNotWorking": [
+    { "name": "<name>", "problem": "<specific problem>", "evidenceLabel": "<Evidence-based|Inference|Insufficient data>", "businessImpact": "<impact>", "likelyRootCause": "<root cause>", "recommendedCorrection": "<correction>" }
+  ],
+  "routeOpsAssessment": "<paragraph on route ops: service-area discipline, route density, travel time, stops per hour, missed-service risk, top bottleneck, top risk, highest-leverage fix>",
+  "financialAssessment": "<paragraph CFO-level: revenue predictability, avg revenue per customer, gross margin, cash flow, billing and collections, profit leakage, top financial bottleneck, top financial risk, highest-leverage fix>",
+  "pricingAssessment": "<paragraph on pricing: weekly/biweekly/monthly adequacy, which customer type is least profitable, which change should happen first>",
+  "marketingAssessment": "<paragraph on growth engine: lead sources, local SEO, referrals, neighborhood marketing, strongest channel, weakest issue, best next move>",
+  "ownerDecisions": [
+    { "decision": "<decision name>", "whyItMatters": "<why>", "recommendedAnswer": "<answer>", "riskIfIgnored": "<risk>" }
+  ],
+  "actionPlan": {
+    "next30": ["<specific action 1>", "<specific action 2>", "<specific action 3>"],
+    "days31to60": ["<specific action 1>", "<specific action 2>", "<specific action 3>"],
+    "days61to90": ["<specific action 1>", "<specific action 2>", "<specific action 3>"]
+  },
+  "stopStartContinue": {
+    "stop": ["<specific thing to stop>", "<specific thing to stop>", "<specific thing to stop>"],
+    "start": ["<specific thing to start>", "<specific thing to start>", "<specific thing to start>"],
+    "continue": ["<specific thing to continue>", "<specific thing to continue>", "<specific thing to continue>"]
+  },
+  "missingData": ["<data item and what decision it affects>"],
+  "finalSummary": "<5-8 sentence blunt final summary: Is this business healthy? What is the main thing holding it back? What should the owner fix first? What should the owner stop doing? What would improve the score fastest?>",
   "cfo": {
     "rating": "<Healthy|Caution|Critical>",
-    "findings": ["<specific finding with numbers>", ...]
+    "findings": ["<specific finding with numbers from the fact sheet>"]
   },
   "coo": {
     "rating": "<Healthy|Caution|Critical>",
-    "findings": ["<specific finding with numbers>", ...]
+    "findings": ["<specific finding with numbers from the fact sheet>"]
   },
   "recommendations": [
     { "priority": "<High|Medium|Low>", "title": "<short title>", "explanation": "<1-2 sentences with specific numbers>" }
@@ -1104,11 +1198,13 @@ Return exactly this JSON shape:
 }
 
 Rules:
-- healthScore: weighted score (revenue growth 20%, profit margin 25%, collection rate 15%, visit completion 20%, customer mix 20%)
-- cfo findings: focus on revenue, collection, MRR, margin
-- coo findings: focus on visit completion, customer mix, cancellations
-- recommendations: max 4, ranked by priority, cite exact numbers from the fact sheet
-- NEVER invent numbers not present in the fact sheet`;
+- healthScore must equal the sum of all scoreBreakdown scores
+- Apply all scoring cap rules from the prompt above before finalizing the score
+- cfo findings: focus on revenue, collection, MRR, margin — cite exact numbers from fact sheet
+- coo findings: focus on visit completion, customer mix, cancellations — cite exact numbers
+- recommendations: max 5, ranked by priority, cite exact numbers from the fact sheet
+- NEVER invent numbers not present in the fact sheet
+- whatIsWorking: 3-7 items; whatIsNotWorking: 3-7 items; ownerDecisions: exactly 5 items`;
 
         const OpenAI = (await import("openai")).default;
         const ai = new OpenAI({
@@ -1119,8 +1215,8 @@ Rules:
         const completion = await ai.chat.completions.create({
           model: "gpt-4o-mini",
           response_format: { type: "json_object" },
-          temperature: 0.2,
-          max_tokens: 1500,
+          temperature: 0,
+          max_tokens: 4000,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: JSON.stringify(factSheet, null, 2) },
@@ -1150,7 +1246,14 @@ Rules:
           if (priorMonthAssessment) {
             scoreDelta = healthScore - priorMonthAssessment.score;
           }
-          await storage.saveBusinessAssessment({ companyId, score: healthScore, verdict });
+          const savedAssessment = await storage.saveBusinessAssessment({
+            companyId,
+            score: healthScore,
+            verdict,
+            factSheetHash: currentHash,
+            fullResult: typedParsed,
+          });
+          return res.json({ ...typedParsed, scoreDelta, cachedAt: savedAssessment.createdAt });
         }
 
         res.json({ ...(parsed as Record<string, unknown>), scoreDelta });

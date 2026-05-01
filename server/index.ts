@@ -891,6 +891,11 @@ async function migrateServicePlansToAgreementsAndJobs() {
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_ba_created ON business_assessments(company_id, created_at)`
     );
+    await pool.query(`
+      ALTER TABLE business_assessments
+        ADD COLUMN IF NOT EXISTS fact_sheet_hash VARCHAR,
+        ADD COLUMN IF NOT EXISTS full_result JSONB
+    `);
     console.log("[Migration] business_assessments table verified");
   } catch (err) {
     console.error("[Migration] Failed to create business_assessments table:", err);

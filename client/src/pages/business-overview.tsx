@@ -20,6 +20,14 @@ import {
   ArrowUp,
   ArrowDown,
   Printer,
+  RefreshCw,
+  Clock,
+  ThumbsUp,
+  ThumbsDown,
+  CalendarDays,
+  StopCircle,
+  Play,
+  Repeat2,
 } from "lucide-react";
 import {
   AreaChart,
@@ -56,13 +64,77 @@ type BusinessOverviewData = {
   weeklyCompletion: { week: string; completed: number; total: number; completionRate: number }[];
 };
 
+type ScoreBreakdownItem = {
+  category: string;
+  score: number;
+  max: number;
+  assessment: string;
+};
+
+type WhatIsWorkingItem = {
+  name: string;
+  observation: string;
+  evidenceLabel: string;
+  whyItMatters: string;
+  recommendation: string;
+};
+
+type WhatIsNotWorkingItem = {
+  name: string;
+  problem: string;
+  evidenceLabel: string;
+  businessImpact: string;
+  likelyRootCause: string;
+  recommendedCorrection: string;
+};
+
+type OwnerDecisionItem = {
+  decision: string;
+  whyItMatters: string;
+  recommendedAnswer: string;
+  riskIfIgnored: string;
+};
+
 type Assessment = {
   healthScore: number;
   verdict: string;
+  businessStage?: string;
+  primaryServiceModel?: string;
+  rating?: string;
+  confidenceLevel?: string;
+  executiveSummary?: {
+    topThingsWorking: string[];
+    topProblems: string[];
+    topActionsFirst: string[];
+    biggestRisk: string;
+    fastestWayToImprove: string;
+  };
+  scoreBreakdown?: ScoreBreakdownItem[];
+  whatIsWorking?: WhatIsWorkingItem[];
+  whatIsNotWorking?: WhatIsNotWorkingItem[];
+  routeOpsAssessment?: string;
+  financialAssessment?: string;
+  pricingAssessment?: string;
+  marketingAssessment?: string;
+  ownerDecisions?: OwnerDecisionItem[];
+  actionPlan?: {
+    next30: string[];
+    days31to60: string[];
+    days61to90: string[];
+  };
+  stopStartContinue?: {
+    stop: string[];
+    start: string[];
+    continue: string[];
+  };
+  missingData?: string[];
+  finalSummary?: string;
   cfo: { rating: string; findings: string[] };
   coo: { rating: string; findings: string[] };
   recommendations: { priority: string; title: string; explanation: string }[];
   scoreDelta: number | null;
+  cachedAt?: string;
+  fromCache?: boolean;
 };
 
 type AssessmentHistoryEntry = {
@@ -202,6 +274,7 @@ export default function BusinessOverview() {
   };
   const [assessmentKey, setAssessmentKey] = useState(0);
   const [hasRequestedAssessment, setHasRequestedAssessment] = useState(false);
+  const [forceRefresh, setForceRefresh] = useState(false);
 
   const { data, isLoading } = useQuery<BusinessOverviewData>({
     queryKey: ["/api/business-overview"],
@@ -214,7 +287,10 @@ export default function BusinessOverview() {
   } = useQuery<Assessment>({
     queryKey: ["/api/business-overview/assessment", assessmentKey],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/business-overview/assessment");
+      const url = forceRefresh
+        ? "/api/business-overview/assessment?force=true"
+        : "/api/business-overview/assessment";
+      const res = await apiRequest("GET", url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.message || "Failed to load assessment");
@@ -531,34 +607,51 @@ export default function BusinessOverview() {
                 CFO + COO dual-perspective health check powered by AI
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (!hasRequestedAssessment) {
-                  setHasRequestedAssessment(true);
-                } else {
-                  setAssessmentKey((k) => k + 1);
-                }
-              }}
-              disabled={isAssessmentLoading}
-              data-testid="button-run-assessment"
-              className="print:hidden"
-            >
-              {isAssessmentLoading ? (
-                <>
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Analyzing...
-                </>
-              ) : hasRequestedAssessment && assessment ? (
-                <>
-                  <Sparkles className="mr-1 h-4 w-4" /> Refresh Assessment
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-1 h-4 w-4" /> Run AI Assessment
-                </>
+            <div className="flex items-center gap-2 print:hidden">
+              {hasRequestedAssessment && assessment && !isAssessmentLoading && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setForceRefresh(true);
+                    setAssessmentKey((k) => k + 1);
+                  }}
+                  disabled={isAssessmentLoading}
+                  data-testid="button-force-rerun-assessment"
+                  title="Force a fresh assessment, bypassing the cache"
+                >
+                  <RefreshCw className="mr-1 h-4 w-4" /> Re-run
+                </Button>
               )}
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setForceRefresh(false);
+                  if (!hasRequestedAssessment) {
+                    setHasRequestedAssessment(true);
+                  } else {
+                    setAssessmentKey((k) => k + 1);
+                  }
+                }}
+                disabled={isAssessmentLoading}
+                data-testid="button-run-assessment"
+              >
+                {isAssessmentLoading ? (
+                  <>
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" /> Analyzing...
+                  </>
+                ) : hasRequestedAssessment && assessment ? (
+                  <>
+                    <Sparkles className="mr-1 h-4 w-4" /> Run Assessment
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-1 h-4 w-4" /> Run AI Assessment
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -598,7 +691,33 @@ export default function BusinessOverview() {
           )}
 
           {assessment && !isAssessmentLoading && (
-            <div className="space-y-5" data-testid="assessment-results">
+            <div className="space-y-6" data-testid="assessment-results">
+              {/* Generated / Cached label */}
+              {assessment.cachedAt && (
+                <div
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  data-testid="text-cached-label"
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  {assessment.fromCache ? "Cached result" : "Generated"} —{" "}
+                  {new Date(assessment.cachedAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}{" "}
+                  at{" "}
+                  {new Date(assessment.cachedAt).toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                  {assessment.fromCache && (
+                    <>
+                      . Use <strong className="ml-1">Re-run</strong> to generate a fresh assessment.
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* Health Score + Verdict */}
               <div className="flex flex-wrap items-center gap-6">
                 <div className="flex flex-col items-center gap-2">
@@ -625,8 +744,40 @@ export default function BusinessOverview() {
                       {assessment.scoreDelta} pts from last month
                     </div>
                   )}
+                  {assessment.rating && (
+                    <Badge
+                      variant="outline"
+                      className={ratingColor(
+                        assessment.rating === "Excellent" || assessment.rating === "Strong"
+                          ? "Healthy"
+                          : assessment.rating === "Good but uneven" ||
+                              assessment.rating === "Viable but fragile"
+                            ? "Caution"
+                            : "Critical"
+                      )}
+                    >
+                      {assessment.rating}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0 space-y-3">
+                  {assessment.businessStage && (
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span>
+                        <strong>Stage:</strong> {assessment.businessStage}
+                      </span>
+                      {assessment.primaryServiceModel && (
+                        <span>
+                          <strong>Model:</strong> {assessment.primaryServiceModel}
+                        </span>
+                      )}
+                      {assessment.confidenceLevel && (
+                        <span>
+                          <strong>Confidence:</strong> {assessment.confidenceLevel}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <p
                     className="text-sm text-muted-foreground leading-relaxed"
                     data-testid="text-verdict"
@@ -677,50 +828,274 @@ export default function BusinessOverview() {
                 </div>
               </div>
 
+              {/* Score Breakdown Table */}
+              {assessment.scoreBreakdown && assessment.scoreBreakdown.length > 0 && (
+                <div data-testid="panel-score-breakdown">
+                  <h3 className="text-sm font-semibold mb-2">Score Breakdown</h3>
+                  <div className="rounded-lg border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-muted/50">
+                          <th className="text-left px-3 py-2 font-medium">Category</th>
+                          <th className="text-right px-3 py-2 font-medium w-16">Score</th>
+                          <th className="text-left px-3 py-2 font-medium hidden md:table-cell">
+                            Assessment
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assessment.scoreBreakdown.map((item, i) => (
+                          <tr key={i} className="border-t" data-testid={`score-row-${i}`}>
+                            <td className="px-3 py-2 font-medium text-foreground">
+                              {item.category}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <span
+                                className={`font-bold ${item.score / item.max >= 0.7 ? "text-green-600 dark:text-green-400" : item.score / item.max >= 0.5 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400"}`}
+                              >
+                                {item.score}
+                              </span>
+                              <span className="text-muted-foreground">/{item.max}</span>
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground hidden md:table-cell">
+                              {item.assessment}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* CFO + COO Panels */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-lg border p-4 space-y-2" data-testid="panel-cfo">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">CFO Perspective</h3>
-                    <Badge variant="outline" className={ratingColor(assessment.cfo.rating)}>
-                      {assessment.cfo.rating}
-                    </Badge>
+                {assessment.cfo && (
+                  <div className="rounded-lg border p-4 space-y-2" data-testid="panel-cfo">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold">CFO Perspective</h3>
+                      <Badge variant="outline" className={ratingColor(assessment.cfo.rating)}>
+                        {assessment.cfo.rating}
+                      </Badge>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {assessment.cfo.findings.map((f, i) => (
+                        <li
+                          key={i}
+                          className="flex items-start gap-2 text-xs text-muted-foreground"
+                          data-testid={`cfo-finding-${i}`}
+                        >
+                          <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="space-y-1.5">
-                    {assessment.cfo.findings.map((f, i) => (
-                      <li
-                        key={i}
-                        className="flex items-start gap-2 text-xs text-muted-foreground"
-                        data-testid={`cfo-finding-${i}`}
-                      >
-                        <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                )}
 
-                <div className="rounded-lg border p-4 space-y-2" data-testid="panel-coo">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">COO Perspective</h3>
-                    <Badge variant="outline" className={ratingColor(assessment.coo.rating)}>
-                      {assessment.coo.rating}
-                    </Badge>
+                {assessment.coo && (
+                  <div className="rounded-lg border p-4 space-y-2" data-testid="panel-coo">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold">COO Perspective</h3>
+                      <Badge variant="outline" className={ratingColor(assessment.coo.rating)}>
+                        {assessment.coo.rating}
+                      </Badge>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {assessment.coo.findings.map((f, i) => (
+                        <li
+                          key={i}
+                          className="flex items-start gap-2 text-xs text-muted-foreground"
+                          data-testid={`coo-finding-${i}`}
+                        >
+                          <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="space-y-1.5">
-                    {assessment.coo.findings.map((f, i) => (
-                      <li
-                        key={i}
-                        className="flex items-start gap-2 text-xs text-muted-foreground"
-                        data-testid={`coo-finding-${i}`}
-                      >
-                        <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                )}
               </div>
+
+              {/* What Is Working / What Is Not Working */}
+              {assessment.whatIsWorking?.length || assessment.whatIsNotWorking?.length ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {assessment.whatIsWorking && assessment.whatIsWorking.length > 0 && (
+                    <div className="space-y-2" data-testid="panel-what-working">
+                      <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                        <ThumbsUp className="h-4 w-4 text-green-600 dark:text-green-400" />
+                        What Is Working
+                      </h3>
+                      <div className="space-y-2">
+                        {assessment.whatIsWorking.map((item, i) => (
+                          <div
+                            key={i}
+                            className="rounded-lg border p-3 space-y-1"
+                            data-testid={`working-item-${i}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-semibold">{item.name}</p>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 flex-shrink-0"
+                              >
+                                {item.evidenceLabel}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{item.observation}</p>
+                            {item.whyItMatters && (
+                              <p className="text-xs text-muted-foreground">
+                                <strong>Why:</strong> {item.whyItMatters}
+                              </p>
+                            )}
+                            <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                              → {item.recommendation}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {assessment.whatIsNotWorking && assessment.whatIsNotWorking.length > 0 && (
+                    <div className="space-y-2" data-testid="panel-what-not-working">
+                      <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                        <ThumbsDown className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        What Is Not Working
+                      </h3>
+                      <div className="space-y-2">
+                        {assessment.whatIsNotWorking.map((item, i) => (
+                          <div
+                            key={i}
+                            className="rounded-lg border p-3 space-y-1"
+                            data-testid={`not-working-item-${i}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-semibold">{item.name}</p>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 flex-shrink-0"
+                              >
+                                {item.evidenceLabel}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{item.problem}</p>
+                            {item.businessImpact && (
+                              <p className="text-xs text-muted-foreground">
+                                <strong>Impact:</strong> {item.businessImpact}
+                              </p>
+                            )}
+                            <p className="text-xs text-primary font-medium">
+                              → {item.recommendedCorrection}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* 30/60/90 Action Plan */}
+              {assessment.actionPlan && (
+                <div data-testid="panel-action-plan">
+                  <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                    <CalendarDays className="h-4 w-4 text-primary" />
+                    30 / 60 / 90 Day Action Plan
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {[
+                      {
+                        label: "Next 30 Days",
+                        items: assessment.actionPlan.next30,
+                        color: "border-green-200 dark:border-green-800",
+                      },
+                      {
+                        label: "Days 31–60",
+                        items: assessment.actionPlan.days31to60,
+                        color: "border-yellow-200 dark:border-yellow-800",
+                      },
+                      {
+                        label: "Days 61–90",
+                        items: assessment.actionPlan.days61to90,
+                        color: "border-blue-200 dark:border-blue-800",
+                      },
+                    ].map((phase, pi) => (
+                      <div
+                        key={pi}
+                        className={`rounded-lg border-2 ${phase.color} p-3 space-y-2`}
+                        data-testid={`action-plan-phase-${pi}`}
+                      >
+                        <p className="text-xs font-semibold">{phase.label}</p>
+                        <ul className="space-y-1.5">
+                          {phase.items?.map((item, ii) => (
+                            <li
+                              key={ii}
+                              className="flex items-start gap-1.5 text-xs text-muted-foreground"
+                            >
+                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Stop / Start / Continue */}
+              {assessment.stopStartContinue && (
+                <div data-testid="panel-stop-start-continue">
+                  <h3 className="text-sm font-semibold mb-3">Stop / Start / Continue</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {[
+                      {
+                        label: "Stop",
+                        items: assessment.stopStartContinue.stop,
+                        icon: StopCircle,
+                        color: "text-red-600 dark:text-red-400",
+                      },
+                      {
+                        label: "Start",
+                        items: assessment.stopStartContinue.start,
+                        icon: Play,
+                        color: "text-green-600 dark:text-green-400",
+                      },
+                      {
+                        label: "Continue",
+                        items: assessment.stopStartContinue.continue,
+                        icon: Repeat2,
+                        color: "text-blue-600 dark:text-blue-400",
+                      },
+                    ].map((section, si) => (
+                      <div
+                        key={si}
+                        className="rounded-lg border p-3 space-y-2"
+                        data-testid={`ssc-${section.label.toLowerCase()}`}
+                      >
+                        <p
+                          className={`text-xs font-semibold flex items-center gap-1.5 ${section.color}`}
+                        >
+                          <section.icon className="h-3.5 w-3.5" />
+                          {section.label}
+                        </p>
+                        <ul className="space-y-1.5">
+                          {section.items?.map((item, ii) => (
+                            <li
+                              key={ii}
+                              className="text-xs text-muted-foreground flex items-start gap-1.5"
+                            >
+                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-muted-foreground/40 flex-shrink-0" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Recommendations */}
               {assessment.recommendations?.length > 0 && (
@@ -746,6 +1121,42 @@ export default function BusinessOverview() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Final Owner Summary */}
+              {assessment.finalSummary && (
+                <div
+                  className="rounded-lg bg-muted/50 border p-4"
+                  data-testid="panel-final-summary"
+                >
+                  <h3 className="text-sm font-semibold mb-2">Final Owner Summary</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {assessment.finalSummary}
+                  </p>
+                </div>
+              )}
+
+              {/* Missing Data */}
+              {assessment.missingData && assessment.missingData.length > 0 && (
+                <div
+                  className="rounded-lg border border-dashed p-3"
+                  data-testid="panel-missing-data"
+                >
+                  <h3 className="text-xs font-semibold text-muted-foreground mb-1.5">
+                    Data That Would Improve This Assessment
+                  </h3>
+                  <ul className="space-y-1">
+                    {assessment.missingData.map((item, i) => (
+                      <li
+                        key={i}
+                        className="text-xs text-muted-foreground flex items-start gap-1.5"
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-muted-foreground/40 flex-shrink-0" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>

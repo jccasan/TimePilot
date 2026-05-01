@@ -2850,6 +2850,8 @@ export const businessAssessments = pgTable(
       .references(() => companies.id, { onDelete: "cascade" }),
     score: integer("score").notNull(),
     verdict: text("verdict").notNull(),
+    factSheetHash: varchar("fact_sheet_hash"),
+    fullResult: jsonb("full_result").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
