@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { retrievePaymentIntentFees } from "./stripe";
 import { db } from "../db";
 import { companies, contacts, invoices, invoiceLineItems, qboSyncLogs } from "@shared/schema";
-import { eq, and, desc, isNotNull } from "drizzle-orm";
+import { eq, and, desc, isNotNull, count, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
 const refreshLocks = new Map<string, Promise<{ access_token: string; refresh_token: string }>>();
@@ -420,6 +420,12 @@ export async function syncInvoiceToQbo(
     .from(invoiceLineItems)
     .where(eq(invoiceLineItems.invoiceId, invoiceId));
 
+  if (lineItems.length === 0 && parseFloat(invoice.tax || "0") === 0) {
+    throw new Error(
+      `Invoice ${invoice.invoiceNumber || invoiceId} has no line items and cannot be synced to QuickBooks — add at least one service before syncing`
+    );
+  }
+
   let serviceItemRef = { value: "1", name: "Services" };
   try {
     const itemQuery = await qboRequest(
@@ -573,6 +579,13 @@ async function getStripeFeeForPayment(
     return await retrievePaymentIntentFees(stripePaymentIntentId, stripeAccount);
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
+    if (
+      errMsg.includes("No such payment_intent") ||
+      errMsg.includes("no such payment_intent") ||
+      errMsg.includes("resource_missing")
+    ) {
+      return null;
+    }
     console.warn(`[QBO] Failed to retrieve Stripe fee for PI ${stripePaymentIntentId}: ${errMsg}`);
     return null;
   }
@@ -829,6 +842,8 @@ export async function getQboSyncStatus(companyId: string): Promise<{
   lastSync: string | null;
   totalSynced: number;
   totalErrors: number;
+  totalSyncedAllTime: number;
+  totalErrorsAllTime: number;
   feeAccountRef: string | null;
   recentLogs: any[];
 }> {
@@ -846,6 +861,50 @@ export async function getQboSyncStatus(companyId: string): Promise<{
   const totalErrors = logs.filter((l) => l.status === "error").length;
   const lastSyncedLog = logs.find((l) => l.status === "synced");
 
+  const [errorCountResult] = await db
+    .select({ cnt: count() })
+    .from(qboSyncLogs)
+    .where(and(eq(qboSyncLogs.companyId, companyId), eq(qboSyncLogs.status, "error")));
+  const [syncedCountResult] = await db
+    .select({ cnt: count() })
+    .from(qboSyncLogs)
+    .where(and(eq(qboSyncLogs.companyId, companyId), eq(qboSyncLogs.status, "synced")));
+
+  const totalErrorsAllTime = Number(errorCountResult?.cnt ?? 0);
+  const totalSyncedAllTime = Number(syncedCountResult?.cnt ?? 0);
+
+  const recentLogsSlice = logs.slice(0, 50);
+
+  const invoiceLogs = recentLogsSlice.filter((l) => l.entityType === "invoice");
+  const contactLogs = recentLogsSlice.filter(
+    (l) => l.entityType === "contact" || l.entityType === "customer"
+  );
+
+  const invoiceIds = [...new Set(invoiceLogs.map((l) => l.entityId))];
+  const contactIds = [...new Set(contactLogs.map((l) => l.entityId))];
+
+  const invoiceMap: Record<string, string> = {};
+  if (invoiceIds.length > 0) {
+    const invRows = await db
+      .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber })
+      .from(invoices)
+      .where(inArray(invoices.id, invoiceIds));
+    for (const row of invRows) {
+      if (row.invoiceNumber) invoiceMap[row.id] = row.invoiceNumber;
+    }
+  }
+
+  const contactMap: Record<string, string> = {};
+  if (contactIds.length > 0) {
+    const ctRows = await db
+      .select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName })
+      .from(contacts)
+      .where(inArray(contacts.id, contactIds));
+    for (const row of ctRows) {
+      contactMap[row.id] = `${row.firstName} ${row.lastName}`.trim();
+    }
+  }
+
   return {
     connected,
     realmId: company?.qboRealmId || null,
@@ -853,17 +912,28 @@ export async function getQboSyncStatus(companyId: string): Promise<{
     lastSync: lastSyncedLog?.syncedAt?.toISOString() || null,
     totalSynced,
     totalErrors,
+    totalSyncedAllTime,
+    totalErrorsAllTime,
     feeAccountRef: company?.qboFeeAccountRef || null,
-    recentLogs: logs.slice(0, 20).map((l) => ({
-      id: l.id,
-      entityType: l.entityType,
-      entityId: l.entityId,
-      action: l.action,
-      status: l.status,
-      errorMessage: l.errorMessage,
-      syncedAt: l.syncedAt?.toISOString() || null,
-      createdAt: l.createdAt.toISOString(),
-    })),
+    recentLogs: recentLogsSlice.map((l) => {
+      let entityLabel: string | null = null;
+      if (l.entityType === "invoice") {
+        entityLabel = invoiceMap[l.entityId] || null;
+      } else if (l.entityType === "contact" || l.entityType === "customer") {
+        entityLabel = contactMap[l.entityId] || null;
+      }
+      return {
+        id: l.id,
+        entityType: l.entityType,
+        entityId: l.entityId,
+        entityLabel,
+        action: l.action,
+        status: l.status,
+        errorMessage: l.errorMessage,
+        syncedAt: l.syncedAt?.toISOString() || null,
+        createdAt: l.createdAt.toISOString(),
+      };
+    }),
   };
 }
 
@@ -1122,7 +1192,22 @@ export async function runCdcPoll(): Promise<void> {
 
     for (const company of connectedCompanies) {
       try {
-        await refreshQboTokens(company.id);
+        try {
+          await refreshQboTokens(company.id);
+        } catch (tokenErr: any) {
+          const isAuthFailure =
+            tokenErr.message?.includes("expired") ||
+            tokenErr.message?.includes("reconnect") ||
+            tokenErr.message?.includes("unauthorized") ||
+            tokenErr.message?.includes("401");
+          if (isAuthFailure) throw tokenErr;
+          console.warn(
+            `[QBO CDC] Transient token refresh failure for company ${company.id}, retrying in 500ms:`,
+            tokenErr.message
+          );
+          await new Promise((r) => setTimeout(r, 500));
+          await refreshQboTokens(company.id);
+        }
 
         const cdcRes = await qboRequest(
           company.id,

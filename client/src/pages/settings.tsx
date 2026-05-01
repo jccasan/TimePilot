@@ -826,11 +826,14 @@ function QuickBooksSection() {
     lastSync: string | null;
     totalSynced: number;
     totalErrors: number;
+    totalSyncedAllTime: number;
+    totalErrorsAllTime: number;
     feeAccountRef: string | null;
     recentLogs: {
       id: string;
       entityType: string;
       entityId: string;
+      entityLabel: string | null;
       action: string;
       status: string;
       errorMessage: string | null;
@@ -955,6 +958,8 @@ function QuickBooksSection() {
   });
 
   const [showLogs, setShowLogs] = useState(false);
+  const [logsFilter, setLogsFilter] = useState<"all" | "errors">("all");
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   return (
     <Card data-testid="card-quickbooks">
@@ -1041,7 +1046,7 @@ function QuickBooksSection() {
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="bg-muted/50 rounded-lg p-3 text-center">
                     <p className="text-2xl font-bold" data-testid="text-qbo-total-synced">
-                      {qboStatus.totalSynced}
+                      {qboStatus.totalSyncedAllTime ?? qboStatus.totalSynced}
                     </p>
                     <p className="text-xs text-muted-foreground">Records Synced</p>
                   </div>
@@ -1050,7 +1055,7 @@ function QuickBooksSection() {
                       className="text-2xl font-bold text-destructive"
                       data-testid="text-qbo-total-errors"
                     >
-                      {qboStatus.totalErrors}
+                      {qboStatus.totalErrorsAllTime ?? qboStatus.totalErrors}
                     </p>
                     <p className="text-xs text-muted-foreground">Errors</p>
                   </div>
@@ -1132,7 +1137,15 @@ function QuickBooksSection() {
                 </div>
 
                 {qboStatus.recentLogs.length > 0 && (
-                  <Collapsible open={showLogs} onOpenChange={setShowLogs}>
+                  <Collapsible
+                    open={showLogs}
+                    onOpenChange={(open) => {
+                      setShowLogs(open);
+                      if (open && (qboStatus.totalErrorsAllTime ?? qboStatus.totalErrors) > 0) {
+                        setLogsFilter("errors");
+                      }
+                    }}
+                  >
                     <CollapsibleTrigger asChild>
                       <Button
                         variant="ghost"
@@ -1147,59 +1160,110 @@ function QuickBooksSection() {
                       </Button>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <div className="mt-2 space-y-1 max-h-64 overflow-y-auto">
-                        {qboStatus.recentLogs.map((log) => (
-                          <div
-                            key={log.id}
-                            className="flex items-center justify-between gap-2 text-sm p-2 rounded border"
-                            data-testid={`row-qbo-log-${log.id}`}
+                      <div className="mt-2 space-y-2">
+                        <div className="flex gap-1 border-b pb-2">
+                          <button
+                            className={`text-xs px-2 py-1 rounded-sm font-medium transition-colors ${logsFilter === "all" ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                            onClick={() => setLogsFilter("all")}
+                            data-testid="tab-qbo-logs-all"
                           >
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              {log.status === "synced" ? (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                              ) : log.status === "error" ? (
-                                <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
-                              ) : (
-                                <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin shrink-0" />
-                              )}
-                              <span className="capitalize">{log.entityType}</span>
-                              <Badge variant="secondary" className="text-xs capitalize">
-                                {log.action}
-                              </Badge>
-                              {log.errorMessage && (
-                                <span
-                                  className="text-xs text-destructive truncate"
-                                  title={log.errorMessage}
-                                >
-                                  {log.errorMessage.substring(0, 60)}
-                                  {log.errorMessage.length > 60 ? "..." : ""}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-xs text-muted-foreground">
-                                {new Date(log.createdAt).toLocaleString(undefined, {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                })}
+                            All Activity
+                          </button>
+                          <button
+                            className={`text-xs px-2 py-1 rounded-sm font-medium flex items-center gap-1 transition-colors ${logsFilter === "errors" ? "bg-destructive/10 text-destructive" : "text-muted-foreground hover:text-foreground"}`}
+                            onClick={() => setLogsFilter("errors")}
+                            data-testid="tab-qbo-logs-errors"
+                          >
+                            Errors
+                            {qboStatus.recentLogs.filter((l) => l.status === "error").length >
+                              0 && (
+                              <span className="bg-destructive text-destructive-foreground text-[10px] rounded-full px-1.5 py-0.5 leading-none">
+                                {qboStatus.recentLogs.filter((l) => l.status === "error").length}
                               </span>
-                              {log.status === "error" && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2"
-                                  onClick={() => retryMutation.mutate(log.id)}
-                                  disabled={retryMutation.isPending}
-                                  data-testid={`button-retry-qbo-${log.id}`}
-                                >
-                                  <RotateCcw className="h-3 w-3" />
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                            )}
+                          </button>
+                        </div>
+                        <div className="space-y-1 max-h-64 overflow-y-auto">
+                          {qboStatus.recentLogs
+                            .filter((log) => logsFilter === "all" || log.status === "error")
+                            .map((log) => (
+                              <div
+                                key={log.id}
+                                className="text-sm p-2 rounded border"
+                                data-testid={`row-qbo-log-${log.id}`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    {log.status === "synced" ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                                    ) : log.status === "error" ? (
+                                      <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+                                    ) : (
+                                      <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin shrink-0" />
+                                    )}
+                                    <span className="font-medium">
+                                      {log.entityLabel || (
+                                        <span className="capitalize text-muted-foreground">
+                                          {log.entityType}
+                                        </span>
+                                      )}
+                                    </span>
+                                    <Badge variant="secondary" className="text-xs capitalize">
+                                      {log.action}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-xs text-muted-foreground">
+                                      {new Date(log.createdAt).toLocaleString(undefined, {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "numeric",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
+                                    {log.errorMessage && (
+                                      <button
+                                        className="text-xs text-muted-foreground hover:text-foreground"
+                                        onClick={() =>
+                                          setExpandedLogId(expandedLogId === log.id ? null : log.id)
+                                        }
+                                        data-testid={`button-expand-log-${log.id}`}
+                                      >
+                                        {expandedLogId === log.id ? "Hide" : "Details"}
+                                      </button>
+                                    )}
+                                    {log.status === "error" && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-2"
+                                        onClick={() => retryMutation.mutate(log.id)}
+                                        disabled={retryMutation.isPending}
+                                        data-testid={`button-retry-qbo-${log.id}`}
+                                      >
+                                        <RotateCcw className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                                {log.errorMessage && expandedLogId === log.id && (
+                                  <div
+                                    className="mt-2 text-xs text-destructive bg-destructive/5 rounded p-2 break-words"
+                                    data-testid={`text-log-error-${log.id}`}
+                                  >
+                                    {log.errorMessage}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          {qboStatus.recentLogs.filter(
+                            (log) => logsFilter === "all" || log.status === "error"
+                          ).length === 0 && (
+                            <p className="text-xs text-muted-foreground text-center py-4">
+                              No errors to show.
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
