@@ -632,7 +632,9 @@ export async function reportSmsUsage(
   if (!isStripeConfigured() || !stripeSubscriptionId) return;
   const eventName = await getSmsEventName();
   if (!eventName) {
-    console.warn("[Stripe SMS Meter] STRIPE_SMS_METER_ID not configured or unresolvable — skipping SMS usage report");
+    console.warn(
+      "[Stripe SMS Meter] STRIPE_SMS_METER_ID not configured or unresolvable — skipping SMS usage report"
+    );
     return;
   }
   try {
@@ -641,7 +643,9 @@ export async function reportSmsUsage(
     const customerId =
       typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
     await createUsageRecord(customerId, eventName, segments);
-    console.log(`[Stripe SMS Meter] Reported ${segments} segment(s) under event "${eventName}" for customer ${customerId}`);
+    console.log(
+      `[Stripe SMS Meter] Reported ${segments} segment(s) under event "${eventName}" for customer ${customerId}`
+    );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[Stripe SMS Meter] Failed to report usage: ${msg}`);
