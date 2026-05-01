@@ -1284,6 +1284,23 @@ Rules:
   );
 
   app.get(
+    "/api/business-overview/assessment-history/:id",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const assessment = await storage.getBusinessAssessmentById(p(req.params.id), companyId);
+        if (!assessment) {
+          return res.status(404).json({ message: "Assessment not found" });
+        }
+        res.json(assessment);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.get(
     "/api/profitability/customer/:contactId",
     isAuthenticated,
     async (req: Request, res: Response) => {

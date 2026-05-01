@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -148,6 +149,7 @@ type AssessmentHistoryEntry = {
   score: number;
   verdict: string;
   createdAt: string;
+  fullResult?: Assessment | null;
 };
 
 function KpiCard({
@@ -268,6 +270,7 @@ function HealthScoreRing({ score }: { score: number }) {
 
 export default function BusinessOverview() {
   const { formatMoney } = useCurrency();
+  const { toast } = useToast();
   const fmtAxis = (n: number): string => {
     if (n >= 1000)
       return (
@@ -374,6 +377,131 @@ export default function BusinessOverview() {
     document.body.classList.add("print-assessment-only");
     window.print();
     document.body.classList.remove("print-assessment-only");
+  }
+
+  async function downloadHistoricalPDF(entry: AssessmentHistoryEntry) {
+    let resolved = entry;
+    if (!entry.fullResult) {
+      try {
+        const res = await apiRequest(
+          "GET",
+          `/api/business-overview/assessment-history/${entry.id}`
+        );
+        if (res.ok) {
+          resolved = await res.json();
+        }
+      } catch {}
+    }
+    const a = resolved.fullResult as Assessment | null | undefined;
+    if (!a) {
+      toast({
+        title: "Report not available",
+        description: "The full report was not archived for this assessment.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const dateStr = new Date(entry.createdAt).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const scoreColor = entry.score >= 70 ? "#16a34a" : entry.score >= 50 ? "#ca8a04" : "#dc2626";
+
+    const esc = (s: string | number | null | undefined): string =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const section = (title: string, content: string) =>
+      `<div class="section"><h2>${esc(title)}</h2>${content}</div>`;
+
+    const list = (items: string[]) => `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`;
+
+    const breakdownRows =
+      a?.scoreBreakdown
+        ?.map(
+          (b) =>
+            `<tr><td>${esc(b.category)}</td><td>${esc(b.score)}/${esc(b.max)}</td><td>${esc(b.assessment)}</td></tr>`
+        )
+        .join("") ?? "";
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>AI Assessment Report — ${esc(dateStr)}</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 24px; }
+    h1 { font-size: 18px; margin-bottom: 4px; }
+    .meta { color: #666; font-size: 11px; margin-bottom: 16px; }
+    .score-badge { display: inline-block; font-size: 28px; font-weight: bold; color: ${scoreColor}; border: 2px solid ${scoreColor}; border-radius: 50%; width: 56px; height: 56px; line-height: 56px; text-align: center; margin-right: 12px; vertical-align: middle; }
+    .verdict { font-size: 13px; color: #444; margin: 8px 0 16px; }
+    .section { margin-bottom: 16px; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+    h2 { font-size: 13px; font-weight: bold; margin-bottom: 6px; color: #1e3a5f; }
+    ul { margin: 0; padding-left: 16px; }
+    li { margin-bottom: 3px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { text-align: left; border-bottom: 1px solid #ccc; padding: 4px 6px; background: #f3f4f6; }
+    td { padding: 4px 6px; border-bottom: 1px solid #f0f0f0; }
+    @media print { body { margin: 0; } }
+  </style>
+</head>
+<body>
+  <h1><span class="score-badge">${esc(entry.score)}</span> AI Business Assessment Report</h1>
+  <div class="meta">Generated: ${esc(dateStr)} &nbsp;|&nbsp; ScooPilot</div>
+  <p class="verdict">${esc(entry.verdict)}</p>
+
+  ${
+    a?.executiveSummary
+      ? section(
+          "Executive Summary",
+          `
+    ${a.executiveSummary.topThingsWorking?.length ? `<strong>Top Things Working:</strong>${list(a.executiveSummary.topThingsWorking)}` : ""}
+    ${a.executiveSummary.topProblems?.length ? `<strong>Top Problems:</strong>${list(a.executiveSummary.topProblems)}` : ""}
+    ${a.executiveSummary.topActionsFirst?.length ? `<strong>Top Actions First:</strong>${list(a.executiveSummary.topActionsFirst)}` : ""}
+    ${a.executiveSummary.biggestRisk ? `<p><strong>Biggest Risk:</strong> ${esc(a.executiveSummary.biggestRisk)}</p>` : ""}
+    ${a.executiveSummary.fastestWayToImprove ? `<p><strong>Fastest Way to Improve:</strong> ${esc(a.executiveSummary.fastestWayToImprove)}</p>` : ""}
+  `
+        )
+      : ""
+  }
+
+  ${breakdownRows ? section("Score Breakdown", `<table><thead><tr><th>Category</th><th>Score</th><th>Assessment</th></tr></thead><tbody>${breakdownRows}</tbody></table>`) : ""}
+
+  ${a?.whatIsWorking?.length ? section("What Is Working", a.whatIsWorking.map((w) => `<p><strong>${esc(w.name)}:</strong> ${esc(w.observation)} ${w.whyItMatters ? `<em>(${esc(w.whyItMatters)})</em>` : ""}</p>`).join("")) : ""}
+
+  ${a?.whatIsNotWorking?.length ? section("What Is Not Working", a.whatIsNotWorking.map((w) => `<p><strong>${esc(w.name)}:</strong> ${esc(w.problem)} ${w.businessImpact ? `<em>Impact: ${esc(w.businessImpact)}</em>` : ""}</p>`).join("")) : ""}
+
+  ${
+    a?.actionPlan
+      ? section(
+          "Action Plan",
+          `
+    ${a.actionPlan.next30?.length ? `<strong>Next 30 Days:</strong>${list(a.actionPlan.next30)}` : ""}
+    ${a.actionPlan.days31to60?.length ? `<strong>31–60 Days:</strong>${list(a.actionPlan.days31to60)}` : ""}
+    ${a.actionPlan.days61to90?.length ? `<strong>61–90 Days:</strong>${list(a.actionPlan.days61to90)}` : ""}
+  `
+        )
+      : ""
+  }
+
+  ${a?.finalSummary ? section("Final Owner Summary", `<p>${esc(a.finalSummary)}</p>`) : ""}
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      win.print();
+    }, 400);
   }
 
   return (
@@ -1414,6 +1542,75 @@ export default function BusinessOverview() {
           )}
         </CardContent>
       </Card>
+
+      {/* Assessment History */}
+      {assessmentHistory && assessmentHistory.length > 0 && (
+        <Card className="print:hidden" data-testid="card-assessment-history">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-primary" />
+              Assessment History
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Download a PDF of any previous AI Assessment report.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y">
+              {assessmentHistory.map((entry) => {
+                const scoreColor =
+                  entry.score >= 70
+                    ? "text-green-600 dark:text-green-400"
+                    : entry.score >= 50
+                      ? "text-yellow-600 dark:text-yellow-400"
+                      : "text-red-600 dark:text-red-400";
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between gap-3 py-2.5"
+                    data-testid={`row-assessment-history-${entry.id}`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className={`text-xl font-bold tabular-nums ${scoreColor} w-10 shrink-0 text-center`}
+                        data-testid={`text-history-score-${entry.id}`}
+                      >
+                        {entry.score}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {new Date(entry.createdAt).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </p>
+                        <p
+                          className="text-sm text-foreground truncate"
+                          data-testid={`text-history-verdict-${entry.id}`}
+                        >
+                          {entry.verdict}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => downloadHistoricalPDF(entry)}
+                      data-testid={`button-download-history-pdf-${entry.id}`}
+                      title="Download PDF for this assessment"
+                      className="shrink-0"
+                    >
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                      Download PDF
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

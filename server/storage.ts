@@ -867,6 +867,7 @@ export interface IStorage {
   // Business Assessments
   saveBusinessAssessment(data: InsertBusinessAssessment): Promise<BusinessAssessment>;
   getBusinessAssessments(companyId: string, limit?: number): Promise<BusinessAssessment[]>;
+  getBusinessAssessmentById(id: string, companyId: string): Promise<BusinessAssessment | null>;
 
   // Error Reports
   createErrorReport(data: InsertErrorReport): Promise<ErrorReport>;
@@ -4575,6 +4576,17 @@ export class DatabaseStorage implements IStorage {
       .where(eq(businessAssessments.companyId, companyId))
       .orderBy(desc(businessAssessments.createdAt))
       .limit(limit);
+  }
+
+  async getBusinessAssessmentById(
+    id: string,
+    companyId: string
+  ): Promise<BusinessAssessment | null> {
+    const [row] = await db
+      .select()
+      .from(businessAssessments)
+      .where(and(eq(businessAssessments.id, id), eq(businessAssessments.companyId, companyId)));
+    return row ?? null;
   }
 
   // ================ Error Reports ================
