@@ -28,6 +28,10 @@ import {
   StopCircle,
   Play,
   Repeat2,
+  Route,
+  Tag,
+  Megaphone,
+  Lightbulb,
 } from "lucide-react";
 import {
   AreaChart,
@@ -916,6 +920,101 @@ export default function BusinessOverview() {
                   </div>
                 )}
               </div>
+
+              {/* Route Ops / Financial / Pricing / Marketing Assessment Paragraphs */}
+              {(assessment.routeOpsAssessment ||
+                assessment.financialAssessment ||
+                assessment.pricingAssessment ||
+                assessment.marketingAssessment) && (
+                <div
+                  className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                  data-testid="panel-deep-assessments"
+                >
+                  {assessment.routeOpsAssessment && (
+                    <div className="rounded-lg border p-4 space-y-2" data-testid="panel-route-ops">
+                      <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                        <Route className="h-4 w-4 text-primary" />
+                        Route Operations
+                      </h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {assessment.routeOpsAssessment}
+                      </p>
+                    </div>
+                  )}
+                  {assessment.financialAssessment && (
+                    <div className="rounded-lg border p-4 space-y-2" data-testid="panel-financial">
+                      <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                        <TrendingUp className="h-4 w-4 text-primary" />
+                        Financial Health
+                      </h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {assessment.financialAssessment}
+                      </p>
+                    </div>
+                  )}
+                  {assessment.pricingAssessment && (
+                    <div className="rounded-lg border p-4 space-y-2" data-testid="panel-pricing">
+                      <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                        <Tag className="h-4 w-4 text-primary" />
+                        Pricing Strategy
+                      </h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {assessment.pricingAssessment}
+                      </p>
+                    </div>
+                  )}
+                  {assessment.marketingAssessment && (
+                    <div className="rounded-lg border p-4 space-y-2" data-testid="panel-marketing">
+                      <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                        <Megaphone className="h-4 w-4 text-primary" />
+                        Marketing & Growth
+                      </h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {assessment.marketingAssessment}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Owner Decision Priorities */}
+              {assessment.ownerDecisions && assessment.ownerDecisions.length > 0 && (
+                <div data-testid="panel-owner-decisions">
+                  <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-3">
+                    <Lightbulb className="h-4 w-4 text-primary" />
+                    Owner Decision Priorities
+                  </h3>
+                  <div className="space-y-3">
+                    {assessment.ownerDecisions.slice(0, 5).map((item, i) => (
+                      <div
+                        key={i}
+                        className="rounded-lg border p-4 space-y-2"
+                        data-testid={`owner-decision-${i}`}
+                      >
+                        <p className="text-sm font-semibold">{item.decision}</p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="font-medium text-foreground">Why it matters: </span>
+                            <span className="text-muted-foreground">{item.whyItMatters}</span>
+                          </div>
+                          <div>
+                            <span className="font-medium text-green-700 dark:text-green-400">
+                              Recommended:{" "}
+                            </span>
+                            <span className="text-muted-foreground">{item.recommendedAnswer}</span>
+                          </div>
+                          <div>
+                            <span className="font-medium text-red-600 dark:text-red-400">
+                              Risk if ignored:{" "}
+                            </span>
+                            <span className="text-muted-foreground">{item.riskIfIgnored}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* What Is Working / What Is Not Working */}
               {assessment.whatIsWorking?.length || assessment.whatIsNotWorking?.length ? (
