@@ -168,6 +168,7 @@ type Company = {
   voicePlanTier?: string | null;
   retellAgentId?: string | null;
   passStripeFees?: boolean;
+  requireCardOnSignup?: boolean;
 };
 
 type SettingsLayoutItem = {
@@ -430,6 +431,24 @@ function StripeConnectSection() {
     },
   });
 
+  const requireCardMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await apiRequest("PATCH", "/api/company", { requireCardOnSignup: enabled });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save setting");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Card requirement setting saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   const canManageStripeConnect = currentUser?.role === "owner" || currentUser?.role === "admin";
   const userRoleLoaded = !!currentUser?.role;
 
@@ -666,6 +685,28 @@ function StripeConnectSection() {
                 <p className="text-xs text-muted-foreground">
                   When enabled, a "Payment Processing Fee" line item is automatically added to new
                   invoices. When off, your business absorbs the Stripe fees.
+                </p>
+              </div>
+            )}
+
+            {canManageStripeConnect && (
+              <div className="border rounded-lg p-4 space-y-2 bg-muted/30">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Require card on file at signup</span>
+                  </div>
+                  <Switch
+                    checked={company?.requireCardOnSignup ?? true}
+                    onCheckedChange={(v) => requireCardMutation.mutate(v)}
+                    disabled={requireCardMutation.isPending}
+                    data-testid="switch-require-card-on-signup"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, new customers must add a card before completing signup via your
+                  widget. The card is saved on file but not charged. Turn off if you prefer to
+                  collect payment details later.
                 </p>
               </div>
             )}

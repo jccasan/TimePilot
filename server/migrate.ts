@@ -33,7 +33,8 @@ export async function runStartupMigrations(): Promise<void> {
     await client.query(`
       ALTER TABLE companies
         ADD COLUMN IF NOT EXISTS review_router_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-        ADD COLUMN IF NOT EXISTS pass_stripe_fees BOOLEAN NOT NULL DEFAULT FALSE
+        ADD COLUMN IF NOT EXISTS pass_stripe_fees BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS require_card_on_signup BOOLEAN NOT NULL DEFAULT TRUE
     `);
 
     // Set the DB-level column default to 50 so new companies get 50 without

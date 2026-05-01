@@ -74,6 +74,19 @@ export async function createSetupIntent(
   };
 }
 
+export async function retrieveSetupIntent(
+  setupIntentId: string,
+  stripeAccount?: string | null
+): Promise<{ status: string; paymentMethod: string | null; customer: string | null }> {
+  const stripe = getStripe();
+  const si = await stripe.setupIntents.retrieve(setupIntentId, reqOpts(stripeAccount));
+  return {
+    status: si.status,
+    paymentMethod: typeof si.payment_method === "string" ? si.payment_method : null,
+    customer: typeof si.customer === "string" ? si.customer : null,
+  };
+}
+
 export async function getCustomerPaymentMethods(customerId: string, stripeAccount?: string | null) {
   const stripe = getStripe();
   const methods = await stripe.paymentMethods.list(

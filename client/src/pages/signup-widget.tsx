@@ -17,7 +17,11 @@ import {
   AlertCircle,
   Sparkles,
   Eye,
+  CreditCard,
+  Lock,
 } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
 function StepTracker({ track }: { track: (event: string, step?: number) => void }) {
   useEffect(() => {
@@ -74,6 +78,10 @@ type CompanyInfo = {
   pricing: PricingItem[];
   primaryColor: string | null;
   quoteFormLayout: "stepper" | "single";
+  requireCardOnSignup: boolean;
+  stripePublishableKey: string | null;
+  stripeConnectOnboarded: boolean;
+  stripeConnectAccountId: string | null;
 };
 
 type QuoteResult = {
@@ -358,12 +366,15 @@ function StepIndicator({
   currentStep,
   totalSteps,
   brandStyles,
+  labels,
 }: {
   currentStep: number;
   totalSteps: number;
   brandStyles: ReturnType<typeof getBrandStyles>;
+  labels?: string[];
 }) {
-  const labels = ["Service Area", "Service Details", "Contact Info"];
+  const defaultLabels = ["Service Area", "Service Details", "Contact Info"];
+  const stepLabels = labels || defaultLabels;
   return (
     <div className="flex items-center justify-center gap-2 py-4 px-6" data-testid="step-indicator">
       {Array.from({ length: totalSteps }, (_, i) => {
@@ -393,7 +404,7 @@ function StepIndicator({
                 className="text-[10px] font-medium whitespace-nowrap"
                 style={{ color: isActive ? brandStyles.accentText : "#9ca3af" }}
               >
-                {labels[i]}
+                {stepLabels[i]}
               </span>
             </div>
           </div>
@@ -438,6 +449,159 @@ function RadioOption({
       </div>
       {children}
     </label>
+  );
+}
+
+function CardSetupForm({
+  clientSecret,
+  brandStyles,
+  contactId,
+  slug,
+  onSuccess,
+  onBack,
+}: {
+  clientSecret: string;
+  brandStyles: ReturnType<typeof getBrandStyles>;
+  contactId: string;
+  slug: string;
+  onSuccess: () => void;
+  onBack: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [cardError, setCardError] = useState<string | null>(null);
+  const [cardComplete, setCardComplete] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!stripe || !elements) return;
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) return;
+    setSaving(true);
+    setCardError(null);
+    const result = await stripe.confirmCardSetup(clientSecret, {
+      payment_method: { card: cardElement },
+    });
+    if (result.error) {
+      setCardError(result.error.message || "Card setup failed. Please try again.");
+      setSaving(false);
+      return;
+    }
+    const siId = result.setupIntent?.id;
+    if (siId) {
+      try {
+        const res = await fetch("/api/public/portal/setup-intent/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ setupIntentId: siId, contactId, slug }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setCardError(data.error || "Card verification failed. Please try again.");
+          setSaving(false);
+          return;
+        }
+      } catch {
+        setCardError("Card verification failed. Please try again.");
+        setSaving(false);
+        return;
+      }
+    }
+    onSuccess();
+  };
+
+  return (
+    <div
+      className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300"
+      data-testid="step-4-card"
+    >
+      <div className="text-center space-y-1">
+        <h2 className="text-xl font-bold">Payment Info</h2>
+        <p className="text-sm text-muted-foreground">
+          A card is required to complete your signup. You won't be charged now.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div
+          className="rounded-xl border p-4 space-y-3"
+          style={{ borderColor: brandStyles.lightBorder, backgroundColor: brandStyles.lightBg }}
+        >
+          <div
+            className="flex items-center gap-2 text-sm font-medium"
+            style={{ color: brandStyles.accentText }}
+          >
+            <Lock className="h-4 w-4" />
+            <span>Secure card collection via Stripe</span>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-3">
+            <CardElement
+              options={{
+                style: {
+                  base: {
+                    fontSize: "16px",
+                    color: "#1f2937",
+                    fontFamily: "Inter, system-ui, sans-serif",
+                    "::placeholder": { color: "#9ca3af" },
+                  },
+                  invalid: { color: "#dc2626" },
+                },
+              }}
+              onChange={(e) => {
+                setCardComplete(e.complete);
+                if (e.error) setCardError(e.error.message);
+                else setCardError(null);
+              }}
+              data-testid="input-card-element"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Your card will be saved on file. No charges will be made at this time.
+          </p>
+        </div>
+
+        {cardError && (
+          <div
+            className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200"
+            data-testid="text-card-error"
+          >
+            <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">{cardError}</p>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1 h-12"
+            onClick={onBack}
+            disabled={saving}
+            data-testid="button-back-card"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" /> Back
+          </Button>
+          <Button
+            type="button"
+            className="flex-[2] text-white h-12 text-base font-semibold"
+            style={{ backgroundColor: !cardComplete ? "#9ca3af" : brandStyles.buttonBg }}
+            disabled={!cardComplete || saving || !stripe}
+            onClick={handleSubmit}
+            data-testid="button-save-card"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" /> Saving...
+              </>
+            ) : (
+              <>
+                <CreditCard className="h-5 w-5 mr-2" /> Save Card & Complete Signup
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -495,6 +659,9 @@ export default function SignupWidget() {
   });
   const [smsOptIn, setSmsOptIn] = useState(false);
   const [quoteResult, setQuoteResult] = useState<QuoteResult | null>(null);
+  const [pendingQuoteResult, setPendingQuoteResult] = useState<QuoteResult | null>(null);
+  const [setupClientSecret, setSetupClientSecret] = useState<string | null>(null);
+  const [setupIntentError, setSetupIntentError] = useState<string | null>(null);
 
   const {
     data: company,
@@ -645,8 +812,31 @@ export default function SignupWidget() {
     },
     onSuccess: (data) => {
       track("submitted", 3, zipCode.trim().slice(0, 5));
-      setQuoteResult(data);
-      track("quote_shown", 4);
+      const needsCard = company?.requireCardOnSignup && company?.stripePublishableKey;
+      if (needsCard) {
+        setPendingQuoteResult(data);
+        setSetupIntentError(null);
+        setCurrentStep(4);
+        fetch("/api/public/portal/setup-intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contactId: data.contactId, slug }),
+        })
+          .then((res) => res.json())
+          .then((json) => {
+            if (json.clientSecret) {
+              setSetupClientSecret(json.clientSecret);
+            } else {
+              setSetupIntentError(json.error || "Failed to initialize card setup.");
+            }
+          })
+          .catch(() => {
+            setSetupIntentError("Failed to initialize card setup. Please try again.");
+          });
+      } else {
+        setQuoteResult(data);
+        track("quote_shown", 4);
+      }
     },
   });
 
@@ -655,6 +845,18 @@ export default function SignupWidget() {
   }, []);
 
   const isSingleLayout = company?.quoteFormLayout === "single";
+
+  const showCardStep = !!(company?.requireCardOnSignup && company?.stripePublishableKey);
+
+  const stripePromise = useMemo(() => {
+    if (!company?.stripePublishableKey) return null;
+    return loadStripe(company.stripePublishableKey);
+  }, [company?.stripePublishableKey]);
+
+  const stepLabels = showCardStep
+    ? ["Service Area", "Service Details", "Contact Info", "Payment Info"]
+    : ["Service Area", "Service Details", "Contact Info"];
+  const totalSteps = showCardStep ? 4 : 3;
 
   const hasLotAddons = parsed && parsed.lotAddons.length > 0;
   const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!lastCleanup;
@@ -846,6 +1048,106 @@ export default function SignupWidget() {
               </p>
               <p className="text-xs text-muted-foreground" data-testid="text-copyright">
                 &copy; {new Date().getFullYear()} PetPilot LLC dba Servicd and ScooPilot
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (pendingQuoteResult) {
+    return (
+      <div
+        className={isEmbed ? "" : "min-h-screen flex items-center justify-center p-4"}
+        style={
+          isEmbed
+            ? {}
+            : { background: `linear-gradient(to bottom, ${brandStyles.gradientFrom}, white)` }
+        }
+      >
+        <div className={`w-full ${isEmbed ? "" : "max-w-lg"}`}>
+          <Card className={`overflow-hidden ${isEmbed ? "shadow-none border-0" : "shadow-xl"}`}>
+            <div className="p-6 text-center" style={{ backgroundColor: brandStyles.headerBg }}>
+              {company.logoUrl && (
+                <img
+                  src={company.logoUrl}
+                  alt={company.name}
+                  className="h-14 mx-auto mb-3 rounded-lg shadow-sm"
+                  data-testid="img-company-logo-card"
+                />
+              )}
+              <h1 className="text-xl font-bold text-white" data-testid="text-company-name-card">
+                {company.name}
+              </h1>
+              <p className="text-sm mt-1 text-white/80">Secure Card Setup</p>
+            </div>
+            <CardContent className="p-6 space-y-5">
+              <div className="text-center space-y-1">
+                <p className="text-sm font-medium">Save a card to complete your signup</p>
+                <p className="text-xs text-muted-foreground">
+                  Your card will not be charged today.
+                </p>
+              </div>
+              {setupIntentError && (
+                <div
+                  className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200"
+                  data-testid="text-setup-intent-error"
+                >
+                  <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700">{setupIntentError}</p>
+                </div>
+              )}
+              {!setupClientSecret && !setupIntentError && (
+                <div
+                  className="flex flex-col items-center gap-3 py-8"
+                  data-testid="loading-setup-intent"
+                >
+                  <Loader2
+                    className="h-8 w-8 animate-spin"
+                    style={{ color: brandStyles.accentText }}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Setting up secure card collection...
+                  </p>
+                </div>
+              )}
+              {setupClientSecret && stripePromise && (
+                <Elements stripe={stripePromise} options={{ clientSecret: setupClientSecret }}>
+                  <CardSetupForm
+                    clientSecret={setupClientSecret}
+                    contactId={pendingQuoteResult.contactId}
+                    slug={slug}
+                    brandStyles={brandStyles}
+                    onSuccess={() => {
+                      setQuoteResult(pendingQuoteResult);
+                      track("quote_shown", 4);
+                    }}
+                    onBack={() => {
+                      setSetupClientSecret(null);
+                      setPendingQuoteResult(null);
+                    }}
+                  />
+                </Elements>
+              )}
+            </CardContent>
+          </Card>
+          {!isEmbed && (
+            <div className="mt-6 text-center space-y-1">
+              <p
+                className="text-xs text-muted-foreground font-medium"
+                data-testid="text-powered-by-card"
+              >
+                Powered by{" "}
+                <a
+                  href="https://servicd.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline font-semibold"
+                  style={{ color: brandStyles.accentText }}
+                >
+                  Servicd
+                </a>
               </p>
             </div>
           )}
@@ -1476,7 +1778,12 @@ export default function SignupWidget() {
             </div>
           )}
 
-          <StepIndicator currentStep={currentStep} totalSteps={3} brandStyles={brandStyles} />
+          <StepIndicator
+            currentStep={currentStep}
+            totalSteps={totalSteps}
+            brandStyles={brandStyles}
+            labels={stepLabels}
+          />
 
           <CardContent className="p-6 pt-0">
             {currentStep === 1 && (

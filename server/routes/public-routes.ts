@@ -19,6 +19,8 @@ import {
   isStripeConfigured,
   createCheckoutSession,
   ensureConnectedCustomer,
+  createSetupIntent,
+  retrieveSetupIntent,
 } from "../services/stripe";
 import { checkIpRisk, getClientIp, getCountryCode } from "../services/ip-risk";
 import { calculateQuotePricing, type ResidentialQuoteInput } from "../services/quote-pricing";
@@ -590,6 +592,10 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         primaryColor,
         quoteFormLayout: company.quoteFormLayout || "stepper",
         country: company.country || "us",
+        requireCardOnSignup: company.requireCardOnSignup ?? true,
+        stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
+        stripeConnectOnboarded: company.stripeConnectOnboarded || false,
+        stripeConnectAccountId: company.stripeConnectAccountId || null,
       });
     } catch (err) {
       handleError(res, err);
@@ -1632,6 +1638,98 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
           })();
         }
       }
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/public/portal/setup-intent", async (req: Request, res: Response) => {
+    try {
+      const { contactId, slug } = req.body;
+      if (!contactId || typeof contactId !== "string") {
+        return res.status(400).json({ error: "contactId is required" });
+      }
+      if (!slug || typeof slug !== "string") {
+        return res.status(400).json({ error: "slug is required" });
+      }
+
+      if (!isStripeConfigured()) {
+        return res.status(400).json({ error: "Stripe is not configured for this account" });
+      }
+
+      const company = await storage.getCompanyBySlug(p(slug));
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const contact = await storage.getContactById(contactId);
+      if (!contact || contact.companyId !== company.id) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+
+      const connectAcct = company.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+      const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+      const { customerId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: contact.stripeCustomerId,
+        stripeAccount: connectAcct,
+        email: contact.email || undefined,
+        name: contactName,
+        metadata: { contactId: contact.id, companyId: company.id },
+      });
+
+      if (wasRecreated || !contact.stripeCustomerId) {
+        await storage.updateContact(contact.id, company.id, { stripeCustomerId: customerId });
+      }
+
+      const { clientSecret } = await createSetupIntent(customerId, connectAcct);
+      res.json({ clientSecret });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/public/portal/setup-intent/confirm", async (req: Request, res: Response) => {
+    try {
+      const { setupIntentId, contactId, slug } = req.body;
+      if (!setupIntentId || typeof setupIntentId !== "string") {
+        return res.status(400).json({ error: "setupIntentId is required" });
+      }
+      if (!contactId || typeof contactId !== "string") {
+        return res.status(400).json({ error: "contactId is required" });
+      }
+      if (!slug || typeof slug !== "string") {
+        return res.status(400).json({ error: "slug is required" });
+      }
+
+      if (!isStripeConfigured()) {
+        return res.status(400).json({ error: "Stripe is not configured for this account" });
+      }
+
+      const company = await storage.getCompanyBySlug(p(slug));
+      if (!company) return res.status(404).json({ error: "Company not found" });
+
+      const contact = await storage.getContactById(contactId);
+      if (!contact || contact.companyId !== company.id) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+
+      const connectAcct = company.stripeConnectOnboarded ? company.stripeConnectAccountId : null;
+      const { status, paymentMethod, customer } = await retrieveSetupIntent(
+        setupIntentId,
+        connectAcct
+      );
+
+      if (status !== "succeeded") {
+        return res
+          .status(400)
+          .json({ error: `SetupIntent status is '${status}', expected 'succeeded'` });
+      }
+
+      if (contact.stripeCustomerId && customer !== contact.stripeCustomerId) {
+        return res
+          .status(403)
+          .json({ error: "SetupIntent customer does not match contact record" });
+      }
+
+      res.json({ ok: true, paymentMethod });
     } catch (err) {
       handleError(res, err);
     }
