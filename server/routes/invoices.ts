@@ -592,14 +592,17 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: "invoiceIds array with at least 2 entries required" });
       }
 
-      // Validate: all must be drafts for the same contact
+      // Validate: none may be paid or voided; all must belong to the same contact
+      const MERGE_BLOCKED = ["paid", "voided"];
       let contactId: string | null = null;
       const validInvoices: Awaited<ReturnType<typeof storage.getInvoice>>[] = [];
       for (const id of invoiceIds) {
         const inv = await storage.getInvoice(id, companyId);
         if (!inv) return res.status(404).json({ error: `Invoice ${id} not found` });
-        if (inv.status !== "draft")
-          return res.status(400).json({ error: `Invoice ${id} is not a draft` });
+        if (MERGE_BLOCKED.includes(inv.status))
+          return res
+            .status(400)
+            .json({ error: `Invoice ${id} cannot be merged (status: ${inv.status})` });
         if (contactId && inv.contactId !== contactId)
           return res
             .status(400)

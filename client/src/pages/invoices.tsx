@@ -105,6 +105,8 @@ import {
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
 
+const MERGE_BLOCKED_STATUSES = ["paid", "voided"];
+
 const invoiceStatusLabels: Record<string, string> = {
   draft: "Draft",
   sent: "Sent",
@@ -1706,11 +1708,11 @@ export default function Invoices() {
     }
   }
 
-  // Merge selected draft invoices (all must be drafts for same contact)
+  // Merge selected invoices — any status except paid/voided, all for same contact
   const mergeSelectedInfo = useMemo(() => {
     if (!allInvoicesForStats || selectedIds.size < 2) return null;
     const selected = allInvoicesForStats.filter((inv) => selectedIds.has(inv.id));
-    if (selected.some((inv) => inv.status !== "draft")) return null;
+    if (selected.some((inv) => MERGE_BLOCKED_STATUSES.includes(inv.status))) return null;
     const contactId = selected[0].contactId;
     if (selected.some((inv) => inv.contactId !== contactId)) return null;
     const total = selected.reduce((sum, inv) => sum + parseFloat(inv.total ?? "0"), 0);
@@ -3034,11 +3036,11 @@ export default function Invoices() {
       <Dialog open={confirmMerge} onOpenChange={setConfirmMerge}>
         <DialogContent className="max-w-sm" data-testid="dialog-confirm-merge">
           <DialogHeader>
-            <DialogTitle>Merge {mergeSelectedInfo?.count ?? 0} Draft Invoices?</DialogTitle>
+            <DialogTitle>Merge {mergeSelectedInfo?.count ?? 0} Invoices?</DialogTitle>
             <DialogDescription>
-              {mergeSelectedInfo?.count ?? 0} draft invoices totaling $
-              {(mergeSelectedInfo?.total ?? 0).toFixed(2)} will be combined into one new draft and
-              the originals will be voided.
+              {mergeSelectedInfo?.count ?? 0} invoices totaling $
+              {(mergeSelectedInfo?.total ?? 0).toFixed(2)} will be combined into one new draft. The
+              originals will be voided.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-2 mt-2">
