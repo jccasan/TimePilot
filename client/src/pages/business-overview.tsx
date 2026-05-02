@@ -407,10 +407,12 @@ export default function BusinessOverview() {
         ? "text-yellow-600 dark:text-yellow-400"
         : "text-red-600 dark:text-red-400";
 
+  const churnPct =
+    kpis.activeCustomers > 0 ? (kpis.churned30d / kpis.activeCustomers) * 100 : 0;
   const churnColor =
-    kpis.churned30d === 0
+    churnPct === 0
       ? "text-green-600 dark:text-green-400"
-      : kpis.churned30d <= 2
+      : churnPct < 5
         ? "text-yellow-600 dark:text-yellow-400"
         : "text-red-600 dark:text-red-400";
 
@@ -653,7 +655,11 @@ export default function BusinessOverview() {
         <KpiCard
           title="Churned"
           value={String(kpis.churned30d)}
-          subtitle="Last 30 days"
+          subtitle={
+            kpis.churned30d > 0
+              ? `Last 30 days · ${churnPct.toFixed(1)}% of customers`
+              : "Last 30 days"
+          }
           icon={CalendarDays}
           colorClass={churnColor}
         />
