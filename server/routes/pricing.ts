@@ -943,9 +943,12 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         const tz = company?.timezone || "America/New_York";
         const now = new Date();
 
-        const allContacts = await storage.getContacts(companyId);
-        const allInvoices = await storage.getInvoices(companyId);
-        const allPlansRaw = await storage.getServicePlans(companyId, {});
+        const [allContacts, allInvoices, allPlansRaw, allRoutes] = await Promise.all([
+          storage.getContacts(companyId),
+          storage.getInvoices(companyId),
+          storage.getServicePlans(companyId, {}),
+          storage.getRoutes(companyId),
+        ]);
         const allActivePlans = allPlansRaw.filter((p) => p.isActive && !p.isStopOnly);
 
         const activeCustomers = allContacts.filter((c) => c.status === "active").length;
@@ -1039,6 +1042,17 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         const churnRatePct =
           activeCustomers > 0 ? Math.round((churned30d / activeCustomers) * 1000) / 10 : 0;
 
+        // Route density metrics
+        const plansWithRoute = allActivePlans.filter((p) => p.routeId != null).length;
+        const distinctRouteIds = new Set(
+          allActivePlans.map((p) => p.routeId).filter(Boolean)
+        ).size;
+        const activeRouteCount = Math.max(distinctRouteIds, allRoutes.length);
+        const avgStopsPerRoute =
+          activeRouteCount > 0 ? Math.round((activePlanCount / activeRouteCount) * 10) / 10 : 0;
+        const plansOnRoutePct =
+          activePlanCount > 0 ? Math.round((plansWithRoute / activePlanCount) * 100) : 0;
+
         const factSheet = {
           businessName: company?.name || "Your Business",
           activeCustomers,
@@ -1050,15 +1064,19 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           activePlanCount,
           pausedPlanCount,
           mrrDollars: Math.round(mrrCents / 100),
+          scheduledMonthlyRevenueDollars: Math.round(mrrCents / 100),
           collectionRatePct: collectionRate,
           avgProfitMarginPct,
           profitableCustomers: profitableCount,
           marginalCustomers: marginalCount,
           unprofitableCustomers: unprofitableCount,
-          thisMonthRevenueDollars: Math.round(thisMonthRev),
-          lastMonthRevenueDollars: Math.round(lastMonthRev),
+          thisMonthInvoicedDollars: Math.round(thisMonthRev),
+          lastMonthInvoicedDollars: Math.round(lastMonthRev),
           revenueGrowthPct,
           paidInvoiceCount: paidInvoices.length,
+          activeRouteCount,
+          avgStopsPerRoute,
+          plansOnRoutePct,
         };
 
         const crypto = await import("crypto");
@@ -1178,8 +1196,10 @@ Ignore the "REQUIRED OUTPUT FORMAT" markdown structure described above. Instead,
 Rules:
 - healthScore must equal the sum of all scoreBreakdown scores
 - Apply all scoring cap rules from the prompt above before finalizing the score
-- cfo findings: focus on revenue, collection, MRR, margin — cite exact numbers from fact sheet
-- coo findings: focus on churn rate (churnRatePct), new customers added (newCustomers30d), active vs paused plans, customer mix — cite exact numbers from fact sheet
+- IMPORTANT: thisMonthInvoicedDollars reflects only invoices *issued* this calendar month. Many service businesses bill at month-end so this may legitimately be $0 mid-month. Do NOT treat thisMonthInvoicedDollars=0 as a revenue problem — use scheduledMonthlyRevenueDollars (MRR from active plans) as the true recurring revenue figure. Only flag a revenue concern if mrrDollars itself is low or declining.
+- Route density assessment: use activeRouteCount, avgStopsPerRoute, and plansOnRoutePct. avgStopsPerRoute >= 8 is good density; 5-7 is moderate; <5 is low density. If plansOnRoutePct < 70%, flag that many customers are not yet assigned to routes.
+- cfo findings: focus on scheduledMonthlyRevenueDollars (MRR), collection, margin — cite exact numbers from fact sheet
+- coo findings: focus on churn rate (churnRatePct), new customers added (newCustomers30d), active vs paused plans, route density (avgStopsPerRoute, activeRouteCount), customer mix — cite exact numbers from fact sheet
 - recommendations: max 5, ranked by priority, cite exact numbers from the fact sheet
 - NEVER invent numbers not present in the fact sheet
 - whatIsWorking: 3-7 items; whatIsNotWorking: 3-7 items; ownerDecisions: exactly 5 items`;
