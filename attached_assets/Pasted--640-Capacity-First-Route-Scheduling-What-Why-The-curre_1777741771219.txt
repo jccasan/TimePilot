@@ -1,0 +1,24 @@
+#640 - Capacity-First Route Scheduling
+What & Why
+The current weekly optimizer spreads stops evenly across all available days (techsPerDay = ceil(stops / maxStops / activeDays)). This means 200 stops at max 50/day gets spread 40 per day across 5 days — wasting geographic clustering. The fix computes required_route_days = ceil(total_stops / max_stops_per_day), creates exactly that many geo clusters, and packs them into the fewest sequential days. Tighter clusters on fewer days = shorter driving, less fuel, fewer partial days.
+
+Done looks like
+Running the weekly optimizer on the same stop set produces fewer active days with fuller routes instead of many days with thin stop counts
+A company with 200 stops and max 50/day gets 4 packed days instead of 5 spread ones
+The existing optimizer UI and API response shape are unchanged — this is a pure logic change inside the engine
+All existing Vitest tests still pass
+Out of scope
+Min stops enforcement second-pass (evaluate after seeing results)
+10% overflow / cost-comparison rule (evaluate after seeing results)
+Tech or day assignment by the system
+Any UI changes to WeeklyOptimizerPanel
+Any changes to the route-planning API response shape
+Steps
+Replace even-distribution formula — In assignByGeoClustering, replace techsPerDay = ceil(stops / stopsPerRoute / activeDays.length) with required_route_days = ceil(total_stops / max_stops_per_day). Use required_route_days as the k-means cluster count target.
+Pack into fewest days — After clustering, assign clusters to days sequentially (fill day 1 before opening day 2) rather than round-robining across all available days. Unused days in activeDays simply get no clusters.
+Preserve minStopsPerDay merge — The existing mergeSmallClusters call already absorbs clusters below the min threshold — keep it in place so it continues to run after the new cluster count is computed.
+Verify no regressions — Run the existing Vitest suite (npx vitest run --reporter=verbose) and confirm all 101 tests pass.
+Relevant files
+server/services/weekly-optimizer.ts:605-657
+server/services/weekly-optimizer.ts:77-78
+server/services/weekly-optimizer.ts:291-448
