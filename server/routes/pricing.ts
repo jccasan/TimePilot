@@ -1231,9 +1231,11 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           profitableCustomers: profitableCount,
           marginalCustomers: marginalCount,
           unprofitableCustomers: unprofitableCount,
-          thisMonthInvoicedDollars: Math.round(thisMonthRev),
-          lastMonthInvoicedDollars: Math.round(lastMonthRev),
-          revenueGrowthPct,
+          billedCalendarMonthToDateDollars: Math.round(thisMonthRev),
+          billedPriorCalendarMonthDollars: Math.round(lastMonthRev),
+          billingNote:
+            "billedCalendarMonthToDateDollars reflects invoices ISSUED this calendar month only — it is commonly $0 mid-month because most operators batch invoices at month-end. This is NOT a revenue or cash-flow signal. Use mrrDollars / scheduledMonthlyRevenueDollars for all revenue analysis.",
+          billedAmountChangeVsPriorMonthPct: revenueGrowthPct,
           paidInvoiceCount: paidInvoices.length,
           activeRouteCount,
           avgStopsPerRoute,
@@ -1410,7 +1412,7 @@ Rules:
 - healthScore must equal the sum of all scoreBreakdown scores
 - Apply all scoring cap rules from the prompt above before finalizing the score
 - ${hasDataQualityWarnings ? "DATA QUALITY WARNING IS ACTIVE: confidenceLevel MUST be Medium or Low. Reflect the dataQualityWarnings array in your confidenceReason." : "No data quality warnings — set confidenceLevel based on data completeness alone."}
-- IMPORTANT: thisMonthInvoicedDollars reflects only invoices *issued* this calendar month. Many service businesses bill at month-end so this may legitimately be $0 mid-month. Do NOT treat thisMonthInvoicedDollars=0 as a revenue problem — use scheduledMonthlyRevenueDollars (MRR from active plans) as the true recurring revenue figure. Only flag a revenue concern if mrrDollars itself is low or declining.
+- IMPORTANT: billedCalendarMonthToDateDollars reflects only invoices *issued* this calendar month — it is commonly $0 mid-month because operators batch invoices at month-end. The billingNote field in the fact sheet explains this. Do NOT treat billedCalendarMonthToDateDollars=0 or billedAmountChangeVsPriorMonthPct=-100 as a revenue or cash-flow problem. Use mrrDollars / scheduledMonthlyRevenueDollars (MRR from active plans) as the authoritative revenue figure for all CFO findings, revenue trend analysis, and health scoring.
 - Route density assessment: use activeRouteCount, avgStopsPerRoute, and plansOnRoutePct. avgStopsPerRoute >= 8 is good density; 5-7 is moderate; <5 is low density. If plansOnRoutePct < 70%, flag that many customers are not yet assigned to routes.
 - cfo findings: focus on scheduledMonthlyRevenueDollars (MRR), collection, margin — cite exact numbers from fact sheet
 - coo findings: focus on churn rate (churnRatePct), new customers added (newCustomers30d), active vs paused plans, route density (avgStopsPerRoute, activeRouteCount), customer mix — cite exact numbers from fact sheet
