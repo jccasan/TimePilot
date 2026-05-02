@@ -407,8 +407,7 @@ export default function BusinessOverview() {
         ? "text-yellow-600 dark:text-yellow-400"
         : "text-red-600 dark:text-red-400";
 
-  const churnPct =
-    kpis.activeCustomers > 0 ? (kpis.churned30d / kpis.activeCustomers) * 100 : 0;
+  const churnPct = kpis.activeCustomers > 0 ? (kpis.churned30d / kpis.activeCustomers) * 100 : 0;
   const churnColor =
     churnPct === 0
       ? "text-green-600 dark:text-green-400"
