@@ -797,8 +797,29 @@ export default function OverheadCosts() {
     queryKey: ["/api/company"],
   });
 
-  const estimatedMonthlyStops = companyData?.pricingConfig?.estimatedMonthlyStops ?? 100;
-  const overheadPerVisit = estimatedMonthlyStops > 0 ? totalMonthly / estimatedMonthlyStops : 0;
+  const { data: activePlans } = useQuery<any[]>({
+    queryKey: ["/api/service-plans", { isActive: true }],
+    queryFn: () =>
+      fetch("/api/service-plans?isActive=true", { credentials: "include" }).then((r) => r.json()),
+  });
+
+  const freqVisitsPerMonth = (freq: string) => {
+    if (freq === "weekly") return 4.33;
+    if (freq === "biweekly") return 2.17;
+    if (freq === "monthly") return 1;
+    return 0;
+  };
+
+  const actualMonthlyVisits =
+    activePlans && activePlans.length > 0
+      ? Math.round(
+          activePlans
+            .filter((p: any) => p.isActive && !p.isStopOnly)
+            .reduce((sum: number, p: any) => sum + freqVisitsPerMonth(p.frequency), 0)
+        )
+      : (companyData?.pricingConfig?.estimatedMonthlyStops ?? 100);
+
+  const overheadPerVisit = actualMonthlyVisits > 0 ? totalMonthly / actualMonthlyVisits : 0;
 
   const handleUpdateCost = (id: string, cents: number) => {
     updateMutation.mutate({ id, monthlyCostCents: cents });
@@ -883,7 +904,7 @@ export default function OverheadCosts() {
               {formatDollars(Math.round(overheadPerVisit))}
             </p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              Based on {estimatedMonthlyStops} visits/mo
+              Based on {actualMonthlyVisits} scheduled visits/mo
             </p>
           </CardContent>
         </Card>
