@@ -1044,11 +1044,29 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
               ) / 10
             : 0;
 
+        const newCustomers30d = allContacts.filter(
+          (c) => new Date(c.createdAt) >= thirtyAgo
+        ).length;
+        const churned30d = allContacts.filter(
+          (c) => c.status === "cancelled" && new Date(c.updatedAt) >= thirtyAgo
+        ).length;
+        const activePlanCount = allActivePlans.length;
+        const pausedPlanCount = allPlansRaw.filter(
+          (p) => p.pausedAt != null || p.isStopOnly
+        ).length;
+        const churnRatePct =
+          activeCustomers > 0 ? Math.round((churned30d / activeCustomers) * 1000) / 10 : 0;
+
         const factSheet = {
           businessName: company?.name || "Your Business",
           activeCustomers,
           cancelledCustomers,
           totalCustomers: allContacts.length,
+          newCustomers30d,
+          churned30d,
+          churnRatePct,
+          activePlanCount,
+          pausedPlanCount,
           mrrDollars: Math.round(mrrCents / 100),
           collectionRatePct: collectionRate,
           visitCompletionRatePct: visitCompletionRate,
@@ -1180,7 +1198,7 @@ Rules:
 - healthScore must equal the sum of all scoreBreakdown scores
 - Apply all scoring cap rules from the prompt above before finalizing the score
 - cfo findings: focus on revenue, collection, MRR, margin — cite exact numbers from fact sheet
-- coo findings: focus on visit completion, customer mix, cancellations — cite exact numbers
+- coo findings: focus on churn rate (churnRatePct), new customers added (newCustomers30d), active vs paused plans, visit completion, customer mix — cite exact numbers from fact sheet
 - recommendations: max 5, ranked by priority, cite exact numbers from the fact sheet
 - NEVER invent numbers not present in the fact sheet
 - whatIsWorking: 3-7 items; whatIsNotWorking: 3-7 items; ownerDecisions: exactly 5 items`;
