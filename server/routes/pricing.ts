@@ -1044,9 +1044,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
 
         // Route density metrics
         const plansWithRoute = allActivePlans.filter((p) => p.routeId != null).length;
-        const distinctRouteIds = new Set(
-          allActivePlans.map((p) => p.routeId).filter(Boolean)
-        ).size;
+        const distinctRouteIds = new Set(allActivePlans.map((p) => p.routeId).filter(Boolean)).size;
         const activeRouteCount = Math.max(distinctRouteIds, allRoutes.length);
         const avgStopsPerRoute =
           activeRouteCount > 0 ? Math.round((activePlanCount / activeRouteCount) * 10) / 10 : 0;

@@ -1,0 +1,128 @@
+1. The UI has too many navigation items
+This fails because it makes the app feel heavier than it probably is.
+The sidebar includes a lot:
+That is too much for a poop scooping owner logging in between jobs.
+The software may be powerful, but the navigation makes it feel like enterprise software. That is bad for this market.
+Fix
+Group the sidebar into fewer sections:
+Run the Business
+•	Dashboard 
+•	Customers 
+•	Schedule 
+•	Routes 
+•	Field Map 
+•	Invoices 
+•	Messages 
+Make More Money
+•	Profitability 
+•	Route Profit Maps 
+•	Pricing Tools 
+•	Reports 
+Setup
+•	Settings 
+•	Automations 
+•	Integrations 
+•	Import Data 
+Hide API Keys, Webhooks, Subscription, Pricing Plans, and advanced items under Settings unless the user needs them.
+2. The dashboard has a serious logic/trust problem
+The dashboard showed:
+•	Active Plans: 124 
+•	Scheduled This Week: 0 
+•	Requires Invoicing: 709 / $20,035 
+•	Awaiting Payment: 0 
+•	Today’s Operations: 0 appointments 
+•	Revenue This Month: $172 
+That looks wrong or confusing.
+Maybe it is because this is demo data. But to a buyer, this fails because the dashboard creates contradiction:
+“How do I have 124 active plans and 709 requiring invoicing, but 0 scheduled this week and $172 revenue this month?”
+A dashboard is supposed to reduce anxiety. This one currently creates it.
+Fix
+Add a setup/data warning state:
+Demo data detected. Some dashboard metrics may not reflect real operations.
+Or better, build logic checks:
+•	active plans with no recurring schedule 
+•	customers requiring invoice but no job history 
+•	invoices created but not sent 
+•	autopay customers without payment method 
+•	customers assigned to route but no upcoming service 
+Turn the contradiction into a useful “Business Health” warning.
+3. Route Builder is close, but not obvious enough
+The Route Builder has the right pieces: max stops, route credits, optimize week, manage zones, days of week, route cards, unassigned stops, drag-and-drop, map.
+But it does not yet feel idiot-proof.
+The route screen at 0 stops showed the map zoomed out to the central United States. That makes the product feel broken, even if technically there are no stops. A field-service owner should never see a random national map unless that is intentional.
+Fix
+When no stops exist, show:
+No stops scheduled for Saturday.
+Pick another day, add stops, or optimize the week.
+Map should center on the company service area, not the United States.
+Also, “Available Credits: 5” creates friction. It makes route optimization feel metered and stingy. That may be necessary for COGS, but it should be framed better:
+Optimization Credits: 5 remaining this month
+Or hide it until it matters.
+4. Billing actions need more safeguards
+The invoice page has powerful actions: Generate All Invoices, Send All Drafts, Charge Autopay.
+That is good. But this fails if there are no confirmation layers or pre-flight checks. A user can easily create or send 139 invoices. If something is wrong, trust is gone.
+Fix
+Before bulk invoice actions, show a confirmation modal:
+You’re about to send 139 invoices totaling $26,454.
+Breakdown:
+•	124 monthly recurring invoices 
+•	15 one-time invoices 
+•	12 missing email addresses 
+•	8 customers without payment method 
+•	4 invoices over $500 
+•	3 customers marked onboarding pending 
+Buttons:
+•	Review Exceptions 
+•	Send Eligible Only 
+•	Cancel 
+Same for autopay:
+You’re about to charge 97 saved payment methods totaling $18,920.
+This is not optional. Bulk billing without guardrails is dangerous.
+5. The pricing calculator looks valuable but too complex
+The pricing calculator has good ingredients: labor cost, travel time, service time, terrain, dog count, yard size, markup, frequency, pricing tiers.
+But it currently looks like an internal finance tool, not a decision tool for a busy owner.
+The operator does not want to “use a calculator.” They want the answer:
+This job should be priced at $28/week.
+Current price: $22/week.
+You are losing $312/year on this customer.
+Fix
+Turn it into a recommendation engine:
+Recommended Price
+•	Weekly: $28 
+•	Biweekly: $40 
+•	Monthly: $65 
+Why
+•	Yard size: small 
+•	Dogs: 2 
+•	Drive-time burden: moderate 
+•	Route density: good 
+•	Target margin: 60% 
+Action
+•	Apply to customer 
+•	Save as quote 
+•	Add to next price increase list 
+The calculator should produce action, not just numbers.
+
+Highest-priority fixes
+Priority 1: Billing safety
+Add bulk-action review screens before sending or charging invoices.
+This is the most important fix because billing mistakes destroy trust.
+Priority 2: Dashboard logic cleanup
+Fix contradictory metrics and add business-health alerts.
+If dashboard data looks wrong, the user assumes the whole app is wrong.
+Priority 3: Simplify navigation
+The app has too many exposed modules. Hide advanced/dev/admin items.
+This will immediately make the app feel more polished.
+Priority 4: Route empty states
+No map should open to the middle of the country. Empty route days need clear guidance.
+This is a small fix with a big trust impact.
+Priority 5: Make profit tools actionable
+Route Profit Maps and Pricing Tools should recommend actions:
+•	raise this customer by $4 
+•	move this stop to Wednesday 
+•	this route is under minimum margin 
+•	this neighborhood needs 8 more customers to become efficient 
+•	this tech/day is overloaded 
+•	this customer is profitable only if paired with nearby stops 
+Reports are nice. Recommendations sell.
+
