@@ -9,7 +9,6 @@ import {
   Calendar,
   MapPin,
   FileText,
-  CreditCard,
   DollarSign,
   Calculator,
   Zap,
@@ -19,7 +18,6 @@ import {
   TrendingUp,
   Building2,
   Map,
-  Columns,
   Compass,
   Sparkles,
   ClipboardCheck,
@@ -31,10 +29,8 @@ import {
   ChevronDown,
   ChevronRight,
   Briefcase,
-  KeyRound,
-  Webhook,
   Database,
-  Radio,
+  Plug,
   HelpCircle,
   GraduationCap,
   MessageCircle,
@@ -68,49 +64,37 @@ import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 
 const menuSections = [
   {
-    label: "CRM",
-    key: "crm",
+    label: "Run the Business",
+    key: "run",
     items: [
-      { title: "Contacts", url: "/contacts", icon: ContactRound },
-      { title: "Pipeline", url: "/pipeline", icon: Columns },
-      { title: "Quotes & Proposals", url: "/quotes", icon: ClipboardCheck },
+      { title: "Dashboard", url: "/", icon: LayoutDashboard },
+      { title: "Customers", url: "/contacts", icon: ContactRound },
+      { title: "Schedule", url: "/scheduling", icon: Calendar },
+      { title: "Routes", url: "/routes", icon: MapPin },
+      { title: "Field Map", url: "/field-view", icon: Map },
+      { title: "Invoices", url: "/invoices", icon: FileText },
       { title: "Messages", url: "/communications", icon: MessageSquare },
     ],
   },
   {
-    label: "Operations",
-    key: "operations",
+    label: "Make More Money",
+    key: "money",
     items: [
-      { title: "Command Center", url: "/command-center", icon: Radio, adminOnly: true },
-      { title: "Scheduling", url: "/scheduling", icon: Calendar },
-      { title: "Routes", url: "/routes", icon: MapPin },
-      { title: "Live Field Map", url: "/field-view", icon: Map },
-      { title: "Invoices", url: "/invoices", icon: FileText },
-      { title: "Reports & Analytics", url: "/reports", icon: BarChart3 },
-    ],
-  },
-  {
-    label: "Business",
-    key: "business",
-    items: [
-      { title: "Business Overview", url: "/business-overview", icon: LayoutDashboard },
       { title: "Profitability", url: "/profitability", icon: TrendingUp },
       { title: "Route Profit Maps", url: "/route-profit-maps", icon: Map },
-      { title: "Expenses", url: "/overhead-costs", icon: DollarSign },
       { title: "Pricing Tools", url: "/pricing-calculator", icon: Calculator },
+      { title: "Reports", url: "/reports", icon: BarChart3 },
+      { title: "Overhead Costs", url: "/overhead-costs", icon: DollarSign },
     ],
   },
   {
-    label: "Settings",
-    key: "settings",
+    label: "Setup",
+    key: "setup",
     items: [
       { title: "Settings", url: "/settings", icon: Settings },
-      { title: "Automation", url: "/automation", icon: Zap },
-      { title: "Pricing Plans", url: "/pricing", icon: DollarSign },
-      { title: "Subscription", url: "/billing", icon: CreditCard },
-      { title: "API Keys", url: "/api-keys", icon: KeyRound },
-      { title: "Webhooks", url: "/webhooks", icon: Webhook },
-      { title: "Data Migration", url: "/migration", icon: Database },
+      { title: "Automations", url: "/automation", icon: Zap },
+      { title: "Integrations", url: "/integrations", icon: Plug },
+      { title: "Import Data", url: "/migration", icon: Database },
     ],
   },
 ];
@@ -270,21 +254,6 @@ export function AppSidebar({
         <div className="px-3 pt-1 pb-3">
           <GlobalSearch />
         </div>
-
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild data-active={location === "/"} tooltip="Dashboard">
-                  <Link href="/" data-testid="link-dashboard" onClick={handleNavClick}>
-                    <LayoutDashboard />
-                    <span>Dashboard</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
 
         {menuSections.map((section) => {
           const isCollapsed = section.label ? (collapsed[section.key] ?? false) : false;

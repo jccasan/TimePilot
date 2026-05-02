@@ -148,6 +148,9 @@ function Router() {
         </Route>
         <Route path="/portal" component={Portal} />
         <Route path="/settings" component={Settings} />
+        <Route path="/integrations">
+          <Redirect to="/settings" />
+        </Route>
         <Route path="/migration" component={MigrationPage} />
         <Route path="/command-center" component={CommandCenter} />
         <Route component={NotFound} />

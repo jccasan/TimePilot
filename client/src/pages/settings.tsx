@@ -6191,6 +6191,46 @@ export default function Settings() {
         )}
       </div>
 
+      <div className="mb-6">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          Advanced Settings
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Link
+            href="/pricing"
+            className="flex flex-col items-center gap-2 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-center"
+            data-testid="link-settings-pricing-plans"
+          >
+            <DollarSign className="h-6 w-6 text-muted-foreground" />
+            <span className="text-sm font-medium">Pricing Plans</span>
+          </Link>
+          <Link
+            href="/billing"
+            className="flex flex-col items-center gap-2 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-center"
+            data-testid="link-settings-subscription"
+          >
+            <CreditCard className="h-6 w-6 text-muted-foreground" />
+            <span className="text-sm font-medium">Subscription</span>
+          </Link>
+          <Link
+            href="/api-keys"
+            className="flex flex-col items-center gap-2 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-center"
+            data-testid="link-settings-api-keys"
+          >
+            <KeyRound className="h-6 w-6 text-muted-foreground" />
+            <span className="text-sm font-medium">API Keys</span>
+          </Link>
+          <Link
+            href="/webhooks"
+            className="flex flex-col items-center gap-2 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-center"
+            data-testid="link-settings-webhooks"
+          >
+            <Webhook className="h-6 w-6 text-muted-foreground" />
+            <span className="text-sm font-medium">Webhooks</span>
+          </Link>
+        </div>
+      </div>
+
       {isMobile ? (
         <div className="space-y-4">
           {availableSettingsBlockIds
