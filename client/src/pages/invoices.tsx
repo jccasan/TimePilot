@@ -103,6 +103,10 @@ import {
   GenerateInvoiceDialog,
   GenerateByDateRangeDialog,
 } from "@/components/generate-invoice-dialog";
+import {
+  BulkActionPreflightModal,
+  type BulkPreflightAction,
+} from "@/components/bulk-action-preflight-modal";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
 
@@ -1229,9 +1233,9 @@ export default function Invoices() {
     draft: true,
     paid: false,
   });
-  const [confirmSendAll, setConfirmSendAll] = useState(false);
-  const [confirmChargeAll, setConfirmChargeAll] = useState(false);
   const [confirmGenerateAll, setConfirmGenerateAll] = useState(false);
+  const [preflightAction, setPreflightAction] = useState<BulkPreflightAction | null>(null);
+  const [previewExceptionFilter, setPreviewExceptionFilter] = useState<string[] | null>(null);
   const [confirmMerge, setConfirmMerge] = useState(false);
   const [generateAllContactIds, setGenerateAllContactIds] = useState<string[] | null>(null);
   const [selectedUninvoicedIds, setSelectedUninvoicedIds] = useState<Set<string>>(new Set());
@@ -1551,6 +1555,7 @@ export default function Invoices() {
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
       setConfirmGenerateAll(false);
+      setPreflightAction(null);
       setGenerateAllContactIds(null);
       setSelectedUninvoicedIds(new Set());
       if (data.created > 0) {
@@ -2744,7 +2749,7 @@ export default function Invoices() {
             variant="default"
             onClick={() => {
               setGenerateAllContactIds(null);
-              setConfirmGenerateAll(true);
+              setPreflightAction("generate");
             }}
             className="rounded-r-none border-r-0"
             data-testid="button-persistent-generate"
@@ -2812,7 +2817,7 @@ export default function Invoices() {
           variant="outline"
           size="sm"
           disabled={batchPending || allUnpaidInvoices.length === 0}
-          onClick={() => setConfirmSendAll(true)}
+          onClick={() => setPreflightAction("send")}
           data-testid="button-persistent-send-unpaid"
           className="flex items-center gap-1.5"
         >
@@ -2830,7 +2835,7 @@ export default function Invoices() {
             variant="outline"
             size="sm"
             disabled={batchPending || autopayEligibleInvoices.length === 0}
-            onClick={() => setConfirmChargeAll(true)}
+            onClick={() => setPreflightAction("charge")}
             data-testid="button-persistent-charge-autopay"
             className="flex items-center gap-1.5"
           >
@@ -2940,105 +2945,63 @@ export default function Invoices() {
         </div>
       )}
 
-      <Dialog open={confirmSendAll} onOpenChange={setConfirmSendAll}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Send {allUnpaidInvoices.length} Draft Invoices?</DialogTitle>
-            <DialogDescription>
-              This will email all {allUnpaidInvoices.length} draft invoice
-              {allUnpaidInvoices.length !== 1 ? "s" : ""} to their respective clients.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex gap-2 mt-2">
-            <Button
-              className="flex-1"
-              onClick={() => {
-                setConfirmSendAll(false);
-                batchSend(allUnpaidInvoices.map((inv) => inv.id));
-              }}
-              disabled={batchPending}
-              data-testid="button-confirm-send-all"
-            >
-              {batchPending ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <SendHorizonal className="mr-1 h-4 w-4" />
-              )}
-              Send All
-            </Button>
-            <Button variant="outline" onClick={() => setConfirmSendAll(false)}>
-              Cancel
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <BulkActionPreflightModal
+        open={preflightAction === "send"}
+        onOpenChange={(open) => {
+          if (!open) setPreflightAction(null);
+        }}
+        actionType="send"
+        isPending={batchPending}
+        onConfirm={() => {
+          setPreflightAction(null);
+          const contactsWithEmail = new Set(
+            (contacts ?? []).filter((c) => c.email).map((c) => c.id)
+          );
+          const eligibleIds = allUnpaidInvoices
+            .filter((inv) => contactsWithEmail.has(inv.contactId))
+            .map((inv) => inv.id);
+          batchSend(eligibleIds);
+        }}
+      />
 
-      <Dialog open={confirmChargeAll} onOpenChange={setConfirmChargeAll}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Charge {autopayEligibleInvoices.length} Autopay Invoices?</DialogTitle>
-            <DialogDescription>
-              This will attempt to charge {autopayEligibleInvoices.length} autopay-enabled invoice
-              {autopayEligibleInvoices.length !== 1 ? "s" : ""} to the cards on file.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex gap-2 mt-2">
-            <Button
-              className="flex-1"
-              onClick={() => {
-                setConfirmChargeAll(false);
-                batchCharge(autopayEligibleInvoices.map((inv) => inv.id));
-              }}
-              disabled={batchPending}
-              data-testid="button-confirm-charge-all"
-            >
-              {batchPending ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <CreditCard className="mr-1 h-4 w-4" />
-              )}
-              Charge All
-            </Button>
-            <Button variant="outline" onClick={() => setConfirmChargeAll(false)}>
-              Cancel
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <BulkActionPreflightModal
+        open={preflightAction === "charge"}
+        onOpenChange={(open) => {
+          if (!open) setPreflightAction(null);
+        }}
+        actionType="charge"
+        isPending={batchPending}
+        onConfirm={() => {
+          setPreflightAction(null);
+          batchCharge(autopayEligibleInvoices.map((inv) => inv.id));
+        }}
+      />
 
-      <Dialog open={confirmMerge} onOpenChange={setConfirmMerge}>
-        <DialogContent className="max-w-sm" data-testid="dialog-confirm-merge">
-          <DialogHeader>
-            <DialogTitle>Merge {mergeSelectedInfo?.count ?? 0} Invoices?</DialogTitle>
-            <DialogDescription>
-              {mergeSelectedInfo?.count ?? 0} invoices totaling{" "}
-              {formatMoney(mergeSelectedInfo?.total ?? 0)} will be combined into one new draft. The
-              originals will be voided.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex gap-2 mt-2">
-            <Button
-              className="flex-1"
-              onClick={() => {
-                if (mergeSelectedInfo) mergeMutation.mutate(mergeSelectedInfo.invoiceIds);
-              }}
-              disabled={mergeMutation.isPending}
-              data-testid="button-confirm-merge"
-            >
-              {mergeMutation.isPending ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <GitMerge className="mr-1 h-4 w-4" />
-              )}
-              Merge
-            </Button>
-            <Button variant="outline" onClick={() => setConfirmMerge(false)}>
-              Cancel
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <BulkActionPreflightModal
+        open={preflightAction === "generate"}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreflightAction(null);
+            setGenerateAllContactIds(null);
+          }
+        }}
+        actionType="generate"
+        isPending={generateAllMutation.isPending}
+        onConfirm={(opts) => {
+          setPreflightAction(null);
+          if (opts?.excludeExceptions && opts.eligibleContactIds) {
+            generateAllMutation.mutate({ contactIds: opts.eligibleContactIds });
+          } else {
+            generateAllMutation.mutate({ contactIds: generateAllContactIds });
+          }
+        }}
+        onReviewExceptions={(exceptionContactIds) => {
+          setPreviewExceptionFilter(exceptionContactIds);
+          setPreviewSheetOpen(true);
+        }}
+      />
 
+      {/* Legacy generate-all dialog kept for "Generate Selected" dropdown path */}
       <Dialog
         open={confirmGenerateAll}
         onOpenChange={(open) => {
@@ -3142,26 +3105,94 @@ export default function Invoices() {
         </DialogContent>
       </Dialog>
 
-      <Sheet open={previewSheetOpen} onOpenChange={setPreviewSheetOpen}>
+      <Dialog open={confirmMerge} onOpenChange={setConfirmMerge}>
+        <DialogContent className="max-w-sm" data-testid="dialog-confirm-merge">
+          <DialogHeader>
+            <DialogTitle>Merge {mergeSelectedInfo?.count ?? 0} Invoices?</DialogTitle>
+            <DialogDescription>
+              {mergeSelectedInfo?.count ?? 0} invoices totaling{" "}
+              {formatMoney(mergeSelectedInfo?.total ?? 0)} will be combined into one new draft. The
+              originals will be voided.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mt-2">
+            <Button
+              className="flex-1"
+              onClick={() => {
+                if (mergeSelectedInfo) mergeMutation.mutate(mergeSelectedInfo.invoiceIds);
+              }}
+              disabled={mergeMutation.isPending}
+              data-testid="button-confirm-merge"
+            >
+              {mergeMutation.isPending ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <GitMerge className="mr-1 h-4 w-4" />
+              )}
+              Merge
+            </Button>
+            <Button variant="outline" onClick={() => setConfirmMerge(false)}>
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Sheet
+        open={previewSheetOpen}
+        onOpenChange={(open) => {
+          setPreviewSheetOpen(open);
+          if (!open) setPreviewExceptionFilter(null);
+        }}
+      >
         <SheetContent
           side="right"
           className="w-full sm:max-w-lg overflow-y-auto"
           data-testid="sheet-preview-uninvoiced"
         >
           <SheetHeader>
-            <SheetTitle>Invoice Preview</SheetTitle>
+            <SheetTitle>
+              {previewExceptionFilter
+                ? `Flagged Contacts (${previewExceptionFilter.length})`
+                : "Invoice Preview"}
+            </SheetTitle>
           </SheetHeader>
           <div className="mt-4 space-y-3">
-            {uninvoicedSummary && uninvoicedSummary.count > 0 ? (
-              <>
-                <div className="text-sm text-muted-foreground border-b pb-3 mb-3">
-                  <span className="font-semibold text-foreground">{uninvoicedSummary.count}</span>{" "}
-                  visits · Total:{" "}
-                  <span className="font-semibold text-foreground">
-                    {formatMoney(uninvoicedSummary.totalDollars)}
+            {previewExceptionFilter && (
+              <div className="flex items-center justify-between p-2.5 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 text-sm text-amber-800 dark:text-amber-300">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Showing {previewExceptionFilter.length} flagged contact
+                    {previewExceptionFilter.length !== 1 ? "s" : ""}
                   </span>
                 </div>
-                {sortedUninvoicedByContact.map((entry) => {
+                <button
+                  className="text-xs underline underline-offset-2 hover:no-underline"
+                  onClick={() => setPreviewExceptionFilter(null)}
+                  data-testid="button-clear-exception-filter"
+                >
+                  Show all
+                </button>
+              </div>
+            )}
+            {uninvoicedSummary && uninvoicedSummary.count > 0 ? (
+              <>
+                {!previewExceptionFilter && (
+                  <div className="text-sm text-muted-foreground border-b pb-3 mb-3">
+                    <span className="font-semibold text-foreground">{uninvoicedSummary.count}</span>{" "}
+                    visits · Total:{" "}
+                    <span className="font-semibold text-foreground">
+                      {formatMoney(uninvoicedSummary.totalDollars)}
+                    </span>
+                  </div>
+                )}
+                {(previewExceptionFilter
+                  ? sortedUninvoicedByContact.filter((e) =>
+                      previewExceptionFilter.includes(e.contactId)
+                    )
+                  : sortedUninvoicedByContact
+                ).map((entry) => {
                   const contact = contacts?.find((c) => c.id === entry.contactId);
                   const hasAutopay = !!(contact?.autoPayEnabled && contact?.stripeCustomerId);
                   return (
@@ -3196,7 +3227,7 @@ export default function Invoices() {
                   onClick={() => {
                     setPreviewSheetOpen(false);
                     setGenerateAllContactIds(null);
-                    setConfirmGenerateAll(true);
+                    setPreflightAction("generate");
                   }}
                   data-testid="button-generate-from-preview"
                 >
@@ -3428,7 +3459,7 @@ export default function Invoices() {
                         variant="default"
                         onClick={() => {
                           setGenerateAllContactIds(null);
-                          setConfirmGenerateAll(true);
+                          setPreflightAction("generate");
                         }}
                         disabled={generateAllMutation.isPending}
                         data-testid="button-generate-all-cta"
@@ -3585,6 +3616,7 @@ export default function Invoices() {
                     }}
                     disabled={generateAllMutation.isPending}
                     data-testid="button-generate-selected"
+                    title="Generate invoices for selected contacts"
                   >
                     <Zap className="mr-1 h-3.5 w-3.5" /> Generate Selected (
                     {selectedUninvoicedIds.size})

@@ -48,6 +48,165 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get("/api/invoices/bulk-preflight", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+
+      const [
+        uninvoicedSummary,
+        allContacts,
+        draftInvoices,
+        sentInvoices,
+        pendingInvoices,
+        allPlans,
+      ] = await Promise.all([
+        storage.getUninvoicedSummary(companyId),
+        storage.getContacts(companyId),
+        storage.getInvoices(companyId, { status: "draft" }),
+        storage.getInvoices(companyId, { status: "sent" }),
+        storage.getInvoices(companyId, { status: "pending" }),
+        storage.getServicePlans(companyId),
+      ]);
+
+      const contactMap = new Map(allContacts.map((c) => [c.id, c]));
+
+      // Build a map from contactId → set of frequencies for their service plans
+      const contactFrequencies = new Map<string, Set<string>>();
+      for (const plan of allPlans) {
+        if (!contactFrequencies.has(plan.contactId)) {
+          contactFrequencies.set(plan.contactId, new Set());
+        }
+        contactFrequencies.get(plan.contactId)!.add(plan.frequency);
+      }
+
+      // Generate preflight: analyze uninvoiced contacts for exceptions
+      let generateMissingEmail = 0;
+      let generateNoPaymentMethod = 0;
+      let generateHighValue = 0;
+      let generateOnboardingPending = 0;
+      const generateExceptionIds = new Set<string>();
+      let recurringCount = 0;
+      let recurringDollars = 0;
+      let onetimeCount = 0;
+      let onetimeDollars = 0;
+
+      for (const entry of uninvoicedSummary.byContact) {
+        const contact = contactMap.get(entry.contactId);
+        if (!contact) continue;
+        if (!contact.email) {
+          generateMissingEmail++;
+          generateExceptionIds.add(entry.contactId);
+        }
+        if (!contact.stripeCustomerId) {
+          generateNoPaymentMethod++;
+          generateExceptionIds.add(entry.contactId);
+        }
+        if (entry.totalDollars > 500) {
+          generateHighValue++;
+          generateExceptionIds.add(entry.contactId);
+        }
+        if (contact.status === "lead" || contact.status === "estimate") {
+          generateOnboardingPending++;
+          generateExceptionIds.add(entry.contactId);
+        }
+
+        // Recurring vs one-time categorization based on service plan frequency
+        const freqs = contactFrequencies.get(entry.contactId);
+        const hasRecurring = freqs ? Array.from(freqs).some((f) => f !== "onetime") : false;
+        if (hasRecurring) {
+          recurringCount++;
+          recurringDollars += entry.totalDollars;
+        } else {
+          onetimeCount++;
+          onetimeDollars += entry.totalDollars;
+        }
+      }
+
+      // Send preflight: analyze draft invoices
+      let sendMissingEmailCount = 0;
+      let sendEligibleCount = 0;
+      let sendTotalDollars = 0;
+      const sendMissingEmailContactsMap = new Map<string, string>();
+      for (const inv of draftInvoices) {
+        const contact = contactMap.get(inv.contactId);
+        const amount = parseFloat(inv.total || "0");
+        sendTotalDollars += amount;
+        if (!contact?.email) {
+          sendMissingEmailCount++;
+          if (!sendMissingEmailContactsMap.has(inv.contactId)) {
+            const name =
+              [contact?.firstName, contact?.lastName].filter(Boolean).join(" ") || "Unknown";
+            sendMissingEmailContactsMap.set(inv.contactId, name);
+          }
+        } else {
+          sendEligibleCount++;
+        }
+      }
+      const sendMissingEmailContacts = Array.from(sendMissingEmailContactsMap.entries()).map(
+        ([id, name]) => ({ id, name })
+      );
+
+      // Charge preflight: analyze sent/pending invoices with autopay
+      // "skipped" = contact has autoPayEnabled=true but no Stripe customer on file (truly blocked).
+      // Invoices from contacts without autoPayEnabled at all are simply out of scope, not "skipped".
+      let chargeEligibleCount = 0;
+      let chargeTotalDollars = 0;
+      let chargeSkippedCount = 0;
+      for (const inv of [...sentInvoices, ...pendingInvoices]) {
+        const contact = contactMap.get(inv.contactId);
+        if (contact?.autoPayEnabled && contact?.stripeCustomerId) {
+          chargeEligibleCount++;
+          chargeTotalDollars += parseFloat(inv.total || "0");
+        } else if (contact?.autoPayEnabled && !contact?.stripeCustomerId) {
+          // Autopay is ON but no card stored — truly skipped
+          chargeSkippedCount++;
+        }
+        // Contacts without autoPayEnabled are not in scope for this action
+      }
+
+      const eligibleContactIds = uninvoicedSummary.byContact
+        .filter((entry) => !generateExceptionIds.has(entry.contactId))
+        .map((entry) => entry.contactId);
+
+      res.json({
+        generate: {
+          totalContacts: uninvoicedSummary.byContact.length,
+          totalDollars: uninvoicedSummary.totalDollars,
+          exceptionCount: generateExceptionIds.size,
+          eligibleCount: eligibleContactIds.length,
+          eligibleContactIds,
+          exceptionContactIds: Array.from(generateExceptionIds),
+          exceptions: {
+            missingEmail: generateMissingEmail,
+            noPaymentMethod: generateNoPaymentMethod,
+            highValue: generateHighValue,
+            onboardingPending: generateOnboardingPending,
+          },
+          breakdown: {
+            recurringCount,
+            recurringDollars: Math.round(recurringDollars * 100) / 100,
+            onetimeCount,
+            onetimeDollars: Math.round(onetimeDollars * 100) / 100,
+          },
+        },
+        send: {
+          totalInvoices: draftInvoices.length,
+          totalDollars: sendTotalDollars,
+          missingEmailCount: sendMissingEmailCount,
+          eligibleCount: sendEligibleCount,
+          missingEmailContacts: sendMissingEmailContacts,
+        },
+        charge: {
+          eligibleCount: chargeEligibleCount,
+          totalDollars: chargeTotalDollars,
+          skippedCount: chargeSkippedCount,
+        },
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/invoices/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
