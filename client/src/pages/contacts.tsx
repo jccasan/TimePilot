@@ -88,12 +88,20 @@ const CONTACT_FIELDS = [
   { key: "notes", label: "Notes" },
 ];
 
+const VALID_STATUS_FILTERS = ["all", "lead", "estimate", "active", "paused", "cancelled"];
+
+function getInitialStatusFilter(): string {
+  const params = new URLSearchParams(window.location.search);
+  const s = params.get("status");
+  return s && VALID_STATUS_FILTERS.includes(s) ? s : "all";
+}
+
 export default function Contacts() {
   const { toast } = useToast();
   const { startTutorial, isTutorialCompleted } = useTutorialContext();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(getInitialStatusFilter);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importStep, setImportStep] = useState<"idle" | "mapping" | "review">("idle");
   const [importRows, setImportRows] = useState<ImportRow[]>([]);

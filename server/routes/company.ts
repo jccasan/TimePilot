@@ -8,6 +8,7 @@ import {
   routes,
   reminderLogs,
   messages as messagesTable,
+  servicePlans,
   type Message,
   type InsertCompany,
   type InsertCompanyUser,
@@ -1992,6 +1993,151 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
           totalVisitsLast30Days: recentVisits.length,
         },
       });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // ── Business Health Checks ────────────────────────────────────────────────
+  app.get("/api/company/health-checks", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+
+      type HealthCheck = {
+        id: string;
+        severity: "warning" | "error";
+        message: string;
+        actionPath: string;
+        count: number;
+      };
+
+      const checks: HealthCheck[] = [];
+
+      // 1. Active recurring plans with no scheduled day
+      const [plansNoScheduleResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(servicePlans)
+        .where(
+          and(
+            eq(servicePlans.companyId, companyId),
+            eq(servicePlans.isActive, true),
+            sql`${servicePlans.frequency} != 'onetime'`,
+            sql`(${servicePlans.dayOfWeek} IS NULL OR ${servicePlans.dayOfWeek} = 'tbd')`
+          )
+        );
+      const plansNoScheduleCount = plansNoScheduleResult?.count ?? 0;
+      if (plansNoScheduleCount > 0) {
+        checks.push({
+          id: "plans_no_schedule",
+          severity: "warning",
+          message: `${plansNoScheduleCount} active recurring plan${plansNoScheduleCount === 1 ? "" : "s"} have no scheduled day — clients may miss service`,
+          actionPath: "/contacts?status=active",
+          count: plansNoScheduleCount,
+        });
+      }
+
+      // 2. Active contacts configured for invoicing/autopay but with no completed visit history —
+      // billing is set up but no service has ever been delivered, so there is nothing to invoice.
+      // visits links to contacts via service_plans (visits.service_plan_id → service_plans.contact_id).
+      const invoicingNoHistoryResult = await db.execute(sql`
+          SELECT COUNT(DISTINCT c.id)::int AS count
+          FROM contacts c
+          WHERE c.company_id = ${companyId}
+            AND c.status = 'active'
+            AND (c.auto_invoice_enabled = true OR c.auto_pay_enabled = true)
+            AND NOT EXISTS (
+              SELECT 1 FROM visits v
+              JOIN service_plans sp ON sp.id = v.service_plan_id
+              WHERE sp.contact_id = c.id
+                AND v.company_id = ${companyId}
+                AND v.status = 'completed'
+            )
+        `);
+      const invoicingNoHistoryCount = Number(
+        (invoicingNoHistoryResult.rows?.[0] as Record<string, unknown>)?.count ?? 0
+      );
+      if (invoicingNoHistoryCount > 0) {
+        checks.push({
+          id: "invoicing_no_history",
+          severity: "warning",
+          message: `${invoicingNoHistoryCount} active client${invoicingNoHistoryCount === 1 ? "" : "s"} are set up for invoicing but have no completed visit history`,
+          actionPath: "/contacts?status=active",
+          count: invoicingNoHistoryCount,
+        });
+      }
+
+      // 3. Invoices created but never sent (draft status)
+      const [unsentInvoicesResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(invoices)
+        .where(and(eq(invoices.companyId, companyId), eq(invoices.status, "draft")));
+      const unsentInvoicesCount = unsentInvoicesResult?.count ?? 0;
+      if (unsentInvoicesCount > 0) {
+        checks.push({
+          id: "unsent_invoices",
+          severity: "warning",
+          message: `${unsentInvoicesCount} invoice${unsentInvoicesCount === 1 ? "" : "s"} created but never sent to clients`,
+          actionPath: "/invoices",
+          count: unsentInvoicesCount,
+        });
+      }
+
+      // 4. Autopay-enabled active contacts without a Stripe customer ID
+      const [autopayNoPaymentResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.companyId, companyId),
+            eq(contacts.status, "active"),
+            eq(contacts.autoPayEnabled, true),
+            sql`(${contacts.stripeCustomerId} IS NULL OR ${contacts.stripeCustomerId} = '')`
+          )
+        );
+      const autopayNoPaymentCount = autopayNoPaymentResult?.count ?? 0;
+      if (autopayNoPaymentCount > 0) {
+        checks.push({
+          id: "autopay_no_payment",
+          severity: "error",
+          message: `${autopayNoPaymentCount} client${autopayNoPaymentCount === 1 ? "" : "s"} have autopay enabled but no Stripe customer profile — payment will fail`,
+          actionPath: "/contacts?status=active",
+          count: autopayNoPaymentCount,
+        });
+      }
+
+      // 5. Contacts assigned to a route but no upcoming scheduled visit.
+      // visits has no direct contact_id; reach contacts via service_plans.contact_id.
+      const routeNoScheduleResult = await db.execute(sql`
+          SELECT COUNT(DISTINCT c.id)::int AS count
+          FROM contacts c
+          JOIN service_plans sp ON sp.contact_id = c.id AND sp.company_id = ${companyId}
+          WHERE c.company_id = ${companyId}
+            AND c.status = 'active'
+            AND sp.is_active = true
+            AND sp.route_id IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM visits v
+              JOIN service_plans sp2 ON sp2.id = v.service_plan_id
+              WHERE sp2.contact_id = c.id
+                AND v.company_id = ${companyId}
+                AND v.status = 'scheduled'
+                AND v.scheduled_date > NOW()
+            )
+        `);
+      const routeNoScheduleCount = Number(
+        (routeNoScheduleResult.rows?.[0] as Record<string, unknown>)?.count ?? 0
+      );
+      if (routeNoScheduleCount > 0) {
+        checks.push({
+          id: "route_no_schedule",
+          severity: "warning",
+          message: `${routeNoScheduleCount} client${routeNoScheduleCount === 1 ? "" : "s"} assigned to a route but have no upcoming service scheduled`,
+          actionPath: "/routes",
+          count: routeNoScheduleCount,
+        });
+      }
+
+      res.json(checks);
     } catch (err) {
       handleError(res, err);
     }

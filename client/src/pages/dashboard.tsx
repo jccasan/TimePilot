@@ -309,6 +309,120 @@ const REQUEST_TYPE_LABELS: Record<string, string> = {
   other: "Other Request",
 };
 
+type HealthCheck = {
+  id: string;
+  severity: "warning" | "error";
+  message: string;
+  actionPath: string;
+  count: number;
+};
+
+function BusinessHealthWidget() {
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+  const { data: checks = [], isLoading } = useQuery<HealthCheck[]>({
+    queryKey: ["/api/company/health-checks"],
+  });
+
+  const visible = checks.filter((c) => !dismissed.has(c.id));
+
+  if (isLoading) {
+    return (
+      <Card data-testid="widget-business-health" className="h-full">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <div className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Business Health</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-2">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (visible.length === 0) {
+    return (
+      <Card data-testid="widget-business-health" className="h-full">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <div className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Business Health</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <div
+            className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400"
+            data-testid="text-health-all-good"
+          >
+            <CheckCircle className="h-4 w-4 shrink-0" />
+            <span>Everything looks good — no issues detected.</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card data-testid="widget-business-health" className="h-full">
+      <CardHeader className="pb-3 pt-4 px-4">
+        <div className="flex items-center gap-2">
+          <Activity className="h-5 w-5 text-primary" />
+          <CardTitle className="text-lg">Business Health</CardTitle>
+          <Badge variant="destructive" className="text-[10px]" data-testid="badge-health-count">
+            {visible.length}
+          </Badge>
+        </div>
+        <CardDescription>Issues detected that may need your attention</CardDescription>
+      </CardHeader>
+      <CardContent className="px-4 pb-4 space-y-2">
+        {visible.map((check) => (
+          <div
+            key={check.id}
+            className={`flex items-start justify-between gap-3 rounded-lg border p-3 ${
+              check.severity === "error"
+                ? "border-destructive/40 bg-destructive/5"
+                : "border-yellow-400/40 bg-yellow-50/50 dark:bg-yellow-900/10"
+            }`}
+            data-testid={`health-check-${check.id}`}
+          >
+            <div className="flex items-start gap-2 min-w-0">
+              {check.severity === "error" ? (
+                <AlertOctagon className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+              ) : (
+                <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm leading-snug" data-testid={`text-health-message-${check.id}`}>
+                  {check.message}
+                </p>
+                <Link href={check.actionPath}>
+                  <span
+                    className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1 mt-1"
+                    data-testid={`link-health-action-${check.id}`}
+                  >
+                    Fix it <ArrowRight className="h-3 w-3" />
+                  </span>
+                </Link>
+              </div>
+            </div>
+            <button
+              onClick={() => setDismissed((prev) => new Set([...prev, check.id]))}
+              className="text-muted-foreground hover:text-foreground shrink-0 transition-colors"
+              aria-label="Dismiss"
+              data-testid={`button-dismiss-health-${check.id}`}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 const WIDGET_DEFS: {
   id: string;
   label: string;
@@ -320,6 +434,17 @@ const WIDGET_DEFS: {
   minH: number;
   category: "stats" | "insights" | "tools";
 }[] = [
+  {
+    id: "business_health",
+    label: "Business Health",
+    icon: Activity,
+    description: "Warnings about contradictory or incomplete data",
+    defaultW: 12,
+    defaultH: 3,
+    minW: 6,
+    minH: 2,
+    category: "insights",
+  },
   {
     id: "mrr",
     label: "Monthly Revenue (MRR)",
@@ -554,6 +679,7 @@ const WIDGET_DEFS: {
 ];
 
 const DEFAULT_WIDGET_IDS = [
+  "business_health",
   "mrr",
   "month_revenue",
   "requires_invoicing",
@@ -3394,6 +3520,8 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         );
+      case "business_health":
+        return <BusinessHealthWidget />;
       default:
         return null;
     }
