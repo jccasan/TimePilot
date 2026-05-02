@@ -1141,7 +1141,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         const churnRatePct =
           activeCustomers > 0 ? Math.round((churned30d / activeCustomers) * 1000) / 10 : 0;
 
-        // Route density metrics
+        // Route density metrics — activeRouteCount counts only routes with at least one active plan
         const plansWithRoute = allActivePlans.filter((p) => p.routeId != null).length;
         const distinctRouteIds = new Set(allActivePlans.map((p) => p.routeId).filter(Boolean)).size;
         const activeRouteCount = distinctRouteIds;
@@ -1149,6 +1149,70 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           activeRouteCount > 0 ? Math.round((activePlanCount / activeRouteCount) * 10) / 10 : 0;
         const plansOnRoutePct =
           activePlanCount > 0 ? Math.round((plansWithRoute / activePlanCount) * 100) : 0;
+
+        // Data quality warnings
+        const dataQualityWarnings: Array<{
+          dataPoint: string;
+          status: "Warning" | "Good" | "Missing";
+          note: string;
+        }> = [];
+        if (activePlanCount === 0) {
+          dataQualityWarnings.push({
+            dataPoint: "Active Plans",
+            status: "Missing",
+            note: "No active service plans found — most metrics cannot be assessed.",
+          });
+        }
+        if (activeCustomers === 0) {
+          dataQualityWarnings.push({
+            dataPoint: "Active Customers",
+            status: "Missing",
+            note: "No active customers found — customer-based metrics cannot be assessed.",
+          });
+        }
+        if (activeRouteCount > 0 && activePlanCount > 0) {
+          const routeToCustomerRatio = activeRouteCount / activePlanCount;
+          if (routeToCustomerRatio >= 0.8) {
+            dataQualityWarnings.push({
+              dataPoint: "Route vs Customer Count",
+              status: "Warning",
+              note: `Route count (${activeRouteCount}) is unusually high relative to active plans (${activePlanCount}) — verify whether service visits are being counted as routes rather than customers.`,
+            });
+          } else {
+            dataQualityWarnings.push({
+              dataPoint: "Route vs Customer Count",
+              status: "Good",
+              note: `${activeRouteCount} routes serving ${activePlanCount} active plans (${avgStopsPerRoute} stops/route avg).`,
+            });
+          }
+        }
+        if (plansOnRoutePct < 50 && activePlanCount > 0) {
+          dataQualityWarnings.push({
+            dataPoint: "Plans Assigned to Routes",
+            status: "Warning",
+            note: `Only ${plansOnRoutePct}% of active plans are assigned to a route — route density metrics may be understated.`,
+          });
+        } else if (activePlanCount > 0) {
+          dataQualityWarnings.push({
+            dataPoint: "Plans Assigned to Routes",
+            status: "Good",
+            note: `${plansOnRoutePct}% of active plans are assigned to routes.`,
+          });
+        }
+        if (mrrCents === 0 && activePlanCount > 0) {
+          dataQualityWarnings.push({
+            dataPoint: "MRR Calculation",
+            status: "Warning",
+            note: "Active plans exist but MRR calculates to $0 — check that plan prices are set correctly.",
+          });
+        }
+        if (collectionRate < 50 && paidInvoices.length > 0) {
+          dataQualityWarnings.push({
+            dataPoint: "Collection Rate",
+            status: "Warning",
+            note: `Collection rate of ${collectionRate}% is unusually low — verify invoice statuses are being updated correctly.`,
+          });
+        }
 
         const factSheet = {
           businessName: company?.name || "Your Business",
@@ -1174,6 +1238,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           activeRouteCount,
           avgStopsPerRoute,
           plansOnRoutePct,
+          dataQualityWarnings,
         };
 
         const crypto = await import("crypto");
@@ -1218,6 +1283,10 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
             "You are an AI Business Assessor for pet waste removal / poop scooping businesses. You act as a combined COO, CFO, route-operations consultant, and growth strategist for small service businesses. Evaluate the business using hard-hitting, neutral, business-owner-level judgment.";
         }
 
+        const hasDataQualityWarnings = dataQualityWarnings.some(
+          (w) => w.status === "Warning" || w.status === "Missing"
+        );
+
         const systemPrompt =
           basePromptContent +
           `
@@ -1232,74 +1301,122 @@ Ignore the "REQUIRED OUTPUT FORMAT" markdown structure described above. Instead,
   "businessStage": "<one of: Idea stage | Pre-revenue setup | Early revenue | Owner-operator route business | Small team route business | Growth-stage route business | Mature local operator | Distressed business>",
   "primaryServiceModel": "<one of: Weekly recurring | Biweekly recurring | Monthly recurring | One-time cleanups | Mixed recurring and one-time | Pet waste removal plus add-ons | Other>",
   "rating": "<one of: Excellent | Strong | Good but uneven | Viable but fragile | Weak | High-risk | Structurally poor | Not currently viable>",
-  "confidenceLevel": "<High | Medium | Low>",
+  "confidenceLevel": "<High | Medium | Low — MUST be Medium or Low if dataQualityWarnings contains any Warning or Missing entries>",
+  "confidenceReason": "<plain-English explanation of why this confidence level was chosen, citing specific data gaps or quality issues>",
   "executiveSummary": {
     "topThingsWorking": ["<item 1>", "<item 2>", "<item 3>"],
     "topProblems": ["<item 1>", "<item 2>", "<item 3>"],
     "topActionsFirst": ["<action 1>", "<action 2>", "<action 3>"],
-    "biggestRisk": "<single biggest business risk>",
-    "fastestWayToImprove": "<one action most likely to improve score within 30-60 days>"
+    "biggestRisk": "<single biggest business risk with specific numbers>",
+    "fastestWayToImprove": "<one specific operational action most likely to improve score within 30-60 days — must include a concrete step, not a vague strategy>"
   },
   "scoreBreakdown": [
-    { "category": "Recurring Revenue Quality", "score": <0-15>, "max": 15, "assessment": "<specific assessment with numbers>" },
-    { "category": "Route Density and Territory Efficiency", "score": <0-15>, "max": 15, "assessment": "<specific assessment>" },
-    { "category": "Gross Margin / Unit Economics", "score": <0-15>, "max": 15, "assessment": "<specific assessment>" },
-    { "category": "Pricing Power and Plan Structure", "score": <0-10>, "max": 10, "assessment": "<specific assessment>" },
-    { "category": "Operating Efficiency", "score": <0-10>, "max": 10, "assessment": "<specific assessment>" },
-    { "category": "Billing and Cash Flow", "score": <0-10>, "max": 10, "assessment": "<specific assessment>" },
-    { "category": "Sales and Marketing Engine", "score": <0-10>, "max": 10, "assessment": "<specific assessment>" },
-    { "category": "Customer Retention and Service Quality", "score": <0-5>, "max": 5, "assessment": "<specific assessment>" },
-    { "category": "Scalability and Owner Dependency", "score": <0-5>, "max": 5, "assessment": "<specific assessment>" },
-    { "category": "Risk Profile", "score": <0-5>, "max": 5, "assessment": "<specific assessment>" }
+    { "category": "Recurring Revenue Quality", "score": <0-15>, "max": 15, "assessment": "<specific assessment with numbers>", "driver": "<the single key metric driving this score, e.g. '$X MRR from Y active plans'>", "suggestedFix": "<one-line specific action to improve this score>" },
+    { "category": "Route Density and Territory Efficiency", "score": <0-15>, "max": 15, "assessment": "<specific assessment>", "driver": "<key metric>", "suggestedFix": "<one-line action>" },
+    { "category": "Gross Margin / Unit Economics", "score": <0-15>, "max": 15, "assessment": "<specific assessment>", "driver": "<key metric>", "suggestedFix": "<one-line action>" },
+    { "category": "Pricing Power and Plan Structure", "score": <0-10>, "max": 10, "assessment": "<specific assessment>", "driver": "<key metric>", "suggestedFix": "<one-line action>" },
+    { "category": "Operating Efficiency", "score": <0-10>, "max": 10, "assessment": "<specific assessment>", "driver": "<key metric>", "suggestedFix": "<one-line action>" },
+    { "category": "Billing and Cash Flow", "score": <0-10>, "max": 10, "assessment": "<specific assessment>", "driver": "<key metric>", "suggestedFix": "<one-line action>" },
+    { "category": "Sales and Marketing Engine", "score": <0-10>, "max": 10, "assessment": "<specific assessment>", "driver": "<key metric>", "suggestedFix": "<one-line action>" },
+    { "category": "Customer Retention and Service Quality", "score": <0-5>, "max": 5, "assessment": "<specific assessment>", "driver": "<key metric>", "suggestedFix": "<one-line action>" },
+    { "category": "Scalability and Owner Dependency", "score": <0-5>, "max": 5, "assessment": "<specific assessment>", "driver": "<key metric>", "suggestedFix": "<one-line action>" },
+    { "category": "Risk Profile", "score": <0-5>, "max": 5, "assessment": "<specific assessment>", "driver": "<key metric>", "suggestedFix": "<one-line action>" }
   ],
   "whatIsWorking": [
-    { "name": "<name>", "observation": "<specific observation>", "evidenceLabel": "<Evidence-based|Inference|Insufficient data>", "whyItMatters": "<why it matters>", "recommendation": "<Keep|Strengthen|Monitor>" }
+    { "name": "<name>", "observation": "<specific observation with numbers from fact sheet>", "metricValue": "<the concrete metric value e.g. '91%' or '4.2 stops/route' or '$3,200 MRR' — NOT a badge label like Evidence-based>", "evidenceLabel": "<Evidence-based|Inference|Insufficient data>", "whyItMatters": "<why it matters>", "recommendation": "<Keep|Strengthen|Monitor>" }
   ],
   "whatIsNotWorking": [
-    { "name": "<name>", "problem": "<specific problem>", "evidenceLabel": "<Evidence-based|Inference|Insufficient data>", "businessImpact": "<impact>", "likelyRootCause": "<root cause>", "recommendedCorrection": "<correction>" }
+    { "name": "<name>", "problem": "<specific problem with numbers>", "metricValue": "<the concrete metric value e.g. '4.2 stops/route' or '$0 MRR' — NOT a badge label>", "evidenceLabel": "<Evidence-based|Inference|Insufficient data>", "businessImpact": "<quantified impact where possible>", "likelyRootCause": "<root cause>", "recommendedCorrection": "<specific correction with concrete steps>" }
   ],
-  "routeOpsAssessment": "<paragraph on route ops: service-area discipline, route density, travel time, stops per hour, missed-service risk, top bottleneck, top risk, highest-leverage fix>",
-  "financialAssessment": "<paragraph CFO-level: revenue predictability, avg revenue per customer, gross margin, cash flow, billing and collections, profit leakage, top financial bottleneck, top financial risk, highest-leverage fix>",
-  "pricingAssessment": "<paragraph on pricing: weekly/biweekly/monthly adequacy, which customer type is least profitable, which change should happen first>",
-  "marketingAssessment": "<paragraph on growth engine: lead sources, local SEO, referrals, neighborhood marketing, strongest channel, weakest issue, best next move>",
+  "functionalAnalysis": {
+    "routeOps": {
+      "diagnosis": "<1-2 sentence direct diagnosis of route operation health>",
+      "evidence": "<specific numbers from fact sheet supporting the diagnosis>",
+      "businessImpact": "<what this means for revenue, margin, or owner workload>",
+      "recommendedFix": "<specific operational action with timeline>"
+    },
+    "financial": {
+      "diagnosis": "<1-2 sentence CFO-level diagnosis>",
+      "evidence": "<specific revenue, margin, collection numbers>",
+      "businessImpact": "<cash flow or profit impact>",
+      "recommendedFix": "<specific financial action with timeline>"
+    },
+    "pricing": {
+      "diagnosis": "<1-2 sentence pricing diagnosis>",
+      "evidence": "<which service tiers are weak and why>",
+      "businessImpact": "<monthly revenue impact of pricing gaps>",
+      "recommendedFix": "<specific price change or structure change>"
+    },
+    "marketing": {
+      "diagnosis": "<1-2 sentence growth engine diagnosis>",
+      "evidence": "<new customers added, growth rate, channel data available>",
+      "businessImpact": "<what current growth rate means for 12-month trajectory>",
+      "recommendedFix": "<specific marketing action with timeline>"
+    }
+  },
   "ownerDecisions": [
-    { "decision": "<decision name>", "whyItMatters": "<why>", "recommendedAnswer": "<answer>", "riskIfIgnored": "<risk>" }
+    { "decision": "<decision name>", "whyItMatters": "<why>", "recommendedAnswer": "<specific answer>", "riskIfIgnored": "<risk>" },
+    { "decision": "<decision name>", "whyItMatters": "<why>", "recommendedAnswer": "<specific answer>", "riskIfIgnored": "<risk>" },
+    { "decision": "<decision name>", "whyItMatters": "<why>", "recommendedAnswer": "<specific answer>", "riskIfIgnored": "<risk>" },
+    { "decision": "<decision name>", "whyItMatters": "<why>", "recommendedAnswer": "<specific answer>", "riskIfIgnored": "<risk>" },
+    { "decision": "<decision name>", "whyItMatters": "<why>", "recommendedAnswer": "<specific answer>", "riskIfIgnored": "<risk>" }
+  ],
+  "nextThreeDecisions": [
+    "<Question framing the first most critical owner decision — phrased as a question the owner must answer this week>",
+    "<Question framing the second most critical owner decision>",
+    "<Question framing the third most critical owner decision>"
   ],
   "actionPlan": {
-    "next30": ["<specific action 1>", "<specific action 2>", "<specific action 3>"],
+    "week1": ["<specific day-level task>", "<specific day-level task>", "<specific day-level task>"],
+    "week2": ["<specific operational task>", "<specific operational task>"],
+    "week3week4": ["<specific operational task>", "<specific operational task>"],
     "days31to60": ["<specific action 1>", "<specific action 2>", "<specific action 3>"],
     "days61to90": ["<specific action 1>", "<specific action 2>", "<specific action 3>"]
   },
   "stopStartContinue": {
-    "stop": ["<specific thing to stop>", "<specific thing to stop>", "<specific thing to stop>"],
-    "start": ["<specific thing to start>", "<specific thing to start>", "<specific thing to start>"],
+    "stop": ["<specific thing to stop — not vague>", "<specific thing to stop>", "<specific thing to stop>"],
+    "start": ["<specific thing to start — not vague>", "<specific thing to start>", "<specific thing to start>"],
     "continue": ["<specific thing to continue>", "<specific thing to continue>", "<specific thing to continue>"]
   },
-  "missingData": ["<data item and what decision it affects>"],
+  "missingData": ["<data item and what decision it blocks>"],
   "finalSummary": "<5-8 sentence blunt final summary: Is this business healthy? What is the main thing holding it back? What should the owner fix first? What should the owner stop doing? What would improve the score fastest?>",
   "cfo": {
     "rating": "<Healthy|Caution|Critical>",
-    "findings": ["<specific finding with numbers from the fact sheet>"]
+    "findings": ["<specific finding with exact numbers from fact sheet>"]
   },
   "coo": {
     "rating": "<Healthy|Caution|Critical>",
-    "findings": ["<specific finding with numbers from the fact sheet>"]
+    "findings": ["<specific finding with exact numbers from fact sheet>"]
   },
   "recommendations": [
-    { "priority": "<High|Medium|Low>", "title": "<short title>", "explanation": "<1-2 sentences with specific numbers>" }
+    {
+      "priorityRank": <1-5 integer, 1 = highest>,
+      "priority": "<High|Medium|Low>",
+      "title": "<short specific title>",
+      "explanation": "<1-2 sentences with specific numbers from fact sheet>",
+      "estimatedImpact": "<computed dollar or percentage impact if calculable, otherwise 'Estimated impact unavailable — [specific missing data needed]'>",
+      "difficulty": "<Low|Medium|High>",
+      "timeframeDays": <integer number of days to implement>
+    }
   ]
 }
+
+LANGUAGE RULES — STRICTLY ENFORCED:
+- Every recommendation, fix, and action must be operational and specific. Name the exact thing to do.
+- FORBIDDEN phrases (if you use these, the output is invalid): "develop a marketing strategy", "reassess pricing", "monitor customer satisfaction", "evaluate workflows", "consider implementing", "you might want to", "it may be helpful", "explore options", "look into".
+- Instead use: "Raise biweekly rates from $X to $Y for all customers added after [date]", "Send a re-engagement email to the 3 customers who cancelled in the last 30 days", "Block off Tuesdays for route-dense zip code [X]".
 
 Rules:
 - healthScore must equal the sum of all scoreBreakdown scores
 - Apply all scoring cap rules from the prompt above before finalizing the score
+- ${hasDataQualityWarnings ? "DATA QUALITY WARNING IS ACTIVE: confidenceLevel MUST be Medium or Low. Reflect the dataQualityWarnings array in your confidenceReason." : "No data quality warnings — set confidenceLevel based on data completeness alone."}
 - IMPORTANT: thisMonthInvoicedDollars reflects only invoices *issued* this calendar month. Many service businesses bill at month-end so this may legitimately be $0 mid-month. Do NOT treat thisMonthInvoicedDollars=0 as a revenue problem — use scheduledMonthlyRevenueDollars (MRR from active plans) as the true recurring revenue figure. Only flag a revenue concern if mrrDollars itself is low or declining.
 - Route density assessment: use activeRouteCount, avgStopsPerRoute, and plansOnRoutePct. avgStopsPerRoute >= 8 is good density; 5-7 is moderate; <5 is low density. If plansOnRoutePct < 70%, flag that many customers are not yet assigned to routes.
 - cfo findings: focus on scheduledMonthlyRevenueDollars (MRR), collection, margin — cite exact numbers from fact sheet
 - coo findings: focus on churn rate (churnRatePct), new customers added (newCustomers30d), active vs paused plans, route density (avgStopsPerRoute, activeRouteCount), customer mix — cite exact numbers from fact sheet
-- recommendations: max 5, ranked by priority, cite exact numbers from the fact sheet
+- recommendations: max 5, ranked by priorityRank (1 = most important), cite exact numbers from the fact sheet
 - NEVER invent numbers not present in the fact sheet
-- whatIsWorking: 3-7 items; whatIsNotWorking: 3-7 items; ownerDecisions: exactly 5 items`;
+- whatIsWorking: 3-7 items; whatIsNotWorking: 3-7 items; ownerDecisions: exactly 5 items; nextThreeDecisions: exactly 3 items`;
 
         const OpenAI = (await import("openai")).default;
         const ai = new OpenAI({
@@ -1311,7 +1428,7 @@ Rules:
           model: "gpt-4o-mini",
           response_format: { type: "json_object" },
           temperature: 0,
-          max_tokens: 4000,
+          max_tokens: 6000,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: JSON.stringify(factSheet, null, 2) },
@@ -1327,6 +1444,22 @@ Rules:
         }
 
         const typedParsed = parsed as Record<string, unknown>;
+
+        // Enforce confidence level server-side: if data quality has Warning/Missing, confidence must be Medium or Low
+        if (hasDataQualityWarnings) {
+          if (typedParsed.confidenceLevel === "High") {
+            typedParsed.confidenceLevel = "Medium";
+            typedParsed.confidenceReason =
+              (typeof typedParsed.confidenceReason === "string"
+                ? typedParsed.confidenceReason + " "
+                : "") +
+              `[Note: Confidence automatically adjusted from High to Medium due to ${dataQualityWarnings.filter((w) => w.status === "Warning" || w.status === "Missing").length} active data quality warning(s).]`;
+          }
+        }
+
+        // Embed input data so the PDF generator can use it for KPI tables and data quality checks
+        typedParsed._inputData = factSheet;
+
         const healthScore =
           typeof typedParsed.healthScore === "number" ? typedParsed.healthScore : null;
         const verdict = typeof typedParsed.verdict === "string" ? typedParsed.verdict : "";
@@ -1480,6 +1613,59 @@ Rules:
 
         await sgMail.send(mailData);
         return res.json({ success: true, to: toEmail });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.get(
+    "/api/business-overview/assessment/pdf",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const recentHistory = await storage.getBusinessAssessments(companyId, 1);
+        const cached = recentHistory[0];
+        if (!cached || !cached.fullResult) {
+          return res
+            .status(404)
+            .json({ error: "No assessment found. Please generate an assessment first." });
+        }
+        const company = await storage.getCompany(companyId);
+        const companyName = company?.name || "Your Business";
+        const { generateAssessmentPdf } = await import("../services/assessment-pdf");
+        const pdfBuffer = await generateAssessmentPdf(cached.fullResult, companyName);
+        const filename = `business-health-report-${companyName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.pdf`;
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.setHeader("Content-Length", pdfBuffer.length);
+        res.send(pdfBuffer);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/business-overview/assessment/pdf",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const company = await storage.getCompany(companyId);
+        const companyName = company?.name || "Your Business";
+        const assessmentData = req.body;
+        if (!assessmentData || typeof assessmentData !== "object") {
+          return res.status(400).json({ error: "Invalid assessment data." });
+        }
+        const { generateAssessmentPdf } = await import("../services/assessment-pdf");
+        const pdfBuffer = await generateAssessmentPdf(assessmentData, companyName);
+        const filename = `business-health-report-${companyName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.pdf`;
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.setHeader("Content-Length", pdfBuffer.length);
+        res.send(pdfBuffer);
       } catch (err) {
         handleError(res, err);
       }

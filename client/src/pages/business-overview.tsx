@@ -117,6 +117,13 @@ type OwnerDecisionItem = {
   riskIfIgnored: string;
 };
 
+type FunctionalAnalysisCard = {
+  diagnosis?: string;
+  evidence?: string;
+  businessImpact?: string;
+  recommendedFix?: string;
+};
+
 type Assessment = {
   healthScore: number;
   verdict: string;
@@ -124,6 +131,7 @@ type Assessment = {
   primaryServiceModel?: string;
   rating?: string;
   confidenceLevel?: string;
+  confidenceReason?: string;
   executiveSummary?: {
     topThingsWorking: string[];
     topProblems: string[];
@@ -134,13 +142,23 @@ type Assessment = {
   scoreBreakdown?: ScoreBreakdownItem[];
   whatIsWorking?: WhatIsWorkingItem[];
   whatIsNotWorking?: WhatIsNotWorkingItem[];
+  functionalAnalysis?: {
+    routeOps?: FunctionalAnalysisCard;
+    financial?: FunctionalAnalysisCard;
+    pricing?: FunctionalAnalysisCard;
+    marketing?: FunctionalAnalysisCard;
+  };
   routeOpsAssessment?: string;
   financialAssessment?: string;
   pricingAssessment?: string;
   marketingAssessment?: string;
   ownerDecisions?: OwnerDecisionItem[];
+  nextThreeDecisions?: string[];
   actionPlan?: {
-    next30: string[];
+    week1?: string[];
+    week2?: string[];
+    week3week4?: string[];
+    next30?: string[];
     days31to60: string[];
     days61to90: string[];
   };
@@ -153,7 +171,15 @@ type Assessment = {
   finalSummary?: string;
   cfo: { rating: string; findings: string[] };
   coo: { rating: string; findings: string[] };
-  recommendations: { priority: string; title: string; explanation: string }[];
+  recommendations: {
+    priorityRank?: number;
+    priority: string;
+    title: string;
+    explanation: string;
+    estimatedImpact?: string;
+    difficulty?: string;
+    timeframeDays?: number;
+  }[];
   scoreDelta: number | null;
   cachedAt?: string;
   fromCache?: boolean;
@@ -432,10 +458,27 @@ export default function BusinessOverview() {
     window.print();
   }
 
-  function handleDownloadAssessmentPDF() {
-    document.body.classList.add("print-assessment-only");
-    window.print();
-    document.body.classList.remove("print-assessment-only");
+  async function handleDownloadAssessmentPDF() {
+    try {
+      const res = await apiRequest("GET", "/api/business-overview/assessment/pdf");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as any).error || "Failed to generate PDF");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "business-health-report.pdf";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({
+        title: "Failed to download PDF",
+        description: err?.message || "An error occurred",
+        variant: "destructive",
+      });
+    }
   }
 
   async function downloadHistoricalPDF(entry: AssessmentHistoryEntry) {
@@ -460,107 +503,33 @@ export default function BusinessOverview() {
       });
       return;
     }
-    const dateStr = new Date(entry.createdAt).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
 
-    const scoreColor = entry.score >= 70 ? "#16a34a" : entry.score >= 50 ? "#ca8a04" : "#dc2626";
-
-    const esc = (s: string | number | null | undefined): string =>
-      String(s ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-
-    const section = (title: string, content: string) =>
-      `<div class="section"><h2>${esc(title)}</h2>${content}</div>`;
-
-    const list = (items: string[]) => `<ul>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`;
-
-    const breakdownRows =
-      a?.scoreBreakdown
-        ?.map(
-          (b) =>
-            `<tr><td>${esc(b.category)}</td><td>${esc(b.score)}/${esc(b.max)}</td><td>${esc(b.assessment)}</td></tr>`
-        )
-        .join("") ?? "";
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>AI Assessment Report — ${esc(dateStr)}</title>
-  <style>
-    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; margin: 24px; }
-    h1 { font-size: 18px; margin-bottom: 4px; }
-    .meta { color: #666; font-size: 11px; margin-bottom: 16px; }
-    .score-badge { display: inline-block; font-size: 28px; font-weight: bold; color: ${scoreColor}; border: 2px solid ${scoreColor}; border-radius: 50%; width: 56px; height: 56px; line-height: 56px; text-align: center; margin-right: 12px; vertical-align: middle; }
-    .verdict { font-size: 13px; color: #444; margin: 8px 0 16px; }
-    .section { margin-bottom: 16px; border-top: 1px solid #e5e7eb; padding-top: 12px; }
-    h2 { font-size: 13px; font-weight: bold; margin-bottom: 6px; color: #1e3a5f; }
-    ul { margin: 0; padding-left: 16px; }
-    li { margin-bottom: 3px; }
-    table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    th { text-align: left; border-bottom: 1px solid #ccc; padding: 4px 6px; background: #f3f4f6; }
-    td { padding: 4px 6px; border-bottom: 1px solid #f0f0f0; }
-    @media print { body { margin: 0; } }
-  </style>
-</head>
-<body>
-  <h1><span class="score-badge">${esc(entry.score)}</span> AI Business Assessment Report</h1>
-  <div class="meta">Generated: ${esc(dateStr)} &nbsp;|&nbsp; ScooPilot</div>
-  <p class="verdict">${esc(entry.verdict)}</p>
-
-  ${
-    a?.executiveSummary
-      ? section(
-          "Executive Summary",
-          `
-    ${a.executiveSummary.topThingsWorking?.length ? `<strong>Top Things Working:</strong>${list(a.executiveSummary.topThingsWorking)}` : ""}
-    ${a.executiveSummary.topProblems?.length ? `<strong>Top Problems:</strong>${list(a.executiveSummary.topProblems)}` : ""}
-    ${a.executiveSummary.topActionsFirst?.length ? `<strong>Top Actions First:</strong>${list(a.executiveSummary.topActionsFirst)}` : ""}
-    ${a.executiveSummary.biggestRisk ? `<p><strong>Biggest Risk:</strong> ${esc(a.executiveSummary.biggestRisk)}</p>` : ""}
-    ${a.executiveSummary.fastestWayToImprove ? `<p><strong>Fastest Way to Improve:</strong> ${esc(a.executiveSummary.fastestWayToImprove)}</p>` : ""}
-  `
-        )
-      : ""
-  }
-
-  ${breakdownRows ? section("Score Breakdown", `<table><thead><tr><th>Category</th><th>Score</th><th>Assessment</th></tr></thead><tbody>${breakdownRows}</tbody></table>`) : ""}
-
-  ${a?.whatIsWorking?.length ? section("What Is Working", a.whatIsWorking.map((w) => `<p><strong>${esc(w.name)}:</strong> ${esc(w.observation)} ${w.whyItMatters ? `<em>(${esc(w.whyItMatters)})</em>` : ""}</p>`).join("")) : ""}
-
-  ${a?.whatIsNotWorking?.length ? section("What Is Not Working", a.whatIsNotWorking.map((w) => `<p><strong>${esc(w.name)}:</strong> ${esc(w.problem)} ${w.businessImpact ? `<em>Impact: ${esc(w.businessImpact)}</em>` : ""}</p>`).join("")) : ""}
-
-  ${
-    a?.actionPlan
-      ? section(
-          "Action Plan",
-          `
-    ${a.actionPlan.next30?.length ? `<strong>Next 30 Days:</strong>${list(a.actionPlan.next30)}` : ""}
-    ${a.actionPlan.days31to60?.length ? `<strong>31–60 Days:</strong>${list(a.actionPlan.days31to60)}` : ""}
-    ${a.actionPlan.days61to90?.length ? `<strong>61–90 Days:</strong>${list(a.actionPlan.days61to90)}` : ""}
-  `
-        )
-      : ""
-  }
-
-  ${a?.finalSummary ? section("Final Owner Summary", `<p>${esc(a.finalSummary)}</p>`) : ""}
-</body>
-</html>`;
-
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => {
-      win.print();
-    }, 400);
+    try {
+      const res = await apiRequest("POST", "/api/business-overview/assessment/pdf", a);
+      if (!res.ok) {
+        throw new Error("Failed to generate PDF");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const dateStr = new Date(entry.createdAt)
+        .toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+        .replace(/\//g, "-");
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `business-health-report-${dateStr}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({
+        title: "Failed to download PDF",
+        description: err?.message || "An error occurred",
+        variant: "destructive",
+      });
+    }
   }
 
   function handleOpenEmailModal() {
@@ -1514,23 +1483,29 @@ export default function BusinessOverview() {
                     30 / 60 / 90 Day Action Plan
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {[
-                      {
-                        label: "Next 30 Days",
-                        items: assessment.actionPlan.next30,
-                        color: "border-green-200 dark:border-green-800",
-                      },
-                      {
-                        label: "Days 31–60",
-                        items: assessment.actionPlan.days31to60,
-                        color: "border-yellow-200 dark:border-yellow-800",
-                      },
-                      {
-                        label: "Days 61–90",
-                        items: assessment.actionPlan.days61to90,
-                        color: "border-blue-200 dark:border-blue-800",
-                      },
-                    ].map((phase, pi) => (
+                    {(() => {
+                      const ap = assessment.actionPlan!;
+                      const first30 = ap.next30?.length
+                        ? ap.next30
+                        : [...(ap.week1 ?? []), ...(ap.week2 ?? []), ...(ap.week3week4 ?? [])];
+                      return [
+                        {
+                          label: "Next 30 Days",
+                          items: first30,
+                          color: "border-green-200 dark:border-green-800",
+                        },
+                        {
+                          label: "Days 31–60",
+                          items: ap.days31to60,
+                          color: "border-yellow-200 dark:border-yellow-800",
+                        },
+                        {
+                          label: "Days 61–90",
+                          items: ap.days61to90,
+                          color: "border-blue-200 dark:border-blue-800",
+                        },
+                      ];
+                    })().map((phase, pi) => (
                       <div
                         key={pi}
                         className={`rounded-lg border-2 ${phase.color} p-3 space-y-2`}
