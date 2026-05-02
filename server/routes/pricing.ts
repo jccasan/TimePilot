@@ -1043,11 +1043,10 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         const tz = company?.timezone || "America/New_York";
         const now = new Date();
 
-        const [allContacts, allInvoices, allPlansRaw, allRoutes] = await Promise.all([
+        const [allContacts, allInvoices, allPlansRaw] = await Promise.all([
           storage.getContacts(companyId),
           storage.getInvoices(companyId),
           storage.getServicePlans(companyId, {}),
-          storage.getRoutes(companyId),
         ]);
         const allActivePlans = allPlansRaw.filter((p) => p.isActive && !p.isStopOnly);
 
@@ -1145,7 +1144,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         // Route density metrics
         const plansWithRoute = allActivePlans.filter((p) => p.routeId != null).length;
         const distinctRouteIds = new Set(allActivePlans.map((p) => p.routeId).filter(Boolean)).size;
-        const activeRouteCount = Math.max(distinctRouteIds, allRoutes.length);
+        const activeRouteCount = distinctRouteIds;
         const avgStopsPerRoute =
           activeRouteCount > 0 ? Math.round((activePlanCount / activeRouteCount) * 10) / 10 : 0;
         const plansOnRoutePct =
