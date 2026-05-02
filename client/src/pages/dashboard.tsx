@@ -1351,6 +1351,20 @@ function RecentCommunications() {
   );
 }
 
+function LiveIndicator() {
+  return (
+    <span className="inline-flex items-center gap-1 ml-1" data-testid="live-indicator">
+      <span className="relative flex h-2 w-2">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+      </span>
+      <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 leading-none">
+        Live
+      </span>
+    </span>
+  );
+}
+
 function PipelineBar({ data }: { data: PipelineData }) {
   const { formatMoney } = useCurrency();
   const stages = [
@@ -1364,7 +1378,7 @@ function PipelineBar({ data }: { data: PipelineData }) {
       bgColor: "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800",
     },
     {
-      label: "Scheduled This Week",
+      label: "Remaining This Week",
       count: data.scheduledVisits.count,
       value: `${data.scheduledVisits.count} visits`,
       href: "/scheduling",
@@ -1439,6 +1453,7 @@ function PipelineBar({ data }: { data: PipelineData }) {
               <div className="flex items-center gap-1.5 mb-1">
                 <div className={`w-2 h-2 rounded-full ${stage.color}`} />
                 <span className="text-xs font-medium text-muted-foreground">{stage.label}</span>
+                {stage.label === "Remaining This Week" && <LiveIndicator />}
               </div>
               <div className={`text-lg font-bold ${stage.textColor}`}>{stage.count}</div>
               <div className="text-xs text-muted-foreground">{stage.value}</div>
@@ -1789,7 +1804,8 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
         <CardHeader className="pb-1">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <CalendarCheck className="h-4 w-4" />
-            Upcoming This Week
+            Remaining This Week
+            <LiveIndicator />
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -1982,6 +1998,7 @@ function UpcomingVisitsWidget() {
 function RouteSummaryWidget() {
   const { data: pipeline } = useQuery<PipelineData>({
     queryKey: ["/api/company/pipeline"],
+    refetchInterval: 60_000,
   });
   const { data: stats } = useQuery<CompanyStats>({
     queryKey: ["/api/company/stats"],
@@ -1999,7 +2016,10 @@ function RouteSummaryWidget() {
           <span className="text-sm font-bold">{pipeline?.activePlans.count ?? 0}</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">This Week</span>
+          <span className="text-xs text-muted-foreground flex items-center">
+            Remaining This Week
+            <LiveIndicator />
+          </span>
           <span className="text-sm font-bold">{pipeline?.scheduledVisits.count ?? 0} visits</span>
         </div>
         <div className="flex items-center justify-between">
@@ -2874,6 +2894,7 @@ export default function Dashboard() {
     isError: pipelineError,
   } = useQuery<PipelineData>({
     queryKey: ["/api/company/pipeline"],
+    refetchInterval: 60_000,
   });
 
   const savedLayout = useMemo(() => {
