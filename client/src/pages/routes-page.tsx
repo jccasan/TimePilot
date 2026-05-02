@@ -2190,6 +2190,11 @@ export default function RoutesPage() {
     return map;
   }, [allRoutes, visiblePlans, dayVisits, routesForDay]);
 
+  const totalStopsForDay = useMemo(
+    () => routesForDay.reduce((acc, r) => acc + (stopsByRoute[r.id]?.length ?? 0), 0),
+    [routesForDay, stopsByRoute]
+  );
+
   const fetchRouteMetrics = useCallback(async (routeId: string) => {
     try {
       setMetricsLoadingRoutes((prev) => new Set(prev).add(routeId));
@@ -2685,14 +2690,13 @@ export default function RoutesPage() {
               onStart={startTutorial}
               isCompleted={isTutorialCompleted("tutorial_route_builder")}
             />
-            <Badge
-              variant="outline"
-              className="flex items-center gap-1.5 text-sm px-3 py-1"
+            <span
+              className="flex items-center gap-1 text-xs text-muted-foreground"
               data-testid="badge-credits"
             >
-              <Coins className="h-4 w-4" />
-              Available Credits: {credits >= 999999 ? "∞" : credits}
-            </Badge>
+              <Coins className="h-3.5 w-3.5" />
+              Optimization Credits: {credits >= 999999 ? "∞" : credits} remaining this month
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <div
@@ -2997,26 +3001,53 @@ export default function RoutesPage() {
                     </div>
                   )}
 
-                  {routesForDay.length === 0 ? (
-                    <Card className="border-dashed">
+                  {totalStopsForDay === 0 && (
+                    <Card className="border-dashed mb-4">
                       <CardContent className="p-8 text-center">
                         <RouteIcon className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-                        <p className="text-muted-foreground mb-3">
-                          No routes for {DAY_LABELS[selectedDay]}
+                        <p className="font-medium mb-1">
+                          No stops scheduled for {DAY_LABELS[selectedDay]}
                         </p>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setEditingRoute(null);
-                            setDialogOpen(true);
-                          }}
-                          data-testid="button-create-route-empty"
-                        >
-                          <Plus className="h-4 w-4 mr-1" /> Create a Route
-                        </Button>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Pick another day, add stops, or optimize the week.
+                        </p>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const currentIdx = DAYS.indexOf(selectedDay as DayOfWeek);
+                              const nextDay = DAYS[(currentIdx + 1) % DAYS.length];
+                              setSelectedDay(nextDay);
+                            }}
+                            data-testid="button-pick-another-day"
+                          >
+                            <CalendarDays className="h-4 w-4 mr-1" /> Pick Another Day
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingRoute(null);
+                              setDialogOpen(true);
+                            }}
+                            data-testid="button-create-route-empty"
+                          >
+                            <Plus className="h-4 w-4 mr-1" /> Add Stops
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowWeeklyOptimizer(true)}
+                            data-testid="button-optimize-week-empty"
+                          >
+                            <Sparkles className="h-4 w-4 mr-1" /> Optimize the Week
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
-                  ) : (
+                  )}
+                  {routesForDay.length > 0 && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {routesForDay.map((route) => (
                         <RouteCard
@@ -3155,6 +3186,12 @@ export default function RoutesPage() {
                   routeName={`${DAY_LABELS[selectedDay]} Routes`}
                   selectedStopId={selectedStopId}
                   onStopClick={(id) => setSelectedStopId((prev) => (prev === id ? null : id))}
+                  companyLatitude={
+                    company?.startLatitude != null ? parseFloat(company.startLatitude) : null
+                  }
+                  companyLongitude={
+                    company?.startLongitude != null ? parseFloat(company.startLongitude) : null
+                  }
                 />
               </Suspense>
             </div>

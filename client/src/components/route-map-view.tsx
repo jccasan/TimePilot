@@ -19,6 +19,8 @@ type RouteMapViewProps = {
   routeName: string;
   selectedStopId?: string | null;
   onStopClick?: (id: string) => void;
+  companyLatitude?: number | null;
+  companyLongitude?: number | null;
 };
 
 const DEFAULT_COLOR = "#22c55e";
@@ -29,6 +31,8 @@ export default function RouteMapView({
   routeName,
   selectedStopId,
   onStopClick,
+  companyLatitude,
+  companyLongitude,
 }: RouteMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -51,14 +55,24 @@ export default function RouteMapView({
 
       mapboxgl.accessToken = tokenData.token;
 
+      const companyLat =
+        companyLatitude != null && Number.isFinite(companyLatitude) ? companyLatitude : null;
+      const companyLng =
+        companyLongitude != null && Number.isFinite(companyLongitude) ? companyLongitude : null;
+      const hasCompanyCoords = companyLat !== null && companyLng !== null;
       const center: [number, number] =
-        stops.length > 0 ? [stops[0].longitude, stops[0].latitude] : [-98.5795, 39.8283];
+        stops.length > 0
+          ? [stops[0].longitude, stops[0].latitude]
+          : hasCompanyCoords
+            ? [companyLng, companyLat]
+            : [-98.5795, 39.8283];
+      const defaultZoom = stops.length > 0 ? 12 : hasCompanyCoords ? 12 : 8;
 
       const map = new mapboxgl.Map({
         container: mapContainerRef.current!,
         style: "mapbox://styles/mapbox/streets-v12",
         center,
-        zoom: stops.length > 0 ? 12 : 4,
+        zoom: defaultZoom,
       });
 
       mapRef.current = map;
@@ -170,6 +184,18 @@ export default function RouteMapView({
       setMapLoaded(false);
     };
   }, [tokenData?.token, stops]);
+
+  // Re-center on company service area when coords arrive after the map is already mounted
+  // and there are no stops to fit bounds to (e.g. company query resolves after map init).
+  useEffect(() => {
+    if (!mapRef.current || stops.length > 0) return;
+    const lat =
+      companyLatitude != null && Number.isFinite(companyLatitude) ? companyLatitude : null;
+    const lng =
+      companyLongitude != null && Number.isFinite(companyLongitude) ? companyLongitude : null;
+    if (lat === null || lng === null) return;
+    mapRef.current.jumpTo({ center: [lng, lat], zoom: 12 });
+  }, [companyLatitude, companyLongitude, stops.length]);
 
   useEffect(() => {
     markerMapRef.current.forEach(({ marker, color }, id) => {
