@@ -58,7 +58,20 @@ import {
   Crown,
   SlidersHorizontal,
   HelpCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Users,
+  Tag,
+  FileText,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
 
 function dollarsToCents(dollars: number | string): number {
@@ -1099,9 +1112,16 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
   );
 }
 
+type AllFrequencyResults = {
+  weekly: CalculatorResult;
+  biweekly: CalculatorResult;
+  monthly: CalculatorResult;
+};
+
 function CalculatorPanel() {
   const { toast } = useToast();
   const [result, setResult] = useState<CalculatorResult | null>(null);
+  const [allFrequencies, setAllFrequencies] = useState<AllFrequencyResults | null>(null);
 
   const form = useForm<CalculatorInputValues>({
     resolver: zodResolver(calculatorInputSchema),
@@ -1117,19 +1137,38 @@ function CalculatorPanel() {
 
   const calculateMutation = useMutation({
     mutationFn: async (data: CalculatorInputValues) => {
-      const payload = {
+      const base = {
         ...data,
         currentPriceCents:
           data.currentPriceDollars !== undefined
             ? dollarsToCents(data.currentPriceDollars)
             : undefined,
       };
-      const { currentPriceDollars: _currentPriceDollars, ...rest } = payload as any;
-      const res = await apiRequest("POST", "/api/pricing/calculate", rest);
-      return res.json();
+      const { currentPriceDollars: _cpd, ...baseRest } = base as any;
+      const makeReq = (freq: string) =>
+        apiRequest("POST", "/api/pricing/calculate", { ...baseRest, serviceFrequency: freq }).then(
+          (r) => r.json() as Promise<CalculatorResult>
+        );
+      const selectedFreq = data.serviceFrequency;
+      const comparisonFreqs = ["weekly", "biweekly", "monthly"] as const;
+      const isStandardFreq = comparisonFreqs.includes(
+        selectedFreq as (typeof comparisonFreqs)[number]
+      );
+      const [primaryResult, weekly, biweekly, monthly] = await Promise.all([
+        isStandardFreq ? Promise.resolve(null) : makeReq(selectedFreq),
+        makeReq("weekly"),
+        makeReq("biweekly"),
+        makeReq("monthly"),
+      ]);
+      const all = { weekly, biweekly, monthly };
+      const primary =
+        primaryResult ??
+        (selectedFreq === "biweekly" ? biweekly : selectedFreq === "monthly" ? monthly : weekly);
+      return { primary, all };
     },
-    onSuccess: (data: CalculatorResult) => {
-      setResult(data);
+    onSuccess: ({ primary, all }: { primary: CalculatorResult; all: AllFrequencyResults }) => {
+      setResult(primary);
+      setAllFrequencies(all);
     },
     onError: (error: Error) => {
       toast({ title: "Calculation Error", description: error.message, variant: "destructive" });
@@ -1319,15 +1358,207 @@ function CalculatorPanel() {
         </CardContent>
       </Card>
 
-      {result && <ResultsDisplay result={result} />}
+      {result && <ResultsDisplay result={result} allFrequencies={allFrequencies ?? undefined} />}
     </div>
   );
 }
 
-function ResultsDisplay({ result }: { result: CalculatorResult }) {
+// ---- Plain-language helpers ----
+
+function getYardSizeLabel(acres: number): string {
+  if (acres < 0.075) return "small yard";
+  if (acres < 0.2) return "medium yard";
+  if (acres < 0.5) return "large yard";
+  return "extra-large yard";
+}
+
+function getDriveTimeBurden(miles: number): string {
+  if (miles < 0.5) return "low drive-time burden";
+  if (miles < 2) return "moderate drive-time burden";
+  return "high drive-time burden";
+}
+
+function getRouteDensityLabel(densityMultiplier: number): string {
+  if (densityMultiplier < 0.9) return "good route density — nearby stops lower per-stop cost";
+  if (densityMultiplier <= 1.1) return "moderate route density";
+  return "sparse route density — this stop is out of the way";
+}
+
+function getFrequencyLabel(freq: string): string {
+  if (freq === "weekly") return "weekly";
+  if (freq === "biweekly") return "bi-weekly";
+  if (freq === "monthly") return "monthly";
+  return "one-time";
+}
+
+function getVisitsPerYear(freq: string): number {
+  if (freq === "weekly") return 52;
+  if (freq === "biweekly") return 26;
+  if (freq === "monthly") return 12;
+  return 1;
+}
+
+// ---- Contact + Service Plan Selector Dialog ----
+
+interface Contact {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+}
+
+interface ServicePlan {
+  id: string;
+  serviceName?: string | null;
+  frequency?: string | null;
+  pricePerVisit: string;
+  isActive: boolean;
+}
+
+function ContactSelectorDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  actionLabel,
+  requireServicePlan,
+  onConfirm,
+  isPending,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  title: string;
+  description: string;
+  actionLabel: string;
+  requireServicePlan?: boolean;
+  onConfirm: (contactId: string, servicePlanId?: string) => void;
+  isPending?: boolean;
+}) {
+  const [selectedContactId, setSelectedContactId] = useState("");
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+
+  const { data: contacts } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+    enabled: open,
+  });
+
+  const { data: plans } = useQuery<ServicePlan[]>({
+    queryKey: ["/api/service-plans", selectedContactId],
+    queryFn: async () => {
+      const { getAuthHeaders } = await import("@/lib/queryClient");
+      const res = await fetch(`/api/service-plans?contactId=${selectedContactId}`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: open && !!selectedContactId && !!requireServicePlan,
+  });
+
+  const activePlans = plans?.filter((p) => p.isActive) ?? [];
+
+  const canConfirm = selectedContactId && (!requireServicePlan || selectedPlanId);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Select customer</label>
+            <Select
+              value={selectedContactId}
+              onValueChange={(v) => {
+                setSelectedContactId(v);
+                setSelectedPlanId("");
+              }}
+            >
+              <SelectTrigger data-testid="select-action-contact">
+                <SelectValue placeholder="Choose a customer…" />
+              </SelectTrigger>
+              <SelectContent>
+                {(contacts ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.firstName} {c.lastName}
+                    {c.email ? ` — ${c.email}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {requireServicePlan && selectedContactId && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Select service plan</label>
+              {activePlans.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No active service plans found.</p>
+              ) : (
+                <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                  <SelectTrigger data-testid="select-action-plan">
+                    <SelectValue placeholder="Choose a plan…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activePlans.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.serviceName ?? "Service Plan"} — {getFrequencyLabel(p.frequency ?? "")} @
+                        ${parseFloat(p.pricePerVisit).toFixed(2)}/visit
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!canConfirm || isPending}
+            onClick={() => onConfirm(selectedContactId, selectedPlanId || undefined)}
+            data-testid="button-action-confirm"
+          >
+            {isPending ? "Saving…" : actionLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---- Main ResultsDisplay ----
+
+function ResultsDisplay({
+  result,
+  allFrequencies,
+}: {
+  result: CalculatorResult;
+  allFrequencies?: AllFrequencyResults;
+}) {
   const { formatMoney } = useCurrency();
+  const { toast } = useToast();
   const formatDollars = (cents: number) => formatMoney(cents / 100);
   const { breakdown, derived } = result;
+
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
+  const [priceListDialogOpen, setPriceListDialogOpen] = useState(false);
+
+  const inputs = result.inputsUsed as {
+    yardSizeAcres: number;
+    dogCount: number;
+    serviceFrequency: string;
+    yardDifficulty: string;
+    distanceFromNearestStopMiles: number;
+    currentPriceCents?: number;
+    configSnapshot?: { targetProfitMarginPct?: number };
+  };
 
   const totalCost =
     breakdown.laborCostCents +
@@ -1342,215 +1573,422 @@ function ResultsDisplay({ result }: { result: CalculatorResult }) {
     { label: "Overhead", value: breakdown.overheadPerVisitCents, icon: Building2 },
   ];
 
+  const whyBullets: string[] = [
+    `${getYardSizeLabel(inputs.yardSizeAcres)} (${inputs.yardSizeAcres.toFixed(2)} acres)`,
+    `${inputs.dogCount} dog${inputs.dogCount !== 1 ? "s" : ""} — ${inputs.dogCount > 2 ? "above-average" : inputs.dogCount > 1 ? "standard" : "minimal"} waste load`,
+    `${inputs.yardDifficulty === "flat" ? "flat terrain — easy access" : inputs.yardDifficulty === "moderate" ? "moderate terrain — some obstacles" : "difficult terrain — hills or heavy landscaping"}`,
+    getDriveTimeBurden(inputs.distanceFromNearestStopMiles),
+    getRouteDensityLabel(breakdown.densityMultiplier),
+    `${inputs.configSnapshot?.targetProfitMarginPct ?? 30}% target profit margin`,
+  ];
+
+  const visitsPerYear = getVisitsPerYear(inputs.serviceFrequency);
+  const currentBelowRecommended =
+    inputs.currentPriceCents !== undefined &&
+    inputs.currentPriceCents < result.recommendedPriceCents;
+  const yearlyGainCents =
+    currentBelowRecommended && inputs.currentPriceCents !== undefined
+      ? (result.recommendedPriceCents - inputs.currentPriceCents) * visitsPerYear
+      : 0;
+
+  // Action mutations
+  const applyMutation = useMutation({
+    mutationFn: async ({
+      contactId: _contactId,
+      servicePlanId,
+    }: {
+      contactId: string;
+      servicePlanId: string;
+    }) => {
+      const pricePerVisit = (result.recommendedPriceCents / 100).toFixed(2);
+      await apiRequest("PATCH", `/api/service-plans/${servicePlanId}`, { pricePerVisit });
+    },
+    onSuccess: () => {
+      setApplyDialogOpen(false);
+      toast({
+        title: "Price applied",
+        description: `Service plan updated to ${formatDollars(result.recommendedPriceCents)}/visit.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const quoteMutation = useMutation({
+    mutationFn: async ({ contactId }: { contactId: string }) => {
+      const contacts = (await (await apiRequest("GET", `/api/contacts/${contactId}`)).json()) as {
+        firstName: string;
+        lastName: string;
+        email?: string;
+      };
+      const freq =
+        inputs.serviceFrequency === "biweekly"
+          ? "biweekly"
+          : inputs.serviceFrequency === "monthly"
+            ? "monthly"
+            : "weekly";
+      const body = {
+        type: "residential",
+        contactId,
+        contactName: `${contacts.firstName} ${contacts.lastName}`,
+        contactEmail: contacts.email ?? undefined,
+        frequency: freq,
+        essentialPrice: (result.minimumPriceCents / 100).toFixed(2),
+        premiumPrice: (result.recommendedPriceCents / 100).toFixed(2),
+        deluxePrice: (result.premiumPriceCents / 100).toFixed(2),
+        dogCount: inputs.dogCount,
+        yardSize: getYardSizeLabel(inputs.yardSizeAcres),
+      };
+      await apiRequest("POST", "/api/quotes", body);
+    },
+    onSuccess: () => {
+      setQuoteDialogOpen(false);
+      toast({
+        title: "Quote saved",
+        description: "A new quote has been created.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const priceListMutation = useMutation({
+    mutationFn: async ({ contactId }: { contactId: string }) => {
+      const tagsRes = (await (await apiRequest("GET", "/api/tags")).json()) as {
+        id: string;
+        name: string;
+      }[];
+      let tag = tagsRes.find((t) => t.name.toLowerCase() === "price increase list");
+      if (!tag) {
+        tag = (await (
+          await apiRequest("POST", "/api/tags", { name: "Price Increase List", color: "#f59e0b" })
+        ).json()) as { id: string; name: string };
+      }
+      await apiRequest("POST", `/api/contacts/${contactId}/tags`, { tagId: tag.id });
+    },
+    onSuccess: () => {
+      setPriceListDialogOpen(false);
+      toast({
+        title: "Contact flagged",
+        description: 'Added to the "Price Increase List" for review.',
+      });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-destructive/30">
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground mb-1">Minimum (Break-Even)</p>
-            <p className="text-3xl font-bold text-destructive" data-testid="text-price-minimum">
-              {formatDollars(result.minimumPriceCents)}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">per visit</p>
-          </CardContent>
-        </Card>
-        <Card className="border-primary/50 ring-2 ring-primary/20">
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground mb-1">Recommended</p>
-            <p className="text-3xl font-bold text-primary" data-testid="text-price-recommended">
+      {/* ── Recommended Price Callout ── */}
+      <Card className="border-primary/50 ring-2 ring-primary/20" data-testid="card-recommendation">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle2 className="h-5 w-5 text-primary" />
+            <span className="text-sm font-medium text-primary uppercase tracking-wide">
+              Recommended Price
+            </span>
+          </div>
+          {/* Primary recommended price */}
+          <div className="mb-4">
+            <p
+              className="text-5xl font-bold text-primary leading-none"
+              data-testid="text-price-recommended"
+            >
               {formatDollars(result.recommendedPriceCents)}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">per visit</p>
-          </CardContent>
-        </Card>
-        <Card className="border-chart-4/30">
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground mb-1">Premium</p>
-            <p
-              className="text-3xl font-bold"
-              style={{ color: "hsl(var(--chart-4))" }}
-              data-testid="text-price-premium"
-            >
-              {formatDollars(result.premiumPriceCents)}
+            <p className="text-sm text-muted-foreground mt-1">
+              per visit · {getFrequencyLabel(inputs.serviceFrequency)} service
             </p>
-            <p className="text-xs text-muted-foreground mt-1">per visit</p>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
 
-      {(derived.clusterDiscountAppliedPct > 0 ||
-        derived.marketAnchorClamped ||
-        breakdown.densityMultiplier !== 1.0) && (
-        <div className="flex flex-wrap gap-2" data-testid="badges-adjustments">
-          {derived.clusterDiscountAppliedPct > 0 && (
-            <Badge
-              variant="secondary"
-              className="no-default-active-elevate"
-              data-testid="badge-cluster-discount"
-            >
-              Cluster Discount: {derived.clusterDiscountAppliedPct}%
-            </Badge>
+          {/* Frequency comparison grid */}
+          <div
+            className="grid grid-cols-3 gap-2 mb-4 rounded-lg border bg-muted/30 p-3"
+            data-testid="grid-frequency-prices"
+          >
+            {(
+              [
+                { key: "weekly", label: "Weekly" },
+                { key: "biweekly", label: "Bi-Weekly" },
+                { key: "monthly", label: "Monthly" },
+              ] as const
+            ).map(({ key, label }) => {
+              const isSelected = inputs.serviceFrequency === key;
+              const freqResult = allFrequencies?.[key];
+              return (
+                <div
+                  key={key}
+                  className={`text-center rounded-md p-2 ${isSelected ? "bg-primary/10 ring-1 ring-primary/40" : ""}`}
+                  data-testid={`cell-freq-${key}`}
+                >
+                  <p
+                    className={`text-xs font-medium mb-1 ${isSelected ? "text-primary" : "text-muted-foreground"}`}
+                  >
+                    {label}
+                    {isSelected && (
+                      <span className="ml-1 text-[10px] uppercase tracking-wide">(selected)</span>
+                    )}
+                  </p>
+                  <p
+                    className={`text-lg font-bold ${isSelected ? "text-primary" : ""}`}
+                    data-testid={`text-freq-recommended-${key}`}
+                  >
+                    {freqResult ? formatDollars(freqResult.recommendedPriceCents) : "—"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {freqResult ? `min ${formatDollars(freqResult.minimumPriceCents)}` : ""}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Break-even & Premium for selected frequency */}
+          <div className="flex gap-4 mb-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Break-even</p>
+              <p
+                className="text-base font-semibold text-destructive"
+                data-testid="text-price-minimum"
+              >
+                {formatDollars(result.minimumPriceCents)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Premium</p>
+              <p
+                className="text-base font-semibold"
+                style={{ color: "hsl(var(--chart-4))" }}
+                data-testid="text-price-premium"
+              >
+                {formatDollars(result.premiumPriceCents)}
+              </p>
+            </div>
+          </div>
+
+          {/* Adjustment badges */}
+          {(derived.clusterDiscountAppliedPct > 0 ||
+            derived.marketAnchorClamped ||
+            breakdown.densityMultiplier !== 1.0 ||
+            derived.isEstimated) && (
+            <div className="flex flex-wrap gap-2 mb-4" data-testid="badges-adjustments">
+              {derived.clusterDiscountAppliedPct > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="no-default-active-elevate"
+                  data-testid="badge-cluster-discount"
+                >
+                  Cluster Discount: {derived.clusterDiscountAppliedPct}%
+                </Badge>
+              )}
+              {derived.marketAnchorClamped && (
+                <Badge
+                  variant="secondary"
+                  className="no-default-active-elevate"
+                  data-testid="badge-market-clamped"
+                >
+                  Market Anchor Applied
+                </Badge>
+              )}
+              {breakdown.densityMultiplier !== 1.0 && (
+                <Badge
+                  variant="secondary"
+                  className="no-default-active-elevate"
+                  data-testid="badge-density"
+                >
+                  Density {breakdown.densityMultiplier.toFixed(2)}x
+                </Badge>
+              )}
+              {derived.isEstimated && (
+                <Badge
+                  variant="outline"
+                  className="no-default-active-elevate"
+                  data-testid="badge-estimated"
+                >
+                  Estimated
+                </Badge>
+              )}
+            </div>
           )}
-          {derived.marketAnchorClamped && (
-            <Badge
-              variant="secondary"
-              className="no-default-active-elevate"
-              data-testid="badge-market-clamped"
-            >
-              Market Anchor Clamped
-            </Badge>
-          )}
-          {breakdown.densityMultiplier !== 1.0 && (
-            <Badge
-              variant="secondary"
-              className="no-default-active-elevate"
-              data-testid="badge-density"
-            >
-              Density: {breakdown.densityMultiplier.toFixed(2)}x
-            </Badge>
-          )}
-          {derived.isEstimated && (
-            <Badge
-              variant="outline"
-              className="no-default-active-elevate"
-              data-testid="badge-estimated"
-            >
-              Estimated (no route data)
-            </Badge>
-          )}
+
+          {/* Why this price */}
+          <div className="border-t pt-4">
+            <p className="text-sm font-medium mb-2">Why this price?</p>
+            <ul className="space-y-1" data-testid="list-why-bullets">
+              {whyBullets.map((b, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-muted-foreground/50 shrink-0" />
+                  {b}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Current Price Comparison ── */}
+      {currentBelowRecommended && inputs.currentPriceCents !== undefined && (
+        <div
+          className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 p-4"
+          data-testid="alert-price-gap"
+        >
+          <TrendingUp className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            You're pricing this job at <strong>{formatDollars(inputs.currentPriceCents)}</strong>.
+            At the recommended price you would earn an extra{" "}
+            <strong>{formatDollars(yearlyGainCents)}/year</strong>.
+          </p>
         </div>
       )}
 
       {result.profitWarning && result.profitWarning.lossPerVisitCents > 0 && (
         <Alert variant="destructive" data-testid="alert-profit-warning">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Losing Money</AlertTitle>
+          <AlertTitle>Losing Money at Current Price</AlertTitle>
           <AlertDescription>
             You are losing approximately {formatDollars(result.profitWarning.lossPerVisitCents)} on
-            every visit at the current price. Your hourly rate at this price:{" "}
-            {formatDollars(result.profitWarning.profitPerHourCents)}/hr.
+            every visit at the current price.
           </AlertDescription>
         </Alert>
       )}
 
-      {result.profitWarning && result.profitWarning.lossPerVisitCents === 0 && (
-        <Alert data-testid="alert-profit-info">
-          <TrendingUp className="h-4 w-4" />
-          <AlertTitle>Profitable</AlertTitle>
-          <AlertDescription>
-            Earning {formatDollars(result.profitWarning.profitPerVisitCents)} profit per visit (
-            {formatDollars(result.profitWarning.profitPerHourCents)}/hr).
-          </AlertDescription>
-        </Alert>
-      )}
+      {result.profitWarning &&
+        result.profitWarning.lossPerVisitCents === 0 &&
+        !currentBelowRecommended && (
+          <Alert data-testid="alert-profit-info">
+            <TrendingUp className="h-4 w-4" />
+            <AlertTitle>Currently Profitable</AlertTitle>
+            <AlertDescription>
+              Earning {formatDollars(result.profitWarning.profitPerVisitCents)} profit per visit (
+              {formatDollars(result.profitWarning.profitPerHourCents)}/hr).
+            </AlertDescription>
+          </Alert>
+        )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Cost Breakdown per Visit</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {costBreakdownItems.map((item) => (
-              <div key={item.label} className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <item.icon className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{item.label}</span>
+      {/* ── Full Breakdown (collapsible) ── */}
+      <div className="rounded-lg border">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+          onClick={() => setBreakdownOpen((v) => !v)}
+          data-testid="button-toggle-breakdown"
+        >
+          <span className="flex items-center gap-2">
+            <Info className="h-4 w-4 text-muted-foreground" />
+            See full breakdown
+          </span>
+          {breakdownOpen ? (
+            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          )}
+        </button>
+        {breakdownOpen && (
+          <div className="px-4 pb-4 border-t">
+            <div className="space-y-3 pt-3">
+              {costBreakdownItems.map((item) => (
+                <div key={item.label} className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <item.icon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{item.label}</span>
+                  </div>
+                  <span
+                    className="text-sm font-medium"
+                    data-testid={`text-cost-${item.label.toLowerCase().replace(/[^a-z]/g, "-")}`}
+                  >
+                    {formatDollars(item.value)}
+                  </span>
                 </div>
-                <span
-                  className="text-sm font-medium"
-                  data-testid={`text-cost-${item.label.toLowerCase().replace(/[^a-z]/g, "-")}`}
-                >
-                  {formatDollars(item.value)}
+              ))}
+              <div className="border-t pt-2 flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold">Total Cost per Visit</span>
+                <span className="text-sm font-bold" data-testid="text-total-cost">
+                  {formatDollars(totalCost)}
                 </span>
               </div>
-            ))}
-            <div className="border-t pt-2 flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold">Total Cost per Visit</span>
-              <span className="text-sm font-bold" data-testid="text-total-cost">
-                {formatDollars(totalCost)}
-              </span>
+              <div className="border-t pt-2 text-xs text-muted-foreground space-y-1">
+                <p>
+                  Service time: {formatMinutes(breakdown.serviceMinutes)} · Travel:{" "}
+                  {formatMinutes(breakdown.adjustedTravelMinutes)} · Total:{" "}
+                  {formatMinutes(derived.jobMinutes)}
+                </p>
+                <p>
+                  Profit at recommended: {formatDollars(derived.profitAtRecommendedCents)}/visit ·{" "}
+                  {formatDollars(derived.profitPerHourAtRecommendedCents)}/hr
+                </p>
+              </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
 
-      <Accordion type="single" collapsible>
-        <AccordionItem value="how-calculated">
-          <AccordionTrigger data-testid="accordion-how-calculated">
-            <div className="flex items-center gap-2">
-              <Info className="h-4 w-4" />
-              How Was This Calculated?
-            </div>
-          </AccordionTrigger>
-          <AccordionContent>
-            <div className="space-y-3 text-sm">
-              <div>
-                <p className="font-medium mb-1">Service Time</p>
-                <p className="text-muted-foreground">
-                  {formatMinutes(breakdown.serviceMinutes)} on-site (includes adjustments for how
-                  often you visit and yard difficulty)
-                </p>
-              </div>
-              <div>
-                <p className="font-medium mb-1">Travel Time</p>
-                <p className="text-muted-foreground">
-                  {formatMinutes(breakdown.travelMinutes)} drive time | Adjusted for route density (
-                  {breakdown.densityMultiplier.toFixed(2)}x):{" "}
-                  {formatMinutes(breakdown.adjustedTravelMinutes)}
-                </p>
-              </div>
-              <div>
-                <p className="font-medium mb-1">Total Time per Visit</p>
-                <p className="text-muted-foreground">
-                  {formatMinutes(derived.jobMinutes)} (service + travel)
-                </p>
-              </div>
-              <div>
-                <p className="font-medium mb-1">Labor Cost</p>
-                <p className="text-muted-foreground">
-                  {formatDollars(breakdown.laborCostCents)} = {formatMinutes(derived.jobMinutes)} of
-                  work at the fully loaded hourly rate
-                </p>
-              </div>
-              <div>
-                <p className="font-medium mb-1">Travel Cost</p>
-                <p className="text-muted-foreground">
-                  Vehicle cost: {formatDollars(breakdown.travelCostCents)} | After route density
-                  adjustment: {formatDollars(breakdown.adjustedTravelCostCents)}
-                </p>
-              </div>
-              <div>
-                <p className="font-medium mb-1">Supplies</p>
-                <p className="text-muted-foreground">
-                  {formatDollars(breakdown.equipmentCostCents)} (disinfectant + deodorizer + bags)
-                </p>
-              </div>
-              <div>
-                <p className="font-medium mb-1">Overhead Share</p>
-                <p className="text-muted-foreground">
-                  {formatDollars(breakdown.overheadPerVisitCents)} (your monthly expenses divided
-                  across all your stops)
-                </p>
-              </div>
-              <div>
-                <p className="font-medium mb-1">How Prices Are Set</p>
-                <p className="text-muted-foreground">
-                  Minimum = your total cost (break-even, no profit). Recommended = cost plus your
-                  target profit margin. Premium = cost plus a higher margin for premium-tier
-                  pricing.
-                </p>
-              </div>
-              <div>
-                <p className="font-medium mb-1">Profit at Recommended Price</p>
-                <p className="text-muted-foreground">
-                  {formatDollars(derived.profitAtRecommendedCents)} per visit |{" "}
-                  {formatDollars(derived.profitPerHourAtRecommendedCents)} per hour
-                </p>
-              </div>
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+      {/* ── Action Buttons ── */}
+      <div className="flex flex-wrap gap-3" data-testid="section-action-buttons">
+        <Button
+          variant="default"
+          onClick={() => setApplyDialogOpen(true)}
+          data-testid="button-apply-to-customer"
+        >
+          <Users className="h-4 w-4 mr-2" />
+          Apply to Customer
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => setQuoteDialogOpen(true)}
+          data-testid="button-save-as-quote"
+        >
+          <FileText className="h-4 w-4 mr-2" />
+          Save as Quote
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => setPriceListDialogOpen(true)}
+          data-testid="button-add-price-increase-list"
+        >
+          <Tag className="h-4 w-4 mr-2" />
+          Add to Price Increase List
+        </Button>
+      </div>
+
+      {/* ── Apply to Customer Dialog ── */}
+      <ContactSelectorDialog
+        open={applyDialogOpen}
+        onOpenChange={setApplyDialogOpen}
+        title="Apply to Customer"
+        description={`This will update the selected service plan's price to ${formatDollars(result.recommendedPriceCents)}/visit.`}
+        actionLabel="Apply Price"
+        requireServicePlan
+        isPending={applyMutation.isPending}
+        onConfirm={(contactId, servicePlanId) => {
+          if (servicePlanId) applyMutation.mutate({ contactId, servicePlanId });
+        }}
+      />
+
+      {/* ── Save as Quote Dialog ── */}
+      <ContactSelectorDialog
+        open={quoteDialogOpen}
+        onOpenChange={setQuoteDialogOpen}
+        title="Save as Quote"
+        description="A quote will be created for the selected customer using these pricing figures."
+        actionLabel="Create Quote"
+        requireServicePlan={false}
+        isPending={quoteMutation.isPending}
+        onConfirm={(contactId) => quoteMutation.mutate({ contactId })}
+      />
+
+      {/* ── Add to Price Increase List Dialog ── */}
+      <ContactSelectorDialog
+        open={priceListDialogOpen}
+        onOpenChange={setPriceListDialogOpen}
+        title="Add to Price Increase List"
+        description='The selected customer will be tagged "Price Increase List" for your review.'
+        actionLabel="Add Tag"
+        requireServicePlan={false}
+        isPending={priceListMutation.isPending}
+        onConfirm={(contactId) => priceListMutation.mutate({ contactId })}
+      />
     </div>
   );
 }
