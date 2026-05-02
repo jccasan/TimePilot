@@ -623,10 +623,14 @@ function assignByGeoClustering(
   // count.  This packs stops into the fewest possible days (tighter geographic
   // clusters, less driving) instead of spreading them evenly across all days.
   const requiredRouteDays = Math.max(1, Math.ceil(stops.length / stopsPerRoute));
-  const maxK = requiredRouteDays;
 
-  const optK = findOptimalK(stops, maxK);
-  let clusters = kMeansClustering(stops, optK);
+  // Enforce the exact cluster count derived from capacity.  findOptimalK uses
+  // an elbow heuristic that can return fewer clusters than required, which
+  // would produce days over capacity.  For capacity-first scheduling we always
+  // want exactly requiredRouteDays clusters (mergeSmallClusters may reduce
+  // that count slightly when some clusters are genuinely too small to stand
+  // alone, which is the desired behaviour).
+  let clusters = kMeansClustering(stops, requiredRouteDays);
 
   // Absorb clusters that are too small to stand alone as a day's route.
   // Threshold scales with route size: ~1/3 of the average stops-per-used-day,
