@@ -158,11 +158,24 @@ export async function calculateCustomerProfitability(
   const contact = contacts.find((c) => c.id === contactId);
   if (!contact) return null;
 
-  const allPlans = await storage.getServicePlans(companyId, { contactId, isActive: true });
+  const [allPlans, allCompanyPlans, properties] = await Promise.all([
+    storage.getServicePlans(companyId, { contactId, isActive: true }),
+    storage.getServicePlans(companyId, { isActive: true }),
+    storage.getProperties(companyId, contactId),
+  ]);
   const plans = allPlans.filter((p) => !p.isStopOnly);
   if (plans.length === 0) return null;
 
-  const properties = await storage.getProperties(companyId, contactId);
+  // Actual monthly visits across ALL active company plans — used as overhead denominator
+  const actualMonthlyVisits = Math.max(
+    Math.round(
+      allCompanyPlans
+        .filter((p) => !p.isStopOnly)
+        .reduce((sum, p) => sum + getFrequencyVisitsPerMonth(p.frequency), 0)
+    ),
+    1
+  );
+
   const propertyMap = new Map(properties.map((p) => [p.id, p]));
 
   const pricingConfig = company.pricingConfig as Partial<PricingConfig> | null;
@@ -172,7 +185,10 @@ export async function calculateCustomerProfitability(
 
   const costOverrides = contact.costOverrides;
 
-  const effectivePricingConfig: Partial<PricingConfig> = { ...pricingConfig };
+  const effectivePricingConfig: Partial<PricingConfig> = {
+    ...pricingConfig,
+    estimatedMonthlyStops: actualMonthlyVisits,
+  };
   if (costOverrides?.techHourlyWageCents !== undefined) {
     effectivePricingConfig.techHourlyWageCents = costOverrides.techHourlyWageCents;
   }
@@ -364,6 +380,15 @@ export async function calculateAllCustomerProfitability(
   const overrideOverhead = overheadTotal > 0 ? overheadTotal : undefined;
 
   const activePlans = allPlans.filter((p) => !p.isStopOnly);
+
+  // Compute actual monthly visit count from real plan frequencies so overhead/visit is accurate
+  const actualMonthlyVisits = Math.max(
+    Math.round(
+      activePlans.reduce((sum, p) => sum + getFrequencyVisitsPerMonth(p.frequency), 0)
+    ),
+    1
+  );
+
   const allAddOnsMap = await storage.getAllServicePlanAddOnsForCompany(
     activePlans.map((p) => p.id)
   );
@@ -382,7 +407,10 @@ export async function calculateAllCustomerProfitability(
 
     const contactOverrides = contact.costOverrides;
 
-    const contactPricingConfig: Partial<PricingConfig> = { ...pricingConfig };
+    const contactPricingConfig: Partial<PricingConfig> = {
+      ...pricingConfig,
+      estimatedMonthlyStops: actualMonthlyVisits,
+    };
     if (contactOverrides?.techHourlyWageCents !== undefined) {
       contactPricingConfig.techHourlyWageCents = contactOverrides.techHourlyWageCents;
     }
