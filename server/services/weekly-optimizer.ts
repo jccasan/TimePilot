@@ -525,43 +525,7 @@ function assignByZones(
   return result;
 }
 
-function totalIntraClusterDistance(clusters: WeeklyStop[][]): number {
-  let total = 0;
-  for (const cluster of clusters) {
-    if (cluster.length === 0) continue;
-    const c = centroid(cluster);
-    for (const stop of cluster) {
-      total += haversineDistance(stop.latitude, stop.longitude, c.lat, c.lon);
-    }
-  }
-  return total;
-}
 
-function findOptimalK(stops: WeeklyStop[], maxK: number): number {
-  if (stops.length <= 1) return 1;
-  if (maxK <= 1) return 1;
-
-  const effectiveMax = Math.min(maxK, stops.length);
-
-  const d1 = totalIntraClusterDistance(kMeansClustering(stops, 1));
-  if (d1 === 0) return 1;
-
-  const GAIN_THRESHOLD = 0.18;
-
-  let prevDist = d1;
-  let optK = 1;
-
-  for (let k = 2; k <= effectiveMax; k++) {
-    const clusters = kMeansClustering(stops, k);
-    const dist = totalIntraClusterDistance(clusters);
-    const gain = (prevDist - dist) / d1;
-    if (gain < GAIN_THRESHOLD) break;
-    optK = k;
-    prevDist = dist;
-  }
-
-  return optK;
-}
 
 /**
  * Merge any cluster smaller than minSize into its nearest neighbor (by
