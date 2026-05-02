@@ -1,0 +1,400 @@
+Update the routing and route optimization system to use Mapbox API correctly while supporting larger weekly route plans through capacity-first scheduling, geographic clustering, and chained optimization legs.
+
+GOAL
+Build routing logic for a field-service business where a customer may have hundreds of weekly stops across multiple technicians and available workdays. The system should create efficient, dense route-days, fill days close to max practical capacity before opening unnecessary extra route-days, and handle Mapbox optimization limits by splitting large daily routes into smaller optimized legs.
+
+CORE BUSINESS RULE
+Do not evenly spread stops across all available techs/days by default.
+
+Instead, use capacity-first scheduling:
+
+- Fill route-days to max practical capacity first.
+- Use the fewest practical route-days possible.
+- Assign those route-days to available techs.
+- Only create additional route-days when capacity, geography, time, or constraints require it.
+
+Example:
+If there are:
+- 2 techs
+- 300 stops
+- 5 available days
+- 40 max stops per day
+
+Then:
+weekly capacity = 2 techs × 5 days × 40 stops = 400 stops
+required route-days = ceil(300 / 40) = 8 route-days
+
+The system should produce:
+- 7 full route-days of 40 stops
+- 1 short route-day of 20 stops
+
+Then assign:
+- Tech 1: 5 full route-days = 200 stops
+- Tech 2: 2 full route-days = 80 stops
+- Tech 2: 1 short route-day = 20 stops
+
+This is better than splitting evenly because it reduces payroll spread, route fragmentation, travel overhead, and unnecessary partial workdays.
+
+IMPORTANT FORMULA CORRECTION
+Do NOT divide stops by:
+
+active techs + available days
+
+That is incorrect.
+
+Use:
+
+route_slots = active_techs × available_days
+target_even_stops = total_stops / route_slots
+
+But for this system, target_even_stops is only a fallback comparison. The preferred logic is:
+
+required_route_days = ceil(total_stops / max_stops_per_day)
+
+Then build that many route-days, filling each route-day up to max practical capacity unless constraints prevent it.
+
+DATA INPUTS
+The routing engine should accept:
+
+- total stops
+- stop list with:
+  - customer ID
+  - customer name
+  - address
+  - latitude
+  - longitude
+  - service type
+  - estimated service duration
+  - preferred service day, if any
+  - required service day, if any
+  - time window, if any
+  - priority
+  - notes
+- active technicians
+- technician availability by day
+- service days available
+- max stops per day
+- min stops per day
+- max shift minutes
+- depot/start location, if any
+- end location, if different from start
+- Mapbox optimization coordinate cap
+- optional zone/ZIP/service-area constraints
+
+ROUTING LOGIC
+
+Step 1: Validate Inputs
+- Confirm every stop has valid coordinates.
+- Flag stops missing coordinates.
+- Confirm max_stops_per_day > 0.
+- Confirm at least one tech and one available day exist.
+- Confirm total weekly capacity can handle total stops.
+
+weekly_capacity = active_techs × available_days × max_stops_per_day
+
+If total_stops > weekly_capacity:
+Return warning:
+“Current weekly capacity is insufficient. Add techs, add days, increase max stops/day, or split into another week.”
+
+Step 2: Create Route Capacity Model
+Calculate:
+
+required_route_days = ceil(total_stops / max_stops_per_day)
+
+Also calculate route capacity using workload, not just stop count:
+
+route_capacity = min(
+  max_stops_per_day,
+  floor(max_shift_minutes / average_adjusted_minutes_per_stop)
+)
+
+Use max_stops_per_day as the primary cap, but do not allow estimated route time to exceed max_shift_minutes.
+
+Step 3: Geographic Clustering First
+Cluster stops geographically before assigning them to techs.
+
+Use one or more of the following:
+- latitude/longitude proximity
+- ZIP code
+- service zone
+- drive-time radius
+- nearest-neighbor grouping
+- k-means or similar clustering
+- density-based clustering for tight neighborhoods
+
+The AI should not randomly distribute stops by count. Geography comes first.
+
+Step 4: Build Dense Route-Days
+Create route-days by pulling geographically close stops into each route until one of these limits is reached:
+
+- max_stops_per_day
+- max_shift_minutes
+- customer time window conflict
+- required service day conflict
+- geographic inefficiency threshold
+- Mapbox optimization feasibility limit for internal legs
+
+Preferred behavior:
+- Fill route-days as close to max capacity as practical.
+- Avoid creating short route-days unless all fuller route-days are already built or constraints force it.
+- Keep outlier stops separate if they damage route efficiency.
+
+Step 5: Assign Route-Days to Techs
+Once route-days are created, assign them to tech/day slots.
+
+Rules:
+- Assign full route-days first.
+- Fill one tech’s available days before unnecessarily spreading small routes across multiple techs.
+- Respect tech availability.
+- Respect required service days.
+- Avoid unnecessary short workdays.
+- Prefer route continuity by geography where possible.
+
+Example assignment preference:
+Tech A Monday: full route
+Tech A Tuesday: full route
+Tech A Wednesday: full route
+Tech A Thursday: full route
+Tech A Friday: full route
+Tech B Monday: full route
+Tech B Tuesday: full route
+Tech B Wednesday: short route
+
+Step 6: Handle Mapbox API Coordinate Limits
+Mapbox route optimization may have a limit on the number of coordinates per optimization request depending on plan/API version.
+
+Do not assume large routes can be optimized in one request.
+
+If a daily route has more stops than the Mapbox optimization cap, split the daily route into internal legs.
+
+Example:
+Daily route = 40 stops
+Mapbox cap = 12 stops/request
+
+Create:
+- Leg 1: 12 stops
+- Leg 2: 12 stops
+- Leg 3: 12 stops
+- Leg 4: 4 stops
+
+Optimize each leg separately with Mapbox.
+
+Then stitch legs together.
+
+Step 7: Chained Optimization Logic
+For each daily route:
+
+1. Start with the depot/start location or first assigned route location.
+2. Select the nearest logical group of stops for Leg 1, up to the Mapbox cap.
+3. Send Leg 1 to Mapbox Optimization API.
+4. Capture:
+   - optimized stop order
+   - final stop coordinates
+   - distance
+   - duration
+   - geometry/polyline if available
+5. Use the final stop of Leg 1 as the anchor/start point for selecting Leg 2.
+6. Select the next nearest logical group of unvisited stops.
+7. Optimize Leg 2.
+8. Repeat until all stops in the daily route are optimized.
+9. Stitch all legs into one complete route sequence.
+
+Important:
+- Do not duplicate stops between legs.
+- Do not drop stops.
+- Preserve required time windows and required service days.
+- Return both the full daily route and the internal leg breakdown.
+
+Step 8: Route Scoring
+Each generated route-day should include a scorecard:
+
+- total stops
+- total estimated service time
+- total estimated drive time
+- total estimated route time
+- total miles
+- number of Mapbox optimization legs
+- capacity utilization percentage
+- outlier stops
+- warnings
+- route efficiency score
+
+Example:
+
+capacity_utilization = assigned_stops / max_stops_per_day
+
+Flag:
+- route under minimum stop count
+- route over max shift time
+- route has excessive drive time
+- route has geographically isolated stop
+- route required too many chained legs
+- route violates time window
+- route exceeds Mapbox cap without leg splitting
+
+Step 9: Output Format
+Return structured JSON and UI-ready route data.
+
+Each weekly route plan should return:
+
+{
+  "summary": {
+    "totalStops": 300,
+    "activeTechs": 2,
+    "availableDays": 5,
+    "maxStopsPerDay": 40,
+    "weeklyCapacity": 400,
+    "requiredRouteDays": 8,
+    "estimatedMiles": 0,
+    "estimatedDriveTimeMinutes": 0,
+    "estimatedServiceTimeMinutes": 0,
+    "warnings": []
+  },
+  "routeDays": [
+    {
+      "routeDayId": "route-001",
+      "assignedTechId": "tech-001",
+      "assignedTechName": "Tech 1",
+      "day": "Monday",
+      "stopCount": 40,
+      "capacityUtilization": 1.0,
+      "estimatedMiles": 0,
+      "estimatedDriveTimeMinutes": 0,
+      "estimatedServiceTimeMinutes": 0,
+      "estimatedTotalMinutes": 0,
+      "legs": [
+        {
+          "legNumber": 1,
+          "stopCount": 12,
+          "mapboxRequestId": null,
+          "optimizedStops": []
+        }
+      ],
+      "fullOptimizedStopSequence": [],
+      "warnings": []
+    }
+  ],
+  "unassignedStops": [],
+  "outlierStops": []
+}
+
+Step 10: UI Requirements
+Update the routing UI to show:
+
+Weekly Routing Summary:
+- total stops
+- weekly capacity
+- required route-days
+- available route slots
+- capacity used
+- unassigned stops
+- estimated miles
+- estimated route time
+
+Route-Day Cards:
+- tech
+- day
+- stop count
+- utilization %
+- estimated miles
+- estimated time
+- number of Mapbox legs
+- warning badges
+
+Route Detail View:
+- full optimized stop order
+- internal leg breakdown
+- map preview
+- miles and time per leg
+- total miles and time
+- any skipped/unassigned/problem stops
+
+Warnings:
+- “Capacity exceeded”
+- “Route below minimum stop count”
+- “Route exceeds shift length”
+- “Stop missing coordinates”
+- “Outlier stop may be inefficient”
+- “Mapbox cap exceeded, route split into legs”
+- “Time window conflict”
+
+Step 11: Admin Settings
+Add or update routing settings:
+
+- max stops per day
+- min stops per day
+- max shift minutes
+- average service minutes per stop
+- Mapbox optimization coordinate cap
+- use depot start location: true/false
+- depot address/coordinates
+- allow short final route: true/false
+- prioritize fewer workdays: true/false
+- prioritize balanced tech workload: true/false
+- prioritize geographic density: true/false
+- max acceptable drive time between stops
+- outlier distance threshold
+
+DEFAULT PRIORITIES
+Use this priority order unless the user changes settings:
+
+1. Required service day/time window
+2. Geographic density
+3. Max stops/day
+4. Max shift time
+5. Fewest practical route-days
+6. Highest route utilization
+7. Balanced tech workload
+
+IMPORTANT BEHAVIOR
+The AI may assist with clustering recommendations, outlier detection, and explaining tradeoffs, but the actual routing logic must be deterministic and auditable.
+
+Do not let the AI make hidden routing decisions that cannot be explained.
+
+Every route assignment should be explainable by:
+- geography
+- capacity
+- tech availability
+- required service day
+- estimated route time
+- Mapbox optimization result
+
+ERROR HANDLING
+If Mapbox fails:
+- retry once
+- if still failing, preserve the clustered route order
+- show warning that Mapbox optimization failed
+- do not delete or drop stops
+
+If a stop has invalid coordinates:
+- exclude it from optimization
+- add it to unassignedStops
+- show warning
+
+If route capacity is insufficient:
+- do not silently force routes
+- return capacity warning and suggested fixes
+
+SUCCESS CRITERIA
+After this update, the system should be able to:
+
+- Take hundreds of stops
+- Cluster them geographically
+- Build dense route-days
+- Fill route-days close to max capacity
+- Minimize unnecessary partial workdays
+- Assign route-days to techs
+- Split large daily routes into Mapbox-compatible legs
+- Chain optimized legs into one full daily route
+- Return auditable route data
+- Show warnings and route quality metrics
+- Avoid relying on simple even distribution
+
+Do not optimize only by stop count. Optimize by route workload:
+- stop count
+- geography
+- drive time
+- service time
+- tech availability
+- Mapbox limits
+- customer constraints
