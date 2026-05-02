@@ -410,6 +410,19 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const newRoutes: { id: string; name: string; stopCount: number }[] = [];
       const allAffectedPlanIds: string[] = [];
 
+      // Stops on the original route that could not be geocoded are excluded from
+      // weeklyStops and therefore from every cluster. They remain on route.id with
+      // their original stopOrder values, which would collide with the 1..N orders
+      // written for cluster[0]. Bump them to a high stopOrder now so that
+      // renumberRouteStops places them after the optimized stops.
+      const weeklyStopIds = new Set(weeklyStops.map((s) => s.id));
+      const ungeocoded = routePlans.filter((sp) => !weeklyStopIds.has(sp.id));
+      for (const sp of ungeocoded) {
+        await storage.updateServicePlan(sp.id, companyId, {
+          stopOrder: 99000 + (sp.stopOrder ?? 0),
+        });
+      }
+
       for (let ci = 0; ci < clusters.length; ci++) {
         const cluster = clusters[ci];
         let targetRouteId: string;
@@ -1393,6 +1406,22 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
             }
             dayRouteIdx++;
             affectedRouteIds.add(existingRoute!.id);
+
+            // Collect the service plan IDs proposed for this destination route
+            const proposedStopIds = new Set(validStops.map((s) => getStopId(s)!));
+
+            // Find stops already on this route that are NOT in the proposal.
+            // Bump them to a high stopOrder (99000 + current) so that after
+            // renumberRouteStops sorts by stopOrder ASC they land after the
+            // optimized sequence (1..N) rather than being interleaved with it.
+            const preExistingNonProposed = companyPlans.filter(
+              (p) => p.routeId === existingRoute!.id && !proposedStopIds.has(p.id)
+            );
+            for (const plan of preExistingNonProposed) {
+              await storage.updateServicePlan(plan.id, companyId, {
+                stopOrder: 99000 + (plan.stopOrder ?? 0),
+              });
+            }
 
             for (let sIdx = 0; sIdx < validStops.length; sIdx++) {
               const stop = validStops[sIdx];
