@@ -383,9 +383,7 @@ export async function calculateAllCustomerProfitability(
 
   // Compute actual monthly visit count from real plan frequencies so overhead/visit is accurate
   const actualMonthlyVisits = Math.max(
-    Math.round(
-      activePlans.reduce((sum, p) => sum + getFrequencyVisitsPerMonth(p.frequency), 0)
-    ),
+    Math.round(activePlans.reduce((sum, p) => sum + getFrequencyVisitsPerMonth(p.frequency), 0)),
     1
   );
 
