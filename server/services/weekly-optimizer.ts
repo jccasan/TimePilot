@@ -525,8 +525,6 @@ function assignByZones(
   return result;
 }
 
-
-
 /**
  * Merge any cluster smaller than minSize into its nearest neighbor (by
  * centroid-to-centroid distance). Runs repeatedly until no undersized cluster
