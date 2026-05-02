@@ -49,6 +49,8 @@ import {
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   LineChart,
   Line,
   PieChart,
@@ -79,6 +81,9 @@ type BusinessOverviewData = {
   monthlyRevenue: { month: string; revenue: number }[];
   customerAcquisition: { month: string; newClients: number; total: number }[];
   profitabilityMix: { name: string; value: number; color: string }[];
+  invoiceCollection: { month: string; invoicedCents: number; collectedCents: number }[];
+  revenueByFrequency: { name: string; mrrCents: number }[];
+  routeEfficiency: { month: string; avgStopsPerDay: number }[];
 };
 
 type ScoreBreakdownItem = {
@@ -385,7 +390,15 @@ export default function BusinessOverview() {
 
   if (!data) return null;
 
-  const { kpis, monthlyRevenue, customerAcquisition, profitabilityMix } = data;
+  const {
+    kpis,
+    monthlyRevenue,
+    customerAcquisition,
+    profitabilityMix,
+    invoiceCollection,
+    revenueByFrequency,
+    routeEfficiency,
+  } = data;
   const mrrDisplay =
     kpis.mrrCents >= 100000
       ? formatMoney(kpis.mrrCents / 100 / 1000)
@@ -780,6 +793,87 @@ export default function BusinessOverview() {
                 {kpis.profitableCount + kpis.marginalCount + kpis.unprofitableCount} total tracked
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Invoice Collection */}
+        <Card data-testid="card-chart-invoice-collection">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Invoice Collection</CardTitle>
+            <CardDescription>Monthly invoiced vs. collected dollars over 12 months</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart
+                data={invoiceCollection.map((d) => ({
+                  month: d.month,
+                  Invoiced: d.invoicedCents / 100,
+                  Collected: d.collectedCents / 100,
+                }))}
+                barGap={2}
+              >
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => fmtAxis(v)} tick={{ fontSize: 11 }} width={52} />
+                <Tooltip content={<ChartTooltipContent prefix="$" />} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="Invoiced" fill="hsl(var(--chart-1))" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="Collected" fill="hsl(var(--chart-2))" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Revenue by Plan Type */}
+        <Card data-testid="card-chart-revenue-by-frequency">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Revenue by Plan Type</CardTitle>
+            <CardDescription>Current MRR split across service plan frequencies</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart
+                data={revenueByFrequency.map((d) => ({ name: d.name, MRR: d.mrrCents / 100 }))}
+                barSize={48}
+              >
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => fmtAxis(v)} tick={{ fontSize: 11 }} width={52} />
+                <Tooltip content={<ChartTooltipContent prefix="$" />} />
+                <Bar dataKey="MRR" radius={[4, 4, 0, 0]}>
+                  {revenueByFrequency.map((_, i) => (
+                    <Cell key={i} fill={`hsl(var(--chart-${i + 1}))`} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Route Efficiency */}
+        <Card data-testid="card-chart-route-efficiency">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Route Efficiency</CardTitle>
+            <CardDescription>Average stops per active route-day per month</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={routeEfficiency}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} width={36} />
+                <Tooltip content={<ChartTooltipContent />} />
+                <Line
+                  type="monotone"
+                  dataKey="avgStopsPerDay"
+                  name="Avg Stops / Day"
+                  stroke="hsl(var(--chart-3))"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>

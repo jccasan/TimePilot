@@ -910,6 +910,103 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const activePlanCount = allActivePlans.length;
       const pausedPlanCount = allPlansRaw.filter((p) => p.pausedAt != null || p.isStopOnly).length;
 
+      // Invoice Collection (12 months) — invoiced by createdAt month, collected by paidAt month
+      const icMonths: {
+        monthKey: string;
+        month: string;
+        invoicedCents: number;
+        collectedCents: number;
+      }[] = [];
+      const icWindowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthKey = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+        icMonths.push({
+          monthKey,
+          month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
+          invoicedCents: 0,
+          collectedCents: 0,
+        });
+      }
+      const icMap = new Map(icMonths.map((m) => [m.monthKey, m]));
+      for (const inv of allInvoices) {
+        const created = new Date(inv.createdAt);
+        if (created >= icWindowStart) {
+          const key = `${created.getFullYear()}-${String(created.getMonth()).padStart(2, "0")}`;
+          const bucket = icMap.get(key);
+          if (bucket) bucket.invoicedCents += Math.round(parseFloat(inv.total) * 100);
+        }
+        if (inv.paidAt) {
+          const paid = new Date(inv.paidAt);
+          if (paid >= icWindowStart) {
+            const key = `${paid.getFullYear()}-${String(paid.getMonth()).padStart(2, "0")}`;
+            const bucket = icMap.get(key);
+            if (bucket) bucket.collectedCents += Math.round(parseFloat(inv.total) * 100);
+          }
+        }
+      }
+      const invoiceCollection = icMonths.map(({ month, invoicedCents, collectedCents }) => ({
+        month,
+        invoicedCents,
+        collectedCents,
+      }));
+
+      // Revenue by plan frequency
+      const freqMrrMap: Record<string, number> = { weekly: 0, biweekly: 0, monthly: 0 };
+      for (const p of allActivePlans) {
+        const freq = p.frequency as string;
+        if (freq in freqMrrMap) {
+          const visits = visitsPerMonthByFreq[freq] ?? 0;
+          freqMrrMap[freq] += Math.round(parseFloat(p.pricePerVisit) * 100 * visits);
+        }
+      }
+      const revenueByFrequency = [
+        { name: "Weekly", mrrCents: freqMrrMap.weekly },
+        { name: "Bi-Weekly", mrrCents: freqMrrMap.biweekly },
+        { name: "Monthly", mrrCents: freqMrrMap.monthly },
+      ];
+
+      // Route Efficiency — avg stops per active route-day per month over 12 months
+      const reStart = new Date(now.getFullYear(), now.getMonth() - 11, 1)
+        .toISOString()
+        .split("T")[0];
+      const reEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+      const allVisits12m = await storage.getVisitsForDateRange(companyId, reStart, reEnd);
+      const reMonths: { monthKey: string; month: string }[] = [];
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        reMonths.push({
+          monthKey: `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`,
+          month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
+        });
+      }
+      const routeDayStops = new Map<string, number>(); // "monthKey|routeId" -> stop count
+      for (const v of allVisits12m) {
+        if (v.status !== "completed" || !v.routeId) continue;
+        const parts = v.scheduledDate.split("-");
+        const yr = parseInt(parts[0], 10);
+        const mo = parseInt(parts[1], 10) - 1;
+        const monthKey = `${yr}-${String(mo).padStart(2, "0")}`;
+        const key = `${monthKey}|${v.routeId}`;
+        routeDayStops.set(key, (routeDayStops.get(key) || 0) + 1);
+      }
+      const reByMonth = new Map<string, { totalStops: number; routeDays: number }>();
+      for (const [key, stops] of routeDayStops.entries()) {
+        const monthKey = key.split("|")[0];
+        const existing = reByMonth.get(monthKey) || { totalStops: 0, routeDays: 0 };
+        existing.totalStops += stops;
+        existing.routeDays += 1;
+        reByMonth.set(monthKey, existing);
+      }
+      const routeEfficiency = reMonths.map(({ month, monthKey }) => {
+        const bucket = reByMonth.get(monthKey);
+        const avgStopsPerDay =
+          bucket && bucket.routeDays > 0
+            ? Math.round((bucket.totalStops / bucket.routeDays) * 10) / 10
+            : 0;
+        return { month, avgStopsPerDay };
+      });
+
       res.json({
         kpis: {
           mrrCents,
@@ -927,6 +1024,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         monthlyRevenue,
         customerAcquisition,
         profitabilityMix,
+        invoiceCollection,
+        revenueByFrequency,
+        routeEfficiency,
       });
     } catch (err) {
       handleError(res, err);
