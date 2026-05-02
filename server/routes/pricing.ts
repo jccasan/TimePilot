@@ -1003,24 +1003,6 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
 
         const thirtyAgo = new Date(now);
         thirtyAgo.setDate(thirtyAgo.getDate() - 30);
-        const assessYesterday = new Date(now);
-        assessYesterday.setDate(assessYesterday.getDate() - 1);
-        const recentVisits = await storage.getVisitsForDateRange(
-          companyId,
-          thirtyAgo.toISOString().split("T")[0],
-          assessYesterday.toISOString().split("T")[0]
-        );
-        const recentTerminalAssess = recentVisits.filter((v) =>
-          ["completed", "skipped", "cancelled"].includes(v.status)
-        );
-        const visitCompletionRate =
-          recentTerminalAssess.length > 0
-            ? Math.round(
-                (recentTerminalAssess.filter((v) => v.status === "completed").length /
-                  recentTerminalAssess.length) *
-                  100
-              )
-            : 0;
 
         const { calculateAllCustomerProfitability } =
           await import("../services/profitability-calculator");
@@ -1069,7 +1051,6 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           pausedPlanCount,
           mrrDollars: Math.round(mrrCents / 100),
           collectionRatePct: collectionRate,
-          visitCompletionRatePct: visitCompletionRate,
           avgProfitMarginPct,
           profitableCustomers: profitableCount,
           marginalCustomers: marginalCount,
@@ -1198,7 +1179,7 @@ Rules:
 - healthScore must equal the sum of all scoreBreakdown scores
 - Apply all scoring cap rules from the prompt above before finalizing the score
 - cfo findings: focus on revenue, collection, MRR, margin — cite exact numbers from fact sheet
-- coo findings: focus on churn rate (churnRatePct), new customers added (newCustomers30d), active vs paused plans, visit completion, customer mix — cite exact numbers from fact sheet
+- coo findings: focus on churn rate (churnRatePct), new customers added (newCustomers30d), active vs paused plans, customer mix — cite exact numbers from fact sheet
 - recommendations: max 5, ranked by priority, cite exact numbers from the fact sheet
 - NEVER invent numbers not present in the fact sheet
 - whatIsWorking: 3-7 items; whatIsNotWorking: 3-7 items; ownerDecisions: exactly 5 items`;
