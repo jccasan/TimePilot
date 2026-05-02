@@ -646,7 +646,7 @@ export default function BusinessOverview() {
         <KpiCard
           title="Visit Completion Rate"
           value={`${kpis.visitCompletionRate}%`}
-          subtitle="Last 30 days"
+          subtitle="Last 30 days (actioned visits)"
           icon={CheckCircle}
           colorClass={completionColor}
         />
@@ -769,7 +769,7 @@ export default function BusinessOverview() {
         <Card data-testid="card-chart-visit-completion">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Weekly Visit Completion</CardTitle>
-            <CardDescription>Completion rate over last 8 weeks</CardDescription>
+            <CardDescription>Completed vs. actioned visits over last 8 weeks</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={220}>
@@ -791,7 +791,8 @@ export default function BusinessOverview() {
                       <div className="rounded-md border bg-background p-2 shadow-md text-xs">
                         <p className="font-medium mb-1">{label}</p>
                         <p>
-                          {d?.completed} / {d?.total} visits — <strong>{d?.completionRate}%</strong>
+                          {d?.completed} / {d?.total} actioned visits —{" "}
+                          <strong>{d?.completionRate}%</strong>
                         </p>
                       </div>
                     );

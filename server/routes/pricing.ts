@@ -857,8 +857,11 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         const wss = `${ws.getFullYear()}-${String(ws.getMonth() + 1).padStart(2, "0")}-${String(ws.getDate()).padStart(2, "0")}`;
         const wes = `${we.getFullYear()}-${String(we.getMonth() + 1).padStart(2, "0")}-${String(we.getDate()).padStart(2, "0")}`;
         const wv = await storage.getVisitsForDateRange(companyId, wss, wes);
-        const comp = wv.filter((v) => v.status === "completed").length;
-        const tot = wv.length;
+        const terminalWv = wv.filter((v) =>
+          ["completed", "skipped", "cancelled"].includes(v.status)
+        );
+        const comp = terminalWv.filter((v) => v.status === "completed").length;
+        const tot = terminalWv.length;
         weeklyCompletion.push({
           week: `${ws.toLocaleString("default", { month: "short" })} ${ws.getDate()}`,
           completed: comp,
@@ -923,18 +926,24 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       // Active customers
       const activeCustomers = allContactsRaw.filter((c) => c.status === "active").length;
 
-      // Recent completion rate (30 days)
+      // Recent completion rate (30 days, terminal-status visits only, up to yesterday)
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
       const thirtyAgo = new Date(now);
       thirtyAgo.setDate(thirtyAgo.getDate() - 30);
       const recentVisits = await storage.getVisitsForDateRange(
         companyId,
         thirtyAgo.toISOString().split("T")[0],
-        now.toISOString().split("T")[0]
+        yesterday.toISOString().split("T")[0]
+      );
+      const recentTerminal = recentVisits.filter((v) =>
+        ["completed", "skipped", "cancelled"].includes(v.status)
       );
       const visitCompletionRate =
-        recentVisits.length > 0
+        recentTerminal.length > 0
           ? Math.round(
-              (recentVisits.filter((v) => v.status === "completed").length / recentVisits.length) *
+              (recentTerminal.filter((v) => v.status === "completed").length /
+                recentTerminal.length) *
                 100
             )
           : 0;
@@ -1030,16 +1039,21 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
 
         const thirtyAgo = new Date(now);
         thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+        const assessYesterday = new Date(now);
+        assessYesterday.setDate(assessYesterday.getDate() - 1);
         const recentVisits = await storage.getVisitsForDateRange(
           companyId,
           thirtyAgo.toISOString().split("T")[0],
-          now.toISOString().split("T")[0]
+          assessYesterday.toISOString().split("T")[0]
+        );
+        const recentTerminalAssess = recentVisits.filter((v) =>
+          ["completed", "skipped", "cancelled"].includes(v.status)
         );
         const visitCompletionRate =
-          recentVisits.length > 0
+          recentTerminalAssess.length > 0
             ? Math.round(
-                (recentVisits.filter((v) => v.status === "completed").length /
-                  recentVisits.length) *
+                (recentTerminalAssess.filter((v) => v.status === "completed").length /
+                  recentTerminalAssess.length) *
                   100
               )
             : 0;
