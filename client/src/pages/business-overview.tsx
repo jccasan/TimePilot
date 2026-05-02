@@ -49,8 +49,6 @@ import {
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   LineChart,
   Line,
   PieChart,
@@ -70,7 +68,10 @@ type BusinessOverviewData = {
     activeCustomers: number;
     avgProfitMarginPct: number;
     collectionRate: number;
-    visitCompletionRate: number;
+    newCustomers30d: number;
+    churned30d: number;
+    activePlanCount: number;
+    pausedPlanCount: number;
     profitableCount: number;
     marginalCount: number;
     unprofitableCount: number;
@@ -78,7 +79,6 @@ type BusinessOverviewData = {
   monthlyRevenue: { month: string; revenue: number }[];
   customerAcquisition: { month: string; newClients: number; total: number }[];
   profitabilityMix: { name: string; value: number; color: string }[];
-  weeklyCompletion: { week: string; completed: number; total: number; completionRate: number }[];
 };
 
 type ScoreBreakdownItem = {
@@ -385,7 +385,7 @@ export default function BusinessOverview() {
 
   if (!data) return null;
 
-  const { kpis, monthlyRevenue, customerAcquisition, profitabilityMix, weeklyCompletion } = data;
+  const { kpis, monthlyRevenue, customerAcquisition, profitabilityMix } = data;
   const mrrDisplay =
     kpis.mrrCents >= 100000
       ? formatMoney(kpis.mrrCents / 100 / 1000)
@@ -400,17 +400,17 @@ export default function BusinessOverview() {
         ? "text-yellow-600 dark:text-yellow-400"
         : "text-red-600 dark:text-red-400";
 
-  const completionColor =
-    kpis.visitCompletionRate >= 90
-      ? "text-green-600 dark:text-green-400"
-      : kpis.visitCompletionRate >= 70
-        ? "text-yellow-600 dark:text-yellow-400"
-        : "text-red-600 dark:text-red-400";
-
   const collectionColor =
     kpis.collectionRate >= 90
       ? "text-green-600 dark:text-green-400"
       : kpis.collectionRate >= 75
+        ? "text-yellow-600 dark:text-yellow-400"
+        : "text-red-600 dark:text-red-400";
+
+  const churnColor =
+    kpis.churned30d === 0
+      ? "text-green-600 dark:text-green-400"
+      : kpis.churned30d <= 2
         ? "text-yellow-600 dark:text-yellow-400"
         : "text-red-600 dark:text-red-400";
 
@@ -622,7 +622,7 @@ export default function BusinessOverview() {
       </div>
 
       {/* KPI Scorecard */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           title="Monthly Recurring Revenue"
           value={mrrDisplay}
@@ -644,11 +644,24 @@ export default function BusinessOverview() {
           colorClass={collectionColor}
         />
         <KpiCard
-          title="Visit Completion Rate"
-          value={`${kpis.visitCompletionRate}%`}
-          subtitle="Last 30 days (actioned visits)"
+          title="New Customers"
+          value={String(kpis.newCustomers30d)}
+          subtitle="Last 30 days"
+          icon={Users}
+          colorClass={kpis.newCustomers30d > 0 ? "text-green-600 dark:text-green-400" : undefined}
+        />
+        <KpiCard
+          title="Churned"
+          value={String(kpis.churned30d)}
+          subtitle="Last 30 days"
+          icon={CalendarDays}
+          colorClass={churnColor}
+        />
+        <KpiCard
+          title="Active Jobs"
+          value={String(kpis.activePlanCount)}
+          subtitle={`${kpis.pausedPlanCount} paused / stopped`}
           icon={CheckCircle}
-          colorClass={completionColor}
         />
       </div>
 
@@ -762,50 +775,6 @@ export default function BusinessOverview() {
                 {kpis.profitableCount + kpis.marginalCount + kpis.unprofitableCount} total tracked
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Weekly Visit Completion */}
-        <Card data-testid="card-chart-visit-completion">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Weekly Visit Completion</CardTitle>
-            <CardDescription>Completed vs. actioned visits over last 8 weeks</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={weeklyCompletion}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="week" tick={{ fontSize: 10 }} />
-                <YAxis
-                  domain={[0, 100]}
-                  tickFormatter={(v) => `${v}%`}
-                  tick={{ fontSize: 11 }}
-                  width={40}
-                />
-                <Tooltip
-                  formatter={(val: number) => [`${val}%`, "Completion Rate"]}
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload?.length) return null;
-                    const d = payload[0]?.payload;
-                    return (
-                      <div className="rounded-md border bg-background p-2 shadow-md text-xs">
-                        <p className="font-medium mb-1">{label}</p>
-                        <p>
-                          {d?.completed} / {d?.total} actioned visits —{" "}
-                          <strong>{d?.completionRate}%</strong>
-                        </p>
-                      </div>
-                    );
-                  }}
-                />
-                <Bar
-                  dataKey="completionRate"
-                  name="Completion Rate"
-                  fill="hsl(var(--chart-3))"
-                  radius={[3, 3, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>

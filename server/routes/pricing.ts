@@ -838,38 +838,6 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         });
       }
 
-      // Weekly visit completion (8 weeks)
-      const currentMonday = new Date(now);
-      const dow = currentMonday.getDay();
-      currentMonday.setDate(currentMonday.getDate() - (dow === 0 ? 6 : dow - 1));
-      currentMonday.setHours(0, 0, 0, 0);
-      const weeklyCompletion: {
-        week: string;
-        completed: number;
-        total: number;
-        completionRate: number;
-      }[] = [];
-      for (let w = 7; w >= 0; w--) {
-        const ws = new Date(currentMonday);
-        ws.setDate(ws.getDate() - w * 7);
-        const we = new Date(ws);
-        we.setDate(we.getDate() + 6);
-        const wss = `${ws.getFullYear()}-${String(ws.getMonth() + 1).padStart(2, "0")}-${String(ws.getDate()).padStart(2, "0")}`;
-        const wes = `${we.getFullYear()}-${String(we.getMonth() + 1).padStart(2, "0")}-${String(we.getDate()).padStart(2, "0")}`;
-        const wv = await storage.getVisitsForDateRange(companyId, wss, wes);
-        const terminalWv = wv.filter((v) =>
-          ["completed", "skipped", "cancelled"].includes(v.status)
-        );
-        const comp = terminalWv.filter((v) => v.status === "completed").length;
-        const tot = terminalWv.length;
-        weeklyCompletion.push({
-          week: `${ws.toLocaleString("default", { month: "short" })} ${ws.getDate()}`,
-          completed: comp,
-          total: tot,
-          completionRate: tot > 0 ? Math.round((comp / tot) * 100) : 0,
-        });
-      }
-
       // Profitability mix
       const { calculateAllCustomerProfitability } =
         await import("../services/profitability-calculator");
@@ -926,27 +894,21 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       // Active customers
       const activeCustomers = allContactsRaw.filter((c) => c.status === "active").length;
 
-      // Recent completion rate (30 days, terminal-status visits only, up to yesterday)
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
+      // New customers last 30 days
       const thirtyAgo = new Date(now);
       thirtyAgo.setDate(thirtyAgo.getDate() - 30);
-      const recentVisits = await storage.getVisitsForDateRange(
-        companyId,
-        thirtyAgo.toISOString().split("T")[0],
-        yesterday.toISOString().split("T")[0]
-      );
-      const recentTerminal = recentVisits.filter((v) =>
-        ["completed", "skipped", "cancelled"].includes(v.status)
-      );
-      const visitCompletionRate =
-        recentTerminal.length > 0
-          ? Math.round(
-              (recentTerminal.filter((v) => v.status === "completed").length /
-                recentTerminal.length) *
-                100
-            )
-          : 0;
+      const newCustomers30d = allContactsRaw.filter(
+        (c) => new Date(c.createdAt) >= thirtyAgo
+      ).length;
+
+      // Churned last 30 days (contacts that moved to cancelled recently, using updatedAt as proxy)
+      const churned30d = allContactsRaw.filter(
+        (c) => c.status === "cancelled" && new Date(c.updatedAt) >= thirtyAgo
+      ).length;
+
+      // Active vs paused plans
+      const activePlanCount = allActivePlans.length;
+      const pausedPlanCount = allPlansRaw.filter((p) => p.pausedAt != null || p.isStopOnly).length;
 
       res.json({
         kpis: {
@@ -954,7 +916,10 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           activeCustomers,
           avgProfitMarginPct,
           collectionRate,
-          visitCompletionRate,
+          newCustomers30d,
+          churned30d,
+          activePlanCount,
+          pausedPlanCount,
           profitableCount,
           marginalCount,
           unprofitableCount,
@@ -962,7 +927,6 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         monthlyRevenue,
         customerAcquisition,
         profitabilityMix,
-        weeklyCompletion,
       });
     } catch (err) {
       handleError(res, err);
