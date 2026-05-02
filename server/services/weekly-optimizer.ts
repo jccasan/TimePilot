@@ -617,16 +617,22 @@ function assignByGeoClustering(
   if (stops.length === 0) return result;
 
   const stopsPerRoute = maxStopsPerDay && maxStopsPerDay > 0 ? maxStopsPerDay : MAX_STOPS_PER_ROUTE;
-  const techsPerDay = Math.ceil(stops.length / stopsPerRoute / activeDays.length) || 1;
-  const maxK = activeDays.length * Math.max(1, techsPerDay);
+
+  // Capacity-first: compute the minimum number of route-days required to
+  // serve all stops without exceeding capacity, then cluster to exactly that
+  // count.  This packs stops into the fewest possible days (tighter geographic
+  // clusters, less driving) instead of spreading them evenly across all days.
+  const requiredRouteDays = Math.max(1, Math.ceil(stops.length / stopsPerRoute));
+  const maxK = requiredRouteDays;
 
   const optK = findOptimalK(stops, maxK);
   let clusters = kMeansClustering(stops, optK);
 
   // Absorb clusters that are too small to stand alone as a day's route.
-  // Threshold scales with route size: ~1/3 of the average stops-per-day,
+  // Threshold scales with route size: ~1/3 of the average stops-per-used-day,
   // floored at MIN_STOPS_FOR_OWN_DAY so tiny companies aren't over-merged.
-  const avgStopsPerDay = stops.length / activeDays.length;
+  const estimatedUsedDays = Math.min(requiredRouteDays, activeDays.length);
+  const avgStopsPerDay = stops.length / Math.max(1, estimatedUsedDays);
   const computedMin = Math.max(MIN_STOPS_FOR_OWN_DAY, Math.floor(avgStopsPerDay * 0.33));
   const minClusterSize =
     minStopsPerDay != null && minStopsPerDay > 0
@@ -648,9 +654,20 @@ function assignByGeoClustering(
   const usedDayCount = Math.min(orderedClusters.length, activeDays.length);
   const usedDays = activeDays.slice(0, usedDayCount);
 
-  for (let i = 0; i < orderedClusters.length; i++) {
-    const dayIdx = i % usedDays.length;
-    result.get(usedDays[dayIdx])!.push(orderedClusters[i]);
+  // Sequential (capacity-first) assignment: pack clusters into the fewest
+  // days, filling each day before opening the next.  Geographically adjacent
+  // clusters (ordered by depot distance above) stay on the same day, keeping
+  // per-day driving tight.
+  const C = orderedClusters.length;
+  const D = usedDayCount;
+  const base = Math.floor(C / D);
+  const extra = C % D;
+  let clusterIdx = 0;
+  for (let d = 0; d < D; d++) {
+    const clustersForDay = base + (d < extra ? 1 : 0);
+    for (let j = 0; j < clustersForDay; j++) {
+      result.get(usedDays[d])!.push(orderedClusters[clusterIdx++]);
+    }
   }
 
   return result;
