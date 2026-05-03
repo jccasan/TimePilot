@@ -1393,6 +1393,28 @@ export default function BusinessOverview() {
                       </div>
                     ))}
                   </div>
+
+                  {assessment.nextThreeDecisions && assessment.nextThreeDecisions.length > 0 && (
+                    <div className="mt-4 space-y-2" data-testid="panel-next-three-decisions">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Next Decisions to Make
+                      </p>
+                      <div className="space-y-2">
+                        {assessment.nextThreeDecisions.map((question, i) => (
+                          <div
+                            key={i}
+                            className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3"
+                            data-testid={`next-decision-${i}`}
+                          >
+                            <span className="flex-shrink-0 flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                              {i + 1}
+                            </span>
+                            <p className="text-sm text-foreground leading-snug">{question}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1482,50 +1504,108 @@ export default function BusinessOverview() {
                     <CalendarDays className="h-4 w-4 text-primary" />
                     30 / 60 / 90 Day Action Plan
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {(() => {
-                      const ap = assessment.actionPlan!;
-                      const first30 = ap.next30?.length
-                        ? ap.next30
-                        : [...(ap.week1 ?? []), ...(ap.week2 ?? []), ...(ap.week3week4 ?? [])];
-                      return [
+                  {(() => {
+                    const ap = assessment.actionPlan!;
+                    const hasWeekly = ap.week1?.length || ap.week2?.length || ap.week3week4?.length;
+                    if (hasWeekly) {
+                      const weeklyPhases = [
                         {
-                          label: "Next 30 Days",
-                          items: first30,
+                          label: "Week 1",
+                          items: ap.week1,
                           color: "border-green-200 dark:border-green-800",
+                          testId: "action-plan-week1",
+                        },
+                        {
+                          label: "Week 2",
+                          items: ap.week2,
+                          color: "border-emerald-200 dark:border-emerald-800",
+                          testId: "action-plan-week2",
+                        },
+                        {
+                          label: "Weeks 3–4",
+                          items: ap.week3week4,
+                          color: "border-teal-200 dark:border-teal-800",
+                          testId: "action-plan-week3week4",
                         },
                         {
                           label: "Days 31–60",
                           items: ap.days31to60,
                           color: "border-yellow-200 dark:border-yellow-800",
+                          testId: "action-plan-phase-1",
                         },
                         {
                           label: "Days 61–90",
                           items: ap.days61to90,
                           color: "border-blue-200 dark:border-blue-800",
+                          testId: "action-plan-phase-2",
                         },
-                      ];
-                    })().map((phase, pi) => (
-                      <div
-                        key={pi}
-                        className={`rounded-lg border-2 ${phase.color} p-3 space-y-2`}
-                        data-testid={`action-plan-phase-${pi}`}
-                      >
-                        <p className="text-xs font-semibold">{phase.label}</p>
-                        <ul className="space-y-1.5">
-                          {phase.items?.map((item, ii) => (
-                            <li
-                              key={ii}
-                              className="flex items-start gap-1.5 text-xs text-muted-foreground"
+                      ].filter((p) => p.items?.length);
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {weeklyPhases.map((phase) => (
+                            <div
+                              key={phase.testId}
+                              className={`rounded-lg border-2 ${phase.color} p-3 space-y-2`}
+                              data-testid={phase.testId}
                             >
-                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
-                              {item}
-                            </li>
+                              <p className="text-xs font-semibold">{phase.label}</p>
+                              <ul className="space-y-1.5">
+                                {phase.items?.map((item, ii) => (
+                                  <li
+                                    key={ii}
+                                    className="flex items-start gap-1.5 text-xs text-muted-foreground"
+                                  >
+                                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
+                                    {item}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           ))}
-                        </ul>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {[
+                          {
+                            label: "Next 30 Days",
+                            items: ap.next30,
+                            color: "border-green-200 dark:border-green-800",
+                          },
+                          {
+                            label: "Days 31–60",
+                            items: ap.days31to60,
+                            color: "border-yellow-200 dark:border-yellow-800",
+                          },
+                          {
+                            label: "Days 61–90",
+                            items: ap.days61to90,
+                            color: "border-blue-200 dark:border-blue-800",
+                          },
+                        ].map((phase, pi) => (
+                          <div
+                            key={pi}
+                            className={`rounded-lg border-2 ${phase.color} p-3 space-y-2`}
+                            data-testid={`action-plan-phase-${pi}`}
+                          >
+                            <p className="text-xs font-semibold">{phase.label}</p>
+                            <ul className="space-y-1.5">
+                              {phase.items?.map((item, ii) => (
+                                <li
+                                  key={ii}
+                                  className="flex items-start gap-1.5 text-xs text-muted-foreground"
+                                >
+                                  <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })()}
                 </div>
               )}
 
