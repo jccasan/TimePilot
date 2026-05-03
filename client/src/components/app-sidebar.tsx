@@ -14,6 +14,7 @@ import {
   Zap,
   MessageSquare,
   BarChart3,
+  Activity,
   Settings,
   TrendingUp,
   Building2,
@@ -80,6 +81,7 @@ const menuSections = [
     label: "Make More Money",
     key: "money",
     items: [
+      { title: "Business Overview", url: "/business-overview", icon: Activity },
       { title: "Profitability", url: "/profitability", icon: TrendingUp },
       { title: "Route Profit Maps", url: "/route-profit-maps", icon: Map },
       { title: "Pricing Tools", url: "/pricing-calculator", icon: Calculator },
