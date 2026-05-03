@@ -76,6 +76,71 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get("/api/routes/suggest-day", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const lat = parseFloat(req.query.lat as string);
+      const lng = parseFloat(req.query.lng as string);
+      if (isNaN(lat) || isNaN(lng)) {
+        return res.status(400).json({ error: "lat and lng are required" });
+      }
+
+      const [allPlans, allProperties] = await Promise.all([
+        storage.getServicePlans(companyId, { isActive: true }),
+        storage.getProperties(companyId),
+      ]);
+
+      const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
+
+      // Haversine distance in km
+      function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+        const R = 6371;
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLon = ((lon2 - lon1) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      }
+
+      // Day stop counts for tie-breaking (densest day wins)
+      const dayStopCounts = new Map<string, number>();
+
+      let nearestDay: string | null = null;
+      let nearestDist = Infinity;
+
+      for (const plan of allPlans) {
+        const day = plan.dayOfWeek;
+        if (!day || day === "tbd") continue;
+
+        // Track stop counts per day
+        dayStopCounts.set(day, (dayStopCounts.get(day) ?? 0) + 1);
+
+        const prop = propertyMap.get(plan.propertyId);
+        if (!prop?.latitude || !prop?.longitude) continue;
+
+        const dist = haversineKm(lat, lng, parseFloat(String(prop.latitude)), parseFloat(String(prop.longitude)));
+
+        if (
+          dist < nearestDist ||
+          (dist === nearestDist &&
+            nearestDay &&
+            (dayStopCounts.get(day) ?? 0) > (dayStopCounts.get(nearestDay) ?? 0))
+        ) {
+          nearestDist = dist;
+          nearestDay = day;
+        }
+      }
+
+      res.json({ day: nearestDay });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.patch("/api/routes/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
