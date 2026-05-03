@@ -33,6 +33,8 @@ import type { ErrorInfo, ReactNode } from "react";
 import { adminFetchFn } from "@/lib/adminApi";
 import RoverChatbot, { type RoverChatbotHandle } from "@/components/rover-chatbot";
 import BusinessOnboarding from "@/components/business-onboarding";
+import { ImportModePopup } from "@/components/import-mode-popup";
+import { ImportModeBanner } from "@/components/import-mode-banner";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const AuthPage = lazy(() => import("@/pages/auth-page"));
@@ -168,6 +170,43 @@ function AuthenticatedLayout() {
   const [setupState, setSetupState] = useState<"loading" | "ready" | "error" | "pending_approval">(
     (user as any)?.setupDone ? "ready" : "loading"
   );
+
+  const isOwnerOrAdmin = user?.role === "owner" || user?.role === "admin";
+  const [importModeActive, setImportModeActive] = useState<boolean>(() => {
+    return !!user?.importMode && isOwnerOrAdmin;
+  });
+  const [importModePopupOpen, setImportModePopupOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!user || !isOwnerOrAdmin) return;
+    const serverImportMode = !!user.importMode;
+    if (serverImportMode !== importModeActive) {
+      setImportModeActive(serverImportMode);
+    }
+    if (serverImportMode) {
+      const popupKey = `importModePopupSeen_${user.id}`;
+      if (!localStorage.getItem(popupKey)) {
+        localStorage.setItem(popupKey, "true");
+        setImportModePopupOpen(true);
+      }
+    }
+  }, [user?.importMode, user?.id]);
+
+  const handleImportModeEvent = useCallback(() => {
+    if (!user || !isOwnerOrAdmin) return;
+    setImportModeActive(true);
+    const popupKey = `importModePopupSeen_${user.id}`;
+    if (!localStorage.getItem(popupKey)) {
+      localStorage.setItem(popupKey, "true");
+    }
+    setImportModePopupOpen(true);
+  }, [user, isOwnerOrAdmin]);
+
+  useEffect(() => {
+    window.addEventListener("scoopilot:import-mode-activated", handleImportModeEvent);
+    return () =>
+      window.removeEventListener("scoopilot:import-mode-activated", handleImportModeEvent);
+  }, [handleImportModeEvent]);
   const { activeTour, isRunning, startTour, handleCallback, getUnseenTours, isTourStatusLoaded } =
     useFeatureTour();
   const [autoTourChecked, setAutoTourChecked] = useState(false);
@@ -363,6 +402,9 @@ function AuthenticatedLayout() {
                 </Button>
               </div>
             </header>
+            {importModeActive && isOwnerOrAdmin && (
+              <ImportModeBanner onTurnOff={() => setImportModeActive(false)} />
+            )}
             <main className="flex-1 overflow-hidden">
               <Router />
             </main>
@@ -371,6 +413,7 @@ function AuthenticatedLayout() {
         <FeatureTourOverlay tour={activeTour} isRunning={isRunning} onCallback={handleCallback} />
       </SidebarProvider>
       <RoverChatbot ref={roverRef} />
+      <ImportModePopup open={importModePopupOpen} onClose={() => setImportModePopupOpen(false)} />
     </TutorialProvider>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ImportJobProgress } from "@/components/import-job-progress";
 import type { ImportJobStatus } from "@/components/import-job-progress";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -996,6 +996,20 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
                     errors: job.errors ?? [],
                   };
                   setImportResult(result);
+                  if (job.status === "completed" && job.importedRows > 0) {
+                    // Only activate (and show popup) when transitioning false → true
+                    const cachedUser = queryClient.getQueryData<{ importMode?: boolean }>([
+                      "/api/auth/user",
+                    ]);
+                    const wasAlreadyActive = cachedUser?.importMode === true;
+                    if (!wasAlreadyActive) {
+                      apiRequest("PATCH", "/api/auth/import-mode", { enabled: true })
+                        .then(() => {
+                          window.dispatchEvent(new CustomEvent("scoopilot:import-mode-activated"));
+                        })
+                        .catch(() => {});
+                    }
+                  }
                 }}
               />
             )}

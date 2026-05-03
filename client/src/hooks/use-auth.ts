@@ -8,6 +8,7 @@ type SafeUser = Omit<User, "passwordHash"> & {
   companyId?: string | null;
   setupDone?: boolean;
   sessionToken?: string;
+  importMode?: boolean;
 };
 
 async function fetchUser(): Promise<SafeUser | null> {

@@ -32,16 +32,30 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       if ("error" in result) {
         return res.status(401).json({ error: result.error });
       }
+
+      const isFirstLogin = result.user.lastLoginAt === null;
+
       req.session.userId = result.user.id;
       await db
         .update(users)
         .set({ lastLoginAt: new Date() })
         .where(eq(users.id, result.user.id))
         .execute();
+
+      if (isFirstLogin) {
+        await storage.setImportMode(result.user.id, true);
+      }
+
       await new Promise<void>((resolve, reject) => {
         req.session.save((err) => (err ? reject(err) : resolve()));
       });
       const { passwordHash: _passwordHash, ...safeUser } = result.user;
+      const importMode = isFirstLogin ? true : safeUser.importMode;
+
+      // Fetch role so the frontend can gate import mode UI immediately after login
+      const memberships = await storage.getCompaniesForUser(result.user.id);
+      const role = memberships.length > 0 ? memberships[0].role : "tech";
+      const companyId = memberships.length > 0 ? memberships[0].companyId : null;
 
       let setupDone = false;
       try {
@@ -54,7 +68,34 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       console.log(
         `[auth] login success | user=${result.user.id} sid=${req.sessionID.substring(0, 8)}... ua=${(req.headers["user-agent"] || "").substring(0, 80)}`
       );
-      return res.json({ ...safeUser, setupDone, sessionToken: req.sessionID });
+      return res.json({
+        ...safeUser,
+        importMode,
+        role,
+        companyId,
+        setupDone,
+        sessionToken: req.sessionID,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.patch("/api/auth/import-mode", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
+      const { enabled } = req.body;
+      if (typeof enabled !== "boolean") {
+        return res.status(400).json({ error: "enabled must be a boolean" });
+      }
+      // Only owner/admin may toggle import mode
+      const memberships = await storage.getCompaniesForUser(userId);
+      const role = memberships.length > 0 ? memberships[0].role : "tech";
+      if (role !== "owner" && role !== "admin") {
+        return res.status(403).json({ error: "Only owners and admins can toggle import mode" });
+      }
+      await storage.setImportMode(userId, enabled);
+      return res.json({ importMode: enabled });
     } catch (err) {
       handleError(res, err);
     }

@@ -18,6 +18,7 @@ import { db } from "./db";
 import {
   companies,
   companyUsers,
+  users,
   contacts,
   tags,
   contactTags,
@@ -226,6 +227,9 @@ export interface RouteProfitabilityEntry {
 }
 
 export interface IStorage {
+  // Users
+  setImportMode(userId: string, value: boolean): Promise<void>;
+
   // Companies
   getCompany(id: string): Promise<Company | undefined>;
   listCompanies(): Promise<Company[]>;
@@ -931,6 +935,14 @@ export type GroupedErrorReport = {
 };
 
 export class DatabaseStorage implements IStorage {
+  // ================ Users ================
+  async setImportMode(userId: string, value: boolean): Promise<void> {
+    await db
+      .update(users)
+      .set({ importMode: value, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+  }
+
   // ================ Companies ================
   async getCompany(id: string): Promise<Company | undefined> {
     const [company] = await db

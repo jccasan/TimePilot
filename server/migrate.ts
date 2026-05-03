@@ -68,6 +68,12 @@ export async function runStartupMigrations(): Promise<void> {
       }
     }
 
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS import_mode BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    console.log("[Migration] users import_mode column verified");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);
