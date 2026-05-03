@@ -233,6 +233,27 @@ async function hasChannelLog(
   return logs.length > 0;
 }
 
+async function hasAnyServiceReminderSent(
+  companyId: string,
+  contactId: string,
+  visitId: string
+): Promise<boolean> {
+  const logs = await db
+    .select({ id: reminderLogs.id })
+    .from(reminderLogs)
+    .where(
+      and(
+        eq(reminderLogs.companyId, companyId),
+        eq(reminderLogs.contactId, contactId),
+        eq(reminderLogs.visitId, visitId),
+        eq(reminderLogs.deliveryStatus, "sent"),
+        sql`${reminderLogs.reminderType} LIKE 'service_%'`
+      )
+    )
+    .limit(1);
+  return logs.length > 0;
+}
+
 async function getVisitTechInfo(
   cv: { visit: { routeId: string | null; jobId: string | null }; job: { id: string } },
   isMorningOf: boolean,
@@ -429,6 +450,12 @@ async function sendServiceRemindersForRule(
     if (!wantsEmail && !wantsSms) continue;
 
     for (const cv of contactVisits) {
+      // If the contact has no timing preference, one reminder per visit is enough —
+      // don't send again even if a different rule also matches this visit.
+      if (!prefs.preferredTiming && !contactOverrideOnly) {
+        if (await hasAnyServiceReminderSent(companyId, contact.id, cv.visitId)) continue;
+      }
+
       const emailAlreadySent =
         wantsEmail && (await hasChannelLog(companyId, contact.id, rule.id, cv.visitId, "email"));
       const smsAlreadySent =
