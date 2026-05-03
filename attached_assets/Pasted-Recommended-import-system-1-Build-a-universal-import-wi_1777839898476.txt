@@ -1,0 +1,365 @@
+Recommended import system
+1. Build a universal import wizard
+Accept:
+1.	CSV / Excel 
+2.	Google Sheet link 
+3.	Copy/paste table 
+4.	Screenshot / PDF as fallback 
+5.	Manual quick-add mode 
+Priority order should be:
+CSV/Excel > Google Sheet > copy/paste > PDF > screenshot
+Screenshot should be the backup, not the default.
+Why: CSV and spreadsheet imports preserve columns. Screenshots destroy structure.
+________________________________________
+2. Separate “customer info” from “service logic”
+Most CRMs will give you some version of:
+•	Customer name 
+•	Address 
+•	Phone 
+•	Email 
+•	Notes 
+•	Price 
+•	Maybe pets 
+•	Maybe status 
+But they often won’t preserve:
+•	Start date 
+•	Current route day 
+•	Weekly / biweekly / monthly cadence 
+•	Next visit date 
+•	Billing cadence 
+•	One-time vs recurring 
+•	Assigned tech 
+•	Service zone 
+•	Yard size 
+•	Gate/dog/access notes 
+So treat import as two layers:
+Layer 1: Contact import
+This can be mostly automated.
+Fields:
+•	Name 
+•	Address 
+•	Phone 
+•	Email 
+•	Notes 
+•	Status 
+•	Price 
+Layer 2: Service setup
+This requires inference and user confirmation.
+Fields:
+•	Service type 
+•	Frequency 
+•	Service day 
+•	Start date or next service date 
+•	Billing rule 
+•	Assigned route 
+•	Price 
+•	Active/inactive 
+This distinction matters. If you try to fully automate both at once, you’ll create chaos.
+________________________________________
+3. Add an “Import Health Score”
+Before final import, show a score like:
+Import Readiness: 78%
+Then break it down:
+Category	Status
+Customer names	96% matched
+Addresses	91% valid
+Phone/email	84% complete
+Service frequency	62% known
+Service day	48% known
+Price	72% known
+Billing rule	35% known
+This tells the user: “We imported your data, but we still need to fix service logic.”
+That is honest and reduces support headaches.
+________________________________________
+4. Use AI for field mapping, not final truth
+When they upload a CSV, the system should auto-map columns:
+Uploaded Column	Scoopilot Field
+Client	Customer Name
+Service Address	Address
+Cell	Phone
+Visit Notes	Service Notes
+Frequency	Service Frequency
+Amount	Price
+Let the AI suggest mappings, but always let the user override.
+This is where AI is useful and low-risk.
+Bad idea:
+“AI imported 147 customers successfully.”
+Better:
+“AI found 147 customers. 112 are ready. 35 need service details confirmed.”
+________________________________________
+5. Create a “Resolve Missing Logic” screen
+This is the key feature.
+After upload, group customers by missing fields.
+Example:
+Needs service frequency
+Show 40 customers in a table:
+Customer	Address	Price	Notes	Suggested Frequency	Action
+Smith	123 Main St	$22	weekly back gate	Weekly	Accept
+Jones	88 Oak Dr	$35	every other Tue	Biweekly	Accept
+Brown	77 Pine Ln	$50	monthly	Monthly	Accept
+Bulk actions:
+•	Set selected as Weekly 
+•	Set selected as Biweekly 
+•	Set selected as Monthly 
+•	Set selected as One-Time 
+•	Apply to all visible 
+This saves massive time.
+Do not make them open each customer one by one.
+________________________________________
+6. Infer cadence from clues
+AI can infer service logic from messy text.
+Examples:
+Text Found	Suggested Logic
+“weekly”	Weekly
+“every week”	Weekly
+“biweekly”	Biweekly
+“every other Tuesday”	Biweekly, Tuesday
+“2x/mo”	Biweekly or Monthly, needs confirmation
+“monthly”	Monthly
+“one time cleanup”	One-time
+“initial cleanup then weekly”	One-time initial + weekly recurring
+“paused”	Inactive
+“cancelled”	Inactive
+“every Thu”	Weekly, Thursday
+“EOW”	Biweekly, needs confirmation
+Important: show confidence.
+Example:
+Field	AI Guess	Confidence
+Frequency	Biweekly	87%
+Service Day	Tuesday	91%
+Start Date	Unknown	0%
+Then only force review below a threshold.
+________________________________________
+7. Add “unknown is allowed” but route import should be blocked
+You need two different states:
+Customer can be imported with missing info
+Fine. Create the customer record.
+Service cannot be activated without logic
+Block activation until these fields exist:
+•	Frequency 
+•	Service day or next service date 
+•	Price 
+•	Service type 
+•	Billing rule 
+That keeps the user moving without letting bad data infect routing and invoicing.
+________________________________________
+8. Use “next service date” instead of “start date” when possible
+Start date is often missing and not that useful during migration.
+For active businesses, the better question is:
+“When should this customer be serviced next?”
+From that, you can derive:
+•	Current service week 
+•	Route day 
+•	Cadence 
+•	Billing timing 
+•	Recurring schedule 
+Example:
+If customer is biweekly and next service date is Thursday, May 7, the system can generate the recurrence from there.
+So your wizard should ask:
+“Do you know each customer’s next service date?”
+If yes, import that.
+If no:
+“Choose their current service day and cadence.”
+This is much easier than asking for original start dates.
+________________________________________
+9. Add route-day assignment modes
+After import, user should choose one of these:
+Option A: Preserve current route days
+Best for existing operators.
+They upload:
+•	Customer 
+•	Address 
+•	Frequency 
+•	Current service day 
+Scoopilot keeps those days.
+Option B: Rebuild optimized routes
+Best for messy businesses.
+They upload:
+•	Customer 
+•	Address 
+•	Frequency 
+•	Price 
+Scoopilot recommends days based on geography and capacity.
+Option C: Hybrid
+Best default.
+Scoopilot keeps obvious route-day assignments and recommends fixes for inefficient ones.
+This matches your positioning. Scoopilot is route-first and route-density driven, so imports should become a route optimization moment, not just a data transfer. 
+________________________________________
+10. Build an “Import Assistant” flow
+The user should not feel like they are using a spreadsheet tool.
+Flow:
+Step 1: Upload your customer list
+Supported:
+•	CSV 
+•	Excel 
+•	Google Sheet 
+•	Screenshot 
+•	PDF 
+•	Copy/paste 
+Step 2: Match your columns
+AI suggests mappings.
+Step 3: Review service logic
+System detects:
+•	Frequency 
+•	Day 
+•	Price 
+•	Billing 
+•	Active status 
+Step 4: Fix missing info in bulk
+Grouped cleanup screens.
+Step 5: Preview routes
+Map view:
+•	Monday route 
+•	Tuesday route 
+•	Wednesday route 
+•	Unassigned customers 
+•	Biweekly week A / week B 
+Step 6: Confirm import
+System creates:
+•	Customers 
+•	Services 
+•	Recurring schedules 
+•	Draft routes 
+•	Billing rules 
+________________________________________
+11. Add competitor-specific import templates
+This will move the needle.
+Have import modes for:
+•	Sweep & Go 
+•	Jobber 
+•	Time To Pet 
+•	Housecall Pro 
+•	Yardbook 
+•	Square 
+•	Google Sheets 
+•	Generic CSV 
+Your site already compares Scoopilot to Sweep & Go, Jobber, MyScoop, Scoopify, and Housecall Pro, so turn that competitive positioning into onboarding utility. 
+Example:
+“Importing from Sweep & Go? Upload your customer export or screenshots. We’ll look for customer, address, service frequency, route day, price, and notes.”
+Even if the backend uses the same parser, the user experience feels purpose-built.
+13. Add a “migration checklist” before upload
+Ask 5 simple questions:
+1.	What system are you coming from? 
+2.	Do you have a customer export? 
+3.	Do you know each customer’s current service day? 
+4.	Do you know each customer’s service frequency? 
+5.	Do you want to preserve current routes or rebuild optimized routes? 
+Then tailor the import flow.
+This avoids pretending all imports are the same.
+________________________________________
+14. What I would build first
+Do this in order.
+Phase 1: CSV/Excel import with AI field mapping
+Must-have.
+Fields:
+•	Name 
+•	Address 
+•	Phone 
+•	Email 
+•	Notes 
+•	Price 
+•	Frequency 
+•	Service day 
+•	Active status 
+Phase 2: Missing logic resolver
+This is the real product win.
+Group customers by missing:
+•	Frequency 
+•	Day 
+•	Price 
+•	Billing 
+•	Address validation 
+Add bulk edit.
+Phase 3: Route preview before import
+Let them see Monday-Friday and Week A/Week B before activation.
+Phase 4: Screenshot/PDF import
+Use it only as fallback.
+Label it honestly:
+“Best for screenshots or reports when you don’t have a spreadsheet. Accuracy depends on image quality. You’ll review before anything is imported.”
+Phase 5: Competitor-specific import modes
+Start with:
+•	Sweep & Go 
+•	Jobber 
+•	Google Sheets 
+•	Generic CSV 
+________________________________________
+15. The Replit-level system logic
+Use a staging model.
+Do not write directly to production customer/service tables.
+Create:
+ImportBatch
+•	id 
+•	tenant_id 
+•	source_type 
+•	original_file_url 
+•	status 
+•	created_by 
+•	total_rows 
+•	ready_rows 
+•	warning_rows 
+•	error_rows 
+ImportRow
+•	batch_id 
+•	raw_data_json 
+•	mapped_customer_json 
+•	mapped_service_json 
+•	confidence_json 
+•	missing_fields 
+•	validation_errors 
+•	status: needs_review / ready / ignored / imported 
+ImportMapping
+•	batch_id 
+•	source_column 
+•	mapped_field 
+•	confidence 
+•	user_override 
+ImportRuleSuggestion
+•	row_id 
+•	suggested_frequency 
+•	suggested_service_day 
+•	suggested_next_date 
+•	suggested_price 
+•	suggested_billing_rule 
+•	confidence 
+•	reason 
+Only after the user confirms should the system create:
+•	Customer 
+•	Service 
+•	Recurring schedule 
+•	Route assignment 
+•	Billing rule 
+This prevents import disasters.
+________________________________________
+16. The key UX principle
+Never show users “bad data.”
+Show them “work to finish.”
+Bad:
+42 records failed.
+Good:
+105 customers are ready. 42 need a service day. Fix all 42 in under 2 minutes.
+Bad:
+Missing recurrence data.
+Good:
+We found these customers but don’t know when to schedule them.
+Bad:
+AI confidence below threshold.
+Good:
+We’re not sure if these are weekly or biweekly. Please confirm.
+________________________________________
+17. Strong product angle
+You should make this part of the pitch:
+“Switching from another CRM? Scoopilot helps rebuild your actual business logic, not just dump your contacts into a database.”
+That’s the pain.
+Most generic CRMs store customer records. Scoopilot needs to know how the business actually runs: who gets serviced, when, how often, at what price, and on which route.
+That is a strong differentiator.
+________________________________________
+18. What to avoid
+Avoid these mistakes:
+1.	Do not promise one-click migration. You’ll get support nightmares. 
+2.	Do not trust screenshots blindly. 
+3.	Do not activate schedules without human confirmation. 
+4.	Do not require perfect data before importing customers. 
+5.	Do not force one-by-one cleanup. 
+6.	Do not bury import warnings in logs. 
+7.	Do not mix import, routing, and billing activation into one invisible step.
+
