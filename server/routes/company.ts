@@ -132,24 +132,36 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
           .select({ count: sql<number>`count(*)::int` })
           .from(contacts)
           .where(and(eq(contacts.companyId, companyId), eq(contacts.googleReviewLeft, true)));
-        const positiveResult = await db.execute(sql`
-        SELECT COUNT(*)::int AS count FROM review_responses rr
-        JOIN review_tokens rt ON rt.id = rr.token_id
-        WHERE rt.company_id = ${companyId} AND rr.branch = 'positive'
-          AND rr.submitted_at >= ${monthStart}
-      `);
-        const negativeResult = await db.execute(sql`
-        SELECT COUNT(*)::int AS count FROM review_responses rr
-        JOIN review_tokens rt ON rt.id = rr.token_id
-        WHERE rt.company_id = ${companyId} AND rr.branch = 'negative'
-          AND rr.submitted_at >= ${monthStart}
-      `);
+        let positiveCount = 0;
+        let negativeCount = 0;
+        try {
+          const positiveResult = await db.execute(sql`
+          SELECT COUNT(*)::int AS count FROM review_responses rr
+          JOIN review_tokens rt ON rt.id = rr.token_id
+          WHERE rt.company_id = ${companyId} AND rr.branch = 'positive'
+            AND rr.submitted_at >= ${monthStart}
+        `);
+          const negativeResult = await db.execute(sql`
+          SELECT COUNT(*)::int AS count FROM review_responses rr
+          JOIN review_tokens rt ON rt.id = rr.token_id
+          WHERE rt.company_id = ${companyId} AND rr.branch = 'negative'
+            AND rr.submitted_at >= ${monthStart}
+        `);
+          positiveCount = Number(
+            (positiveResult?.rows?.[0] as Record<string, unknown>)?.count ?? 0
+          );
+          negativeCount = Number(
+            (negativeResult?.rows?.[0] as Record<string, unknown>)?.count ?? 0
+          );
+        } catch (_reviewErr) {
+          // Tables may not exist yet; return zero counts as safe default
+        }
         res.json({
           totalSent: totalResult?.count ?? 0,
           sentThisMonth: monthResult?.count ?? 0,
           totalReviewsLeft: reviewsLeftResult?.count ?? 0,
-          positiveCount: Number((positiveResult?.rows?.[0] as Record<string, unknown>)?.count ?? 0),
-          negativeCount: Number((negativeResult?.rows?.[0] as Record<string, unknown>)?.count ?? 0),
+          positiveCount,
+          negativeCount,
         });
       } catch (err) {
         handleError(res, err);

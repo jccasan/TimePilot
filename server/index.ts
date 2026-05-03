@@ -2438,6 +2438,46 @@ async function ensureRetellWebhookRepairsTable() {
   }
 }
 
+async function ensureReviewTables() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'review_branch') THEN
+        CREATE TYPE review_branch AS ENUM ('positive', 'negative');
+      END IF;
+    END $$`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS review_tokens (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      contact_id VARCHAR NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      token VARCHAR(36) NOT NULL UNIQUE,
+      google_review_url TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMP NOT NULL,
+      used_at TIMESTAMP
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_rt_token ON review_tokens(token)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_rt_company ON review_tokens(company_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_rt_contact ON review_tokens(contact_id)`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS review_responses (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      token_id VARCHAR NOT NULL REFERENCES review_tokens(id) ON DELETE CASCADE,
+      rating INTEGER NOT NULL,
+      feedback_text TEXT,
+      branch review_branch NOT NULL,
+      submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      alert_sent BOOLEAN NOT NULL DEFAULT FALSE
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_rr_token ON review_responses(token_id)`);
+    console.log("[Migration] review_tokens and review_responses tables verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure review tables:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function ensureReviewTokenGoogleUrl() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -2855,6 +2895,7 @@ async function seedLakeErieScoopersAccount() {
   await ensureErrorReportsTable();
   await ensureCompanyNotificationColumns();
   await ensureRetellWebhookRepairsTable();
+  await ensureReviewTables();
   await ensureReviewTokenGoogleUrl();
   await ensureUserColumns();
   await ensureVisitEnRouteAtColumn();

@@ -353,21 +353,26 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
     try {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role, ["owner", "admin"]);
-      const rows = await db.execute(sql`
-        SELECT rr.id, rr.rating, rr.feedback_text, rr.branch, rr.submitted_at, rr.alert_sent,
-               rt.contact_id, rt.token,
-               c.first_name, c.last_name
-        FROM review_responses rr
-        JOIN review_tokens rt ON rt.id = rr.token_id
-        JOIN contacts c ON c.id = rt.contact_id
-        WHERE rt.company_id = ${companyId}
-          AND rr.branch = 'negative'
-          AND rr.feedback_text IS NOT NULL
-          AND length(trim(coalesce(rr.feedback_text, ''))) > 0
-        ORDER BY rr.submitted_at DESC
-        LIMIT 50
-      `);
-      res.json(rows.rows);
+      try {
+        const rows = await db.execute(sql`
+          SELECT rr.id, rr.rating, rr.feedback_text, rr.branch, rr.submitted_at, rr.alert_sent,
+                 rt.contact_id, rt.token,
+                 c.first_name, c.last_name
+          FROM review_responses rr
+          JOIN review_tokens rt ON rt.id = rr.token_id
+          JOIN contacts c ON c.id = rt.contact_id
+          WHERE rt.company_id = ${companyId}
+            AND rr.branch = 'negative'
+            AND rr.feedback_text IS NOT NULL
+            AND length(trim(coalesce(rr.feedback_text, ''))) > 0
+          ORDER BY rr.submitted_at DESC
+          LIMIT 50
+        `);
+        res.json(rows.rows);
+      } catch (_reviewErr) {
+        // Tables may not exist yet; return empty array as safe default
+        res.json([]);
+      }
     } catch (err) {
       handleError(res, err);
     }
