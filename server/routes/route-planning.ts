@@ -106,9 +106,15 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       }
 
-      // Day stop counts for tie-breaking (densest day wins)
+      // Pass 1: precompute final stop counts per day for tie-breaking
       const dayStopCounts = new Map<string, number>();
+      for (const plan of allPlans) {
+        const day = plan.dayOfWeek;
+        if (!day || day === "tbd") continue;
+        dayStopCounts.set(day, (dayStopCounts.get(day) ?? 0) + 1);
+      }
 
+      // Pass 2: find nearest geocoded property and its day
       let nearestDay: string | null = null;
       let nearestDist = Infinity;
 
@@ -116,18 +122,20 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         const day = plan.dayOfWeek;
         if (!day || day === "tbd") continue;
 
-        // Track stop counts per day
-        dayStopCounts.set(day, (dayStopCounts.get(day) ?? 0) + 1);
-
         const prop = propertyMap.get(plan.propertyId);
-        if (!prop?.latitude || !prop?.longitude) continue;
+        if (prop?.latitude == null || prop?.longitude == null) continue;
 
-        const dist = haversineKm(lat, lng, parseFloat(String(prop.latitude)), parseFloat(String(prop.longitude)));
+        const dist = haversineKm(
+          lat,
+          lng,
+          parseFloat(String(prop.latitude)),
+          parseFloat(String(prop.longitude))
+        );
 
         if (
           dist < nearestDist ||
           (dist === nearestDist &&
-            nearestDay &&
+            nearestDay !== null &&
             (dayStopCounts.get(day) ?? 0) > (dayStopCounts.get(nearestDay) ?? 0))
         ) {
           nearestDist = dist;
