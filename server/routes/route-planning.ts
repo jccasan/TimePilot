@@ -458,7 +458,17 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       }
 
       const k = Math.ceil(visitCountForRoute / maxStops);
-      const clusters = kMeansClustering(weeklyStops, k);
+      let clusters = kMeansClustering(weeklyStops, k);
+
+      // Guard against under-minimum sub-clusters created by the split.
+      // Mirror the protection already present in the weekly optimizer so a
+      // 52+8 partition from 60 stops doesn't produce a standalone 8-stop route.
+      const { mergeSmallClusters } = await import("../services/weekly-optimizer");
+      const minSplitSize =
+        company.minStopsPerDay != null && company.minStopsPerDay > 0
+          ? company.minStopsPerDay
+          : Math.ceil(visitCountForRoute / k / 3);
+      clusters = mergeSmallClusters(clusters, minSplitSize);
 
       const suffixLetters = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
       const splitColors = [

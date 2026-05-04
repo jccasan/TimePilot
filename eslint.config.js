@@ -11,6 +11,7 @@ export default [
       "build/**",
       "*.min.js",
       "wizard/**",
+      "attached_assets/**",
     ],
   },
   {

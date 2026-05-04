@@ -530,7 +530,7 @@ function assignByZones(
  * centroid-to-centroid distance). Runs repeatedly until no undersized cluster
  * remains or only one cluster is left.
  */
-function mergeSmallClusters(clusters: WeeklyStop[][], minSize: number): WeeklyStop[][] {
+export function mergeSmallClusters(clusters: WeeklyStop[][], minSize: number): WeeklyStop[][] {
   if (clusters.length <= 1) return clusters;
 
   let result = [...clusters];
@@ -605,6 +605,60 @@ function assignByGeoClustering(
       ? Math.max(minStopsPerDay, computedMin)
       : computedMin;
   clusters = mergeSmallClusters(clusters, minClusterSize);
+
+  // Second enforcement pass: ensure no cluster falls below the company-configured
+  // minStopsPerDay threshold. mergeSmallClusters above uses max(minStopsPerDay, computedMin)
+  // so its threshold can exceed minStopsPerDay when the heuristic dominates. This pass
+  // targets ONLY the user-visible threshold, redistributing stops one-by-one to the nearest
+  // cluster that still has headroom. If all clusters are at capacity, the stop still goes to
+  // the nearest one (no stops are ever lost).
+  if (minStopsPerDay != null && minStopsPerDay > 0) {
+    let enforcing = true;
+    while (enforcing && clusters.length > 1) {
+      enforcing = false;
+      const underIdx = clusters.findIndex((c) => c.length < minStopsPerDay);
+      if (underIdx === -1) break;
+      // Redistribute every stop in this under-minimum cluster
+      while (clusters[underIdx].length > 0) {
+        const stop = clusters[underIdx][0];
+        const stopLat = stop.latitude;
+        const stopLon = stop.longitude;
+        // Prefer a cluster with remaining capacity
+        let bestIdx = -1;
+        let bestDist = Infinity;
+        for (let j = 0; j < clusters.length; j++) {
+          if (j === underIdx) continue;
+          if (clusters[j].length >= stopsPerRoute) continue;
+          const c = centroid(clusters[j]);
+          const d = haversineDistance(stopLat, stopLon, c.lat, c.lon);
+          if (d < bestDist) {
+            bestDist = d;
+            bestIdx = j;
+          }
+        }
+        // Fallback: all clusters at capacity — pick nearest regardless
+        if (bestIdx === -1) {
+          bestDist = Infinity;
+          for (let j = 0; j < clusters.length; j++) {
+            if (j === underIdx) continue;
+            const c = centroid(clusters[j]);
+            const d = haversineDistance(stopLat, stopLon, c.lat, c.lon);
+            if (d < bestDist) {
+              bestDist = d;
+              bestIdx = j;
+            }
+          }
+        }
+        if (bestIdx === -1) break;
+        clusters[bestIdx] = [...clusters[bestIdx], stop];
+        clusters[underIdx] = clusters[underIdx].slice(1);
+      }
+      if (clusters[underIdx].length === 0) {
+        clusters.splice(underIdx, 1);
+      }
+      enforcing = true;
+    }
+  }
 
   const orderedClusters = startPoint
     ? [...clusters].sort((a, b) => {
