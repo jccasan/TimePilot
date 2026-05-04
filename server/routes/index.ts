@@ -36,6 +36,7 @@ import { registerAdminRoutes } from "./admin";
 import { registerPublicRoutes } from "./public-routes";
 import { registerIntegrationsRoutes } from "./integrations";
 import { registerErrorReportingRoutes } from "./error-reporting";
+import { registerPlannerRoutes } from "./planner";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Object file download route — registered before registerObjectStorageRoutes so this
@@ -233,6 +234,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   await registerPublicRoutes(app);
   await registerIntegrationsRoutes(app);
   await registerErrorReportingRoutes(app);
+  registerPlannerRoutes(app);
 
   return httpServer;
 }
