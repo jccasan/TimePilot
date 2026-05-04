@@ -598,6 +598,12 @@ export interface StagedCsvContactsPayload {
   transformations: Array<{ field: string; type: string; params?: Record<string, unknown> }>;
   skippedRows: number[];
   editedCells: Record<string, string>;
+  /** How service days are assigned: preserve CSV value, rebuild via AI, or hybrid */
+  routePreference?: "preserve" | "rebuild" | "hybrid" | null;
+  /** Source platform identifier from the import wizard */
+  platform?: string | null;
+  /** Whether the user confirmed they know the next service date for their customers */
+  knowsNextServiceDate?: boolean | null;
 }
 
 export async function enqueueStagedCsvContactsImport(
@@ -638,7 +644,11 @@ async function inferRowServiceLogic(row: ImportRow): Promise<RowServiceInference
   const mapped = (row.mappedContactJson ?? {}) as Record<string, unknown>;
   const service = (row.mappedServiceJson ?? {}) as Record<string, unknown>;
 
-  // Gather every text field that could hint at frequency / schedule
+  // Gather every text field that could hint at frequency / schedule.
+  // __importPlatform is stored by the import runner when the user selects a source
+  // platform in the wizard (e.g. "sweepandgo", "jobber") — include it so the AI
+  // can apply platform-specific scheduling conventions in its inference.
+  const platformHint = raw.__importPlatform ? `source platform: ${raw.__importPlatform}` : null;
   const textHints = [
     raw.notes,
     raw.frequency,
@@ -652,6 +662,7 @@ async function inferRowServiceLogic(row: ImportRow): Promise<RowServiceInference
     service.serviceFrequency,
     service.serviceDay,
     mapped.notes,
+    platformHint,
   ]
     .filter(Boolean)
     .join("; ");
@@ -763,6 +774,9 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
     transformations,
     skippedRows: skippedRowIndices,
     editedCells,
+    routePreference,
+    platform,
+    knowsNextServiceDate,
   } = payload;
 
   await storage.updateImportBatch(batchId, { status: "processing" });
@@ -828,16 +842,42 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
       gateCode: t.gateCode || null,
     };
 
-    // Build service json
+    // Apply any internal-field overrides from editedCells written by the wizard's step-5
+    // day-reassignment panel. These use internal names ("serviceDay") rather than raw CSV
+    // column headers, so they are NOT caught by the header-index lookup above and must
+    // be applied here, post-transform, directly on the service/contact values.
+    const INTERNAL_FIELD_OVERRIDE_KEYS = ["serviceDay", "serviceFrequency"];
+    const internalOverrides: Record<string, string> = {};
+    for (const fieldName of INTERNAL_FIELD_OVERRIDE_KEYS) {
+      const cellKey = `${r.rowIndex}:${fieldName}`;
+      if (Object.prototype.hasOwnProperty.call(editedCells, cellKey)) {
+        internalOverrides[fieldName] = editedCells[cellKey];
+      }
+    }
+
+    // Build service json — routePreference controls how serviceDay is handled:
+    // "preserve"  → keep whatever the CSV says (or flag if absent)
+    // "rebuild"   → always clear serviceDay so the resolver AI assigns it fresh
+    // "hybrid"/null → keep present values, flag absent ones for review (default)
+    // Internal field overrides from the wizard's day-panel take precedence over routePreference.
+    const csvServiceDay = internalOverrides["serviceDay"] ?? t.serviceDay ?? null;
+    const csvServiceFreq = internalOverrides["serviceFrequency"] ?? t.serviceFrequency ?? null;
+    const effectiveServiceDay =
+      routePreference === "rebuild" && !internalOverrides["serviceDay"] ? null : csvServiceDay;
+
     const mappedServiceJson: Record<string, unknown> = {
-      serviceFrequency: t.serviceFrequency || null,
-      serviceDay: t.serviceDay || null,
+      serviceFrequency: csvServiceFreq || null,
+      serviceDay: effectiveServiceDay,
     };
 
     // Compute missing service fields
     const missingFields: string[] = [];
     if (!mappedServiceJson.serviceFrequency) missingFields.push("frequency");
-    if (!mappedServiceJson.serviceDay) missingFields.push("serviceDay");
+    // For "preserve", only flag serviceDay missing if it was truly absent in CSV.
+    // For "rebuild", always flag serviceDay so the resolver fills it via AI.
+    if (!mappedServiceJson.serviceDay || routePreference === "rebuild") {
+      missingFields.push("serviceDay");
+    }
     // price and billingRule are not in CSV but tracked as missing
     missingFields.push("price");
     missingFields.push("billingRule");
@@ -848,11 +888,19 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
     const rowStatus: InsertImportRow["status"] =
       r.isValid && missingFields.length === 0 ? "ready" : "needs_review";
 
+    // Store platform in rawJson as a hint field so it is available to the AI
+    // inference step and for audit/debugging — competitor-specific scheduling
+    // patterns (e.g. Sweep & Go biweekly cadences) are picked up from this.
+    const rawWithPlatform = {
+      ...(raw as Record<string, string>),
+      ...(platform ? { __importPlatform: platform } : {}),
+    };
+
     importRowsToInsert.push({
       batchId,
       companyId,
       rowIndex: r.rowIndex,
-      rawJson: raw as Record<string, string>,
+      rawJson: rawWithPlatform,
       mappedContactJson,
       mappedServiceJson,
       confidenceJson: {},
@@ -916,8 +964,14 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
       if (missing.includes("serviceDay") && aiSuggestion.suggestedServiceDay) {
         suggestion.suggestedServiceDay = aiSuggestion.suggestedServiceDay;
       }
+      // If the user confirmed they know the next service date, boost confidence and expose
+      // suggestedNextDate even when the AI has low confidence so the resolver can use it.
       if (aiSuggestion.suggestedNextDate) {
         suggestion.suggestedNextDate = aiSuggestion.suggestedNextDate;
+        if (knowsNextServiceDate === true && suggestion.confidenceScore < 70) {
+          suggestion.confidenceScore = Math.max(suggestion.confidenceScore, 70);
+          suggestion.reason = `${suggestion.reason} (user confirmed next service date is known)`;
+        }
       }
 
       // Fill price/billing from pricing catalog when AI cannot infer them

@@ -13,7 +13,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -50,9 +49,6 @@ import {
   Loader2,
   ArrowRight,
   ArrowRightLeft,
-  RefreshCw,
-  MapPin,
-  Mail,
   File,
   FileImage,
   X,
@@ -60,9 +56,7 @@ import {
   Sparkles,
   ChevronsUpDown,
   Check,
-  CalendarClock,
 } from "lucide-react";
-import { BulkServicePlanSetup } from "@/components/bulk-service-plan-setup";
 
 interface ParsedInvoicePreview {
   summary: {
@@ -82,42 +76,6 @@ interface ParsedInvoicePreview {
   }>;
   errors: Array<{ row: number; field?: string; message: string }>;
   warnings: string[];
-}
-
-interface CompetitorDetectResult {
-  platform: string;
-  platformLabel: string;
-  totalRows: number;
-  fieldMapping: Record<string, string>;
-  preview: Array<{
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    streetAddress: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    numberOfDogs: number | null;
-    serviceDay: string;
-    serviceFrequency: string;
-    gateCode: string;
-    notes: string;
-    status: string;
-  }>;
-  warnings: string[];
-  errors: Array<{ row: number; message: string }>;
-}
-
-interface CompetitorImportResult {
-  importRunId: string;
-  platform: string;
-  platformLabel: string;
-  imported: number;
-  updated: number;
-  skipped: number;
-  total: number;
-  errors: Array<{ row: number; message: string }>;
 }
 
 interface ImportResult {
@@ -143,688 +101,114 @@ function formatDollars(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-function TransferResultView({
-  importResult,
-  onReset,
-}: {
-  importResult: CompetitorImportResult;
-  onReset: () => void;
-}) {
-  const [bulkSetupOpen, setBulkSetupOpen] = useState(false);
-
-  return (
-    <div className="space-y-6">
-      <Alert data-testid="alert-transfer-result">
-        <CheckCircle2 className="h-4 w-4" />
-        <AlertTitle>Transfer Complete</AlertTitle>
-        <AlertDescription>
-          <div className="mt-3 space-y-2 text-sm">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div>
-                <p className="text-muted-foreground">Source</p>
-                <p className="font-medium" data-testid="text-result-platform">
-                  {importResult.platformLabel}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Imported</p>
-                <p className="font-medium text-green-600" data-testid="text-result-imported">
-                  {importResult.imported}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Updated</p>
-                <p className="font-medium text-blue-600" data-testid="text-result-updated">
-                  {importResult.updated}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Skipped</p>
-                <p className="font-medium text-muted-foreground" data-testid="text-result-skipped">
-                  {importResult.skipped}
-                </p>
-              </div>
-            </div>
-          </div>
-        </AlertDescription>
-      </Alert>
-
-      {importResult.errors.length > 0 && (
-        <Alert variant="destructive" data-testid="alert-transfer-import-errors">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Import Issues ({importResult.errors.length})</AlertTitle>
-          <AlertDescription>
-            <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
-              {importResult.errors.slice(0, 20).map((err, i) => (
-                <li key={i}>
-                  Row {err.row}: {err.message}
-                </li>
-              ))}
-              {importResult.errors.length > 20 && (
-                <li className="text-muted-foreground">
-                  ...and {importResult.errors.length - 20} more
-                </li>
-              )}
-            </ul>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {importResult.imported > 0 && (
-        <Card className="border-primary/30 bg-primary/5" data-testid="card-finish-setup">
-          <CardContent className="pt-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <CalendarClock className="h-4 w-4 text-primary" />
-                <span className="font-semibold text-sm">
-                  Finish Setup — Schedule Your New Clients
-                </span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Create service plans and assign stops to routes for the {importResult.imported}{" "}
-                clients you just imported. This takes just a few clicks.
-              </p>
-            </div>
-            <Button onClick={() => setBulkSetupOpen(true)} data-testid="button-finish-setup">
-              Finish Setup
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      <Button variant="outline" onClick={onReset} data-testid="button-new-transfer">
-        Transfer More Data
-      </Button>
-
-      <BulkServicePlanSetup
-        open={bulkSetupOpen}
-        onOpenChange={setBulkSetupOpen}
-        importRunId={importResult.importRunId}
-        title="Finish Setup — Create Service Plans for Imported Clients"
-      />
-    </div>
-  );
-}
-
 function TransferTab() {
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<"select" | "upload" | "preview" | "running" | "result">(
-    "select"
-  );
-  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-  const [csvText, setCsvText] = useState<string | null>(null);
-  const [fileName, setFileName] = useState("");
-  const [detectResult, setDetectResult] = useState<CompetitorDetectResult | null>(null);
-  const [importResult, setImportResult] = useState<CompetitorImportResult | null>(null);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [duplicateHandling, setDuplicateHandling] = useState<string>("skip");
-  const [isDragOver, setIsDragOver] = useState(false);
+  const [wizardPlatform, setWizardPlatform] = useState<
+    "sweepandgo" | "jobber" | "generic" | "googlesheet" | null
+  >(null);
+  const [wizardStarted, setWizardStarted] = useState(false);
 
-  const detectMutation = useMutation({
-    mutationFn: async (text: string) => {
-      const res = await apiRequest("POST", "/api/migrations/competitor/detect", {
-        csvText: text,
-        platform: selectedPlatform === "auto" ? undefined : selectedPlatform,
-      });
-      return res.json() as Promise<CompetitorDetectResult>;
-    },
-    onSuccess: (data) => {
-      setDetectResult(data);
-      setStep("preview");
-    },
-    onError: (error: Error) => {
-      toast({ title: "Detection failed", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const importMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/migrations/competitor/import", {
-        csvText,
-        platform: detectResult?.platform,
-        duplicateHandling,
-      });
-      return res.json() as Promise<{ jobId: string; totalRows: number }>;
-    },
-    onSuccess: (data) => {
-      setActiveJobId(data.jobId);
-      setStep("running");
-      queryClient.invalidateQueries({ queryKey: ["/api/imports"] });
-      toast({
-        title: "Import started",
-        description: `Processing ${data.totalRows} rows in the background.`,
-      });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Transfer failed", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const handleFile = useCallback(
-    (file: File) => {
-      if (!file.name.endsWith(".csv")) {
-        toast({
-          title: "Invalid file",
-          description: "Please upload a CSV file.",
-          variant: "destructive",
-        });
-        return;
-      }
-      setFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        setCsvText(text);
-        detectMutation.mutate(text);
-      };
-      reader.readAsText(file);
-    },
-    [selectedPlatform]
-  );
-
-  const handleDrop = useCallback(
-    (e: DragEvent) => {
-      e.preventDefault();
-      setIsDragOver(false);
-      const file = (e as any).dataTransfer?.files?.[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
-  );
-
-  const handleDragOver = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback(() => {
-    setIsDragOver(false);
-  }, []);
-
-  const handleFileInput = useCallback(
-    (e: any) => {
-      const file = e.target?.files?.[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
-  );
-
-  const resetAll = () => {
-    setStep("select");
-    setSelectedPlatform(null);
-    setCsvText(null);
-    setFileName("");
-    setDetectResult(null);
-    setImportResult(null);
-    setActiveJobId(null);
-    setDuplicateHandling("skip");
-  };
-
-  const goToUpload = (platform: string) => {
-    setSelectedPlatform(platform);
-    setStep("upload");
-  };
-
-  if (step === "select") {
+  if (!wizardStarted) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" data-testid="transfer-platform-select">
         <Alert>
           <ArrowRightLeft className="h-4 w-4" />
           <AlertTitle>Transfer Your Data</AlertTitle>
           <AlertDescription>
-            Select the software you are coming from, then upload the customer CSV export. We will
-            automatically detect columns and map your data into ScooPilot.
+            Select the software you are coming from. We'll guide you through every step — from
+            export to route preview.
           </AlertDescription>
         </Alert>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card
-            className="cursor-pointer hover:border-primary/50 transition-colors"
-            onClick={() => goToUpload("sweepandgo")}
-            data-testid="card-platform-sweepandgo"
-          >
-            <CardHeader className="text-center pb-2">
-              <div className="mx-auto w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-2">
-                <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
-                  S&G
-                </span>
-              </div>
-              <CardTitle className="text-base">Sweep & Go</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center">
-              <p className="text-xs text-muted-foreground">
-                Import customers from Sweep & Go CSV export
-              </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-3"
-                data-testid="button-select-sweepandgo"
-              >
-                Select <ArrowRight className="h-3 w-3 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card
-            className="cursor-pointer hover:border-primary/50 transition-colors"
-            onClick={() => goToUpload("jobber")}
-            data-testid="card-platform-jobber"
-          >
-            <CardHeader className="text-center pb-2">
-              <div className="mx-auto w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-2">
-                <span className="text-lg font-bold text-blue-700 dark:text-blue-400">J</span>
-              </div>
-              <CardTitle className="text-base">Jobber</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center">
-              <p className="text-xs text-muted-foreground">Import clients from Jobber CSV export</p>
-              <Button variant="ghost" size="sm" className="mt-3" data-testid="button-select-jobber">
-                Select <ArrowRight className="h-3 w-3 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card
-            className="cursor-pointer hover:border-primary/50 transition-colors"
-            onClick={() => goToUpload("auto")}
-            data-testid="card-platform-auto"
-          >
-            <CardHeader className="text-center pb-2">
-              <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-2">
-                <RefreshCw className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-              </div>
-              <CardTitle className="text-base">Other / Auto-detect</CardTitle>
-            </CardHeader>
-            <CardContent className="text-center">
-              <p className="text-xs text-muted-foreground">
-                Upload any customer CSV and we will detect the format
-              </p>
-              <Button variant="ghost" size="sm" className="mt-3" data-testid="button-select-auto">
-                Select <ArrowRight className="h-3 w-3 ml-1" />
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "upload") {
-    const platformLabels: Record<string, string> = {
-      sweepandgo: "Sweep & Go",
-      jobber: "Jobber",
-      auto: "Auto-detect",
-    };
-
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" data-testid="badge-selected-platform">
-              {platformLabels[selectedPlatform || "auto"]}
-            </Badge>
-            <span className="text-sm text-muted-foreground">Upload your customer export CSV</span>
-          </div>
-          <Button variant="ghost" size="sm" onClick={resetAll} data-testid="button-back-to-select">
-            Change source
-          </Button>
-        </div>
-
-        {selectedPlatform === "sweepandgo" && (
-          <Alert>
-            <FileSpreadsheet className="h-4 w-4" />
-            <AlertTitle>Sweep & Go Export</AlertTitle>
-            <AlertDescription>
-              In Sweep & Go, go to Customers, then click Export to download your customer list as
-              CSV. Upload that file here.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {selectedPlatform === "jobber" && (
-          <Alert>
-            <FileSpreadsheet className="h-4 w-4" />
-            <AlertTitle>Jobber Export</AlertTitle>
-            <AlertDescription>
-              In Jobber, go to Clients, click the gear icon, then Export to CSV. Upload that file
-              here.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        <div
-          className={`border-2 border-dashed rounded-md p-12 text-center cursor-pointer transition-colors ${
-            isDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25"
-          }`}
-          onDrop={handleDrop as any}
-          onDragOver={handleDragOver as any}
-          onDragLeave={handleDragLeave}
-          onClick={() => fileInputRef.current?.click()}
-          data-testid="dropzone-transfer"
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            className="hidden"
-            onChange={handleFileInput}
-            data-testid="input-transfer-file"
-          />
-          <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm font-medium">Drop your CSV file here</p>
-          <p className="text-xs text-muted-foreground mt-1">or click to browse</p>
-        </div>
-
-        {detectMutation.isPending && (
-          <div className="flex items-center justify-center py-8 gap-2" data-testid="loading-detect">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span className="text-sm text-muted-foreground">Analyzing CSV columns...</span>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (step === "preview" && detectResult) {
-    const hasErrors = detectResult.errors.some((e) => e.row === 0);
-    const fieldLabels: Record<string, string> = {
-      firstName: "First Name",
-      lastName: "Last Name",
-      email: "Email",
-      phone: "Phone",
-      streetAddress: "Address",
-      address2: "Address 2",
-      city: "City",
-      state: "State",
-      zipCode: "Zip Code",
-      numberOfDogs: "# of Dogs",
-      yardSize: "Yard Size",
-      serviceFrequency: "Frequency",
-      serviceDay: "Service Day",
-      gateCode: "Gate Code",
-      notes: "Notes",
-      status: "Status",
-      leadSource: "Lead Source",
-      tags: "Tags",
-      fullName: "Full Name",
-    };
-
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-3">
-            <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
-            <span className="text-sm font-medium" data-testid="text-transfer-file-name">
-              {fileName}
-            </span>
-            <Badge variant="outline" data-testid="badge-detected-platform">
-              {detectResult.platformLabel}
-            </Badge>
-          </div>
-          <Button variant="ghost" size="sm" onClick={resetAll} data-testid="button-reset-transfer">
-            Start over
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Contacts</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold" data-testid="text-total-contacts">
-                {detectResult.totalRows}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">With Email</CardTitle>
-              <Mail className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold" data-testid="text-with-email">
-                {detectResult.preview.filter((c) => c.email).length}
-                {detectResult.totalRows > 10 && (
-                  <span className="text-sm text-muted-foreground font-normal">+</span>
-                )}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">With Address</CardTitle>
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold" data-testid="text-with-address">
-                {detectResult.preview.filter((c) => c.streetAddress).length}
-                {detectResult.totalRows > 10 && (
-                  <span className="text-sm text-muted-foreground font-normal">+</span>
-                )}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Fields Mapped</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold" data-testid="text-fields-mapped">
-                {Object.keys(detectResult.fieldMapping).length}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Column Mapping</CardTitle>
-            <CardDescription>How your CSV columns map to ScooPilot fields</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-              {Object.entries(detectResult.fieldMapping).map(([field, csvCol]) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            {
+              value: "sweepandgo" as const,
+              icon: "S&G",
+              label: "Sweep & Go",
+              description: "Import customers from Sweep & Go",
+              color: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400",
+              testId: "card-platform-sweepandgo",
+            },
+            {
+              value: "jobber" as const,
+              icon: "J",
+              label: "Jobber",
+              description: "Import clients from Jobber",
+              color: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400",
+              testId: "card-platform-jobber",
+            },
+            {
+              value: "googlesheet" as const,
+              icon: "GS",
+              label: "Google Sheets",
+              description: "Paste a Google Sheet link directly",
+              color: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400",
+              testId: "card-platform-googlesheet",
+            },
+            {
+              value: "generic" as const,
+              icon: "CSV",
+              label: "Other / CSV",
+              description: "Upload any customer CSV",
+              color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",
+              testId: "card-platform-generic",
+            },
+          ].map((p) => (
+            <Card
+              key={p.value}
+              className="cursor-pointer hover:border-primary/50 transition-colors"
+              onClick={() => {
+                setWizardPlatform(p.value);
+                setWizardStarted(true);
+              }}
+              data-testid={p.testId}
+            >
+              <CardHeader className="text-center pb-2">
                 <div
-                  key={field}
-                  className="flex items-center gap-2 text-sm p-2 rounded-md bg-muted/50"
-                  data-testid={`mapping-${field}`}
+                  className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-2 ${p.color}`}
                 >
-                  <span className="text-muted-foreground truncate">{csvCol}</span>
-                  <ArrowRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                  <span className="font-medium">{fieldLabels[field] || field}</span>
+                  <span className="text-sm font-bold">{p.icon}</span>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {detectResult.warnings.length > 0 && (
-          <Alert data-testid="alert-transfer-warnings">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Warnings ({detectResult.warnings.length})</AlertTitle>
-            <AlertDescription>
-              <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
-                {detectResult.warnings.map((warn, i) => (
-                  <li key={i} data-testid={`text-transfer-warning-${i}`}>
-                    {warn}
-                  </li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {detectResult.errors.length > 0 && (
-          <Alert
-            variant={hasErrors ? "destructive" : "default"}
-            data-testid="alert-transfer-errors"
-          >
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Issues ({detectResult.errors.length})</AlertTitle>
-            <AlertDescription>
-              <ul className="list-disc pl-4 mt-2 space-y-1 text-sm">
-                {detectResult.errors.slice(0, 20).map((err, i) => (
-                  <li key={i} data-testid={`text-transfer-error-${i}`}>
-                    {err.row > 0 ? `Row ${err.row}: ` : ""}
-                    {err.message}
-                  </li>
-                ))}
-                {detectResult.errors.length > 20 && (
-                  <li className="text-muted-foreground">
-                    ...and {detectResult.errors.length - 20} more
-                  </li>
-                )}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {detectResult.preview.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Preview (first {Math.min(detectResult.preview.length, 10)})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table data-testid="table-transfer-preview">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Address</TableHead>
-                      <TableHead>Dogs</TableHead>
-                      <TableHead>Day</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {detectResult.preview.slice(0, 10).map((contact, i) => (
-                      <TableRow key={i} data-testid={`row-preview-${i}`}>
-                        <TableCell className="whitespace-nowrap">
-                          {contact.firstName} {contact.lastName}
-                        </TableCell>
-                        <TableCell className="text-xs">{contact.email || "---"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">
-                          {contact.phone || "---"}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {contact.streetAddress
-                            ? `${contact.streetAddress}, ${contact.city}`
-                            : "---"}
-                        </TableCell>
-                        <TableCell>{contact.numberOfDogs ?? "---"}</TableCell>
-                        <TableCell className="capitalize text-xs">
-                          {contact.serviceDay || "---"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className="text-xs capitalize"
-                            data-testid={`badge-contact-status-${i}`}
-                          >
-                            {contact.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {!hasErrors && (
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Duplicate Handling</Label>
-                <RadioGroup
-                  value={duplicateHandling}
-                  onValueChange={setDuplicateHandling}
-                  className="space-y-2"
+                <CardTitle className="text-base">{p.label}</CardTitle>
+              </CardHeader>
+              <CardContent className="text-center">
+                <p className="text-xs text-muted-foreground">{p.description}</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-3"
+                  data-testid={`button-select-${p.value}`}
                 >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="skip" id="dup-skip" data-testid="radio-skip" />
-                    <Label htmlFor="dup-skip" className="text-sm font-normal">
-                      Skip duplicates (don't import contacts that already exist by email or address)
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="update" id="dup-update" data-testid="radio-update" />
-                    <Label htmlFor="dup-update" className="text-sm font-normal">
-                      Update existing (fill in missing fields on matching contacts)
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <Button
-                onClick={() => importMutation.mutate()}
-                disabled={importMutation.isPending}
-                className="w-full sm:w-auto"
-                data-testid="button-run-transfer"
-              >
-                {importMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Transfer {detectResult.totalRows} Contacts to ScooPilot
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    );
-  }
-
-  if (step === "running" && activeJobId) {
-    return (
-      <div className="space-y-6">
-        <div className="text-sm font-medium text-muted-foreground">
-          Transferring contacts from {detectResult?.platformLabel ?? "your file"}
+                  Start Wizard <ArrowRight className="h-3 w-3 ml-1" />
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
         </div>
-        <ImportJobProgress
-          jobId={activeJobId}
-          label="Importing contacts"
-          onComplete={(job) => {
-            queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-            if (job.status === "completed") {
-              toast({
-                title: "Transfer complete",
-                description: `${job.importedRows} contacts imported.`,
-              });
-              // Store result for the next step
-              setImportResult({
-                importRunId: job.id,
-                platform: detectResult?.platform || "unknown",
-                platformLabel: detectResult?.platformLabel || "Unknown",
-                imported: job.importedRows,
-                updated: 0,
-                skipped: job.skippedRows,
-                total: job.totalRows,
-                errors: job.errors || [],
-              });
-            }
-            setStep("result");
-          }}
-          onReset={resetAll}
-        />
       </div>
     );
   }
 
-  if (step === "result" && importResult) {
-    return <TransferResultView importResult={importResult} onReset={resetAll} />;
-  }
-
-  return null;
+  return (
+    <ImportWizard
+      targetSchema="contacts"
+      initialPlatform={wizardPlatform}
+      onComplete={(result) => {
+        toast({
+          title: "Transfer Complete",
+          description: `${result.importedRows} contacts imported successfully.`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/imports"] });
+        setWizardStarted(false);
+        setWizardPlatform(null);
+      }}
+      onCancel={() => {
+        setWizardStarted(false);
+        setWizardPlatform(null);
+      }}
+    />
+  );
 }
 
 function InvoicesTab() {

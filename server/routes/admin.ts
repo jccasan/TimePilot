@@ -39,6 +39,7 @@ import {
   isCustomerOnPlatform,
 } from "../services/stripe";
 import { registerRetellWebhook, getRetellAgentWebhookUrl, getAppBaseUrl } from "../services/retell";
+import { geocodeAddress } from "../services/geocode";
 import { TIER_CONFIG } from "@shared/schema";
 
 import {
@@ -2242,6 +2243,29 @@ Respond with exactly one category from the list above and nothing else.`;
     }
   });
 
+  app.get("/api/imports/fetch-url", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { url } = req.query as { url?: string };
+      if (!url) return res.status(400).json({ error: "url query parameter is required" });
+      // Only allow Google Sheets export URLs
+      if (!url.startsWith("https://docs.google.com/spreadsheets/")) {
+        return res.status(400).json({ error: "Only Google Sheets URLs are supported" });
+      }
+      const upstream = await fetch(url, {
+        headers: { "User-Agent": "ScooPilot-Import/1.0" },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!upstream.ok) {
+        return res.status(502).json({ error: `Upstream returned ${upstream.status}` });
+      }
+      const text = await upstream.text();
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.send(text);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.post("/api/imports/ai-map", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -2334,6 +2358,42 @@ Respond with exactly one category from the list above and nothing else.`;
     }
   });
 
+  app.post("/api/imports/geocode-preview", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const addresses: Array<{
+        rowIndex: number;
+        streetAddress?: string | null;
+        city?: string | null;
+        state?: string | null;
+        zipCode?: string | null;
+      }> = req.body.addresses || [];
+      if (!Array.isArray(addresses) || addresses.length === 0) {
+        return res.json({ results: [] });
+      }
+      const sample = addresses.slice(0, 30);
+      const results: Array<{
+        rowIndex: number;
+        latitude: number | null;
+        longitude: number | null;
+      }> = [];
+      for (const addr of sample) {
+        if (!addr.streetAddress) {
+          results.push({ rowIndex: addr.rowIndex, latitude: null, longitude: null });
+          continue;
+        }
+        const geo = await geocodeAddress(addr.streetAddress, addr.city, addr.state, addr.zipCode);
+        results.push({
+          rowIndex: addr.rowIndex,
+          latitude: geo ? parseFloat(geo.latitude) : null,
+          longitude: geo ? parseFloat(geo.longitude) : null,
+        });
+      }
+      return res.json({ results });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.post("/api/imports/apply", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -2380,7 +2440,10 @@ Respond with exactly one category from the list above and nothing else.`;
         totalRows: rows.length,
         mappingConfig,
         aiSuggestions: req.body.aiSuggestions || null,
-        userOverrides: req.body.userOverrides || null,
+        userOverrides: {
+          ...(req.body.userOverrides || {}),
+          knowsNextServiceDate: req.body.knowsNextServiceDate ?? null,
+        },
       });
 
       if (targetSchema === "contacts" || !targetSchema) {
@@ -2411,6 +2474,9 @@ Respond with exactly one category from the list above and nothing else.`;
           transformations,
           skippedRows: req.body.skipRowIndices || req.body.skippedRows || [],
           editedCells: req.body.editedCells || {},
+          routePreference: req.body.routePreference || null,
+          platform: req.body.platform || null,
+          knowsNextServiceDate: req.body.knowsNextServiceDate ?? null,
         });
         return res.json({ jobId: importRun.id, batchId: importBatch.id, totalRows: rows.length });
       }
