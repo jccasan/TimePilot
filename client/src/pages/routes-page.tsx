@@ -235,6 +235,8 @@ type OptimizeResult = {
   message?: string;
   geocodeFailure?: boolean;
   failedStops?: FailedStop[];
+  degraded?: boolean;
+  degradedReason?: string;
 };
 
 type RouteMetrics = {
@@ -2423,6 +2425,13 @@ export default function RoutesPage() {
         setShowSavings(true);
         setGeocodeAlert(null);
         setHighlightedStopIds(new Set());
+        if (data.degraded) {
+          toast({
+            title: "Optimization used estimated distances",
+            description: data.degradedReason ?? "Live drive times were temporarily unavailable.",
+            variant: "default",
+          });
+        }
       } else if (data.geocodeFailure && data.failedStops && data.failedStops.length > 0) {
         setGeocodeAlert({ routeId, stops: data.failedStops });
       } else {
@@ -2459,6 +2468,13 @@ export default function RoutesPage() {
         setHighlightedStopIds(new Set());
         setSavingsResult(data);
         setShowSavings(true);
+        if (data.degraded) {
+          toast({
+            title: "Optimization used estimated distances",
+            description: data.degradedReason ?? "Live drive times were temporarily unavailable.",
+            variant: "default",
+          });
+        }
       } else if (data.geocodeFailure && data.failedStops && data.failedStops.length > 0) {
         setGeocodeAlert({ routeId, stops: data.failedStops });
         toast({

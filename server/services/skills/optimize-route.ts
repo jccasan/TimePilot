@@ -142,6 +142,7 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
   const originalMinutes = originalMapbox?.duration ?? (originalDistance / 25) * 60;
 
   const result = await optimizeRouteAsync(stops, startPoint);
+  const isDegraded = result.degraded;
 
   const stopsById = new Map(stops.map((s) => [s.id, s]));
   const optimizedStops = result.orderedIds.map((id) => stopsById.get(id)!);
@@ -229,6 +230,10 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
       lastOptimizedAt: new Date().toISOString(),
       optimizedStopHash: stopHash,
       order: result.orderedIds,
+      degraded: isDegraded,
+      degradedReason: isDegraded
+        ? "Optimization used estimated distances — live drive times were temporarily unavailable."
+        : undefined,
     },
   };
 }

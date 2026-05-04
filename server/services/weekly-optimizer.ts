@@ -10,8 +10,9 @@ type TimeDistMap = Map<string, Map<string, number>>;
 async function fetchDistMapForStops(
   stops: { id: string; latitude: number; longitude: number }[],
   startPoint?: { latitude: number; longitude: number }
-): Promise<TimeDistMap | undefined> {
-  if (stops.length < 1 || stops.length > ROUTE_MATRIX_LIMIT) return undefined;
+): Promise<{ map: TimeDistMap | undefined; degraded: boolean }> {
+  if (stops.length < 1 || stops.length > ROUTE_MATRIX_LIMIT)
+    return { map: undefined, degraded: false };
   return buildChunkedDistMap(stops, startPoint);
 }
 
@@ -65,6 +66,7 @@ export interface WeeklyOptimizationResult {
   minutesSaved: number;
   movedStops: { stopId: string; fromDay: string; toDay: string; contactName: string }[];
   creditsRequired: number;
+  degraded: boolean;
 }
 
 interface StartPoint {
@@ -187,8 +189,8 @@ export function kMeansClustering(
 async function computeDayMetrics(
   stops: WeeklyStop[],
   startPoint?: StartPoint
-): Promise<{ miles: number; minutes: number }> {
-  if (stops.length === 0) return { miles: 0, minutes: 0 };
+): Promise<{ miles: number; minutes: number; degraded: boolean }> {
+  if (stops.length === 0) return { miles: 0, minutes: 0, degraded: false };
   if (stops.length === 1) {
     if (startPoint) {
       const d = haversineDistance(
@@ -197,9 +199,13 @@ async function computeDayMetrics(
         stops[0].latitude,
         stops[0].longitude
       );
-      return { miles: Math.round(d * 10) / 10, minutes: Math.round((d / 25) * 60) };
+      return {
+        miles: Math.round(d * 10) / 10,
+        minutes: Math.round((d / 25) * 60),
+        degraded: false,
+      };
     }
-    return { miles: 0, minutes: 0 };
+    return { miles: 0, minutes: 0, degraded: false };
   }
 
   const routeStops = stops.map((s) => ({
@@ -208,11 +214,11 @@ async function computeDayMetrics(
     longitude: s.longitude,
   }));
 
-  const distMap = await fetchDistMapForStops(routeStops, startPoint);
+  const { map: distMap, degraded } = await fetchDistMapForStops(routeStops, startPoint);
   const result = optimizeRoute(routeStops, startPoint, distMap);
   const miles = Math.round(result.totalDistance * 10) / 10;
   const minutes = Math.round((result.totalDistance / 25) * 60);
-  return { miles, minutes };
+  return { miles, minutes, degraded };
 }
 
 async function splitIntoSubRoutes(
@@ -221,37 +227,48 @@ async function splitIntoSubRoutes(
   startPoint?: StartPoint,
   maxStops: number = MAX_STOPS_PER_ROUTE,
   minRoutes: number = 1
-): Promise<ProposedRoute[]> {
-  if (stops.length === 0) return [];
+): Promise<{ routes: ProposedRoute[]; degraded: boolean }> {
+  if (stops.length === 0) return { routes: [], degraded: false };
 
   const numByMax = Math.ceil(stops.length / maxStops);
   const numRoutes = Math.max(minRoutes, numByMax);
 
   if (numRoutes <= 1) {
-    const optimizedStops = await optimizeStopOrder(stops, startPoint);
+    const { stops: optimizedStops, degraded: orderDegraded } = await optimizeStopOrder(
+      stops,
+      startPoint
+    );
     const metrics = await computeDayMetrics(optimizedStops, startPoint);
-    return [
-      {
-        routeLabel: `${capitalize(day)} Route`,
-        day,
-        stops: optimizedStops,
-        estimatedMiles: metrics.miles,
-        estimatedMinutes: metrics.minutes,
-        stopCount: optimizedStops.length,
-      },
-    ];
+    return {
+      routes: [
+        {
+          routeLabel: `${capitalize(day)} Route`,
+          day,
+          stops: optimizedStops,
+          estimatedMiles: metrics.miles,
+          estimatedMinutes: metrics.minutes,
+          stopCount: optimizedStops.length,
+        },
+      ],
+      degraded: orderDegraded || metrics.degraded,
+    };
   }
 
   const clusters = kMeansClustering(stops, numRoutes);
 
-  return Promise.all(
+  let anyDegraded = false;
+  const routes = await Promise.all(
     clusters.map(async (cluster, idx) => {
       const label =
         clusters.length > 1
           ? `${capitalize(day)} Route ${String.fromCharCode(65 + idx)}`
           : `${capitalize(day)} Route`;
-      const optimizedStops = await optimizeStopOrder(cluster, startPoint);
+      const { stops: optimizedStops, degraded: orderDegraded } = await optimizeStopOrder(
+        cluster,
+        startPoint
+      );
       const metrics = await computeDayMetrics(optimizedStops, startPoint);
+      if (orderDegraded || metrics.degraded) anyDegraded = true;
       return {
         routeLabel: label,
         day,
@@ -262,13 +279,14 @@ async function splitIntoSubRoutes(
       };
     })
   );
+  return { routes, degraded: anyDegraded };
 }
 
 async function optimizeStopOrder(
   stops: WeeklyStop[],
   startPoint?: StartPoint
-): Promise<WeeklyStop[]> {
-  if (stops.length <= 1) return stops;
+): Promise<{ stops: WeeklyStop[]; degraded: boolean }> {
+  if (stops.length <= 1) return { stops, degraded: false };
 
   const routeStops = stops.map((s) => ({
     id: s.servicePlanId,
@@ -276,12 +294,15 @@ async function optimizeStopOrder(
     longitude: s.longitude,
   }));
 
-  const distMap = await fetchDistMapForStops(routeStops, startPoint);
+  const { map: distMap, degraded } = await fetchDistMapForStops(routeStops, startPoint);
   const result = optimizeRoute(routeStops, startPoint, distMap);
   const orderMap = new Map(result.orderedIds.map((id, idx) => [id, idx]));
-  return [...stops].sort(
-    (a, b) => (orderMap.get(a.servicePlanId) ?? 0) - (orderMap.get(b.servicePlanId) ?? 0)
-  );
+  return {
+    stops: [...stops].sort(
+      (a, b) => (orderMap.get(a.servicePlanId) ?? 0) - (orderMap.get(b.servicePlanId) ?? 0)
+    ),
+    degraded,
+  };
 }
 
 function capitalize(s: string): string {
@@ -324,16 +345,18 @@ export async function analyzeWeeklySchedule(
   const currentDays: DayProposal[] = [];
   let currentTotalMiles = 0;
   let currentTotalMinutes = 0;
+  let anyDegraded = false;
 
   for (const day of activeDays) {
     const dayStops = currentByDay.get(day) || [];
-    const routes = await splitIntoSubRoutes(
+    const { routes, degraded: splitDegraded } = await splitIntoSubRoutes(
       dayStops,
       day,
       startPoint,
       maxStopsPerDay,
       minRoutesPerDay
     );
+    if (splitDegraded) anyDegraded = true;
     const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
     const totalMinutes = routes.reduce((s, r) => s + r.estimatedMinutes, 0);
     currentDays.push({
@@ -357,13 +380,14 @@ export async function analyzeWeeklySchedule(
     for (const day of activeDays) {
       const dayStops = proposedByDay.get(day) || [];
       for (const stop of dayStops) proposedStopDayMap.set(stop.servicePlanId, day);
-      const routes = await splitIntoSubRoutes(
+      const { routes, degraded: splitDegraded } = await splitIntoSubRoutes(
         dayStops,
         day,
         startPoint,
         maxStopsPerDay,
         minRoutesPerDay
       );
+      if (splitDegraded) anyDegraded = true;
       const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
       const totalMinutes = routes.reduce((s, r) => s + r.estimatedMinutes, 0);
       proposedDays.push({
@@ -410,13 +434,14 @@ export async function analyzeWeeklySchedule(
 
       const routes: ProposedRoute[] = [];
       for (let ci = 0; ci < dayClusters.length; ci++) {
-        const subRoutes = await splitIntoSubRoutes(
+        const { routes: subRoutes, degraded: splitDegraded } = await splitIntoSubRoutes(
           dayClusters[ci],
           day,
           startPoint,
           maxStopsPerDay,
           clusterMin[ci]
         );
+        if (splitDegraded) anyDegraded = true;
         routes.push(...subRoutes);
       }
 
@@ -482,6 +507,7 @@ export async function analyzeWeeklySchedule(
     minutesSaved: Math.max(0, minutesSaved),
     movedStops,
     creditsRequired: totalRoutes,
+    degraded: anyDegraded,
   };
 }
 

@@ -109,6 +109,7 @@ type WeeklyOptResult = {
   creditsRequired: number;
   excludedWeekendCount?: number;
   ungeocodedStops?: UngeocodedStop[];
+  degraded?: boolean;
 };
 
 type UngeocodedStop = { servicePlanId: string; contactId: string; name: string; address: string };
@@ -1138,6 +1139,27 @@ export function WeeklyOptimizerPanel({
                           </Badge>
                         )}
                       </div>
+
+                      {/* Degraded mode warning */}
+                      {activeWeek.degraded && (
+                        <div
+                          className="rounded-lg border border-yellow-300 bg-yellow-50 dark:border-yellow-700 dark:bg-yellow-950/30 p-4"
+                          data-testid={`banner-degraded-week-${activeWeek.weekNum}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">
+                                Optimization used estimated distances
+                              </p>
+                              <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-0.5">
+                                Live drive times were temporarily unavailable. Results are based on
+                                straight-line distances and may not reflect actual drive time.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Ungeocoded warning */}
                       {activeWeek.ungeocodedStops && activeWeek.ungeocodedStops.length > 0 && (
