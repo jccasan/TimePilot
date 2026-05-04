@@ -802,6 +802,7 @@ async function reconcileDeposit(
             {
               TxnId: qboPaymentId,
               TxnType: "Payment",
+              TxnLineId: "0",
             },
           ],
         },
