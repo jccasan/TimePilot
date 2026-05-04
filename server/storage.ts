@@ -56,6 +56,10 @@ import {
   activityLog,
   auditTrail,
   importRuns,
+  importBatches,
+  importRows,
+  importMappings,
+  importRuleSuggestions,
   invoicePayments,
   estimates,
   serviceChangeRequests,
@@ -133,6 +137,14 @@ import {
   type InsertAuditTrail,
   type ImportRun,
   type InsertImportRun,
+  type ImportBatch,
+  type InsertImportBatch,
+  type ImportRow,
+  type InsertImportRow,
+  type ImportMapping,
+  type InsertImportMapping,
+  type ImportRuleSuggestion,
+  type InsertImportRuleSuggestion,
   type InvoicePayment,
   type InsertInvoicePayment,
   type PriceRecommendation,
@@ -698,6 +710,48 @@ export interface IStorage {
   ): Promise<ImportRun>;
   getImportRuns(companyId: string): Promise<ImportRun[]>;
   getImportRunByHash(companyId: string, fileHash: string): Promise<ImportRun | undefined>;
+
+  // Import Batches (staging)
+  createImportBatch(data: InsertImportBatch): Promise<ImportBatch>;
+  getImportBatch(id: string, companyId: string): Promise<ImportBatch | undefined>;
+  updateImportBatch(
+    id: string,
+    data: Partial<InsertImportBatch> & { completedAt?: Date }
+  ): Promise<ImportBatch>;
+  getImportBatches(companyId: string): Promise<ImportBatch[]>;
+
+  // Import Rows
+  createImportRow(data: InsertImportRow): Promise<ImportRow>;
+  bulkCreateImportRows(rows: InsertImportRow[]): Promise<ImportRow[]>;
+  getImportRows(
+    batchId: string,
+    companyId: string,
+    filters?: { status?: string; missingField?: string }
+  ): Promise<ImportRow[]>;
+  getImportRow(id: string, companyId: string): Promise<ImportRow | undefined>;
+  updateImportRow(
+    id: string,
+    companyId: string,
+    data: Partial<InsertImportRow>
+  ): Promise<ImportRow>;
+  bulkUpdateImportRows(
+    ids: string[],
+    companyId: string,
+    data: Partial<InsertImportRow>
+  ): Promise<void>;
+
+  // Import Mappings
+  bulkCreateImportMappings(mappings: InsertImportMapping[]): Promise<ImportMapping[]>;
+  getImportMappings(batchId: string): Promise<ImportMapping[]>;
+
+  // Import Rule Suggestions
+  createImportRuleSuggestion(data: InsertImportRuleSuggestion): Promise<ImportRuleSuggestion>;
+  getImportRuleSuggestions(batchId: string): Promise<ImportRuleSuggestion[]>;
+  getImportRuleSuggestionByRow(rowId: string): Promise<ImportRuleSuggestion | undefined>;
+  updateImportRuleSuggestion(
+    id: string,
+    data: Partial<InsertImportRuleSuggestion>
+  ): Promise<ImportRuleSuggestion>;
 
   // Invoice Payments
   createInvoicePayment(data: InsertInvoicePayment): Promise<InvoicePayment>;
@@ -3613,6 +3667,161 @@ export class DatabaseStorage implements IStorage {
       .from(importRuns)
       .where(and(eq(importRuns.companyId, companyId), eq(importRuns.fileHash, fileHash)));
     return run;
+  }
+
+  // ================ Import Batches ================
+  async createImportBatch(data: InsertImportBatch): Promise<ImportBatch> {
+    const [batch] = await db.insert(importBatches).values(data).returning();
+    return batch;
+  }
+
+  async getImportBatch(id: string, companyId: string): Promise<ImportBatch | undefined> {
+    const [batch] = await db
+      .select()
+      .from(importBatches)
+      .where(and(eq(importBatches.id, id), eq(importBatches.companyId, companyId)));
+    return batch;
+  }
+
+  async updateImportBatch(
+    id: string,
+    data: Partial<InsertImportBatch> & { completedAt?: Date }
+  ): Promise<ImportBatch> {
+    const [batch] = await db
+      .update(importBatches)
+      .set(data)
+      .where(eq(importBatches.id, id))
+      .returning();
+    return batch;
+  }
+
+  async getImportBatches(companyId: string): Promise<ImportBatch[]> {
+    return db
+      .select()
+      .from(importBatches)
+      .where(eq(importBatches.companyId, companyId))
+      .orderBy(desc(importBatches.createdAt));
+  }
+
+  // ================ Import Rows ================
+  async createImportRow(data: InsertImportRow): Promise<ImportRow> {
+    const [row] = await db.insert(importRows).values(data).returning();
+    return row;
+  }
+
+  async bulkCreateImportRows(rows: InsertImportRow[]): Promise<ImportRow[]> {
+    if (rows.length === 0) return [];
+    const CHUNK = 250;
+    let inserted: ImportRow[] = [];
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK);
+      const result = await db.insert(importRows).values(chunk).returning();
+      inserted = inserted.concat(result);
+    }
+    return inserted;
+  }
+
+  async getImportRows(
+    batchId: string,
+    companyId: string,
+    filters?: { status?: string; missingField?: string }
+  ): Promise<ImportRow[]> {
+    const conditions = [eq(importRows.batchId, batchId), eq(importRows.companyId, companyId)];
+    if (filters?.status) {
+      conditions.push(
+        eq(importRows.status, filters.status as (typeof importRows.$inferSelect)["status"])
+      );
+    }
+    const results = await db
+      .select()
+      .from(importRows)
+      .where(and(...conditions))
+      .orderBy(asc(importRows.rowIndex));
+
+    if (filters?.missingField) {
+      return results.filter(
+        (r) => r.missingFields && r.missingFields.includes(filters.missingField!)
+      );
+    }
+    return results;
+  }
+
+  async getImportRow(id: string, companyId: string): Promise<ImportRow | undefined> {
+    const [row] = await db
+      .select()
+      .from(importRows)
+      .where(and(eq(importRows.id, id), eq(importRows.companyId, companyId)));
+    return row;
+  }
+
+  async updateImportRow(
+    id: string,
+    companyId: string,
+    data: Partial<InsertImportRow>
+  ): Promise<ImportRow> {
+    const [row] = await db
+      .update(importRows)
+      .set(data)
+      .where(and(eq(importRows.id, id), eq(importRows.companyId, companyId)))
+      .returning();
+    return row;
+  }
+
+  async bulkUpdateImportRows(
+    ids: string[],
+    companyId: string,
+    data: Partial<InsertImportRow>
+  ): Promise<void> {
+    if (ids.length === 0) return;
+    await db
+      .update(importRows)
+      .set(data)
+      .where(and(inArray(importRows.id, ids), eq(importRows.companyId, companyId)));
+  }
+
+  // ================ Import Mappings ================
+  async bulkCreateImportMappings(mappings: InsertImportMapping[]): Promise<ImportMapping[]> {
+    if (mappings.length === 0) return [];
+    return db.insert(importMappings).values(mappings).returning();
+  }
+
+  async getImportMappings(batchId: string): Promise<ImportMapping[]> {
+    return db.select().from(importMappings).where(eq(importMappings.batchId, batchId));
+  }
+
+  // ================ Import Rule Suggestions ================
+  async createImportRuleSuggestion(
+    data: InsertImportRuleSuggestion
+  ): Promise<ImportRuleSuggestion> {
+    const [suggestion] = await db.insert(importRuleSuggestions).values(data).returning();
+    return suggestion;
+  }
+
+  async getImportRuleSuggestions(batchId: string): Promise<ImportRuleSuggestion[]> {
+    return db
+      .select()
+      .from(importRuleSuggestions)
+      .where(eq(importRuleSuggestions.batchId, batchId));
+  }
+
+  async getImportRuleSuggestionByRow(rowId: string): Promise<ImportRuleSuggestion | undefined> {
+    const [suggestion] = await db
+      .select()
+      .from(importRuleSuggestions)
+      .where(eq(importRuleSuggestions.rowId, rowId));
+    return suggestion;
+  }
+
+  async updateImportRuleSuggestion(
+    id: string,
+    data: Partial<InsertImportRuleSuggestion>
+  ): Promise<ImportRuleSuggestion> {
+    const [suggestion] = await db
+      .update(importRuleSuggestions)
+      .set(data)
+      .where(eq(importRuleSuggestions.id, id))
+      .returning();
+    return suggestion;
   }
 
   // ================ Invoice Payments ================

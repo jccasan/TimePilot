@@ -1921,7 +1921,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
   const { parseCompetitorCSV } = await import("../services/competitor-import");
   const {
     enqueueCompetitorImport,
-    enqueueCsvContactsImport,
+    enqueueStagedCsvContactsImport,
     enqueueSweepAndGoInvoicesImport,
     enqueueCsvRoutesImport,
   } = await import("../services/import-runner");
@@ -2384,9 +2384,27 @@ Respond with exactly one category from the list above and nothing else.`;
       });
 
       if (targetSchema === "contacts" || !targetSchema) {
-        await enqueueCsvContactsImport({
+        // Create staging batch
+        const importBatch = await storage.createImportBatch({
+          companyId,
+          sourceType: "csv_contacts",
+          fileName: req.body.fileName || "import.csv",
+          status: "pending",
+          totalRows: rows.length,
+          stagedRows: 0,
+          readyRows: 0,
+          needsReviewRows: 0,
+          ignoredRows: 0,
+          importedRows: 0,
+          importRunId: importRun.id,
+          createdBy:
+            ((req.session as unknown as Record<string, unknown>)?.userId as string) || null,
+        });
+
+        await enqueueStagedCsvContactsImport({
           companyId,
           jobId: importRun.id,
+          batchId: importBatch.id,
           headers,
           rows,
           mappings,
@@ -2394,7 +2412,7 @@ Respond with exactly one category from the list above and nothing else.`;
           skippedRows: req.body.skipRowIndices || req.body.skippedRows || [],
           editedCells: req.body.editedCells || {},
         });
-        return res.json({ jobId: importRun.id, totalRows: rows.length });
+        return res.json({ jobId: importRun.id, batchId: importBatch.id, totalRows: rows.length });
       }
 
       if (targetSchema === "routes") {

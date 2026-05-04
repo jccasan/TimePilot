@@ -91,6 +91,7 @@ const BusinessOverview = lazy(() => import("@/pages/business-overview"));
 const OnboardingForm = lazy(() => import("@/pages/onboarding-form"));
 const PendingApproval = lazy(() => import("@/pages/pending-approval"));
 const ReviewRouter = lazy(() => import("@/pages/review-router"));
+const ImportResolverPage = lazy(() => import("@/pages/import-resolver-page"));
 
 function PageLoader() {
   return (
@@ -154,6 +155,7 @@ function Router() {
           <Redirect to="/settings" />
         </Route>
         <Route path="/migration" component={MigrationPage} />
+        <Route path="/import/:batchId/resolve" component={ImportResolverPage} />
         <Route path="/command-center" component={CommandCenter} />
         <Route component={NotFound} />
       </Switch>

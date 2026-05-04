@@ -1,7 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import OpenAI from "openai";
 import { storage } from "../storage";
 import { db } from "../db";
 import { contacts, properties, routes } from "@shared/schema";
+import type { ImportRow, InsertImportRow } from "@shared/schema";
 import { geocodeAddress } from "./geocode";
 import { applyTransformations } from "./import-transforms";
 import type { ParsedContact } from "./competitor-import";
@@ -218,7 +219,7 @@ async function runCompetitorImport(payload: CompetitorImportPayload): Promise<vo
 
     for (const { pc, existingId } of toUpdate) {
       try {
-        const updates: Record<string, any> = {};
+        const updates: Record<string, unknown> = {};
         if (pc.phone && !emailToContactMap.get(pc.email?.toLowerCase() || "")?.phone)
           updates.phone = pc.phone;
         if (pc.email && !emailToContactMap.get(pc.email.toLowerCase())?.email)
@@ -235,8 +236,11 @@ async function runCompetitorImport(payload: CompetitorImportPayload): Promise<vo
           await storage.updateContact(existingId, companyId, updates);
         }
         updated++;
-      } catch (err: any) {
-        importErrors.push({ row: 0, message: `Update failed: ${err.message}` });
+      } catch (err: unknown) {
+        importErrors.push({
+          row: 0,
+          message: `Update failed: ${err instanceof Error ? err.message : String(err)}`,
+        });
       }
     }
 
@@ -376,7 +380,7 @@ export interface CsvContactsPayload {
   headers: string[];
   rows: string[][];
   mappings: Array<{ csvColumn: string; internalField: string }>;
-  transformations: Array<{ field: string; type: string; params?: Record<string, any> }>;
+  transformations: Array<{ field: string; type: string; params?: Record<string, unknown> }>;
   skippedRows: number[];
   editedCells: Record<string, string>;
 }
@@ -582,13 +586,400 @@ async function runCsvContactsImport(payload: CsvContactsPayload): Promise<void> 
   });
 }
 
+// ================ Staged CSV Contacts Import ================
+
+export interface StagedCsvContactsPayload {
+  companyId: string;
+  jobId: string;
+  batchId: string;
+  headers: string[];
+  rows: string[][];
+  mappings: Array<{ csvColumn: string; internalField: string }>;
+  transformations: Array<{ field: string; type: string; params?: Record<string, unknown> }>;
+  skippedRows: number[];
+  editedCells: Record<string, string>;
+}
+
+export async function enqueueStagedCsvContactsImport(
+  payload: StagedCsvContactsPayload
+): Promise<void> {
+  runStagedCsvContactsImport(payload).catch(async (err) => {
+    console.error(`[import-runner] Staged CSV import ${payload.jobId} failed:`, err);
+    const fatalError: ImportError[] = [{ row: 0, message: (err as Error)?.message || String(err) }];
+    await storage
+      .updateImportRun(payload.jobId, {
+        status: "failed",
+        errors: fatalError,
+        completedAt: new Date(),
+      })
+      .catch(console.error);
+    await storage
+      .updateImportBatch(payload.batchId, { status: "failed", completedAt: new Date() })
+      .catch(console.error);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// AI inference: derives service cadence from raw row text using OpenAI.
+// Returns confidence 0-100 and a human-readable reason.
+// Any error is surfaced as a low-confidence "could not infer" result so the
+// caller can still fall back to catalog defaults.
+// ---------------------------------------------------------------------------
+type RowServiceInference = {
+  suggestedFrequency: string | null;
+  suggestedServiceDay: string | null;
+  suggestedNextDate: string | null;
+  confidenceScore: number;
+  reason: string;
+};
+
+async function inferRowServiceLogic(row: ImportRow): Promise<RowServiceInference> {
+  const raw = (row.rawJson ?? {}) as Record<string, string>;
+  const mapped = (row.mappedContactJson ?? {}) as Record<string, unknown>;
+  const service = (row.mappedServiceJson ?? {}) as Record<string, unknown>;
+
+  // Gather every text field that could hint at frequency / schedule
+  const textHints = [
+    raw.notes,
+    raw.frequency,
+    raw.service_frequency,
+    raw.serviceFrequency,
+    raw.schedule,
+    raw.service_day,
+    raw.serviceDay,
+    raw.next_service,
+    raw.nextService,
+    service.serviceFrequency,
+    service.serviceDay,
+    mapped.notes,
+  ]
+    .filter(Boolean)
+    .join("; ");
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const defaultResult: RowServiceInference = {
+    suggestedFrequency: null,
+    suggestedServiceDay: null,
+    suggestedNextDate: null,
+    confidenceScore: 0,
+    reason: "No service cadence hints found in row data.",
+  };
+
+  if (!textHints.trim()) return defaultResult;
+
+  try {
+    const openai = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+
+    const prompt = `You are a pet waste removal scheduling assistant. Analyze the following customer record text and infer the service cadence.
+
+Customer data hints: "${textHints}"
+Today's date: ${today}
+
+Respond with ONLY valid JSON:
+{
+  "suggestedFrequency": "<weekly|biweekly|monthly|onetime|null>",
+  "suggestedServiceDay": "<monday|tuesday|wednesday|thursday|friday|saturday|sunday|null>",
+  "suggestedNextDate": "<YYYY-MM-DD or null>",
+  "confidenceScore": <0-100>,
+  "reason": "<one sentence explanation>"
+}
+
+Rules:
+- Set suggestedNextDate to the nearest future date matching suggestedServiceDay (within 14 days of today), or null if day is unknown.
+- confidenceScore >= 80 means the data clearly states frequency/day; 50-79 means inferred; < 50 means guessing.
+- If no frequency information exists at all, set all fields to null and confidenceScore to 0.`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return defaultResult;
+
+    const parsed = JSON.parse(content) as {
+      suggestedFrequency?: string | null;
+      suggestedServiceDay?: string | null;
+      suggestedNextDate?: string | null;
+      confidenceScore?: number;
+      reason?: string;
+    };
+
+    const VALID_FREQUENCIES = ["weekly", "biweekly", "monthly", "onetime"];
+    const VALID_DAYS = [
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday",
+      "sunday",
+    ];
+
+    return {
+      suggestedFrequency:
+        typeof parsed.suggestedFrequency === "string" &&
+        VALID_FREQUENCIES.includes(parsed.suggestedFrequency)
+          ? parsed.suggestedFrequency
+          : null,
+      suggestedServiceDay:
+        typeof parsed.suggestedServiceDay === "string" &&
+        VALID_DAYS.includes(parsed.suggestedServiceDay)
+          ? parsed.suggestedServiceDay
+          : null,
+      suggestedNextDate:
+        typeof parsed.suggestedNextDate === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(parsed.suggestedNextDate)
+          ? parsed.suggestedNextDate
+          : null,
+      confidenceScore:
+        typeof parsed.confidenceScore === "number"
+          ? Math.min(100, Math.max(0, Math.round(parsed.confidenceScore)))
+          : 0,
+      reason: typeof parsed.reason === "string" ? parsed.reason : "AI inference completed.",
+    };
+  } catch (err: unknown) {
+    console.warn(
+      "[import-runner] AI cadence inference failed:",
+      err instanceof Error ? err.message : String(err)
+    );
+    return defaultResult;
+  }
+}
+
+async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Promise<void> {
+  const {
+    companyId,
+    jobId,
+    batchId,
+    headers,
+    rows: rawRows,
+    mappings,
+    transformations,
+    skippedRows: skippedRowIndices,
+    editedCells,
+  } = payload;
+
+  await storage.updateImportBatch(batchId, { status: "processing" });
+
+  const rows = rawRows.map((row) => [...row]);
+  for (const [key, value] of Object.entries(editedCells)) {
+    const parts = key.split(":");
+    const rowIdx = parseInt(parts[0]);
+    const colName = parts[1];
+    const colIdx = headers.indexOf(colName);
+    if (rows[rowIdx] && colIdx >= 0) {
+      rows[rowIdx][colIdx] = String(value);
+    } else if (rows[rowIdx]) {
+      const altParts = key.split("-").map(Number);
+      if (altParts.length === 2 && rows[altParts[0]] && altParts[1] < rows[altParts[0]].length) {
+        rows[altParts[0]][altParts[1]] = String(value);
+      }
+    }
+  }
+
+  const skipSet = new Set(skippedRowIndices);
+  const transformed = applyTransformations(rows, headers, mappings, transformations, ["firstName"]);
+
+  // Build import_mappings records (deduped)
+  const uniqueMappings = mappings.filter(
+    (m, idx, arr) => arr.findIndex((x) => x.internalField === m.internalField) === idx
+  );
+  await storage.bulkCreateImportMappings(
+    uniqueMappings.map((m) => ({
+      batchId,
+      sourceColumn: m.csvColumn,
+      targetField: m.internalField,
+      confidence: 80,
+      isUserOverride: false,
+    }))
+  );
+
+  const importRowsToInsert: InsertImportRow[] = [];
+
+  for (const r of transformed) {
+    const isSkipped = skipSet.has(r.rowIndex);
+    if (isSkipped) continue;
+
+    const t = r.transformed as Record<string, unknown>;
+    const raw = r.original;
+
+    // Build contact json
+    const mappedContactJson: Record<string, unknown> = {
+      firstName: t.firstName || null,
+      lastName: t.lastName || null,
+      email: t.email || null,
+      phone: t.phone || null,
+      streetAddress: t.streetAddress || null,
+      address2: t.address2 || null,
+      city: t.city || null,
+      state: t.state || null,
+      zipCode: t.zipCode || null,
+      numberOfDogs: t.numberOfDogs || null,
+      yardSize: t.yardSize || null,
+      notes: t.notes || null,
+      leadSource: t.leadSource || null,
+      status: t.status || "lead",
+      gateCode: t.gateCode || null,
+    };
+
+    // Build service json
+    const mappedServiceJson: Record<string, unknown> = {
+      serviceFrequency: t.serviceFrequency || null,
+      serviceDay: t.serviceDay || null,
+    };
+
+    // Compute missing service fields
+    const missingFields: string[] = [];
+    if (!mappedServiceJson.serviceFrequency) missingFields.push("frequency");
+    if (!mappedServiceJson.serviceDay) missingFields.push("serviceDay");
+    // price and billingRule are not in CSV but tracked as missing
+    missingFields.push("price");
+    missingFields.push("billingRule");
+
+    // Validation errors from transform
+    const validationErrors = r.errors.map((e) => ({ field: e.field, message: e.message }));
+
+    const rowStatus: InsertImportRow["status"] =
+      r.isValid && missingFields.length === 0 ? "ready" : "needs_review";
+
+    importRowsToInsert.push({
+      batchId,
+      companyId,
+      rowIndex: r.rowIndex,
+      rawJson: raw as Record<string, string>,
+      mappedContactJson,
+      mappedServiceJson,
+      confidenceJson: {},
+      missingFields,
+      validationErrors,
+      status: rowStatus,
+      createdContactId: null,
+      needsServiceSetup: missingFields.length > 0,
+    });
+  }
+
+  const insertedRows = await storage.bulkCreateImportRows(importRowsToInsert);
+
+  // Generate AI-inferred service cadence suggestions per needs_review row,
+  // supplemented by rules-based pricing defaults from the company catalog.
+  try {
+    const pricingItems = await storage.getServicePricing(companyId);
+    const activePricing = pricingItems.filter((item) => item.isActive);
+    const defaultPricingItem =
+      activePricing.length > 0
+        ? activePricing.reduce((best, item) =>
+            parseFloat(String(item.basePrice ?? "9999")) <
+            parseFloat(String(best.basePrice ?? "9999"))
+              ? item
+              : best
+          )
+        : null;
+
+    const unitToBillingRule: Record<string, string> = {
+      per_visit: "per_visit",
+      monthly: "monthly_flat",
+      monthly_flat: "monthly_flat",
+      per_dog: "per_dog",
+    };
+
+    const reviewRows = insertedRows.filter(
+      (r) => r.status === "needs_review" && (r.missingFields || []).length > 0
+    );
+
+    for (const row of reviewRows) {
+      const aiSuggestion = await inferRowServiceLogic(row);
+
+      // Merge AI suggestion with pricing defaults for price/billingRule
+      const missing = row.missingFields || [];
+      const suggestion: {
+        suggestedFrequency?: string;
+        suggestedServiceDay?: string;
+        suggestedNextDate?: string;
+        suggestedPriceCents?: number;
+        suggestedBillingRule?: string;
+        confidenceScore: number;
+        reason: string;
+      } = {
+        confidenceScore: aiSuggestion.confidenceScore,
+        reason: aiSuggestion.reason,
+      };
+
+      if (missing.includes("frequency") && aiSuggestion.suggestedFrequency) {
+        suggestion.suggestedFrequency = aiSuggestion.suggestedFrequency;
+      }
+      if (missing.includes("serviceDay") && aiSuggestion.suggestedServiceDay) {
+        suggestion.suggestedServiceDay = aiSuggestion.suggestedServiceDay;
+      }
+      if (aiSuggestion.suggestedNextDate) {
+        suggestion.suggestedNextDate = aiSuggestion.suggestedNextDate;
+      }
+
+      // Fill price/billing from pricing catalog when AI cannot infer them
+      if (missing.includes("price") && defaultPricingItem) {
+        const cents = Math.round(parseFloat(String(defaultPricingItem.basePrice || "0")) * 100);
+        if (cents > 0) suggestion.suggestedPriceCents = cents;
+      }
+      if (missing.includes("billingRule") && defaultPricingItem) {
+        suggestion.suggestedBillingRule = unitToBillingRule[defaultPricingItem.unit] ?? "per_visit";
+      }
+
+      const hasAnySuggestion =
+        suggestion.suggestedFrequency ||
+        suggestion.suggestedServiceDay ||
+        suggestion.suggestedNextDate ||
+        suggestion.suggestedPriceCents ||
+        suggestion.suggestedBillingRule;
+      if (!hasAnySuggestion) continue;
+
+      await storage.createImportRuleSuggestion({
+        batchId,
+        rowId: row.id,
+        ...suggestion,
+        isAccepted: false,
+      });
+    }
+  } catch (suggestionErr: unknown) {
+    // Non-fatal: suggestion failure must not block staging
+    console.warn(
+      "[import-runner] Suggestion generation failed:",
+      suggestionErr instanceof Error ? suggestionErr.message : String(suggestionErr)
+    );
+  }
+
+  const readyCount = insertedRows.filter((r) => r.status === "ready").length;
+  const needsReviewCount = insertedRows.filter((r) => r.status === "needs_review").length;
+
+  await storage.updateImportBatch(batchId, {
+    status: "staged",
+    totalRows: insertedRows.length,
+    stagedRows: insertedRows.length,
+    readyRows: readyCount,
+    needsReviewRows: needsReviewCount,
+    completedAt: new Date(),
+  });
+
+  await storage.updateImportRun(jobId, {
+    status: "completed",
+    importedRows: 0,
+    skippedRows: transformed.filter((r) => skipSet.has(r.rowIndex)).length,
+    errors: null,
+    completedAt: new Date(),
+  });
+}
+
 export interface CsvRoutesPayload {
   companyId: string;
   jobId: string;
   headers: string[];
   rows: string[][];
   mappings: Array<{ csvColumn: string; internalField: string }>;
-  transformations: Array<{ field: string; type: string; params?: Record<string, any> }>;
+  transformations: Array<{ field: string; type: string; params?: Record<string, unknown> }>;
   skippedRows: number[];
   editedCells: Record<string, string>;
 }

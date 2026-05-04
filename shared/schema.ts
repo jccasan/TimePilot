@@ -2173,6 +2173,163 @@ export const insertImportRunSchema = createInsertSchema(importRuns).omit({
 export type ImportRun = typeof importRuns.$inferSelect;
 export type InsertImportRun = z.infer<typeof insertImportRunSchema>;
 
+// ================ Import Staging Tables ================
+
+export const importBatchStatusEnum = pgEnum("import_batch_status", [
+  "pending",
+  "processing",
+  "staged",
+  "committed",
+  "failed",
+]);
+
+export const importBatchSourceEnum = pgEnum("import_batch_source", [
+  "csv_contacts",
+  "competitor_contacts",
+]);
+
+export const importRowStatusEnum = pgEnum("import_row_status", [
+  "needs_review",
+  "ready",
+  "ignored",
+  "imported",
+]);
+
+export const importBatches = pgTable(
+  "import_batches",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    companyId: varchar("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    sourceType: importBatchSourceEnum("source_type").notNull().default("csv_contacts"),
+    fileName: varchar("file_name", { length: 500 }),
+    status: importBatchStatusEnum("status").notNull().default("pending"),
+    totalRows: integer("total_rows").notNull().default(0),
+    stagedRows: integer("staged_rows").notNull().default(0),
+    readyRows: integer("ready_rows").notNull().default(0),
+    needsReviewRows: integer("needs_review_rows").notNull().default(0),
+    ignoredRows: integer("ignored_rows").notNull().default(0),
+    importedRows: integer("imported_rows").notNull().default(0),
+    createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+    importRunId: varchar("import_run_id").references(() => importRuns.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [
+    index("idx_ib_company").on(table.companyId),
+    index("idx_ib_status").on(table.status),
+    index("idx_ib_created").on(table.createdAt),
+  ]
+);
+
+export const insertImportBatchSchema = createInsertSchema(importBatches).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+export type ImportBatch = typeof importBatches.$inferSelect;
+export type InsertImportBatch = z.infer<typeof insertImportBatchSchema>;
+
+export const importRows = pgTable(
+  "import_rows",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    batchId: varchar("batch_id")
+      .notNull()
+      .references(() => importBatches.id, { onDelete: "cascade" }),
+    companyId: varchar("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    rowIndex: integer("row_index").notNull(),
+    rawJson: jsonb("raw_json").$type<Record<string, string>>(),
+    mappedContactJson: jsonb("mapped_contact_json").$type<Record<string, unknown>>(),
+    mappedServiceJson: jsonb("mapped_service_json").$type<Record<string, unknown>>(),
+    confidenceJson: jsonb("confidence_json").$type<Record<string, number>>(),
+    missingFields: text("missing_fields").array(),
+    validationErrors: jsonb("validation_errors").$type<Array<{ field: string; message: string }>>(),
+    status: importRowStatusEnum("status").notNull().default("needs_review"),
+    createdContactId: varchar("created_contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    needsServiceSetup: boolean("needs_service_setup").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_irow_batch").on(table.batchId),
+    index("idx_irow_company").on(table.companyId),
+    index("idx_irow_status").on(table.status),
+  ]
+);
+
+export const insertImportRowSchema = createInsertSchema(importRows).omit({
+  id: true,
+  createdAt: true,
+});
+export type ImportRow = typeof importRows.$inferSelect;
+export type InsertImportRow = z.infer<typeof insertImportRowSchema>;
+
+export const importMappings = pgTable(
+  "import_mappings",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    batchId: varchar("batch_id")
+      .notNull()
+      .references(() => importBatches.id, { onDelete: "cascade" }),
+    sourceColumn: varchar("source_column", { length: 255 }).notNull(),
+    targetField: varchar("target_field", { length: 100 }).notNull(),
+    confidence: integer("confidence").notNull().default(0),
+    isUserOverride: boolean("is_user_override").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("idx_imap_batch").on(table.batchId)]
+);
+
+export const insertImportMappingSchema = createInsertSchema(importMappings).omit({
+  id: true,
+  createdAt: true,
+});
+export type ImportMapping = typeof importMappings.$inferSelect;
+export type InsertImportMapping = z.infer<typeof insertImportMappingSchema>;
+
+export const importRuleSuggestions = pgTable(
+  "import_rule_suggestions",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    batchId: varchar("batch_id")
+      .notNull()
+      .references(() => importBatches.id, { onDelete: "cascade" }),
+    rowId: varchar("row_id")
+      .notNull()
+      .references(() => importRows.id, { onDelete: "cascade" }),
+    suggestedFrequency: varchar("suggested_frequency", { length: 50 }),
+    suggestedServiceDay: varchar("suggested_service_day", { length: 50 }),
+    suggestedNextDate: varchar("suggested_next_date", { length: 20 }),
+    suggestedPriceCents: integer("suggested_price_cents"),
+    suggestedBillingRule: varchar("suggested_billing_rule", { length: 100 }),
+    confidenceScore: integer("confidence_score").notNull().default(0),
+    reason: text("reason"),
+    isAccepted: boolean("is_accepted").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("idx_irs_batch").on(table.batchId), index("idx_irs_row").on(table.rowId)]
+);
+
+export const insertImportRuleSuggestionSchema = createInsertSchema(importRuleSuggestions).omit({
+  id: true,
+  createdAt: true,
+});
+export type ImportRuleSuggestion = typeof importRuleSuggestions.$inferSelect;
+export type InsertImportRuleSuggestion = z.infer<typeof insertImportRuleSuggestionSchema>;
+
 export const paymentMethodEnum = pgEnum("payment_method", [
   "cash",
   "check",

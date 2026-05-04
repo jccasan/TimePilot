@@ -64,6 +64,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **Voice Agent Scheduling API**: Platform-agnostic REST API for AI voice agents to manage services and retrieve call logs.
 - **Cross-sell Opportunities Engine**: Rules-based engine that surfaces upgrade/add-on suggestions for contacts based on various criteria, displayed in a dashboard widget and contact detail pages.
 - **Client Notifications (Import Mode + Onboarding Complete)**: Settings block for suppressing outbound client emails during data import and a one-time batch-send welcome email upon onboarding completion.
+- **Import Staging & Missing Logic Resolver**: 4 staging tables (`import_batches`, `import_rows`, `import_mappings`, `import_rule_suggestions`) buffer CSV imports before committing to production. The `/import/:batchId/resolve` page lets users review import health scores, fix missing service fields (frequency, service day, price, billing rule) with bulk-edit and per-row inline editing, accept AI rule suggestions, and commit clean data to production contacts/service plans.
 
 ### Data Model
 

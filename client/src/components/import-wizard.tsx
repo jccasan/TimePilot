@@ -42,7 +42,9 @@ import {
   CheckCircle2,
   XCircle,
   SkipForward,
+  ExternalLink,
 } from "lucide-react";
+import { Link } from "wouter";
 
 interface FieldMapping {
   csvColumn: string;
@@ -244,6 +246,7 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -300,10 +303,11 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
       editedCells: Record<string, string>;
     }) => {
       const res = await apiRequest("POST", "/api/imports/apply", data);
-      return res.json() as Promise<{ jobId: string; totalRows: number }>;
+      return res.json() as Promise<{ jobId: string; batchId?: string; totalRows: number }>;
     },
     onSuccess: (result) => {
       setActiveJobId(result.jobId);
+      if (result.batchId) setActiveBatchId(result.batchId);
     },
   });
 
@@ -1062,10 +1066,21 @@ export function ImportWizard({ targetSchema, onComplete, onCancel }: ImportWizar
             </Button>
           )}
           {step === 4 && importResult && (
-            <Button onClick={() => onComplete(importResult)} data-testid="button-done">
-              <Check className="w-4 h-4 mr-1.5" />
-              Done
-            </Button>
+            <>
+              {activeBatchId && targetSchema === "contacts" && (
+                <Link href={`/import/${activeBatchId}/resolve`}>
+                  <Button variant="outline" data-testid="button-resolve-missing-logic">
+                    <Sparkles className="w-4 h-4 mr-1.5" />
+                    Review in Resolver
+                    <ExternalLink className="w-3.5 h-3.5 ml-1.5" />
+                  </Button>
+                </Link>
+              )}
+              <Button onClick={() => onComplete(importResult)} data-testid="button-done">
+                <Check className="w-4 h-4 mr-1.5" />
+                Done
+              </Button>
+            </>
           )}
         </div>
       </div>
