@@ -2776,9 +2776,9 @@ export default function RoutesPage() {
               variant="outline"
               size="sm"
               onClick={() => setShowWeeklyOptimizer(true)}
-              data-testid="button-weekly-optimizer"
+              data-testid="button-monthly-optimizer"
             >
-              <Sparkles className="h-4 w-4 mr-1" /> Optimize Week
+              <Sparkles className="h-4 w-4 mr-1" /> Optimize All Routes
             </Button>
             <Button
               variant="outline"
@@ -3055,9 +3055,9 @@ export default function RoutesPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => setShowWeeklyOptimizer(true)}
-                            data-testid="button-optimize-week-empty"
+                            data-testid="button-monthly-optimizer-empty"
                           >
-                            <Sparkles className="h-4 w-4 mr-1" /> Optimize the Week
+                            <Sparkles className="h-4 w-4 mr-1" /> Optimize All Routes
                           </Button>
                         </div>
                       </CardContent>

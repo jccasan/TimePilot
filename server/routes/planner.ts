@@ -184,7 +184,18 @@ export function registerPlannerRoutes(app: Express): void {
 
         const appliedRouteCount = { created: 0, reused: 0, stopsUpdated: 0 };
 
-        for (const week of plan.planningWindow.weeks) {
+        // Optional week filter: if weekNumbers is provided, only apply those weeks.
+        const body = req.body as { weekNumbers?: number[] };
+        const weekFilter =
+          Array.isArray(body.weekNumbers) && body.weekNumbers.length > 0
+            ? new Set(body.weekNumbers)
+            : null;
+
+        const weeksToApply = weekFilter
+          ? plan.planningWindow.weeks.filter((w) => weekFilter.has(w.weekNumber))
+          : plan.planningWindow.weeks;
+
+        for (const week of weeksToApply) {
           for (let routeIndex = 0; routeIndex < week.plannedRoutes.length; routeIndex++) {
             const plannedRoute = week.plannedRoutes[routeIndex];
 
