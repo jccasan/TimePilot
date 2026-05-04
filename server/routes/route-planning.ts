@@ -1390,9 +1390,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         if (!company) return res.status(404).json({ error: "Company not found" });
 
         // Demo unlimited-credits bypass (mirrors /api/routes/:id/optimize)
-        const demoUnlimitedCredits = !!(company as Record<string, unknown>).demoUnlimitedCredits;
-        const isDemoCompanyForCredits =
-          demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
+        const isDemoCompanyForCredits = (await getDemoCompanyId()) === companyId;
 
         const tier = (company.subscriptionTier ?? "tier_1") as keyof typeof TIER_CONFIG;
         const monthlyAllowance = TIER_CONFIG[tier]?.monthlyOptimizerCredits ?? 20;
@@ -1426,8 +1424,8 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           return res.status(400).json({ error: "No valid stops to apply" });
         }
 
-        // Monthly optimizer costs 1 credit per route actually applied.
-        const creditsToCharge = totalRoutes;
+        // Monthly optimizer costs 1 credit per day applied (not per route).
+        const creditsToCharge = daysToApply.length;
         const currentCredits = company.routeCredits ?? 0;
         if (!isDemoCompanyForCredits && currentCredits < creditsToCharge) {
           return res.status(402).json({

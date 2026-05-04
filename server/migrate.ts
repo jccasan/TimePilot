@@ -74,6 +74,22 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] users import_mode column verified");
 
+    // Ensure the demo account always has unlimited credits enabled.
+    // This is idempotent — it only updates when the flag is currently false.
+    await client.query(`
+      UPDATE companies
+        SET demo_unlimited_credits = TRUE
+      WHERE demo_unlimited_credits = FALSE
+        AND id IN (
+          SELECT cu.company_id
+          FROM users u
+          JOIN company_users cu ON cu.user_id = u.id
+          WHERE u.email = 'demo@scoopilot.com'
+          LIMIT 1
+        )
+    `);
+    console.log("[Migration] Demo account demo_unlimited_credits flag verified");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

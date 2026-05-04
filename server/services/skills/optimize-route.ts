@@ -20,7 +20,11 @@ function computeStopHash(stopIds: string[]): string {
 }
 
 /** Internal helper – optimizes a single route by ID. */
-async function optimizeSingleRoute(routeId: string, companyId: string): Promise<SkillResult> {
+async function optimizeSingleRoute(
+  routeId: string,
+  companyId: string,
+  skipCreditCharge = false
+): Promise<SkillResult> {
   const route = await storage.getRoute(routeId, companyId);
   if (!route) {
     return { success: false, message: `Route not found: ${routeId}`, error: "ROUTE_NOT_FOUND" };
@@ -56,10 +60,9 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
   const creditsRequired = routePlans.length <= 30 ? 1 : 2;
   const company = await storage.getCompany(companyId);
   const currentCredits = company?.routeCredits ?? 0;
-  const demoUnlimitedCredits = !!company?.demoUnlimitedCredits;
-  const isDemoCompanyForCredits = demoUnlimitedCredits && (await getDemoCompanyId()) === companyId;
+  const isDemoCompanyForCredits = (await getDemoCompanyId()) === companyId;
 
-  if (!isDemoCompanyForCredits && currentCredits < creditsRequired) {
+  if (!skipCreditCharge && !isDemoCompanyForCredits && currentCredits < creditsRequired) {
     return {
       success: false,
       message: `Not enough route credits (need ${creditsRequired}, have ${currentCredits}).`,
@@ -164,7 +167,7 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
     });
   }
 
-  if (!isDemoCompanyForCredits) {
+  if (!skipCreditCharge && !isDemoCompanyForCredits) {
     await storage.updateCompany(companyId, { routeCredits: currentCredits - creditsRequired });
   }
 
@@ -254,10 +257,33 @@ registerSkill({
       if (allRoutes.length === 0) {
         return { success: false, message: "No routes found to optimize.", error: "NO_ROUTES" };
       }
+
+      // Charge once for the whole batch (capped at 3 credits) rather than per route.
+      const batchCreditsRequired = Math.min(allRoutes.length, 3);
+      const batchCompany = await storage.getCompany(companyId);
+      const batchCurrentCredits = batchCompany?.routeCredits ?? 0;
+      const batchIsDemoCompany = (await getDemoCompanyId()) === companyId;
+
+      if (!batchIsDemoCompany && batchCurrentCredits < batchCreditsRequired) {
+        return {
+          success: false,
+          message: `Not enough route credits to optimize all routes (need ${batchCreditsRequired}, have ${batchCurrentCredits}).`,
+          error: "INSUFFICIENT_CREDITS",
+          data: { creditsRequired: batchCreditsRequired, creditsAvailable: batchCurrentCredits },
+        };
+      }
+
       const results: SkillResult[] = [];
       for (const r of allRoutes) {
-        results.push(await optimizeSingleRoute(r.id, companyId));
+        results.push(await optimizeSingleRoute(r.id, companyId, true));
       }
+
+      if (!batchIsDemoCompany) {
+        await storage.updateCompany(companyId, {
+          routeCredits: batchCurrentCredits - batchCreditsRequired,
+        });
+      }
+
       const succeeded = results.filter((r) => r.success);
       const failed = results.filter((r) => !r.success);
       const summary =
@@ -267,7 +293,15 @@ registerSkill({
       return {
         success: succeeded.length > 0,
         message: summary,
-        data: { total: results.length, succeeded: succeeded.length, failed: failed.length },
+        data: {
+          total: results.length,
+          succeeded: succeeded.length,
+          failed: failed.length,
+          creditsUsed: batchIsDemoCompany ? 0 : batchCreditsRequired,
+          creditsRemaining: batchIsDemoCompany
+            ? 999999
+            : batchCurrentCredits - batchCreditsRequired,
+        },
       };
     }
 
