@@ -111,12 +111,12 @@ export async function getAllApiUsageStats(): Promise<RawApiUsageStats> {
     `),
     db.execute(sql`
       SELECT
-        DATE(recorded_at)::text AS date,
-        COALESCE(SUM(quantity), 0)::int AS segments
-      FROM usage_events
-      WHERE event_type = 'sms_segment'
-        AND recorded_at >= CURRENT_DATE - INTERVAL '30 days'
-      GROUP BY DATE(recorded_at)
+        DATE(created_at)::text AS date,
+        COALESCE(SUM(segments), 0)::int AS segments
+      FROM sms_messages
+      WHERE direction = 'outbound'
+        AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY DATE(created_at)
       ORDER BY date
     `),
   ]);
