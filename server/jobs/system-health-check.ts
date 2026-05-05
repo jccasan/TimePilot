@@ -360,26 +360,22 @@ export async function runSystemHealthCheck(): Promise<void> {
 
   const checks: CheckResult[] = await Promise.all([
     checkDbConnectivity(),
-    Promise.resolve(
-      checkEnvVar(
-        "stripe_webhook_secret",
-        "STRIPE_WEBHOOK_SECRET",
-        "critical",
-        "Stripe webhook secret"
-      )
+    checkEnvVar(
+      "stripe_webhook_secret",
+      "STRIPE_WEBHOOK_SECRET",
+      "critical",
+      "Stripe webhook secret"
     ),
-    Promise.resolve(
-      checkEnvVar(
-        "stripe_connect_webhook_secret",
-        "STRIPE_CONNECT_WEBHOOK_SECRET",
-        "high",
-        "Stripe Connect webhook secret"
-      )
+    checkEnvVar(
+      "stripe_connect_webhook_secret",
+      "STRIPE_CONNECT_WEBHOOK_SECRET",
+      "high",
+      "Stripe Connect webhook secret"
     ),
     checkStripeRecentEvents(),
-    Promise.resolve(checkStripeConfig()),
-    Promise.resolve(checkEnvVar("telnyx_configured", "TELNYX_API_KEY", "high", "Telnyx API key")),
-    Promise.resolve(checkEnvVar("openai_configured", "OPENAI_API_KEY", "medium", "OpenAI API key")),
+    checkStripeConfig(),
+    checkEnvVar("telnyx_configured", "TELNYX_API_KEY", "high", "Telnyx API key"),
+    checkEnvVar("openai_configured", "OPENAI_API_KEY", "medium", "OpenAI API key"),
     checkNoStuckSubscriptions(),
     getJobTrackingResult("job_nightly_rollup", "medium", 26 * 60 * 60 * 1000, "Nightly rollup"),
     getJobTrackingResult("job_auto_invoice", "high", 26 * 60 * 60 * 1000, "Auto invoice"),
@@ -403,15 +399,22 @@ export async function runSystemHealthCheck(): Promise<void> {
     ? "✅ ScooPilot System Health: All OK"
     : `⚠️ ScooPilot System Health: ${issueCount} issue${issueCount !== 1 ? "s" : ""} found`;
 
-  await sendEmail({
+  const emailResult = await sendEmail({
     to: ADMIN_EMAIL,
     subject,
     text: buildEmailText(checks, issueCount),
     html: buildEmailHtml(checks, issueCount),
     bypassClientSuppression: true,
-  }).catch((err) =>
-    console.error("[SystemHealth] Failed to send digest email:", err?.message ?? err)
-  );
+  }).catch((err) => {
+    console.error("[SystemHealth] Failed to send digest email (exception):", err?.message ?? err);
+    return { success: false as const, error: String(err?.message ?? err) };
+  });
+  if (!emailResult.success) {
+    console.error(
+      "[SystemHealth] Digest email not delivered:",
+      emailResult.error ?? "(no error detail)"
+    );
+  }
 
   console.log(
     `[SystemHealth] Completed — ${checks.length} checks, ${issueCount} issues. Digest sent to ${ADMIN_EMAIL}.`

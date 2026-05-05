@@ -631,6 +631,17 @@ export default function AdminDashboard() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-mono font-medium">{check.checkName}</span>
                         <Badge
+                          className={`text-[10px] py-0 px-1.5 ${
+                            check.status === "pass"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                              : check.status === "warn"
+                                ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                                : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                          }`}
+                        >
+                          {check.status.toUpperCase()}
+                        </Badge>
+                        <Badge
                           className={`text-[10px] py-0 px-1.5 ${severityColors[check.severity] ?? ""}`}
                         >
                           {check.severity}
