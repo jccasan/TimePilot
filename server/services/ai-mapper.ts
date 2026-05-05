@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import OpenAI from "openai";
+import { anthropic, CLAUDE_FAST_MODEL } from "./claude";
 import crypto from "crypto";
 
 const KNOWN_ALIASES: Record<string, string[]> = {
@@ -222,11 +222,6 @@ export async function aiMapColumns(
   }
 
   try {
-    const openai = new OpenAI({
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    });
-
     const prompt = `You are a data mapping assistant. Given CSV column headers and sample data, map each CSV column to the most appropriate internal field.
 
 Target schema: ${targetSchema}
@@ -245,7 +240,7 @@ For each CSV column, provide:
 3. A short reason explaining the mapping
 4. Any suggested transformations (split_name, normalize_phone, parse_date, parse_currency, trim, infer_frequency, map_status)
 
-Respond with ONLY valid JSON in this exact format:
+Respond with ONLY valid JSON in this exact format, no markdown or explanation:
 {
   "mappings": [
     {"csvColumn": "header name", "internalField": "fieldName", "confidence": 0.95, "reason": "explanation"}
@@ -256,13 +251,13 @@ Respond with ONLY valid JSON in this exact format:
   "warnings": ["any warnings"]
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-5-mini",
+    const response = await anthropic.messages.create({
+      model: CLAUDE_FAST_MODEL,
+      max_tokens: 2048,
       messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
     });
 
-    const content = response.choices[0]?.message?.content;
+    const content = response.content[0]?.type === "text" ? response.content[0].text : null;
     if (!content) throw new Error("Empty AI response");
 
     const parsed = JSON.parse(content) as MappingResult;

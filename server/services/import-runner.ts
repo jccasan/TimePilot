@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { anthropic, CLAUDE_FAST_MODEL } from "./claude";
 import { storage } from "../storage";
 import { db } from "../db";
 import { contacts, properties, routes } from "@shared/schema";
@@ -680,11 +680,6 @@ async function inferRowServiceLogic(row: ImportRow): Promise<RowServiceInference
   if (!textHints.trim()) return defaultResult;
 
   try {
-    const openai = new OpenAI({
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-    });
-
     const prompt = `You are a pet waste removal scheduling assistant. Analyze the following customer record text and infer the service cadence.
 
 Customer data hints: "${textHints}"
@@ -704,13 +699,13 @@ Rules:
 - confidenceScore >= 80 means the data clearly states frequency/day; 50-79 means inferred; < 50 means guessing.
 - If no frequency information exists at all, set all fields to null and confidenceScore to 0.`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const response = await anthropic.messages.create({
+      model: CLAUDE_FAST_MODEL,
+      max_tokens: 512,
       messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
     });
 
-    const content = response.choices[0]?.message?.content;
+    const content = response.content[0]?.type === "text" ? response.content[0].text : null;
     if (!content) return defaultResult;
 
     const parsed = JSON.parse(content) as {

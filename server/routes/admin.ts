@@ -2152,8 +2152,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const { fileName, mimeType } = req.body;
       if (!fileName) return res.status(400).json({ error: "fileName is required" });
 
-      const OpenAI = (await import("openai")).default;
-      const ai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const { anthropic, CLAUDE_FAST_MODEL } = await import("../services/claude");
 
       const prompt = `You are helping classify a document being imported into a field service management system.
 Given the file name and MIME type, determine the most appropriate document category.
@@ -2165,14 +2164,13 @@ Categories: ${DOCUMENT_CATEGORIES.join(", ")}
 
 Respond with exactly one category from the list above and nothing else.`;
 
-      const completion = await ai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
+      const completion = await anthropic.messages.create({
+        model: CLAUDE_FAST_MODEL,
         max_tokens: 20,
-        temperature: 0,
+        messages: [{ role: "user", content: prompt }],
       });
 
-      const raw = completion.choices[0]?.message?.content?.trim() || "";
+      const raw = completion.content[0]?.type === "text" ? (completion.content[0].text?.trim() || "") : "";
       const category =
         DOCUMENT_CATEGORIES.find((c) => raw.toLowerCase().includes(c.toLowerCase())) || "Other";
       res.json({ category });
@@ -2579,9 +2577,7 @@ Respond with exactly one category from the list above and nothing else.`;
   app.get("/api/rover/status", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const aiKeyAvailable = !!(
-        process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
-      );
+      const aiKeyAvailable = !!process.env.CLAUDE_API_KEY;
       const [company] = await db
         .select({ roverAiEnabled: companies.roverAiEnabled })
         .from(companies)
@@ -2619,9 +2615,7 @@ Respond with exactly one category from the list above and nothing else.`;
           return res.status(400).json({ error: "Last message must be a non-empty user message" });
         }
 
-        const aiKeyAvailable = !!(
-          process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
-        );
+        const aiKeyAvailable = !!process.env.CLAUDE_API_KEY;
         const [company] = await db
           .select({ roverAiEnabled: companies.roverAiEnabled })
           .from(companies)

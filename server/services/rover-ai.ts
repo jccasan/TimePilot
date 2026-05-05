@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { db } from "../db";
 import { trackApiCall } from "./api-usage";
 import {
@@ -21,11 +21,7 @@ import { storage } from "../storage";
 import { sendEmail } from "./email";
 import * as crypto from "crypto";
 import { geocodeAddress } from "./geocode";
-
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
-});
+import { anthropic, CLAUDE_SMART_MODEL } from "./claude";
 
 const KNOWLEDGE_BASE = `
 ScooPilot is a vertical SaaS for pet waste removal businesses. Here's what you need to know:
@@ -236,197 +232,167 @@ GUIDELINES:
 - ADDRESS CONFIRMATION GATE: When you are helping a user add a new property or collect an address for a client, you must display the full address back to the user and wait for their explicit confirmation (e.g., "yes", "confirm", "correct", "that's right") before any property creation or geocoding is triggered. Never create a property or request geocoding while the address is still being collected, edited, or clarified. Only proceed after the user has clearly confirmed the address is correct.`;
 }
 
-export const ROVER_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+export const ROVER_TOOLS: Anthropic.Tool[] = [
   {
-    type: "function",
-    function: {
-      name: "get_business_stats",
-      description:
-        "Get high-level business statistics: total contacts by status, active service plans, route count, team size, and monthly revenue.",
-      parameters: { type: "object", properties: {}, required: [] },
-    },
+    name: "get_business_stats",
+    description:
+      "Get high-level business statistics: total contacts by status, active service plans, route count, team size, and monthly revenue.",
+    input_schema: { type: "object", properties: {}, required: [] },
   },
   {
-    type: "function",
-    function: {
-      name: "get_overdue_invoices",
-      description:
-        "Get a summary of overdue (unpaid, past-due) invoices including count and total amount.",
-      parameters: { type: "object", properties: {}, required: [] },
-    },
+    name: "get_overdue_invoices",
+    description:
+      "Get a summary of overdue (unpaid, past-due) invoices including count and total amount.",
+    input_schema: { type: "object", properties: {}, required: [] },
   },
   {
-    type: "function",
-    function: {
-      name: "get_upcoming_visits",
-      description: "Get upcoming scheduled visits for the next 7 days, including count by day.",
-      parameters: {
-        type: "object",
-        properties: {
-          days: { type: "number", description: "Number of days ahead to look (default 7, max 14)" },
-        },
-        required: [],
+    name: "get_upcoming_visits",
+    description: "Get upcoming scheduled visits for the next 7 days, including count by day.",
+    input_schema: {
+      type: "object",
+      properties: {
+        days: { type: "number", description: "Number of days ahead to look (default 7, max 14)" },
       },
+      required: [],
     },
   },
   {
-    type: "function",
-    function: {
-      name: "get_recent_activity",
-      description:
-        "Get a summary of recent activity: visits completed today, new contacts this week, invoices sent this week.",
-      parameters: { type: "object", properties: {}, required: [] },
-    },
+    name: "get_recent_activity",
+    description:
+      "Get a summary of recent activity: visits completed today, new contacts this week, invoices sent this week.",
+    input_schema: { type: "object", properties: {}, required: [] },
   },
   {
-    type: "function",
-    function: {
-      name: "optimize_route",
-      /**
-       * Rover uses `routeRef` (name / number / UUID) instead of the raw `routeId` UUID
-       * that `/api/skills/run` accepts. This is intentional: Rover resolves the human-
-       * readable reference via `resolveRouteRef()` before calling `runSkill`, so users can
-       * say "optimize route 3" without knowing the underlying UUID.
-       */
-      description:
-        "Optimize the stop order for a specific route to minimize drive distance and time. Use this when the user asks to optimize a route or says something like 'optimize route 3' or 'optimize the Monday route'. Supply routeRef as the route name, number, or UUID.",
-      parameters: {
-        type: "object",
-        properties: {
-          routeRef: {
-            type: "string",
-            description:
-              "The route to optimize — can be a route name (e.g. 'Route 3', 'Monday'), a number (e.g. '3'), or a UUID. The system will resolve this to the correct route.",
-          },
+    /**
+     * Rover uses `routeRef` (name / number / UUID) instead of the raw `routeId` UUID
+     * that `/api/skills/run` accepts. This is intentional: Rover resolves the human-
+     * readable reference via `resolveRouteRef()` before calling `runSkill`, so users can
+     * say "optimize route 3" without knowing the underlying UUID.
+     */
+    name: "optimize_route",
+    description:
+      "Optimize the stop order for a specific route to minimize drive distance and time. Use this when the user asks to optimize a route or says something like 'optimize route 3' or 'optimize the Monday route'. Supply routeRef as the route name, number, or UUID.",
+    input_schema: {
+      type: "object",
+      properties: {
+        routeRef: {
+          type: "string",
+          description:
+            "The route to optimize — can be a route name (e.g. 'Route 3', 'Monday'), a number (e.g. '3'), or a UUID. The system will resolve this to the correct route.",
         },
-        required: ["routeRef"],
       },
+      required: ["routeRef"],
     },
   },
   {
-    type: "function",
-    function: {
-      name: "generate_invoice",
-      /**
-       * Rover uses `contactRef` (name or UUID) instead of the raw `contactId` UUID
-       * that `/api/skills/run` accepts. This is intentional: Rover resolves the human-
-       * readable reference via `resolveContactRef()` before calling `runSkill`, so users
-       * can say "generate invoice for Jane Doe" without knowing the underlying UUID.
-       */
-      description:
-        "Generate draft invoice(s) for completed, uninvoiced visits. Use when the user says something like 'generate invoices for all clients', 'invoice all pending work', or 'create an invoice for [client name/id]'. If a specific client is mentioned, supply their name or UUID as contactRef; otherwise use allPending: true to invoice everyone with outstanding work.",
-      parameters: {
-        type: "object",
-        properties: {
-          contactRef: {
-            type: "string",
-            description:
-              "The client to invoice — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact. Omit to invoice all pending clients.",
-          },
-          allPending: {
-            type: "boolean",
-            description:
-              "Set to true to generate invoices for all contacts with uninvoiced completed visits.",
-          },
+    /**
+     * Rover uses `contactRef` (name or UUID) instead of the raw `contactId` UUID
+     * that `/api/skills/run` accepts. This is intentional: Rover resolves the human-
+     * readable reference via `resolveContactRef()` before calling `runSkill`, so users
+     * can say "generate invoice for Jane Doe" without knowing the underlying UUID.
+     */
+    name: "generate_invoice",
+    description:
+      "Generate draft invoice(s) for completed, uninvoiced visits. Use when the user says something like 'generate invoices for all clients', 'invoice all pending work', or 'create an invoice for [client name/id]'. If a specific client is mentioned, supply their name or UUID as contactRef; otherwise use allPending: true to invoice everyone with outstanding work.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contactRef: {
+          type: "string",
+          description:
+            "The client to invoice — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact. Omit to invoice all pending clients.",
         },
-        required: [],
+        allPending: {
+          type: "boolean",
+          description:
+            "Set to true to generate invoices for all contacts with uninvoiced completed visits.",
+        },
       },
+      required: [],
     },
   },
   {
-    type: "function",
-    function: {
-      name: "get_client_visits",
-      description:
-        "Look up recent visit history for a specific client. Use when the user asks about a client's past visits, service history, or upcoming scheduled visits. Supply the client's name or UUID as contactRef.",
-      parameters: {
-        type: "object",
-        properties: {
-          contactRef: {
-            type: "string",
-            description:
-              "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
-          },
-          limit: {
-            type: "number",
-            description: "Number of recent visits to return (default 10, max 20).",
-          },
+    name: "get_client_visits",
+    description:
+      "Look up recent visit history for a specific client. Use when the user asks about a client's past visits, service history, or upcoming scheduled visits. Supply the client's name or UUID as contactRef.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contactRef: {
+          type: "string",
+          description:
+            "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
         },
-        required: ["contactRef"],
+        limit: {
+          type: "number",
+          description: "Number of recent visits to return (default 10, max 20).",
+        },
       },
+      required: ["contactRef"],
     },
   },
   {
-    type: "function",
-    function: {
-      name: "get_client_service_plan",
-      description:
-        "Check the active service plan(s) for a specific client — frequency, day of week, property, and whether the plan is active. Use when the user asks what schedule or plan a client is on. Supply the client's name or UUID as contactRef.",
-      parameters: {
-        type: "object",
-        properties: {
-          contactRef: {
-            type: "string",
-            description:
-              "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
-          },
+    name: "get_client_service_plan",
+    description:
+      "Check the active service plan(s) for a specific client — frequency, day of week, property, and whether the plan is active. Use when the user asks what schedule or plan a client is on. Supply the client's name or UUID as contactRef.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contactRef: {
+          type: "string",
+          description:
+            "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
         },
-        required: ["contactRef"],
       },
+      required: ["contactRef"],
     },
   },
   {
-    type: "function",
-    function: {
-      name: "send_portal_invite",
-      description:
-        "Send a client portal invite to a specific client, granting them access to the self-service portal. Use when the user asks to send a portal invite or enable portal access for a client. The client must have an email address on file. Supply the client's name or UUID as contactRef.",
-      parameters: {
-        type: "object",
-        properties: {
-          contactRef: {
-            type: "string",
-            description:
-              "The client to invite — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
-          },
+    name: "send_portal_invite",
+    description:
+      "Send a client portal invite to a specific client, granting them access to the self-service portal. Use when the user asks to send a portal invite or enable portal access for a client. The client must have an email address on file. Supply the client's name or UUID as contactRef.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contactRef: {
+          type: "string",
+          description:
+            "The client to invite — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
         },
-        required: ["contactRef"],
       },
+      required: ["contactRef"],
     },
   },
   {
-    type: "function",
-    function: {
-      name: "create_contact_with_property",
-      description:
-        "Create a new client contact and their service property address. IMPORTANT: You must collect the full address first, display it back to the user, and only call this tool AFTER the user has explicitly confirmed the address is correct (e.g., 'yes', 'confirm', 'that's right'). Never call this tool while the address is still being collected or clarified. The 'confirmed' field must be true — set it to false if the user has not yet confirmed.",
-      parameters: {
-        type: "object",
-        properties: {
-          firstName: { type: "string", description: "Client's first name." },
-          lastName: { type: "string", description: "Client's last name." },
-          email: { type: "string", description: "Client's email address (optional)." },
-          phone: { type: "string", description: "Client's phone number (optional)." },
-          streetAddress: { type: "string", description: "Service property street address." },
-          city: { type: "string", description: "City." },
-          state: { type: "string", description: "State or province abbreviation." },
-          zipCode: { type: "string", description: "ZIP or postal code." },
-          numberOfDogs: {
-            type: "number",
-            description: "Number of dogs at the property (optional).",
-          },
-          yardSize: {
-            type: "string",
-            description: "Yard size descriptor, e.g. 'small', 'medium', 'large' (optional).",
-          },
-          confirmed: {
-            type: "boolean",
-            description:
-              "REQUIRED: Set to true only after the user has explicitly confirmed the address. Set to false if confirmation has not been received — the system will reject the call.",
-          },
+    name: "create_contact_with_property",
+    description:
+      "Create a new client contact and their service property address. IMPORTANT: You must collect the full address first, display it back to the user, and only call this tool AFTER the user has explicitly confirmed the address is correct (e.g., 'yes', 'confirm', 'that's right'). Never call this tool while the address is still being collected or clarified. The 'confirmed' field must be true — set it to false if the user has not yet confirmed.",
+    input_schema: {
+      type: "object",
+      properties: {
+        firstName: { type: "string", description: "Client's first name." },
+        lastName: { type: "string", description: "Client's last name." },
+        email: { type: "string", description: "Client's email address (optional)." },
+        phone: { type: "string", description: "Client's phone number (optional)." },
+        streetAddress: { type: "string", description: "Service property street address." },
+        city: { type: "string", description: "City." },
+        state: { type: "string", description: "State or province abbreviation." },
+        zipCode: { type: "string", description: "ZIP or postal code." },
+        numberOfDogs: {
+          type: "number",
+          description: "Number of dogs at the property (optional).",
         },
-        required: ["firstName", "streetAddress", "confirmed"],
+        yardSize: {
+          type: "string",
+          description: "Yard size descriptor, e.g. 'small', 'medium', 'large' (optional).",
+        },
+        confirmed: {
+          type: "boolean",
+          description:
+            "REQUIRED: Set to true only after the user has explicitly confirmed the address. Set to false if confirmation has not been received — the system will reject the call.",
+        },
       },
+      required: ["firstName", "streetAddress", "confirmed"],
     },
   },
 ];
@@ -435,7 +401,7 @@ const USER_CONFIRMATION_RE =
   /\b(yes|yep|yup|confirm(ed)?|correct|right|that'?s?\s+(right|correct)|go\s+ahead|proceed|please\s+do|sure|absolutely|ok(ay)?|sounds\s+good|do\s+it)\b/i;
 
 function hasUserConfirmedInHistory(
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+  messages: { role: string; content: unknown }[]
 ): boolean {
   const userMessages = messages.filter((m) => m.role === "user");
   if (userMessages.length === 0) return false;
@@ -461,7 +427,7 @@ export async function executeToolCall(
   companyId: string,
   userId?: string,
   role?: string,
-  messages?: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+  messages?: { role: string; content: unknown }[]
 ): Promise<string> {
   try {
     switch (toolName) {
@@ -1185,7 +1151,7 @@ async function getRecentActivity(companyId: string): Promise<string> {
 }
 
 export async function streamRoverChat(
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  messages: Anthropic.MessageParam[],
   companyId: string,
   userId: string,
   onChunk: (text: string) => void,
@@ -1199,76 +1165,83 @@ export async function streamRoverChat(
   const isPrivileged = ["owner", "admin"].includes(userCtx.userRole);
   const availableTools = isPrivileged ? ROVER_TOOLS : [];
 
-  const fullMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: systemPrompt },
-    ...messages,
-  ];
-
-  const OPENAI_TIMEOUT_MS = 30000;
+  const CLAUDE_TIMEOUT_MS = 30000;
 
   try {
-    const response = await Promise.race([
-      openai.chat.completions.create({
-        model: "gpt-5-mini",
-        messages: fullMessages,
-        tools: availableTools.length > 0 ? availableTools : undefined,
-        stream: true,
-        max_completion_tokens: 8192,
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("OPENAI_TIMEOUT")), OPENAI_TIMEOUT_MS)
-      ),
-    ]);
-    trackApiCall("openai", "rover_chat");
-
     let fullResponse = "";
-    let toolCalls: { id: string; name: string; arguments: string }[] = [];
+    let toolUseBlocks: { id: string; name: string; inputJson: string }[] = [];
+    let currentToolBlock: { id: string; name: string; inputJson: string } | null = null;
 
-    for await (const chunk of response) {
-      if (signal?.aborted) return;
-      const delta = chunk.choices[0]?.delta;
-      if (!delta) continue;
+    const stream = await anthropic.messages.create({
+      model: CLAUDE_SMART_MODEL,
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages,
+      tools: availableTools.length > 0 ? availableTools : undefined,
+      stream: true,
+    });
 
-      if (delta.content) {
-        fullResponse += delta.content;
-        onChunk(delta.content);
-      }
+    const streamPromise = (async () => {
+      for await (const event of stream) {
+        if (signal?.aborted) return;
 
-      if (delta.tool_calls) {
-        for (const tc of delta.tool_calls) {
-          if (tc.index !== undefined) {
-            while (toolCalls.length <= tc.index) {
-              toolCalls.push({ id: "", name: "", arguments: "" });
-            }
-            if (tc.id) toolCalls[tc.index].id = tc.id;
-            if (tc.function?.name) toolCalls[tc.index].name = tc.function.name;
-            if (tc.function?.arguments) toolCalls[tc.index].arguments += tc.function.arguments;
+        if (event.type === "content_block_start") {
+          if (event.content_block.type === "tool_use") {
+            currentToolBlock = {
+              id: event.content_block.id,
+              name: event.content_block.name,
+              inputJson: "",
+            };
+          }
+        } else if (event.type === "content_block_delta") {
+          if (event.delta.type === "text_delta") {
+            fullResponse += event.delta.text;
+            onChunk(event.delta.text);
+          } else if (event.delta.type === "input_json_delta" && currentToolBlock) {
+            currentToolBlock.inputJson += event.delta.partial_json;
+          }
+        } else if (event.type === "content_block_stop") {
+          if (currentToolBlock) {
+            toolUseBlocks.push(currentToolBlock);
+            currentToolBlock = null;
           }
         }
       }
-    }
+    })();
+
+    await Promise.race([
+      streamPromise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("CLAUDE_TIMEOUT")), CLAUDE_TIMEOUT_MS)
+      ),
+    ]);
+
+    trackApiCall("claude", "rover_chat");
 
     if (signal?.aborted) return;
 
-    if (toolCalls.length > 0 && toolCalls[0].name) {
-      const toolResults: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+    if (toolUseBlocks.length > 0) {
+      const assistantContent: Array<Anthropic.TextBlockParam | Anthropic.ToolUseBlockParam> = [];
+      if (fullResponse) {
+        assistantContent.push({ type: "text", text: fullResponse });
+      }
+      for (const tb of toolUseBlocks) {
+        let input: Record<string, any> = {};
+        try {
+          input = JSON.parse(tb.inputJson || "{}");
+        } catch {
+          input = {};
+        }
+        assistantContent.push({ type: "tool_use", id: tb.id, name: tb.name, input });
+      }
 
-      toolResults.push({
-        role: "assistant",
-        content: fullResponse || null,
-        tool_calls: toolCalls.map((tc) => ({
-          id: tc.id,
-          type: "function" as const,
-          function: { name: tc.name, arguments: tc.arguments },
-        })),
-      });
-
-      for (const tc of toolCalls) {
+      const toolResultContent: Anthropic.ToolResultBlockParam[] = [];
+      for (const tb of toolUseBlocks) {
         if (signal?.aborted) return;
         if (!isPrivileged) {
-          toolResults.push({
-            role: "tool",
-            tool_call_id: tc.id,
+          toolResultContent.push({
+            type: "tool_result",
+            tool_use_id: tb.id,
             content: JSON.stringify({
               error: "Access denied. Data tools are only available to owners and admins.",
             }),
@@ -1277,44 +1250,63 @@ export async function streamRoverChat(
         }
         let args: Record<string, any> = {};
         try {
-          args = JSON.parse(tc.arguments || "{}");
+          args = JSON.parse(tb.inputJson || "{}");
         } catch {
           args = {};
         }
         const result = await executeToolCall(
-          tc.name,
+          tb.name,
           args,
           companyId,
           userId,
           userCtx.userRole,
-          fullMessages
+          messages
         );
-        toolResults.push({
-          role: "tool",
-          tool_call_id: tc.id,
+        toolResultContent.push({
+          type: "tool_result",
+          tool_use_id: tb.id,
           content: result,
         });
       }
 
       if (signal?.aborted) return;
 
-      const followUp = await openai.chat.completions.create({
-        model: "gpt-5-mini",
-        messages: [...fullMessages, ...toolResults],
+      const followUpMessages: Anthropic.MessageParam[] = [
+        ...messages,
+        { role: "assistant", content: assistantContent },
+        { role: "user", content: toolResultContent },
+      ];
+
+      const followUpStream = await anthropic.messages.create({
+        model: CLAUDE_SMART_MODEL,
+        max_tokens: 8192,
+        system: systemPrompt,
+        messages: followUpMessages,
         stream: true,
-        max_completion_tokens: 8192,
       });
-      trackApiCall("openai", "rover_chat");
 
       fullResponse = "";
-      for await (const chunk of followUp) {
-        if (signal?.aborted) return;
-        const content = chunk.choices[0]?.delta?.content;
-        if (content) {
-          fullResponse += content;
-          onChunk(content);
+      const followUpPromise = (async () => {
+        for await (const event of followUpStream) {
+          if (signal?.aborted) return;
+          if (
+            event.type === "content_block_delta" &&
+            event.delta.type === "text_delta"
+          ) {
+            fullResponse += event.delta.text;
+            onChunk(event.delta.text);
+          }
         }
-      }
+      })();
+
+      await Promise.race([
+        followUpPromise,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("CLAUDE_TIMEOUT")), CLAUDE_TIMEOUT_MS)
+        ),
+      ]);
+
+      trackApiCall("claude", "rover_chat");
     }
 
     if (!signal?.aborted) {

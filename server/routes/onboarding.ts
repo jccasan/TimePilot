@@ -419,18 +419,11 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
         }
 
         try {
-          const OpenAI = (await import("openai")).default;
-          const ai = new OpenAI({
-            apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-            baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
-          });
-
-          const completion = await ai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-              {
-                role: "system",
-                content: `You are a business analyst specializing in pet waste removal companies. Analyze the following website text and extract business intelligence. Return a JSON object with these fields:
+          const { anthropic, CLAUDE_FAST_MODEL } = await import("../services/claude");
+          const completion = await anthropic.messages.create({
+            model: CLAUDE_FAST_MODEL,
+            max_tokens: 1000,
+            system: `You are a business analyst specializing in pet waste removal companies. Analyze the following website text and extract business intelligence. Return a JSON object with these fields:
 - businessDescription: string (1-2 sentence summary of what the business does)
 - serviceArea: string (geographic area they serve, if mentioned)
 - servicesOffered: string[] (list of services)
@@ -438,14 +431,10 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
 - competitiveInsights: string (brief competitive positioning notes)
 - suggestedPricingMode: "aggressive" | "standard" | "premium" (based on their positioning)
 Return ONLY valid JSON, no markdown.`,
-              },
-              { role: "user", content: pageText },
-            ],
-            temperature: 0.3,
-            max_tokens: 1000,
+            messages: [{ role: "user", content: pageText }],
           });
 
-          const raw = completion.choices[0]?.message?.content || "{}";
+          const raw = completion.content[0]?.type === "text" ? completion.content[0].text : "{}";
           let insights;
           try {
             insights = JSON.parse(

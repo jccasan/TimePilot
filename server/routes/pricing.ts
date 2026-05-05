@@ -1420,24 +1420,15 @@ Rules:
 - NEVER invent numbers not present in the fact sheet
 - whatIsWorking: 3-7 items; whatIsNotWorking: 3-7 items; ownerDecisions: exactly 5 items; nextThreeDecisions: exactly 3 items`;
 
-        const OpenAI = (await import("openai")).default;
-        const ai = new OpenAI({
-          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
-        });
-
-        const completion = await ai.chat.completions.create({
-          model: "gpt-4o-mini",
-          response_format: { type: "json_object" },
-          temperature: 0,
+        const { anthropic, CLAUDE_FAST_MODEL } = await import("../services/claude");
+        const completion = await anthropic.messages.create({
+          model: CLAUDE_FAST_MODEL,
           max_tokens: 6000,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: JSON.stringify(factSheet, null, 2) },
-          ],
+          system: systemPrompt,
+          messages: [{ role: "user", content: JSON.stringify(factSheet, null, 2) }],
         });
 
-        const raw = completion.choices[0]?.message?.content ?? "{}";
+        const raw = completion.content[0]?.type === "text" ? completion.content[0].text : "{}";
         let parsed: unknown;
         try {
           parsed = JSON.parse(raw);

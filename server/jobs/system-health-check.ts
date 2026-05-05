@@ -375,7 +375,7 @@ export async function runSystemHealthCheck(): Promise<void> {
     checkStripeRecentEvents(),
     checkStripeConfig(),
     checkEnvVar("telnyx_configured", "TELNYX_API_KEY", "high", "Telnyx API key"),
-    checkEnvVar("openai_configured", "OPENAI_API_KEY", "medium", "OpenAI API key"),
+    checkEnvVar("claude_configured", "CLAUDE_API_KEY", "medium", "Claude API key"),
     checkNoStuckSubscriptions(),
     getJobTrackingResult("job_nightly_rollup", "medium", 26 * 60 * 60 * 1000, "Nightly rollup"),
     getJobTrackingResult("job_auto_invoice", "high", 26 * 60 * 60 * 1000, "Auto invoice"),

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 
-export type ApiProvider = "mapbox" | "mapbox_searchbox" | "openai";
+export type ApiProvider = "mapbox" | "mapbox_searchbox" | "openai" | "claude";
 export type ApiMetric = "geocode" | "autocomplete" | "directions" | "matrix" | "rover_chat";
 
 const DAILY_THRESHOLD = parseInt(process.env.GEOCODE_DAILY_THRESHOLD || "1000", 10);
@@ -200,7 +200,9 @@ export async function getAllApiCosts(): Promise<AllApiCosts> {
   let openaiToday = 0;
   let openaiMonth = 0;
 
-  for (const row of dailyRows.filter((r) => r.provider === "openai" && r.metric === "rover_chat")) {
+  for (const row of dailyRows.filter(
+    (r) => (r.provider === "openai" || r.provider === "claude") && r.metric === "rover_chat"
+  )) {
     const calls = Number(row.calls);
     openaiByDate[row.date] = (openaiByDate[row.date] || 0) + calls;
     if (row.date === todayStr) openaiToday += calls;
