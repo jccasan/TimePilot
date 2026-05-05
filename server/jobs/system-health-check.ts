@@ -354,8 +354,9 @@ function buildEmailText(results: CheckResult[], issueCount: number): string {
   return `ScooPilot System Health — ${new Date().toISOString()}\n\n${headline}\n\n${lines.join("\n")}\n\nView details: https://app.scoopilot.com/admin`;
 }
 
-export async function runSystemHealthCheck(): Promise<void> {
-  console.log("[SystemHealth] Starting daily system health check");
+export async function runSystemHealthCheck(options?: { sendEmail?: boolean }): Promise<void> {
+  const shouldSendEmail = options?.sendEmail !== false;
+  console.log("[SystemHealth] Starting system health check");
 
   await db
     .delete(systemHealthChecks)
@@ -398,29 +399,28 @@ export async function runSystemHealthCheck(): Promise<void> {
   }
 
   const issueCount = checks.filter((c) => c.status !== "pass").length;
-  const allOk = issueCount === 0;
-  const subject = allOk
-    ? "✅ ScooPilot System Health: All OK"
-    : `⚠️ ScooPilot System Health: ${issueCount} issue${issueCount !== 1 ? "s" : ""} found`;
 
-  const emailResult = await sendEmail({
-    to: ADMIN_EMAIL,
-    subject,
-    text: buildEmailText(checks, issueCount),
-    html: buildEmailHtml(checks, issueCount),
-    bypassClientSuppression: true,
-  }).catch((err) => {
-    console.error("[SystemHealth] Failed to send digest email (exception):", err?.message ?? err);
-    return { success: false as const, error: String(err?.message ?? err) };
-  });
-  if (!emailResult.success) {
-    console.error(
-      "[SystemHealth] Digest email not delivered:",
-      emailResult.error ?? "(no error detail)"
-    );
+  if (shouldSendEmail && issueCount > 0) {
+    const subject = `⚠️ ScooPilot System Health: ${issueCount} issue${issueCount !== 1 ? "s" : ""} found`;
+    const emailResult = await sendEmail({
+      to: ADMIN_EMAIL,
+      subject,
+      text: buildEmailText(checks, issueCount),
+      html: buildEmailHtml(checks, issueCount),
+      bypassClientSuppression: true,
+    }).catch((err) => {
+      console.error("[SystemHealth] Failed to send digest email (exception):", err?.message ?? err);
+      return { success: false as const, error: String(err?.message ?? err) };
+    });
+    if (!emailResult.success) {
+      console.error(
+        "[SystemHealth] Digest email not delivered:",
+        emailResult.error ?? "(no error detail)"
+      );
+    }
   }
 
   console.log(
-    `[SystemHealth] Completed — ${checks.length} checks, ${issueCount} issues. Digest sent to ${ADMIN_EMAIL}.`
+    `[SystemHealth] Completed — ${checks.length} checks, ${issueCount} issue(s)${shouldSendEmail && issueCount > 0 ? `. Digest sent to ${ADMIN_EMAIL}.` : "."}`
   );
 }

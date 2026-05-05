@@ -853,7 +853,12 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   setInterval(() => syncSeatUsageToStripe().catch(console.error), 24 * 60 * 60 * 1000);
 
   import("../jobs/system-health-check").then(({ runSystemHealthCheck }) => {
-    setTimeout(() => runSystemHealthCheck().catch(console.error), 30000);
-    setInterval(() => runSystemHealthCheck().catch(console.error), 24 * 60 * 60 * 1000);
+    // Startup run: update DB state but do not send email (avoids alert spam on every restart)
+    setTimeout(() => runSystemHealthCheck({ sendEmail: false }).catch(console.error), 30000);
+    // Scheduled daily run: send email only when there are issues
+    setInterval(
+      () => runSystemHealthCheck({ sendEmail: true }).catch(console.error),
+      24 * 60 * 60 * 1000
+    );
   });
 }
