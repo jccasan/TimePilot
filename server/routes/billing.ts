@@ -143,9 +143,7 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         apiVersion: "2026-01-28.clover" as const,
       });
 
-      const seatDescription = company.name
-        ? `Seat add-on \u2013 ${company.name}`
-        : "Seat add-on";
+      const seatDescription = company.name ? `Seat add-on \u2013 ${company.name}` : "Seat add-on";
 
       const sessionParams: import("stripe").Stripe.Checkout.SessionCreateParams = {
         mode: "payment",
