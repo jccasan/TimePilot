@@ -26,7 +26,7 @@ export default async function Page() {
 }
 
 // UserProfile.tsx (client component)
-"use client";
+("use client");
 export function UserProfile({ user }: { user: User }) {
   return <div>{user.name}</div>;
 }
@@ -66,7 +66,7 @@ export default function Page() {
 
 // Good: Define function inside client component
 // ClientButton.tsx
-"use client";
+("use client");
 export function ClientButton() {
   const handleClick = () => console.log("clicked");
   return <button onClick={handleClick}>Click</button>;
@@ -82,7 +82,7 @@ export default async function Page() {
 }
 
 // PostCard.tsx (client) - will crash on .getFullYear()
-"use client";
+("use client");
 export function PostCard({ createdAt }: { createdAt: Date }) {
   return <span>{createdAt.getFullYear()}</span>; // Runtime error!
 }
@@ -95,7 +95,7 @@ export default async function Page() {
 }
 
 // PostCard.tsx (client)
-"use client";
+("use client");
 export function PostCard({ createdAt }: { createdAt: string }) {
   const date = new Date(createdAt);
   return <span>{date.getFullYear()}</span>;
@@ -140,7 +140,7 @@ export default function Page() {
 }
 
 // ClientForm.tsx (client)
-"use client";
+("use client");
 export function ClientForm({ onSubmit }: { onSubmit: (data: FormData) => Promise<void> }) {
   return <form action={onSubmit}>...</form>;
 }

@@ -241,7 +241,7 @@ async function Page() {
 }
 
 // Client Component
-"use client";
+("use client");
 function ClientComponent({ initialData }) {
   const [data, setData] = useState(initialData);
   // ...
