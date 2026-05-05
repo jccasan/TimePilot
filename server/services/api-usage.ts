@@ -122,7 +122,12 @@ export async function getAllApiUsageStats(): Promise<RawApiUsageStats> {
   ]);
 
   return {
-    dailyRows: dailyResult.rows as { provider: string; metric: string; date: string; calls: number }[],
+    dailyRows: dailyResult.rows as {
+      provider: string;
+      metric: string;
+      date: string;
+      calls: number;
+    }[],
     telnyxRows: telnyxResult.rows as { date: string; segments: number }[],
   };
 }
@@ -189,9 +194,7 @@ export async function getAllApiCosts(): Promise<AllApiCosts> {
   let openaiToday = 0;
   let openaiMonth = 0;
 
-  for (const row of dailyRows.filter(
-    (r) => r.provider === "openai" && r.metric === "rover_chat"
-  )) {
+  for (const row of dailyRows.filter((r) => r.provider === "openai" && r.metric === "rover_chat")) {
     const calls = Number(row.calls);
     openaiByDate[row.date] = (openaiByDate[row.date] || 0) + calls;
     if (row.date === todayStr) openaiToday += calls;
