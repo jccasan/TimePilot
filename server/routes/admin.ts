@@ -146,10 +146,15 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
   app.get("/api/admin/system-health", isAdmin, async (_req: Request, res: Response) => {
     try {
       const { systemHealthChecks } = await import("@shared/schema");
-      const rows = await db
-        .select()
-        .from(systemHealthChecks)
-        .orderBy(systemHealthChecks.checkName);
+      const rows = await db.select().from(systemHealthChecks);
+      const sevOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+      const stOrder: Record<string, number> = { fail: 0, warn: 1, pass: 2 };
+      rows.sort(
+        (a, b) =>
+          (stOrder[a.status] ?? 9) - (stOrder[b.status] ?? 9) ||
+          (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9) ||
+          a.checkName.localeCompare(b.checkName)
+      );
       res.json(rows);
     } catch (err) {
       handleError(res, err);

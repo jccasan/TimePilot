@@ -11,6 +11,7 @@ interface CheckResult {
   status: CheckStatus;
   severity: CheckSeverity;
   message: string;
+  lastRunAt: Date;
 }
 
 const ADMIN_EMAIL = "jeremy@scoopilot.com";
@@ -38,6 +39,7 @@ export async function upsertHealthCheckResult(
 }
 
 async function checkDbConnectivity(): Promise<CheckResult> {
+  const lastRunAt = new Date();
   try {
     await db.execute(sql`SELECT 1`);
     return {
@@ -45,6 +47,7 @@ async function checkDbConnectivity(): Promise<CheckResult> {
       status: "pass",
       severity: "critical",
       message: "Database connection is healthy",
+      lastRunAt,
     };
   } catch (err) {
     return {
@@ -52,6 +55,7 @@ async function checkDbConnectivity(): Promise<CheckResult> {
       status: "fail",
       severity: "critical",
       message: `Database connection failed: ${err instanceof Error ? err.message : String(err)}`,
+      lastRunAt,
     };
   }
 }
@@ -62,13 +66,21 @@ function checkEnvVar(
   severity: CheckSeverity,
   label: string
 ): CheckResult {
+  const lastRunAt = new Date();
   if (process.env[envVar]) {
-    return { checkName, status: "pass", severity, message: `${label} is configured` };
+    return { checkName, status: "pass", severity, message: `${label} is configured`, lastRunAt };
   }
-  return { checkName, status: "fail", severity, message: `${label} (${envVar}) is not set` };
+  return {
+    checkName,
+    status: "fail",
+    severity,
+    message: `${label} (${envVar}) is not set`,
+    lastRunAt,
+  };
 }
 
 async function checkStripeRecentEvents(): Promise<CheckResult> {
+  const lastRunAt = new Date();
   try {
     const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
     const rows = await db
@@ -82,6 +94,7 @@ async function checkStripeRecentEvents(): Promise<CheckResult> {
         status: "pass",
         severity: "high",
         message: "Stripe webhook events received in the last 48 hours",
+        lastRunAt,
       };
     }
     return {
@@ -89,6 +102,7 @@ async function checkStripeRecentEvents(): Promise<CheckResult> {
       status: "warn",
       severity: "high",
       message: "No Stripe webhook events in the last 48 hours — verify webhook is registered",
+      lastRunAt,
     };
   } catch (err) {
     return {
@@ -96,11 +110,13 @@ async function checkStripeRecentEvents(): Promise<CheckResult> {
       status: "fail",
       severity: "high",
       message: `Could not query stripe_events: ${err instanceof Error ? err.message : String(err)}`,
+      lastRunAt,
     };
   }
 }
 
 function checkStripeConfig(): CheckResult {
+  const lastRunAt = new Date();
   const priceVars = [
     "STRIPE_PRICE_TIER_1",
     "STRIPE_PRICE_TIER_1_3",
@@ -115,6 +131,7 @@ function checkStripeConfig(): CheckResult {
       status: "fail",
       severity: "critical",
       message: "STRIPE_SECRET_KEY is not set",
+      lastRunAt,
     };
   }
   if (missing.length === priceVars.length) {
@@ -123,6 +140,7 @@ function checkStripeConfig(): CheckResult {
       status: "fail",
       severity: "critical",
       message: "No Stripe price env vars are configured (STRIPE_PRICE_TIER_*)",
+      lastRunAt,
     };
   }
   if (missing.length > 0) {
@@ -131,6 +149,7 @@ function checkStripeConfig(): CheckResult {
       status: "warn",
       severity: "critical",
       message: `Some Stripe price vars missing: ${missing.join(", ")}`,
+      lastRunAt,
     };
   }
   return {
@@ -138,10 +157,12 @@ function checkStripeConfig(): CheckResult {
     status: "pass",
     severity: "critical",
     message: "Stripe secret key and all price env vars are configured",
+    lastRunAt,
   };
 }
 
 async function checkNoStuckSubscriptions(): Promise<CheckResult> {
+  const lastRunAt = new Date();
   try {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const rows = await db
@@ -157,6 +178,7 @@ async function checkNoStuckSubscriptions(): Promise<CheckResult> {
         status: "pass",
         severity: "high",
         message: "No active accounts stuck in frozen state",
+        lastRunAt,
       };
     }
     const names = rows.map((r) => r.name).join(", ");
@@ -165,6 +187,7 @@ async function checkNoStuckSubscriptions(): Promise<CheckResult> {
       status: "fail",
       severity: "high",
       message: `${rows.length} account(s) stuck frozen >7 days: ${names}`,
+      lastRunAt,
     };
   } catch (err) {
     return {
@@ -172,6 +195,7 @@ async function checkNoStuckSubscriptions(): Promise<CheckResult> {
       status: "fail",
       severity: "high",
       message: `Could not query stuck subscriptions: ${err instanceof Error ? err.message : String(err)}`,
+      lastRunAt,
     };
   }
 }
@@ -182,6 +206,7 @@ async function getJobTrackingResult(
   maxAgeMs: number,
   label: string
 ): Promise<CheckResult> {
+  const now = new Date();
   try {
     const rows = await db
       .select()
@@ -194,12 +219,14 @@ async function getJobTrackingResult(
         status: "warn",
         severity,
         message: `${label} has not reported yet since last restart`,
+        lastRunAt: now,
       };
     }
     const row = rows[0];
-    const age = Date.now() - new Date(row.lastRunAt).getTime();
+    const jobLastRunAt = new Date(row.lastRunAt);
+    const age = Date.now() - jobLastRunAt.getTime();
     if (row.status === "fail") {
-      return { checkName, status: "fail", severity, message: row.message };
+      return { checkName, status: "fail", severity, message: row.message, lastRunAt: jobLastRunAt };
     }
     if (age > maxAgeMs) {
       const hours = Math.round(age / 3600000);
@@ -208,23 +235,45 @@ async function getJobTrackingResult(
         status: "warn",
         severity,
         message: `${label} last ran ${hours}h ago (expected every ${Math.round(maxAgeMs / 3600000)}h)`,
+        lastRunAt: jobLastRunAt,
       };
     }
-    return { checkName, status: "pass", severity, message: row.message };
+    return { checkName, status: "pass", severity, message: row.message, lastRunAt: jobLastRunAt };
   } catch (err) {
     return {
       checkName,
       status: "warn",
       severity,
       message: `Could not read job status for ${label}: ${err instanceof Error ? err.message : String(err)}`,
+      lastRunAt: now,
     };
   }
 }
 
-function buildEmailHtml(results: CheckResult[], issueCount: number): string {
-  const sorted = [...results].sort(
-    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
+const STATUS_ORDER: Record<CheckStatus, number> = { fail: 0, warn: 1, pass: 2 };
+
+function sortChecks(results: CheckResult[]): CheckResult[] {
+  return [...results].sort(
+    (a, b) =>
+      STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
+      SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
+      a.checkName.localeCompare(b.checkName)
   );
+}
+
+function formatLastRunAt(d: Date): string {
+  return d.toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function buildEmailHtml(results: CheckResult[], issueCount: number): string {
+  const sorted = sortChecks(results);
 
   const statusColor: Record<CheckStatus, string> = {
     pass: "#16a34a",
@@ -250,6 +299,7 @@ function buildEmailHtml(results: CheckResult[], issueCount: number): string {
         <span style="color:${severityColor[r.severity]}; font-size:12px; font-weight:600; text-transform:uppercase;">${r.severity}</span>
       </td>
       <td style="padding: 8px 12px; font-size: 13px; color: #374151;">${r.message}</td>
+      <td style="padding: 8px 12px; font-size: 11px; color: #9ca3af; white-space: nowrap;">${formatLastRunAt(r.lastRunAt)}</td>
     </tr>`
     )
     .join("");
@@ -261,7 +311,7 @@ function buildEmailHtml(results: CheckResult[], issueCount: number): string {
       : `${issueCount} issue${issueCount !== 1 ? "s" : ""} require attention.`;
 
   return `
-    <div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; background: #f9fafb;">
+    <div style="font-family: Arial, sans-serif; max-width: 750px; margin: 0 auto; background: #f9fafb;">
       <div style="background:${headerBg}; padding:20px 24px; border-radius:8px 8px 0 0;">
         <h1 style="color:#fff; margin:0; font-size:20px;">ScooPilot System Health</h1>
         <p style="color:#fff; margin:6px 0 0; font-size:14px; opacity:0.9;">${new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "full", timeStyle: "short" })} ET</p>
@@ -275,6 +325,7 @@ function buildEmailHtml(results: CheckResult[], issueCount: number): string {
               <th style="padding:8px 12px; font-size:12px; color:#6b7280; font-weight:600; text-transform:uppercase;">Status</th>
               <th style="padding:8px 12px; font-size:12px; color:#6b7280; font-weight:600; text-transform:uppercase;">Severity</th>
               <th style="padding:8px 12px; text-align:left; font-size:12px; color:#6b7280; font-weight:600; text-transform:uppercase;">Message</th>
+              <th style="padding:8px 12px; text-align:left; font-size:12px; color:#6b7280; font-weight:600; text-transform:uppercase;">Last Run</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -287,11 +338,10 @@ function buildEmailHtml(results: CheckResult[], issueCount: number): string {
 }
 
 function buildEmailText(results: CheckResult[], issueCount: number): string {
-  const sorted = [...results].sort(
-    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]
-  );
+  const sorted = sortChecks(results);
   const lines = sorted.map(
-    (r) => `[${r.status.toUpperCase()}] [${r.severity.toUpperCase()}] ${r.checkName}: ${r.message}`
+    (r) =>
+      `[${r.status.toUpperCase()}] [${r.severity.toUpperCase()}] ${r.checkName}: ${r.message} (last run: ${formatLastRunAt(r.lastRunAt)})`
   );
   const headline =
     issueCount === 0
@@ -323,12 +373,8 @@ export async function runSystemHealthCheck(): Promise<void> {
     ),
     checkStripeRecentEvents(),
     Promise.resolve(checkStripeConfig()),
-    Promise.resolve(
-      checkEnvVar("telnyx_configured", "TELNYX_API_KEY", "high", "Telnyx API key")
-    ),
-    Promise.resolve(
-      checkEnvVar("openai_configured", "OPENAI_API_KEY", "medium", "OpenAI API key")
-    ),
+    Promise.resolve(checkEnvVar("telnyx_configured", "TELNYX_API_KEY", "high", "Telnyx API key")),
+    Promise.resolve(checkEnvVar("openai_configured", "OPENAI_API_KEY", "medium", "OpenAI API key")),
     checkNoStuckSubscriptions(),
     getJobTrackingResult("job_nightly_rollup", "medium", 26 * 60 * 60 * 1000, "Nightly rollup"),
     getJobTrackingResult("job_auto_invoice", "high", 26 * 60 * 60 * 1000, "Auto invoice"),
@@ -337,6 +383,7 @@ export async function runSystemHealthCheck(): Promise<void> {
   ]);
 
   for (const check of checks) {
+    if (check.checkName.startsWith("job_")) continue;
     await upsertHealthCheckResult(check.checkName, check.status, check.severity, check.message);
   }
 

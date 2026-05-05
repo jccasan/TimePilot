@@ -550,14 +550,20 @@ export default function AdminDashboard() {
         <div className="flex items-center gap-2 mb-3">
           <ShieldCheck className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-lg font-semibold">System Health</h2>
-          {healthChecks && healthChecks.length > 0 && (() => {
-            const issues = healthChecks.filter((c) => c.status !== "pass");
-            return issues.length === 0 ? (
-              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">All OK</Badge>
-            ) : (
-              <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">{issues.length} issue{issues.length !== 1 ? "s" : ""}</Badge>
-            );
-          })()}
+          {healthChecks &&
+            healthChecks.length > 0 &&
+            (() => {
+              const issues = healthChecks.filter((c) => c.status !== "pass");
+              return issues.length === 0 ? (
+                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                  All OK
+                </Badge>
+              ) : (
+                <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                  {issues.length} issue{issues.length !== 1 ? "s" : ""}
+                </Badge>
+              );
+            })()}
         </div>
         {healthLoading ? (
           <div className="grid md:grid-cols-2 gap-2">
@@ -576,17 +582,34 @@ export default function AdminDashboard() {
           <div className="grid md:grid-cols-2 gap-2">
             {[...healthChecks]
               .sort((a, b) => {
-                const sev = { critical: 0, high: 1, medium: 2, low: 3 };
-                const sSev = (sev[a.severity as keyof typeof sev] ?? 9) - (sev[b.severity as keyof typeof sev] ?? 9);
-                if (sSev !== 0) return sSev;
                 const st = { fail: 0, warn: 1, pass: 2 };
-                return (st[a.status as keyof typeof st] ?? 9) - (st[b.status as keyof typeof st] ?? 9);
+                const sSt =
+                  (st[a.status as keyof typeof st] ?? 9) - (st[b.status as keyof typeof st] ?? 9);
+                if (sSt !== 0) return sSt;
+                const sev = { critical: 0, high: 1, medium: 2, low: 3 };
+                const sSev =
+                  (sev[a.severity as keyof typeof sev] ?? 9) -
+                  (sev[b.severity as keyof typeof sev] ?? 9);
+                if (sSev !== 0) return sSev;
+                return a.checkName.localeCompare(b.checkName);
               })
               .map((check) => {
                 const statusConfig = {
-                  pass: { icon: CheckCircle2, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" },
-                  warn: { icon: AlertTriangle, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" },
-                  fail: { icon: XCircle, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800" },
+                  pass: {
+                    icon: CheckCircle2,
+                    color: "text-green-600 dark:text-green-400",
+                    bg: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800",
+                  },
+                  warn: {
+                    icon: AlertTriangle,
+                    color: "text-amber-600 dark:text-amber-400",
+                    bg: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800",
+                  },
+                  fail: {
+                    icon: XCircle,
+                    color: "text-red-600 dark:text-red-400",
+                    bg: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800",
+                  },
                 }[check.status] ?? { icon: AlertTriangle, color: "text-muted-foreground", bg: "" };
                 const severityColors: Record<string, string> = {
                   critical: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
@@ -607,13 +630,19 @@ export default function AdminDashboard() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-mono font-medium">{check.checkName}</span>
-                        <Badge className={`text-[10px] py-0 px-1.5 ${severityColors[check.severity] ?? ""}`}>
+                        <Badge
+                          className={`text-[10px] py-0 px-1.5 ${severityColors[check.severity] ?? ""}`}
+                        >
                           {check.severity}
                         </Badge>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{check.message}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                        {check.message}
+                      </p>
                     </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0 mt-0.5">{agoStr}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0 mt-0.5">
+                      {agoStr}
+                    </span>
                   </div>
                 );
               })}
