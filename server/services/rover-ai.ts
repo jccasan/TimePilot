@@ -1221,7 +1221,7 @@ export async function streamRoverChat(
     if (toolUseBlocks.length > 0) {
       const assistantContent: Array<Anthropic.TextBlockParam | Anthropic.ToolUseBlockParam> = [];
       if (fullResponse) {
-        assistantContent.push({ type: "text", text: fullResponse });
+        assistantContent.push({ type: "text", text: fullResponse } as Anthropic.ContentBlock);
       }
       for (const tb of toolUseBlocks) {
         let input: Record<string, any> = {};
@@ -1230,7 +1230,7 @@ export async function streamRoverChat(
         } catch {
           input = {};
         }
-        assistantContent.push({ type: "tool_use", id: tb.id, name: tb.name, input });
+        assistantContent.push({ type: "tool_use", id: tb.id, name: tb.name, input } as Anthropic.ContentBlock);
       }
 
       const toolResultContent: Anthropic.ToolResultBlockParam[] = [];

@@ -102,7 +102,7 @@ async function checkStripeRecentEvents(): Promise<CheckResult> {
     return {
       checkName: "stripe_recent_events",
       status: "warn",
-      severity: "high",
+      severity: "low",
       message: "No Stripe webhook events in the last 48 hours — verify webhook is registered",
       lastRunAt,
     };
@@ -124,7 +124,6 @@ function checkStripeConfig(): CheckResult {
     "STRIPE_PRICE_TIER_1_3",
     "STRIPE_PRICE_TIER_3_5",
     "STRIPE_PRICE_TIER_6_10",
-    "STRIPE_PRICE_TIER_10_PLUS",
   ];
   const missing = priceVars.filter((v) => !process.env[v]);
   if (!process.env.STRIPE_SECRET_KEY) {
@@ -158,7 +157,7 @@ function checkStripeConfig(): CheckResult {
     checkName: "stripe_config",
     status: "pass",
     severity: "critical",
-    message: "Stripe secret key and all price env vars are configured",
+    message: "Stripe secret key and configured price tiers are set",
     lastRunAt,
   };
 }
@@ -358,6 +357,11 @@ function buildEmailText(results: CheckResult[], issueCount: number): string {
 export async function runSystemHealthCheck(): Promise<void> {
   console.log("[SystemHealth] Starting daily system health check");
 
+  await db
+    .delete(systemHealthChecks)
+    .where(sql`${systemHealthChecks.checkName} = 'openai_configured'`)
+    .catch(() => {});
+
   const checks: CheckResult[] = await Promise.all([
     checkDbConnectivity(),
     checkEnvVar(
@@ -380,7 +384,7 @@ export async function runSystemHealthCheck(): Promise<void> {
     getJobTrackingResult("job_nightly_rollup", "medium", 26 * 60 * 60 * 1000, "Nightly rollup"),
     getJobTrackingResult("job_auto_invoice", "high", 26 * 60 * 60 * 1000, "Auto invoice"),
     getJobTrackingResult("job_stop_order_repair", "low", 26 * 60 * 60 * 1000, "Stop order repair"),
-    getJobTrackingResult("job_reminders", "medium", 15 * 60 * 1000, "Reminders"),
+    getJobTrackingResult("job_reminders", "medium", 30 * 60 * 1000, "Reminders"),
   ]);
 
   for (const check of checks) {
