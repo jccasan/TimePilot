@@ -19,7 +19,11 @@ import {
   RefreshCw,
   CheckCircle2,
   XCircle,
+  Map,
+  BrainCircuit,
+  MessageSquare,
 } from "lucide-react";
+import { BarChart, Bar, Tooltip, ResponsiveContainer, XAxis } from "recharts";
 import { TIER_CONFIG } from "@shared/schema";
 import { adminFetchFn, adminRequest } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +36,161 @@ const tierColors: Record<string, string> = {
   tier_6_10: "bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-200",
   tier_10_plus: "bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-200",
 };
+
+interface ProviderCostSummary {
+  today: number;
+  thisMonth: number;
+  estimatedMonthlyCostUsd: number;
+  dailyTrend: { date: string; calls: number }[];
+  breakdown?: { metric: string; today: number; thisMonth: number; costPerCall: number }[];
+}
+
+interface AllApiCosts {
+  mapbox: ProviderCostSummary;
+  openai: ProviderCostSummary;
+  telnyx: ProviderCostSummary;
+}
+
+const METRIC_LABELS: Record<string, string> = {
+  geocode: "Geocode",
+  autocomplete: "Autocomplete",
+  directions: "Directions",
+  matrix: "Matrix",
+  rover_chat: "Rover Chat",
+};
+
+function CostSparkline({ data }: { data: { date: string; calls: number }[] }) {
+  const last14 = data.slice(-14);
+  if (last14.every((d) => d.calls === 0)) {
+    return <p className="text-xs text-muted-foreground italic">No activity in last 14 days</p>;
+  }
+  return (
+    <ResponsiveContainer width="100%" height={40}>
+      <BarChart data={last14} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+        <Bar
+          dataKey="calls"
+          fill="currentColor"
+          className="text-primary/60"
+          radius={[2, 2, 0, 0]}
+        />
+        <Tooltip
+          content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            const d = payload[0].payload as { date: string; calls: number };
+            return (
+              <div className="bg-popover border rounded px-2 py-1 text-xs shadow-md">
+                <p className="font-medium">{d.date}</p>
+                <p>{d.calls.toLocaleString()} calls</p>
+              </div>
+            );
+          }}
+        />
+        <XAxis dataKey="date" hide />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function ApiCostCard({
+  title,
+  icon: Icon,
+  iconColor,
+  summary,
+  unit,
+  isLoading,
+  testId,
+}: {
+  title: string;
+  icon: React.ElementType;
+  iconColor: string;
+  summary: ProviderCostSummary | undefined;
+  unit: string;
+  isLoading: boolean;
+  testId: string;
+}) {
+  const cost = summary?.estimatedMonthlyCostUsd ?? 0;
+  const costStr = cost < 0.01 && cost > 0 ? "<$0.01" : `$${cost.toFixed(2)}`;
+
+  return (
+    <Card data-testid={testId}>
+      <CardContent className="pt-4 pb-4 px-4">
+        <div className="flex items-center gap-2 mb-3">
+          <div className={`p-1.5 rounded-md ${iconColor}`}>
+            <Icon className="h-4 w-4" />
+          </div>
+          <p className="font-medium text-sm">{title}</p>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-2">
+            <div className="h-4 bg-muted rounded animate-pulse w-2/3" />
+            <div className="h-4 bg-muted rounded animate-pulse w-1/2" />
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Today</p>
+                <p className="text-sm font-semibold" data-testid={`${testId}-today`}>
+                  {(summary?.today ?? 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">{unit}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">This month</p>
+                <p className="text-sm font-semibold" data-testid={`${testId}-month`}>
+                  {(summary?.thisMonth ?? 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">{unit}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Est. cost</p>
+                <p
+                  className="text-sm font-semibold text-amber-600 dark:text-amber-400"
+                  data-testid={`${testId}-cost`}
+                >
+                  {costStr}
+                </p>
+                <p className="text-xs text-muted-foreground">this month</p>
+              </div>
+            </div>
+
+            {summary?.breakdown && summary.breakdown.length > 0 && (
+              <div className="mb-3 space-y-1">
+                {summary.breakdown.map((b) => (
+                  <div key={b.metric} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      {METRIC_LABELS[b.metric] ?? b.metric}
+                    </span>
+                    <span className="font-medium tabular-nums">
+                      {b.thisMonth.toLocaleString()}{" "}
+                      <span className="text-muted-foreground font-normal">
+                        (${(b.thisMonth * b.costPerCall).toFixed(2)})
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Last 14 days</p>
+              {summary?.dailyTrend ? (
+                <CostSparkline data={summary.dailyTrend} />
+              ) : (
+                <p className="text-xs text-muted-foreground italic">No data</p>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground mt-2 italic">
+              Estimates based on public pricing, before free-tier credits.
+            </p>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function AdminDashboard() {
   const { toast } = useToast();
@@ -76,6 +235,12 @@ export default function AdminDashboard() {
     queryKey: ["/api/admin/retell/webhook-status"],
     queryFn: adminFetchFn("/api/admin/retell/webhook-status"),
     refetchInterval: 120000,
+  });
+
+  const { data: apiCosts, isLoading: costsLoading } = useQuery<AllApiCosts>({
+    queryKey: ["/api/admin/api-costs"],
+    queryFn: adminFetchFn("/api/admin/api-costs"),
+    refetchInterval: 300000,
   });
 
   const syncWebhookMutation = useMutation({
@@ -325,6 +490,44 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </Link>
+      </div>
+
+      <div data-testid="section-api-costs">
+        <div className="mb-3">
+          <h2 className="text-lg font-semibold">API Cost Monitor</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Platform-wide usage and estimated spend across paid third-party APIs
+          </p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-4">
+          <ApiCostCard
+            title="Mapbox"
+            icon={Map}
+            iconColor="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
+            summary={apiCosts?.mapbox}
+            unit="calls"
+            isLoading={costsLoading}
+            testId="card-api-cost-mapbox"
+          />
+          <ApiCostCard
+            title="OpenAI (Rover AI)"
+            icon={BrainCircuit}
+            iconColor="bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400"
+            summary={apiCosts?.openai}
+            unit="calls"
+            isLoading={costsLoading}
+            testId="card-api-cost-openai"
+          />
+          <ApiCostCard
+            title="Telnyx SMS"
+            icon={MessageSquare}
+            iconColor="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
+            summary={apiCosts?.telnyx}
+            unit="segments"
+            isLoading={costsLoading}
+            testId="card-api-cost-telnyx"
+          />
+        </div>
       </div>
 
       {inactiveUsers && Object.values(inactiveUsers).some((arr) => arr.length > 0) && (

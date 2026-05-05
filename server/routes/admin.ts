@@ -143,6 +143,16 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get("/api/admin/api-costs", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { getAllApiCosts } = await import("../services/api-usage");
+      const costs = await getAllApiCosts();
+      res.json(costs);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // Platform admin: view ALL message exceptions (including zero-candidate items)
   app.get("/api/admin/message-exceptions", isAdmin, async (req: Request, res: Response) => {
     try {

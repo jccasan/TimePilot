@@ -85,3 +85,139 @@ export async function getApiUsageStats(): Promise<ApiUsageStats> {
     breakdown,
   };
 }
+
+const MAPBOX_COST_PER_CALL: Record<string, number> = {
+  geocode: 0.005,
+  autocomplete: 0.005,
+  directions: 0.001,
+  matrix: 0.002,
+};
+const OPENAI_COST_PER_CALL = 0.0001;
+const TELNYX_COST_PER_SEGMENT = 0.005;
+
+export interface ProviderCostSummary {
+  today: number;
+  thisMonth: number;
+  estimatedMonthlyCostUsd: number;
+  dailyTrend: { date: string; calls: number }[];
+  breakdown?: { metric: string; today: number; thisMonth: number; costPerCall: number }[];
+}
+
+export interface AllApiCosts {
+  mapbox: ProviderCostSummary;
+  openai: ProviderCostSummary;
+  telnyx: ProviderCostSummary;
+}
+
+function buildTrend(byDate: Record<string, number>): { date: string; calls: number }[] {
+  const trend: { date: string; calls: number }[] = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const ds = d.toISOString().slice(0, 10);
+    trend.push({ date: ds, calls: byDate[ds] || 0 });
+  }
+  return trend;
+}
+
+export async function getAllApiCosts(): Promise<AllApiCosts> {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const monthStartStr = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+
+  const [dailyResult, telnyxResult] = await Promise.all([
+    db.execute(sql`
+      SELECT provider, metric, date::text AS date, calls
+      FROM api_usage_daily
+      WHERE date >= CURRENT_DATE - INTERVAL '30 days'
+      ORDER BY provider, metric, date
+    `),
+    db.execute(sql`
+      SELECT
+        DATE(recorded_at)::text AS date,
+        COALESCE(SUM(quantity), 0)::int AS segments
+      FROM usage_events
+      WHERE event_type = 'sms_segment'
+        AND recorded_at >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY DATE(recorded_at)
+      ORDER BY date
+    `),
+  ]);
+
+  const rows = dailyResult.rows as {
+    provider: string;
+    metric: string;
+    date: string;
+    calls: number;
+  }[];
+
+  const mapboxByDate: Record<string, number> = {};
+  const mapboxBreakdown: Record<string, { today: number; thisMonth: number }> = {};
+
+  for (const row of rows.filter(
+    (r) => r.provider === "mapbox" || r.provider === "mapbox_searchbox"
+  )) {
+    const calls = Number(row.calls);
+    mapboxByDate[row.date] = (mapboxByDate[row.date] || 0) + calls;
+    if (!mapboxBreakdown[row.metric]) mapboxBreakdown[row.metric] = { today: 0, thisMonth: 0 };
+    if (row.date === todayStr) mapboxBreakdown[row.metric].today += calls;
+    if (row.date >= monthStartStr) mapboxBreakdown[row.metric].thisMonth += calls;
+  }
+
+  const mapboxTodayTotal = Object.values(mapboxBreakdown).reduce((s, b) => s + b.today, 0);
+  const mapboxMonthTotal = Object.values(mapboxBreakdown).reduce((s, b) => s + b.thisMonth, 0);
+  const mapboxCost = Object.entries(mapboxBreakdown).reduce(
+    (cost, [metric, counts]) => cost + counts.thisMonth * (MAPBOX_COST_PER_CALL[metric] ?? 0.005),
+    0
+  );
+  const mapboxBreakdownArr = Object.entries(mapboxBreakdown).map(([metric, counts]) => ({
+    metric,
+    today: counts.today,
+    thisMonth: counts.thisMonth,
+    costPerCall: MAPBOX_COST_PER_CALL[metric] ?? 0.005,
+  }));
+
+  const openaiByDate: Record<string, number> = {};
+  let openaiToday = 0;
+  let openaiMonth = 0;
+
+  for (const row of rows.filter((r) => r.provider === "openai")) {
+    const calls = Number(row.calls);
+    openaiByDate[row.date] = (openaiByDate[row.date] || 0) + calls;
+    if (row.date === todayStr) openaiToday += calls;
+    if (row.date >= monthStartStr) openaiMonth += calls;
+  }
+
+  const telnyxByDate: Record<string, number> = {};
+  let telnyxToday = 0;
+  let telnyxMonth = 0;
+
+  for (const row of telnyxResult.rows as { date: string; segments: number }[]) {
+    const segs = Number(row.segments);
+    telnyxByDate[row.date] = segs;
+    if (row.date === todayStr) telnyxToday = segs;
+    if (row.date >= monthStartStr) telnyxMonth += segs;
+  }
+
+  return {
+    mapbox: {
+      today: mapboxTodayTotal,
+      thisMonth: mapboxMonthTotal,
+      estimatedMonthlyCostUsd: mapboxCost,
+      dailyTrend: buildTrend(mapboxByDate),
+      breakdown: mapboxBreakdownArr,
+    },
+    openai: {
+      today: openaiToday,
+      thisMonth: openaiMonth,
+      estimatedMonthlyCostUsd: openaiMonth * OPENAI_COST_PER_CALL,
+      dailyTrend: buildTrend(openaiByDate),
+    },
+    telnyx: {
+      today: telnyxToday,
+      thisMonth: telnyxMonth,
+      estimatedMonthlyCostUsd: telnyxMonth * TELNYX_COST_PER_SEGMENT,
+      dailyTrend: buildTrend(telnyxByDate),
+    },
+  };
+}
