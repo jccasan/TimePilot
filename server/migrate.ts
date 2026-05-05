@@ -90,6 +90,17 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] Demo account demo_unlimited_credits flag verified");
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS system_health_checks (
+        check_name  VARCHAR(100) PRIMARY KEY,
+        status      VARCHAR(10)  NOT NULL,
+        severity    VARCHAR(10)  NOT NULL,
+        message     TEXT         NOT NULL,
+        last_run_at TIMESTAMP    NOT NULL DEFAULT NOW()
+      )
+    `);
+    console.log("[Migration] system_health_checks table ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

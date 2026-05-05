@@ -13,6 +13,7 @@ import {
   type InvoiceReminderSettings,
 } from "@shared/schema";
 import { storage } from "../storage";
+import { upsertHealthCheckResult } from "./system-health-check";
 import { sendEmail } from "../services/email";
 import { sendSmsForCompany, isSmsConfiguredForCompany } from "../services/sms";
 import { getCompanyToday } from "../utils/company-date";
@@ -204,9 +205,14 @@ export async function runReminders() {
     }
   }
 
-  console.log(
-    `[reminders] Completed: ${totalServiceReminders} service reminders, ${totalInvoiceReminders} invoice reminders, ${errors} errors`
-  );
+  const msg = `Completed: ${totalServiceReminders} service reminders, ${totalInvoiceReminders} invoice reminders, ${errors} errors`;
+  console.log(`[reminders] ${msg}`);
+  await upsertHealthCheckResult(
+    "job_reminders",
+    errors === 0 ? "pass" : "warn",
+    "medium",
+    msg
+  ).catch(() => {});
 }
 
 async function hasChannelLog(

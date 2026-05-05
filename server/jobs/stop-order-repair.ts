@@ -1,4 +1,5 @@
 import { storage } from "../storage";
+import { upsertHealthCheckResult } from "./system-health-check";
 
 export async function runStopOrderRepair(): Promise<void> {
   console.log("[stop-order-repair] Starting nightly stop order integrity check");
@@ -40,8 +41,12 @@ export async function runStopOrderRepair(): Promise<void> {
     }
   }
 
-  console.log(
-    `[stop-order-repair] Done — checked ${totalRoutes} routes across ${companies.length} companies, ` +
-      `repaired ${repairedRoutes}, errors ${errors}`
-  );
+  const msg = `Done — checked ${totalRoutes} routes across ${companies.length} companies, repaired ${repairedRoutes}, errors ${errors}`;
+  console.log(`[stop-order-repair] ${msg}`);
+  await upsertHealthCheckResult(
+    "job_stop_order_repair",
+    errors === 0 ? "pass" : "warn",
+    "low",
+    msg
+  ).catch(() => {});
 }

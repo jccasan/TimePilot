@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import { getCompanyToday } from "../utils/company-date";
+import { upsertHealthCheckResult } from "./system-health-check";
 
 export async function runAutoInvoice() {
   console.log(`[auto-invoice] Starting auto-invoice run`);
@@ -28,10 +29,14 @@ export async function runAutoInvoice() {
     }
   }
 
-  console.log(
-    `[auto-invoice] Completed: ${totalInvoicesCreated} draft invoices created, ` +
-      `${errors} company errors`
-  );
+  const msg = `Completed: ${totalInvoicesCreated} draft invoices created, ${errors} company errors`;
+  console.log(`[auto-invoice] ${msg}`);
+  await upsertHealthCheckResult(
+    "job_auto_invoice",
+    errors === 0 ? "pass" : "warn",
+    "high",
+    msg
+  ).catch(() => {});
 
   return { totalInvoicesCreated, errors };
 }

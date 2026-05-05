@@ -3249,3 +3249,13 @@ export const retellWebhookRepairs = pgTable(
 
 export type RetellWebhookRepair = typeof retellWebhookRepairs.$inferSelect;
 export type InsertRetellWebhookRepair = typeof retellWebhookRepairs.$inferInsert;
+
+export const systemHealthChecks = pgTable("system_health_checks", {
+  checkName: varchar("check_name", { length: 100 }).primaryKey(),
+  status: varchar("status", { length: 10 }).notNull(),
+  severity: varchar("severity", { length: 10 }).notNull(),
+  message: text("message").notNull(),
+  lastRunAt: timestamp("last_run_at").defaultNow().notNull(),
+});
+
+export type SystemHealthCheck = typeof systemHealthChecks.$inferSelect;

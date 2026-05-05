@@ -143,6 +143,19 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get("/api/admin/system-health", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { systemHealthChecks } = await import("@shared/schema");
+      const rows = await db
+        .select()
+        .from(systemHealthChecks)
+        .orderBy(systemHealthChecks.checkName);
+      res.json(rows);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/admin/api-costs", isAdmin, async (_req: Request, res: Response) => {
     try {
       const { getAllApiCosts } = await import("../services/api-usage");

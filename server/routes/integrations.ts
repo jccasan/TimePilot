@@ -851,4 +851,9 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
   }
   setTimeout(() => syncSeatUsageToStripe().catch(console.error), 120000);
   setInterval(() => syncSeatUsageToStripe().catch(console.error), 24 * 60 * 60 * 1000);
+
+  import("../jobs/system-health-check").then(({ runSystemHealthCheck }) => {
+    setTimeout(() => runSystemHealthCheck().catch(console.error), 30000);
+    setInterval(() => runSystemHealthCheck().catch(console.error), 24 * 60 * 60 * 1000);
+  });
 }

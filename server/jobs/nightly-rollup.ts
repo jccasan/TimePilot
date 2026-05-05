@@ -2,6 +2,7 @@ import { db } from "../db";
 import { eq, and, sql, gte, lte, count } from "drizzle-orm";
 import { visits, invoices, smsMessages, emailsSent, contacts, agreements } from "@shared/schema";
 import { storage } from "../storage";
+import { upsertHealthCheckResult } from "./system-health-check";
 
 export async function runNightlyRollup() {
   const now = new Date();
@@ -173,9 +174,14 @@ export async function runNightlyRollup() {
     }
   }
 
-  console.log(
-    `[nightly-rollup] Completed for ${dateStr}: ${processed} companies processed, ${errors} errors`
-  );
+  const msg = `Completed for ${dateStr}: ${processed} companies processed, ${errors} errors`;
+  console.log(`[nightly-rollup] ${msg}`);
+  await upsertHealthCheckResult(
+    "job_nightly_rollup",
+    errors === 0 ? "pass" : "warn",
+    "medium",
+    msg
+  ).catch(() => {});
 }
 
 async function computeChurnRisk(

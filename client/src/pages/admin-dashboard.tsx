@@ -22,6 +22,8 @@ import {
   Map,
   BrainCircuit,
   MessageSquare,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
 import { BarChart, Bar, Tooltip, ResponsiveContainer, XAxis } from "recharts";
 import { TIER_CONFIG } from "@shared/schema";
@@ -240,6 +242,20 @@ export default function AdminDashboard() {
   const { data: apiCosts, isLoading: costsLoading } = useQuery<AllApiCosts>({
     queryKey: ["/api/admin/api-costs"],
     queryFn: adminFetchFn("/api/admin/api-costs"),
+    refetchInterval: 300000,
+  });
+
+  const { data: healthChecks, isLoading: healthLoading } = useQuery<
+    {
+      checkName: string;
+      status: string;
+      severity: string;
+      message: string;
+      lastRunAt: string;
+    }[]
+  >({
+    queryKey: ["/api/admin/system-health"],
+    queryFn: adminFetchFn("/api/admin/system-health"),
     refetchInterval: 300000,
   });
 
@@ -528,6 +544,81 @@ export default function AdminDashboard() {
             testId="card-api-cost-telnyx"
           />
         </div>
+      </div>
+
+      <div data-testid="section-system-health">
+        <div className="flex items-center gap-2 mb-3">
+          <ShieldCheck className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-lg font-semibold">System Health</h2>
+          {healthChecks && healthChecks.length > 0 && (() => {
+            const issues = healthChecks.filter((c) => c.status !== "pass");
+            return issues.length === 0 ? (
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">All OK</Badge>
+            ) : (
+              <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">{issues.length} issue{issues.length !== 1 ? "s" : ""}</Badge>
+            );
+          })()}
+        </div>
+        {healthLoading ? (
+          <div className="grid md:grid-cols-2 gap-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-12 bg-muted rounded animate-pulse" />
+            ))}
+          </div>
+        ) : !healthChecks || healthChecks.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-center text-muted-foreground">
+              <Clock className="h-6 w-6 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">No health check results yet — runs 30 seconds after startup</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-2">
+            {[...healthChecks]
+              .sort((a, b) => {
+                const sev = { critical: 0, high: 1, medium: 2, low: 3 };
+                const sSev = (sev[a.severity as keyof typeof sev] ?? 9) - (sev[b.severity as keyof typeof sev] ?? 9);
+                if (sSev !== 0) return sSev;
+                const st = { fail: 0, warn: 1, pass: 2 };
+                return (st[a.status as keyof typeof st] ?? 9) - (st[b.status as keyof typeof st] ?? 9);
+              })
+              .map((check) => {
+                const statusConfig = {
+                  pass: { icon: CheckCircle2, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" },
+                  warn: { icon: AlertTriangle, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" },
+                  fail: { icon: XCircle, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800" },
+                }[check.status] ?? { icon: AlertTriangle, color: "text-muted-foreground", bg: "" };
+                const severityColors: Record<string, string> = {
+                  critical: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+                  high: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+                  medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+                  low: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+                };
+                const StatusIcon = statusConfig.icon;
+                const ago = Math.round((Date.now() - new Date(check.lastRunAt).getTime()) / 60000);
+                const agoStr = ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+                return (
+                  <div
+                    key={check.checkName}
+                    className={`flex items-start gap-3 p-3 rounded-lg border ${statusConfig.bg}`}
+                    data-testid={`health-check-${check.checkName}`}
+                  >
+                    <StatusIcon className={`h-4 w-4 mt-0.5 shrink-0 ${statusConfig.color}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-mono font-medium">{check.checkName}</span>
+                        <Badge className={`text-[10px] py-0 px-1.5 ${severityColors[check.severity] ?? ""}`}>
+                          {check.severity}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{check.message}</p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0 mt-0.5">{agoStr}</span>
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </div>
 
       {inactiveUsers && Object.values(inactiveUsers).some((arr) => arr.length > 0) && (

@@ -40,7 +40,7 @@ Scoopilot is a full-stack, multi-tenant SaaS application built on role-based acc
 - **UI Components**: Shadcn/ui with Tailwind CSS, utilizing a green/earth tone theme.
 - **Mobile View**: Dedicated mobile-optimized views for field technicians, including PWA support and offline capabilities.
 - **Client Portal**: Self-service portal.
-- **Admin Dashboard**: Platform-level administration for tenant management.
+- **Admin Dashboard**: Platform-level administration for tenant management. Includes API cost monitoring widgets (Mapbox, OpenAI, Telnyx) and a System Health section showing live pass/warn/fail status for all 12 critical checks.
 - **Rover Chatbot**: AI-powered in-app assistant with SSE streaming responses and function calling.
 - **Dark Mode**: Full dark mode support.
 - **Draggable Grid Layouts**: Dashboard and settings page use `react-grid-layout` with layout persistence.
