@@ -165,7 +165,13 @@ export async function getAllApiCosts(): Promise<AllApiCosts> {
   const { dailyRows, telnyxRows } = await getAllApiUsageStats();
 
   const mapboxByDate: Record<string, number> = {};
-  const mapboxBreakdown: Record<string, { today: number; thisMonth: number }> = {};
+  // Pre-seed all four required Mapbox metric types with zero defaults
+  const mapboxBreakdown: Record<string, { today: number; thisMonth: number }> = {
+    geocode: { today: 0, thisMonth: 0 },
+    autocomplete: { today: 0, thisMonth: 0 },
+    directions: { today: 0, thisMonth: 0 },
+    matrix: { today: 0, thisMonth: 0 },
+  };
 
   for (const row of dailyRows.filter(
     (r) => r.provider === "mapbox" || r.provider === "mapbox_searchbox"
