@@ -400,9 +400,7 @@ export const ROVER_TOOLS: Anthropic.Tool[] = [
 const USER_CONFIRMATION_RE =
   /\b(yes|yep|yup|confirm(ed)?|correct|right|that'?s?\s+(right|correct)|go\s+ahead|proceed|please\s+do|sure|absolutely|ok(ay)?|sounds\s+good|do\s+it)\b/i;
 
-function hasUserConfirmedInHistory(
-  messages: { role: string; content: unknown }[]
-): boolean {
+function hasUserConfirmedInHistory(messages: { role: string; content: unknown }[]): boolean {
   const userMessages = messages.filter((m) => m.role === "user");
   if (userMessages.length === 0) return false;
   const lastUserMsg = userMessages[userMessages.length - 1];
@@ -1289,10 +1287,7 @@ export async function streamRoverChat(
       const followUpPromise = (async () => {
         for await (const event of followUpStream) {
           if (signal?.aborted) return;
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "text_delta"
-          ) {
+          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
             fullResponse += event.delta.text;
             onChunk(event.delta.text);
           }

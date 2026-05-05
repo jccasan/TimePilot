@@ -2170,7 +2170,8 @@ Respond with exactly one category from the list above and nothing else.`;
         messages: [{ role: "user", content: prompt }],
       });
 
-      const raw = completion.content[0]?.type === "text" ? (completion.content[0].text?.trim() || "") : "";
+      const raw =
+        completion.content[0]?.type === "text" ? completion.content[0].text?.trim() || "" : "";
       const category =
         DOCUMENT_CATEGORIES.find((c) => raw.toLowerCase().includes(c.toLowerCase())) || "Other";
       res.json({ category });
