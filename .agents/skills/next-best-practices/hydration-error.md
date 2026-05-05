@@ -20,7 +20,7 @@ In development, click the hydration error to see the server/client diff.
 <div>{window.innerWidth}</div>;
 
 // Good: Use client component with mounted check
-("use client");
+"use client";
 import { useState, useEffect } from "react";
 
 export function ClientOnly({ children }: { children: React.ReactNode }) {
@@ -39,7 +39,7 @@ Server and client may be in different timezones:
 <span>{new Date().toLocaleString()}</span>;
 
 // Good: Render on client only
-("use client");
+"use client";
 const [time, setTime] = useState<string>();
 useEffect(() => setTime(new Date().toLocaleString()), []);
 ```
