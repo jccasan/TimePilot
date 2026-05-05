@@ -88,6 +88,7 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         successUrl: `${baseUrl}/billing?success=1`,
         cancelUrl: `${baseUrl}/billing?cancelled=1`,
         trialDays: 14,
+        companyName,
         metadata: {
           plan_tier: tier,
           company_name: companyName,
@@ -142,13 +143,22 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         apiVersion: "2026-01-28.clover" as const,
       });
 
+      const seatDescription = company.name
+        ? `Seat add-on \u2013 ${company.name}`
+        : "Seat add-on";
+
       const sessionParams: import("stripe").Stripe.Checkout.SessionCreateParams = {
         mode: "payment",
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${baseUrl}/settings?seatAdded=1`,
         cancel_url: `${baseUrl}/settings`,
         payment_intent_data: {
-          metadata: { type: "seat_purchase", companyId },
+          description: seatDescription,
+          metadata: {
+            type: "seat_purchase",
+            companyId,
+            ...(company.name ? { companyName: company.name } : {}),
+          },
         },
         metadata: { type: "seat_purchase", companyId },
       };
@@ -438,6 +448,7 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       amount: parseFloat(invoice.total),
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
+      clientName: contactName,
       stripeConnectAccountId: connectAcct,
       tenantId: companyId,
       currency: company?.currency || "usd",

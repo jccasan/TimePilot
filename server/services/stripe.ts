@@ -166,6 +166,7 @@ export async function chargeInvoiceAutomatically(params: {
   amount: number;
   invoiceId: string;
   invoiceNumber: string;
+  clientName?: string;
   stripeConnectAccountId?: string | null;
   tenantId?: string;
   currency?: string;
@@ -192,6 +193,10 @@ export async function chargeInvoiceAutomatically(params: {
   const amountCents = Math.round(params.amount * 100);
 
   try {
+    const description = params.clientName
+      ? `Invoice ${params.invoiceNumber} \u2013 ${params.clientName}`
+      : `Invoice ${params.invoiceNumber}`;
+
     const piParams: Stripe.PaymentIntentCreateParams = {
       customer: params.customerId,
       amount: amountCents,
@@ -199,15 +204,18 @@ export async function chargeInvoiceAutomatically(params: {
       payment_method: methods.data[0].id,
       confirm: true,
       off_session: true,
+      description,
       metadata: {
         invoiceId: params.invoiceId,
         invoiceNumber: params.invoiceNumber,
+        ...(params.clientName ? { clientName: params.clientName } : {}),
         ...(params.tenantId ? { tenant_id: params.tenantId } : {}),
       },
     };
 
     if (params.stripeConnectAccountId) {
       piParams.application_fee_amount = computeApplicationFee(amountCents);
+      piParams.statement_descriptor_suffix = params.invoiceNumber.slice(0, 22);
     }
 
     const pi = await stripe.paymentIntents.create(piParams, reqOpts(params.stripeConnectAccountId));
@@ -237,6 +245,7 @@ export async function createCheckoutSession(params: {
   amount: number;
   successUrl: string;
   cancelUrl: string;
+  clientName?: string;
   tipAmount?: string;
   stripeConnectAccountId?: string | null;
   tenantId?: string;
@@ -244,6 +253,10 @@ export async function createCheckoutSession(params: {
 }): Promise<{ url: string; sessionId: string }> {
   const stripe = getStripe();
   const amountCents = Math.round(params.amount * 100);
+
+  const description = params.clientName
+    ? `Invoice ${params.invoiceNumber} \u2013 ${params.clientName}`
+    : `Invoice ${params.invoiceNumber}`;
 
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     customer: params.customerId,
@@ -270,11 +283,22 @@ export async function createCheckoutSession(params: {
     cancel_url: params.cancelUrl,
   };
 
+  const paymentIntentData: Stripe.Checkout.SessionCreateParams.PaymentIntentData = {
+    description,
+    metadata: {
+      invoiceId: params.invoiceId,
+      invoiceNumber: params.invoiceNumber,
+      ...(params.clientName ? { clientName: params.clientName } : {}),
+      ...(params.tenantId ? { tenant_id: params.tenantId } : {}),
+    },
+  };
+
   if (params.stripeConnectAccountId) {
-    sessionParams.payment_intent_data = {
-      application_fee_amount: computeApplicationFee(amountCents),
-    };
+    paymentIntentData.application_fee_amount = computeApplicationFee(amountCents);
+    paymentIntentData.statement_descriptor_suffix = params.invoiceNumber.slice(0, 22);
   }
+
+  sessionParams.payment_intent_data = paymentIntentData;
 
   const session = await stripe.checkout.sessions.create(
     sessionParams,
@@ -515,6 +539,7 @@ export async function createSubscriptionCheckout(params: {
   trialDays?: number;
   metadata?: Record<string, string>;
   customerId?: string;
+  companyName?: string;
 }): Promise<{ url: string; sessionId: string }> {
   const stripe = getStripe();
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
@@ -529,13 +554,26 @@ export async function createSubscriptionCheckout(params: {
   } else {
     sessionParams.customer_email = params.customerEmail;
   }
+
+  const subscriptionDescription = params.companyName
+    ? `Platform subscription \u2013 ${params.companyName}`
+    : "Platform subscription";
+  const subscriptionMetadata: Record<string, string> = {
+    ...(params.metadata || {}),
+    ...(params.companyName ? { companyName: params.companyName } : {}),
+  };
+
   if (params.trialDays && params.trialDays > 0) {
     sessionParams.subscription_data = {
       trial_period_days: params.trialDays,
-      metadata: params.metadata || {},
+      description: subscriptionDescription,
+      metadata: subscriptionMetadata,
     };
   } else {
-    sessionParams.subscription_data = { metadata: params.metadata || {} };
+    sessionParams.subscription_data = {
+      description: subscriptionDescription,
+      metadata: subscriptionMetadata,
+    };
   }
   const session = await stripe.checkout.sessions.create(sessionParams);
   return { url: session.url!, sessionId: session.id };

@@ -445,6 +445,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
         amount: chargeAmount,
+        clientName: contactName,
         successUrl: `${baseUrl}/portal/client?paid=${invoice.id}`,
         cancelUrl: `${baseUrl}/portal/client`,
         tipAmount: tipAmount.toFixed(2),

@@ -500,7 +500,8 @@ describe("createCheckoutSession()", () => {
     await createCheckoutSession(baseParams);
 
     const [params] = mockCheckoutSessionsCreate.mock.calls[0];
-    expect(params.payment_intent_data).toBeUndefined();
+    expect(params.payment_intent_data?.application_fee_amount).toBeUndefined();
+    expect(params.payment_intent_data?.statement_descriptor_suffix).toBeUndefined();
   });
 
   it("returns the sessionId and url", async () => {
