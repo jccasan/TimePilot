@@ -27,14 +27,16 @@ export async function upsertHealthCheckResult(
   checkName: string,
   status: CheckStatus,
   severity: CheckSeverity,
-  message: string
+  message: string,
+  lastRunAt?: Date
 ): Promise<void> {
+  const ts = lastRunAt ?? new Date();
   await db
     .insert(systemHealthChecks)
-    .values({ checkName, status, severity, message, lastRunAt: new Date() })
+    .values({ checkName, status, severity, message, lastRunAt: ts })
     .onConflictDoUpdate({
       target: systemHealthChecks.checkName,
-      set: { status, severity, message, lastRunAt: new Date() },
+      set: { status, severity, message, lastRunAt: ts },
     });
 }
 
@@ -250,12 +252,9 @@ async function getJobTrackingResult(
   }
 }
 
-const STATUS_ORDER: Record<CheckStatus, number> = { fail: 0, warn: 1, pass: 2 };
-
 function sortChecks(results: CheckResult[]): CheckResult[] {
   return [...results].sort(
     (a, b) =>
-      STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
       SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] ||
       a.checkName.localeCompare(b.checkName)
   );
@@ -383,8 +382,13 @@ export async function runSystemHealthCheck(): Promise<void> {
   ]);
 
   for (const check of checks) {
-    if (check.checkName.startsWith("job_")) continue;
-    await upsertHealthCheckResult(check.checkName, check.status, check.severity, check.message);
+    await upsertHealthCheckResult(
+      check.checkName,
+      check.status,
+      check.severity,
+      check.message,
+      check.lastRunAt
+    );
   }
 
   const issueCount = checks.filter((c) => c.status !== "pass").length;
