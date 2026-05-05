@@ -92,8 +92,40 @@ const MAPBOX_COST_PER_CALL: Record<string, number> = {
   directions: 0.001,
   matrix: 0.002,
 };
-const OPENAI_COST_PER_CALL = 0.0001;
+const OPENAI_ROVER_CHAT_COST_PER_CALL = 0.0001;
 const TELNYX_COST_PER_SEGMENT = 0.005;
+
+/** Raw per-provider/per-metric daily rows for the last 30 days, plus Telnyx SMS segment rows. */
+export interface RawApiUsageStats {
+  dailyRows: { provider: string; metric: string; date: string; calls: number }[];
+  telnyxRows: { date: string; segments: number }[];
+}
+
+export async function getAllApiUsageStats(): Promise<RawApiUsageStats> {
+  const [dailyResult, telnyxResult] = await Promise.all([
+    db.execute(sql`
+      SELECT provider, metric, date::text AS date, calls
+      FROM api_usage_daily
+      WHERE date >= CURRENT_DATE - INTERVAL '30 days'
+      ORDER BY provider, metric, date
+    `),
+    db.execute(sql`
+      SELECT
+        DATE(recorded_at)::text AS date,
+        COALESCE(SUM(quantity), 0)::int AS segments
+      FROM usage_events
+      WHERE event_type = 'sms_segment'
+        AND recorded_at >= CURRENT_DATE - INTERVAL '30 days'
+      GROUP BY DATE(recorded_at)
+      ORDER BY date
+    `),
+  ]);
+
+  return {
+    dailyRows: dailyResult.rows as { provider: string; metric: string; date: string; calls: number }[],
+    telnyxRows: telnyxResult.rows as { date: string; segments: number }[],
+  };
+}
 
 export interface ProviderCostSummary {
   today: number;
@@ -125,36 +157,12 @@ export async function getAllApiCosts(): Promise<AllApiCosts> {
   const now = new Date();
   const monthStartStr = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
 
-  const [dailyResult, telnyxResult] = await Promise.all([
-    db.execute(sql`
-      SELECT provider, metric, date::text AS date, calls
-      FROM api_usage_daily
-      WHERE date >= CURRENT_DATE - INTERVAL '30 days'
-      ORDER BY provider, metric, date
-    `),
-    db.execute(sql`
-      SELECT
-        DATE(recorded_at)::text AS date,
-        COALESCE(SUM(quantity), 0)::int AS segments
-      FROM usage_events
-      WHERE event_type = 'sms_segment'
-        AND recorded_at >= CURRENT_DATE - INTERVAL '30 days'
-      GROUP BY DATE(recorded_at)
-      ORDER BY date
-    `),
-  ]);
-
-  const rows = dailyResult.rows as {
-    provider: string;
-    metric: string;
-    date: string;
-    calls: number;
-  }[];
+  const { dailyRows, telnyxRows } = await getAllApiUsageStats();
 
   const mapboxByDate: Record<string, number> = {};
   const mapboxBreakdown: Record<string, { today: number; thisMonth: number }> = {};
 
-  for (const row of rows.filter(
+  for (const row of dailyRows.filter(
     (r) => r.provider === "mapbox" || r.provider === "mapbox_searchbox"
   )) {
     const calls = Number(row.calls);
@@ -181,7 +189,9 @@ export async function getAllApiCosts(): Promise<AllApiCosts> {
   let openaiToday = 0;
   let openaiMonth = 0;
 
-  for (const row of rows.filter((r) => r.provider === "openai")) {
+  for (const row of dailyRows.filter(
+    (r) => r.provider === "openai" && r.metric === "rover_chat"
+  )) {
     const calls = Number(row.calls);
     openaiByDate[row.date] = (openaiByDate[row.date] || 0) + calls;
     if (row.date === todayStr) openaiToday += calls;
@@ -192,7 +202,7 @@ export async function getAllApiCosts(): Promise<AllApiCosts> {
   let telnyxToday = 0;
   let telnyxMonth = 0;
 
-  for (const row of telnyxResult.rows as { date: string; segments: number }[]) {
+  for (const row of telnyxRows) {
     const segs = Number(row.segments);
     telnyxByDate[row.date] = segs;
     if (row.date === todayStr) telnyxToday = segs;
@@ -210,7 +220,7 @@ export async function getAllApiCosts(): Promise<AllApiCosts> {
     openai: {
       today: openaiToday,
       thisMonth: openaiMonth,
-      estimatedMonthlyCostUsd: openaiMonth * OPENAI_COST_PER_CALL,
+      estimatedMonthlyCostUsd: openaiMonth * OPENAI_ROVER_CHAT_COST_PER_CALL,
       dailyTrend: buildTrend(openaiByDate),
     },
     telnyx: {

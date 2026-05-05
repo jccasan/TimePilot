@@ -60,13 +60,13 @@ const METRIC_LABELS: Record<string, string> = {
 };
 
 function CostSparkline({ data }: { data: { date: string; calls: number }[] }) {
-  const last14 = data.slice(-14);
-  if (last14.every((d) => d.calls === 0)) {
-    return <p className="text-xs text-muted-foreground italic">No activity in last 14 days</p>;
+  const last30 = data.slice(-30);
+  if (last30.every((d) => d.calls === 0)) {
+    return <p className="text-xs text-muted-foreground italic">No activity in last 30 days</p>;
   }
   return (
     <ResponsiveContainer width="100%" height={40}>
-      <BarChart data={last14} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+      <BarChart data={last30} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
         <Bar
           dataKey="calls"
           fill="currentColor"
@@ -174,7 +174,7 @@ function ApiCostCard({
             )}
 
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Last 14 days</p>
+              <p className="text-xs text-muted-foreground mb-1">Last 30 days</p>
               {summary?.dailyTrend ? (
                 <CostSparkline data={summary.dailyTrend} />
               ) : (
