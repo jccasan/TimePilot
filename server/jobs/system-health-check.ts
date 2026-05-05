@@ -240,7 +240,13 @@ async function getJobTrackingResult(
         lastRunAt: jobLastRunAt,
       };
     }
-    return { checkName, status: "pass", severity, message: row.message, lastRunAt: jobLastRunAt };
+    return {
+      checkName,
+      status: row.status as CheckStatus,
+      severity,
+      message: row.message,
+      lastRunAt: jobLastRunAt,
+    };
   } catch (err) {
     return {
       checkName,
