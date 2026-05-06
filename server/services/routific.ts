@@ -103,11 +103,16 @@ export async function routificOptimize(
 ): Promise<RoutificResult | null> {
   if (stops.length <= 1) return null;
 
-  const client = getClient();
-  if (!client) {
-    console.log("[routific] ROUTIFIC_API_TOKEN not set — skipping Routific");
+  const token = process.env.ROUTIFIC_API_TOKEN;
+  if (!token) {
+    console.warn("[routific] ROUTIFIC_API_TOKEN not set — skipping Routific, using fallback");
     return null;
   }
+
+  const client = getClient();
+  if (!client) return null;
+
+  console.log(`[routific] Submitting VRP: ${stops.length} stops, startPoint=${!!startPoint}`);
 
   try {
     const vrp = new Routific.Vrp();
@@ -134,17 +139,30 @@ export async function routificOptimize(
       },
     });
 
-    vrp.addOption("traffic", "slow");
-
-    const { solution } = (await client.route(vrp)) as {
+    const result = (await client.route(vrp)) as {
       jobId: string;
       solution: Record<string, unknown>;
     };
 
+    const { solution } = result;
+    console.log(
+      `[routific] Job ${result.jobId} finished. Solution keys: ${Object.keys(solution ?? {}).join(", ")}`
+    );
+
+    // Log num_unserved so we know if Routific skipped any stops
+    if (solution?.num_unserved) {
+      console.warn(
+        `[routific] ${solution.num_unserved} stop(s) unserved — falling back to internal algorithm`
+      );
+      return null;
+    }
+
     const stopIds = new Set(stops.map((s) => s.id));
     const orderedIds = extractOrderedIds(solution, stopIds);
     if (!orderedIds) {
-      console.log("[routific] Unexpected solution shape — falling back");
+      console.warn(
+        `[routific] extractOrderedIds returned null (expected ${stopIds.size} stops, got different shape). Solution routes: ${JSON.stringify(solution?.routes ?? {}).substring(0, 300)}`
+      );
       return null;
     }
 
@@ -172,10 +190,13 @@ export async function routificOptimize(
       // keep speed estimate
     }
 
-    console.log(`[routific] Optimized ${stops.length} stops — ${totalDistance} mi estimated`);
+    console.log(
+      `[routific] SUCCESS — ${stops.length} stops optimized, ${totalDistance} mi estimated`
+    );
     return { orderedIds, totalDistance, totalDuration };
   } catch (err) {
-    console.log("[routific] API error — falling back to internal algorithm:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[routific] API error (falling back): ${message}`);
     return null;
   }
 }
