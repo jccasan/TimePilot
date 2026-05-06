@@ -124,6 +124,8 @@ export async function routificOptimize(
           lat: stop.latitude,
           lng: stop.longitude,
         },
+        start: "8:00",
+        end: "17:00",
         duration: stop.durationMinutes ?? 5,
       });
     }
@@ -137,7 +139,14 @@ export async function routificOptimize(
         lat: depotLat,
         lng: depotLng,
       },
+      end_location: {
+        id: "depot",
+        lat: depotLat,
+        lng: depotLng,
+      },
     });
+
+    vrp.addOption("traffic", "slow");
 
     const result = (await client.route(vrp)) as {
       jobId: string;

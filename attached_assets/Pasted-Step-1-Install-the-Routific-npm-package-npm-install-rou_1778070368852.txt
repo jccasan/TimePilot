@@ -1,0 +1,92 @@
+Step 1: Install the Routific npm package
+
+npm install routific
+Step 2: Initialize client
+
+const Routific = require('routific')
+
+// This is your actual token
+const token   = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OWZhYTFjY2UwNDg4MzkyNDM5OWMxNDAiLCJpYXQiOjE3NzgwNzAzMjN9.nMY8DyNffbxDin4zYdc5g38oNfjorfFNLyG_UB0_zSo'
+
+const options = {token: token}
+const client  = new Routific.Client(options);
+Step 3: Initialize vrp service
+
+const vrp = new Routific.Vrp();
+Step 4: Add your visits
+
+const visits = [
+  {
+    id: "visit_1",
+    location: {name: "Jack Smith", lat: 49.227607, lng: -123.1363085},
+    start: "8:00",
+    end: "16:00",
+    duration: 10
+  },
+  {
+    id: "visit_2",
+    location: {name: "Bill Mayers", lat: 49.227607, lng: -123.1363085},
+    start: "8:00",
+    end: "16:00",
+    duration: 10
+  },
+  {
+    id: "visit_3",
+    location: {name: "Marc Kuo", lat: 49.227607, lng: -123.1363085},
+    start: "8:00",
+    end: "16:00",
+    duration: 10
+  }
+]
+
+visits.map((visit) => {
+  vrp.addVisit(visit.id, visit);
+})
+Step 5: Add your vehicles
+
+const vehicles = [
+  {
+    id: "vehicle_1",
+    start_location: {
+        id: "depot",
+        lat: 49.2553636,
+        lng: -123.0873365
+    },
+    end_location: {
+        id: "depot",
+        lat: 49.2553636,
+        lng: -123.0873365
+    }
+  },
+  {
+    id: "vehicle_2",
+    start_location: {
+        id: "depot",
+        lat: 49.2553636,
+        lng: -123.0873365
+    },
+    end_location: {
+        id: "depot",
+        lat: 49.2553636,
+        lng: -123.0873365
+    }
+  },
+]
+
+vehicles.map((vehicle) => {
+  vrp.addVehicle(vehicle.id, vehicle);
+})
+Step 6: Set traffic speed
+
+vrp.addOption("traffic", "slow");
+Step 7: Send request
+
+client.route(vrp, (err, solution, jobId) => {
+  if (err) {
+    console.log("An error occurred");
+    console.log(err);
+  } else if (solution.status == "success") {
+    console.log("Solution is:")
+    console.log(solution)
+  }
+})
