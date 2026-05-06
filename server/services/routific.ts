@@ -39,21 +39,22 @@ export interface RoutificResult {
 
 /**
  * Extract an ordered list of visit IDs from a Routific VRP solution.
- * The solution looks like:
- *   { routes: { vehicleId: { visits: [ { location_id: "..." }, ... ] } }, ... }
+ * The actual Routific VRP-Long output shape is:
+ *   { solution: { vehicleId: [ { location_id: "..." }, ... ] }, num_unserved: 0, ... }
+ * Each vehicle's value is a direct array of visit objects — NOT { visits: [...] }.
  */
 function extractOrderedIds(
   solution: Record<string, unknown>,
   stopIds: Set<string>
 ): string[] | null {
-  const routes = solution?.routes as
-    | Record<string, { visits?: Array<{ location_id?: string }> }>
+  const solutionMap = solution?.solution as
+    | Record<string, Array<{ location_id?: string }>>
     | undefined;
-  if (!routes) return null;
+  if (!solutionMap) return null;
 
   const ordered: string[] = [];
-  for (const vehicle of Object.values(routes)) {
-    for (const visit of vehicle.visits ?? []) {
+  for (const vehicleVisits of Object.values(solutionMap)) {
+    for (const visit of vehicleVisits) {
       if (visit.location_id && stopIds.has(visit.location_id)) {
         ordered.push(visit.location_id);
       }
@@ -196,7 +197,7 @@ export async function routificOptimize(
     const orderedIds = extractOrderedIds(solution, stopIds);
     if (!orderedIds) {
       console.warn(
-        `[routific] extractOrderedIds returned null (expected ${stopIds.size} stops). Routes: ${JSON.stringify(solution?.routes ?? {}).substring(0, 300)}`
+        `[routific] extractOrderedIds returned null (expected ${stopIds.size} stops). Solution: ${JSON.stringify(solution?.solution ?? {}).substring(0, 300)}`
       );
       return null;
     }
@@ -207,11 +208,8 @@ export async function routificOptimize(
 
     let totalDuration = (totalDistance / 25) * 60;
     try {
-      const routes = solution.routes as Record<
-        string,
-        { visits?: Array<{ arrival_time?: string }> }
-      >;
-      const vehicleVisits = Object.values(routes)[0]?.visits ?? [];
+      const solutionMap = solution.solution as Record<string, Array<{ arrival_time?: string }>>;
+      const vehicleVisits = Object.values(solutionMap)[0] ?? [];
       const lastVisit = vehicleVisits[vehicleVisits.length - 1];
       if (lastVisit?.arrival_time) {
         const [h, m] = lastVisit.arrival_time.split(":").map(Number);

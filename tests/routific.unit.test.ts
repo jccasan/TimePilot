@@ -22,16 +22,17 @@ const THREE_STOPS = [
   { id: "gamma", latitude: 40.2, longitude: -80.2 },
 ];
 
+// Real Routific VRP-Long output shape:
+//   solution.<vehicleId> is a direct array of visit objects (not { visits: [...] })
 const GOOD_OUTPUT = {
-  routes: {
-    vehicle_1: {
-      visits: [
-        { location_id: "beta", arrival_time: "08:20" },
-        { location_id: "alpha", arrival_time: "08:45" },
-        { location_id: "gamma", arrival_time: "09:15" },
-      ],
-    },
+  solution: {
+    vehicle_1: [
+      { location_id: "beta", arrival_time: "08:20" },
+      { location_id: "alpha", arrival_time: "08:45" },
+      { location_id: "gamma", arrival_time: "09:15" },
+    ],
   },
+  num_unserved: 0,
 };
 
 function mockFetchResponses(submitResponse: unknown, pollResponse: unknown) {
@@ -117,11 +118,10 @@ describe("routificOptimize", () => {
       {
         status: "finished",
         output: {
-          routes: {
-            vehicle_1: {
-              visits: [{ location_id: "alpha" }],
-            },
+          solution: {
+            vehicle_1: [{ location_id: "alpha" }],
           },
+          num_unserved: 0,
         },
       }
     );
@@ -161,11 +161,14 @@ describe("routificOptimize", () => {
       {
         status: "finished",
         output: {
-          routes: {
-            vehicle_1: {
-              visits: [{ location_id: "beta" }, { location_id: "alpha" }, { location_id: "gamma" }],
-            },
+          solution: {
+            vehicle_1: [
+              { location_id: "beta" },
+              { location_id: "alpha" },
+              { location_id: "gamma" },
+            ],
           },
+          num_unserved: 0,
         },
       }
     );
