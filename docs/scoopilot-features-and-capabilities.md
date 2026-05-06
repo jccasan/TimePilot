@@ -27,6 +27,7 @@ ScooPilot includes a full customer relationship management system designed for s
 - **Global Search** — Instantly search across contacts, properties, invoices, and quotes from a single search bar. Find any record in seconds.
 - **Tags & Filtering** — Organize contacts with custom tags and filter your database by status, service frequency, yard size, location, or any custom criteria.
 - **Bulk Actions** — Update statuses, apply tags, send portal invites, or trigger communications for multiple contacts at once.
+- **Cross-sell Opportunities** — The contact detail page surfaces upgrade and add-on suggestions specific to that client — based on service frequency, yard size, dog count, and account history. See section 20 for full details.
 
 ---
 
@@ -118,10 +119,12 @@ ScooPilot automates the entire billing cycle — from generating invoices when s
 
 - **Auto-Invoice Generation** — Invoices are created automatically when visits are completed. Choose to bill per service, per week, or per month based on your business model.
 - **Batch Invoicing** — Generate invoices for all completed, unbilled visits across your entire client base with a single action. No more manually creating invoices one by one.
+- **Batch Actions** — Select multiple invoices and perform bulk operations: send, mark paid, void, or delete — all from the invoice list view in a single step.
 - **Stripe Payment Processing** — Accept credit and debit card payments directly through ScooPilot. Clients can pay online through their portal or via payment links sent by email/SMS.
 - **Card-on-File Auto-Pay** — Store a client's payment method securely through Stripe and charge it automatically when invoices are generated. Set it and forget it — payments process without any manual effort.
 - **Customer Tipping** — Clients can add a tip when paying their invoice through the payment portal. Tips are tracked separately in your financial records.
 - **Payment Ledger** — A complete record of every payment received, including date, amount, method, and associated invoice. Filter by date range, client, or payment status.
+- **Revenue Dashboard** — Visualize your invoicing pipeline at a glance: open balances, collected this month, overdue amounts, and month-over-month trends — all from the invoices page.
 - **Invoice Consolidation** — Group multiple visits into a single monthly invoice for clients who prefer consolidated billing. Supports per-service, weekly, and monthly billing frequencies.
 - **Overdue Tracking** — Invoices are automatically flagged when they pass their due date. Send automated payment reminders to clients with outstanding balances.
 - **Partial Payments** — Track partial payments against invoices with remaining balance calculations.
@@ -146,14 +149,24 @@ Give your clients a professional, self-service experience with ScooPilot's brand
 
 ## 9. AI-Powered Features
 
-ScooPilot integrates artificial intelligence throughout the platform to help you work smarter, price better, and serve clients faster.
+ScooPilot integrates artificial intelligence throughout the platform to help you work smarter, price better, and serve clients faster. All product AI features are powered by Claude (Anthropic), giving you a fast, capable AI backbone across quoting, import mapping, profitability analysis, and the Rover assistant.
 
 ### Rover AI — Your In-App Business Assistant
 
-- **Context-Aware Chat** — Rover is an AI chatbot built into your ScooPilot dashboard that knows your business. It has real-time access to your contact count, monthly recurring revenue, upcoming visits, and overdue invoices.
-- **Live Data Queries** — Ask Rover questions like "How many active clients do I have?" or "What's my MRR?" and get instant, accurate answers pulled from your live data.
-- **Action Suggestions** — Rover can suggest creating support tickets or feature requests based on your conversation, streamlining your workflow.
+Rover is an AI chatbot built into your ScooPilot dashboard that knows your business. It has real-time access to your live data and can answer questions, look up clients, check schedules, and surface business insights — all through a natural conversational interface.
+
+- **Context-Aware Chat** — Rover knows your active clients, monthly recurring revenue, upcoming visits, overdue invoices, and open balances. Ask business questions in plain English and get accurate, live answers.
+- **Function Calling & Live Data Queries** — Rover uses structured function calls to query your actual data. Built-in tools include:
+  - Look up a specific client by name or ID — including their service plan, property, balance, and recent visits
+  - Get upcoming scheduled visits for the next 7 days by day of week
+  - Check today's route progress and visit completion status
+  - Retrieve recent visit history for any client
+  - Fetch a real-time dashboard snapshot: total active clients, MRR, overdue count, and open balance
+  - Send a portal invite or reset a client's portal password directly from the chat
+  - Look up recent invoices and payment history
 - **Streaming Responses** — Rover responds in real-time with streaming text, so you see answers as they're generated — no waiting for a full response.
+- **Privileged Mode** — Admin users get access to additional Rover capabilities. Rover can run full business diagnostics, system status checks, and multi-tool queries.
+- **Conversation History** — Rover maintains context across your conversation so follow-up questions work naturally ("What about that client's invoice?" after asking about a visit).
 
 ### AI Pricing Optimizer
 
@@ -161,10 +174,22 @@ ScooPilot integrates artificial intelligence throughout the platform to help you
 - **Price Elasticity Simulation** — Model how price changes would affect customer retention and net revenue before you make changes. See the projected impact of a 5%, 10%, or 15% increase.
 - **Unprofitable Account Detection** — AI analyzes your per-customer profitability and flags accounts that are costing you money, with specific recommendations for price adjustments.
 
+### AI Business Assessment
+
+- **Health Score (0–100)** — An animated ring gauge giving your business a single, comparable score you can track over time.
+- **CFO & COO Perspectives** — AI delivers structured findings from a financial and operational lens: revenue trends, collection rate, margin health, route efficiency, and visit completion rates.
+- **Prioritized Recommendations** — A ranked list of specific actions (High / Medium / Low priority) with plain-English explanations of what to do and why.
+- **Assessment History** — Every assessment is saved so you can compare your score over time and measure the impact of changes.
+
 ### AI-Assisted Data Import
 
 - **Smart Column Mapping** — When importing CSV files from competitors or spreadsheets, AI automatically maps your columns to ScooPilot fields. It handles variations in column naming, date formats, phone number formats, and service frequency descriptions.
+- **Import Rule Suggestions** — During the import review phase, AI suggests how to fill in missing service data (frequency, service day, price, billing rule) based on patterns in the staged rows.
 - **Data Cleaning** — Automatically standardizes phone numbers, addresses, and pricing data during import.
+
+### AI-Powered Onboarding
+
+- **Website Intelligence Extraction** — During onboarding, provide your existing website URL and ScooPilot's AI extracts your branding, service descriptions, service area, and business background. This pre-populates your company profile and trains the AI voice agent on your specific business.
 
 ---
 
@@ -190,7 +215,7 @@ ScooPilot's built-in communication tools keep your clients informed at every sta
 
 - **Two-Way SMS** — Send and receive text messages directly from ScooPilot. Conversations are threaded by contact so your team has full context for every interaction.
 - **MMS Image Support** — Send and receive images via MMS. Clients and technicians can attach up to 5 images per message (up to 5 MB each) — useful for sharing property photos, service confirmations, or gate access instructions.
-- **Multi-Provider Support** — Choose between Twilio (system default) or Telnyx as your SMS provider. Companies can configure their own Telnyx API keys and messaging profiles for custom sender IDs.
+- **Multi-Provider Support** — ScooPilot uses Telnyx as its default SMS/MMS provider. Companies can configure their own Telnyx API keys and messaging profiles for custom sender IDs. Shared-number multi-tenant SMS routing ensures the correct company context is applied to every inbound message, even when multiple tenants use the same platform phone number.
 - **Automated Service Reminders** — Send "service scheduled for tomorrow" reminders automatically. Configure timing and message content to match your brand voice.
 - **Invoice & Payment Reminders** — Automated text reminders for outstanding invoices. Set the timing and frequency of follow-ups.
 - **Customizable Templates** — Create reusable message templates with dynamic placeholders like {firstName}, {serviceDate}, {total}, and {companyName}. Templates ensure consistent, professional communication.
@@ -210,6 +235,7 @@ ScooPilot supports full two-way email communication — from automated transacti
 - **Conversation Threading** — Inbound email replies are matched to the originating contact and threaded chronologically, giving your team full context for every client conversation in one place.
 - **Notification Preferences** — Configure which events trigger email notifications and customize the content for your business.
 - **Branded Communications** — Emails include your company logo and branding for a professional, consistent client experience.
+- **Import Mode Suppression** — A toggle in Settings disables all outbound client emails during data imports and bulk operations, preventing accidental notifications while setting up a new account. A separate one-time batch welcome email can be sent to all clients when you're ready to go live.
 
 ---
 
@@ -242,6 +268,7 @@ ScooPilot offers flexible pricing tiers that grow with your business, from solo 
 
 - **Additional Users** — Add team members beyond your plan limit for $7/user/month.
 - **14-Day Free Trial** — Every new account starts with a full-featured, no-commitment trial. No credit card required to start.
+- **Account Freezing** — Accounts with failed payments or delinquent subscriptions are automatically frozen, preventing service delivery while preserving all data until billing is resolved.
 
 ### Stripe Connect for Your Clients
 
@@ -287,14 +314,16 @@ ScooPilot is built to integrate with your existing tools and external services t
 - **HMAC Security** — Every outbound webhook is signed with HMAC SHA256 so the receiving system can verify it came from ScooPilot. Your data integrity is protected.
 - **Reliable Delivery** — Built-in retry logic attempts delivery up to 5 times with exponential backoff. Delivery logs show the status of every webhook attempt.
 
-### Inbound Lead Capture Webhook
+### Inbound Lead & Quote Webhooks
 
 - **External Lead Forms** — Accept leads from your website, landing pages, or any external system via a dedicated webhook endpoint. ScooPilot automatically:
-  - Creates a new contact with "lead" status
-  - Geocodes the address and creates a property record
-  - Calculates a recommended price based on yard size and dog count
-  - Sends an auto-quote SMS to the lead if a phone number is provided
+  - Creates a new contact with "lead" status, with auto-deduplication against existing records
+  - Geocodes the address and creates a linked property record
+  - Calculates a tiered price recommendation based on yard size and dog count
+  - Creates a draft quote ready for review or auto-send
+  - Sends an auto-follow-up SMS and email to the prospect if contact info is provided
 - **API Key Authentication** — Secure your webhook endpoints with scoped API keys. Each key can be restricted to specific operations.
+- **Auto-Follow-Up Configuration** — Control the timing and content of automated follow-up messages triggered by lead and quote webhooks — all configurable per company.
 
 ### Voice Agent Scheduling API
 
@@ -308,10 +337,11 @@ ScooPilot gives you a clear picture of your business health with real-time dashb
 
 ### Customizable Dashboard
 
-- **Drag-and-Drop Widgets** — Build your perfect dashboard by adding, removing, and rearranging widgets. Choose from MRR, revenue, team size, client count, visit progress, and more.
+- **Drag-and-Drop Widgets** — Build your perfect dashboard by adding, removing, and rearranging widgets. Layout preferences are saved per user. Choose from MRR, revenue, team size, client count, visit progress, cross-sell opportunities, and more.
 - **Client Request Inbox** — See service change requests, portal messages, and one-time cleanup leads directly on your dashboard.
 - **Today's Operations** — Real-time progress bar showing how many of today's visits are completed, plus a weekly upcoming visit summary.
 - **5-Day Weather Forecast** — Plan around the weather with an integrated forecast widget. Know when rain or extreme temperatures might affect your service schedule.
+- **Cross-Sell Opportunities Widget** — A dashboard card that surfaces the top upgrade and add-on opportunities across your entire client base, ranked by revenue impact. See section 20 for details.
 
 ### Business Overview
 
@@ -380,38 +410,67 @@ ScooPilot goes beyond revenue tracking to show you true profitability — accoun
 - **Route Profit Maps** — Geographic visualization showing profitable zones (green) and unprofitable zones (red) on an interactive map. See at a glance where your money is being made and where it's being lost.
 - **AI Recommendations** — ScooPilot identifies unprofitable accounts and provides specific, actionable recommendations: raise the price by X%, consolidate with a nearby route, or consider dropping the account.
 - **Pricing Simulation** — Model "what if" scenarios before making changes. See how a price increase would affect your margins, factoring in estimated customer churn rates.
+- **Per-Customer Cost Overrides** — Set custom cost parameters for individual accounts that don't fit the standard model — for example, a far-out property that always takes longer to reach.
 
 ---
 
-## 19. Data Migration & Import
+## 19. Cross-Sell Opportunities Engine
+
+ScooPilot's rules-based cross-sell engine continuously scans your client base and surfaces upgrade and add-on opportunities — so you can grow revenue from clients you already have.
+
+- **Automated Rules Engine** — Dozens of pre-built rules evaluate every contact against criteria like service frequency, yard size, dog count, visit history, account age, and location. When a client matches an opportunity pattern, it's flagged automatically.
+- **Opportunity Types** — Examples of surfaced opportunities include:
+  - Bi-weekly customers who could benefit from weekly service (based on dog count or yard size)
+  - Clients without auto-pay who consistently pay late
+  - Single-service clients who own multiple properties
+  - Clients approaching rate thresholds who haven't had a price review
+  - Long-tenure accounts overdue for a loyalty check-in
+- **Dashboard Widget** — A dedicated dashboard card shows the top N opportunities across your entire client base, ranked by estimated revenue impact. Click any opportunity to go directly to the contact record.
+- **Contact Detail Integration** — On each contact's detail page, a dedicated Opportunities panel shows every relevant cross-sell suggestion for that specific client, with a short explanation of why each was surfaced.
+- **Actionable** — Each opportunity includes a suggested next step — send a message, schedule a call, or update the service plan — so your team knows exactly how to act on it.
+
+---
+
+## 20. Data Migration & Import
 
 Switching to ScooPilot from another platform? The migration tools make it painless to bring your existing data — clients, properties, service plans, and invoice history — into your new system.
+
+### Import Wizard (v2) — 7-Step Guided Migration
+
+The full import experience is managed through a structured 7-step wizard that takes you from raw export files to clean, live production data.
+
+- **Step 0 — Migration Checklist** — Six pre-flight questions prepare the import: do you know your next service dates? Will you preserve existing route assignments or rebuild them? What billing rules apply? This anchors critical decisions before any data is touched.
+- **Step 1 — Upload & Platform Detection** — Choose your source platform (Sweep & Go, Jobber, Google Sheets, or Other). Upload a CSV, paste a Google Sheets export URL, or paste raw CSV content directly. ScooPilot fetches remote URLs and detects competitor-specific formats automatically.
+- **Step 2 — AI Field Mapping** — ScooPilot's AI maps your source columns to ScooPilot fields. Review and adjust the mapping before proceeding. Handles variations like "Customer Name" → first/last name split, "Svc Freq" → frequency enum, and phone number format normalization.
+- **Step 3 — Row Review** — Preview every row that will be imported. Rows with errors or warnings are flagged. Fix or skip problem rows before staging.
+- **Step 4 — Route Assignment Mode** — Choose how service days are handled:
+  - **Preserve** — Keep each client's existing service day exactly as imported
+  - **Rebuild** — Let ScooPilot redistribute clients across optimized route days
+  - **Hybrid** — Apply a rule-based mix: preserve where possible, redistribute where needed
+- **Step 5 — Route Day Preview** — See a day-distribution table (Mon–Fri + Unassigned) showing how many clients fall on each service day based on the assignment mode chosen. Adjust before committing.
+- **Step 6 — Stage & Confirm** — Review the final import summary and click "Stage Import." Data is buffered into staging tables and not written to production until reviewed and confirmed.
+
+### Import Staging & Missing Logic Resolver
+
+All imports are buffered in staging before touching production records. This gives you a chance to fix data quality issues without any risk.
+
+- **Health Scores** — Each staged batch shows a health score based on how complete and valid the data is. Rows with missing required fields are flagged.
+- **Missing Logic Resolver** — A dedicated review page (`/import/:batchId/resolve`) shows every row with missing service fields (frequency, service day, price, billing rule). Fix them in bulk or row-by-row with inline editing.
+- **AI Rule Suggestions** — For batches with missing service logic, the AI analyzes patterns in the staged rows and suggests rules to fill the gaps. Accept suggestions with one click.
+- **Commit to Production** — Once the batch is clean, commit it. ScooPilot writes contacts, properties, and service plans to production and removes them from staging.
 
 ### Competitor-Specific Import
 
 - **Sweep & Go** — Purpose-built parser for Sweep & Go exports. Automatically maps fields, handles their specific data formats, and imports contacts, properties, and invoice history.
 - **Jobber** — Dedicated import support for Jobber data exports with field mapping tailored to Jobber's export format.
+- **Google Sheets** — Paste a shareable Google Sheets URL and ScooPilot fetches the CSV export directly, no manual download required.
 
 ### General Import Tools
 
 - **CSV Upload** — Upload any CSV file and use the interactive column mapping wizard to match your columns to ScooPilot fields.
-- **AI-Assisted Mapping** — When column names don't match exactly, AI suggests the best field mapping. It handles variations like "Customer Name" → "Contact Name" or "Svc Freq" → "Service Frequency."
-- **Data Preview** — Review your imported data before committing. See warnings for potential issues (missing required fields, format mismatches) and fix them before import.
 - **Duplicate Detection** — The import system checks for existing records and gives you the option to skip duplicates or update existing records with new data.
 - **Invoice History Import** — Bring your historical invoices into ScooPilot so your financial records are complete from day one.
 - **JSON Import** — For more technical integrations, import contact data via JSON format with full schema validation.
-
----
-
-## 20. Platform Administration
-
-For ScooPilot platform operators, a dedicated admin dashboard provides oversight across all tenant companies.
-
-- **Multi-Tenant Management** — View and manage all companies on the platform. See subscription status, user counts, usage metrics, and account health at a glance.
-- **Platform Analytics** — Executive-level dashboards showing total platform MRR, active tenants, growth trends, and churn rates.
-- **Subscription Tier Management** — Configure and manage the available subscription tiers, pricing, and feature limits.
-- **Admin Messaging Monitor** — A dedicated platform-admin dashboard at `/admin/messaging` for monitoring communications health across all tenants. Includes per-tenant message volume breakdowns by channel and direction, aggregate platform-wide messaging analytics, and an exception queue for managing failed or ambiguous message deliveries that require manual intervention.
-- **Security Controls** — Platform-wide security settings, user management, and access controls.
 
 ---
 
@@ -439,27 +498,55 @@ New ScooPilot accounts are guided through a structured 5-step onboarding wizard 
 
 ---
 
-## 23. Settings & Configuration
+## 23. Feature Tours
+
+ScooPilot includes built-in guided tours to help new users and returning users navigate the platform efficiently.
+
+- **Joyride-Powered Tours** — Interactive step-by-step walkthroughs highlight key UI elements and explain what each section does, overlaid directly on the live application.
+- **New User Onboarding Tour** — Automatically launched for new accounts, guiding them through the dashboard, quick-create menu, contacts, scheduling, and routes.
+- **Feature-Specific Tours** — Individual tours are available for major features — the route builder, import wizard, profitability tools, and the Rover AI assistant.
+- **Replay Anytime** — Tours can be relaunched from the Settings page or the help menu, so team members added later can get the same guided introduction.
+- **Tour Completion Tracking** — The system tracks which tours each user has completed so they aren't shown again unnecessarily.
+
+---
+
+## 24. Settings & Configuration
 
 ScooPilot is deeply configurable to match how your specific business operates.
 
 - **Company Branding** — Upload your logo, set your company colors, and configure your business information. Your branding appears on proposals, invoices, the client portal, and email communications.
 - **Timezone & Service Area** — Set your operating timezone and define your service area for accurate scheduling and client expectations.
 - **Pricing Engine Configuration** — Fine-tune the variables that drive your pricing: base labor rates, burden multipliers (taxes, insurance, workers comp), travel cost per mile, equipment costs, and overhead allocation. These feed into both your pricing calculator and profitability analysis.
-- **SMS Provider Setup** — Configure Twilio or Telnyx as your SMS provider. Set up your own API keys and messaging profiles for branded communication.
+- **SMS Provider Setup** — Configure Telnyx as your SMS provider. Set up your own API keys and messaging profiles for branded communication.
 - **Integration Management** — Connect and manage QuickBooks Online, Stripe, and other integrations from a centralized settings panel.
 - **Notification Preferences** — Control which events trigger notifications and how they're delivered (email, SMS, in-app).
 - **Team Management** — Add team members, assign roles (admin, office, technician), and manage permissions. Each user seat beyond your plan limit is $7/month.
+- **Import Mode** — Suppress all outbound client communications during a data migration or bulk import, then send a one-time welcome email batch when you're ready to go live.
+- **Draggable Layout Persistence** — The dashboard and settings page use drag-and-drop grid layouts. Your arrangement is saved per user and persists across sessions.
 
 ---
 
-## 24. Dark Mode
+## 25. Platform Administration
+
+For ScooPilot platform operators, a dedicated admin dashboard provides oversight across all tenant companies.
+
+- **Multi-Tenant Management** — View and manage all companies on the platform. See subscription status, user counts, usage metrics, and account health at a glance.
+- **Platform Analytics** — Executive-level dashboards showing total platform MRR, active tenants, growth trends, and churn rates.
+- **Subscription Tier Management** — Configure and manage the available subscription tiers, pricing, and feature limits.
+- **Admin Messaging Monitor** — A dedicated platform-admin dashboard for monitoring communications health across all tenants. Includes per-tenant message volume breakdowns by channel and direction, aggregate platform-wide messaging analytics, and an exception queue for managing failed or ambiguous message deliveries that require manual intervention.
+- **API Cost Monitoring** — Real-time widgets tracking API usage and spend across Mapbox (geocoding + directions), Claude AI (Rover assistant), and Telnyx (SMS/MMS). View daily call counts, estimated costs, and month-to-date totals per provider.
+- **System Health Monitor** — A live status panel showing pass/warn/fail indicators for all critical platform checks: database connectivity, Stripe configuration, SMS provider, AI API key, job health (reminders, auto-invoice, nightly rollup, stop order repair), and stuck subscriptions. Alerts are sent automatically when issues are detected.
+- **Security Controls** — Platform-wide security settings, user management, and access controls.
+
+---
+
+## 26. Dark Mode
 
 ScooPilot supports full dark mode across the entire application. Toggle between light and dark themes based on your preference. The dark theme is carefully designed to maintain readability and visual hierarchy across all screens, maps, charts, and data tables.
 
 ---
 
-## 25. Security & Reliability
+## 27. Security & Reliability
 
 ScooPilot is built with enterprise-grade security practices to protect your business data and your clients' information.
 
@@ -469,11 +556,11 @@ ScooPilot is built with enterprise-grade security practices to protect your busi
 - **Encrypted Communications** — All data in transit is encrypted via TLS/SSL. Sensitive credentials (QuickBooks tokens, API keys) are encrypted at rest.
 - **Rate Limiting** — API endpoints are rate-limited to prevent abuse and ensure platform stability for all users.
 - **CORS & Helmet Protection** — Industry-standard HTTP security headers and cross-origin request protections are enforced on every request.
-- **Webhook Signature Verification** — All outbound webhooks include HMAC SHA256 signatures. Inbound webhooks from Stripe, QuickBooks, and Twilio are verified before processing.
+- **Webhook Signature Verification** — All outbound webhooks include HMAC SHA256 signatures. Inbound webhooks from Stripe, QuickBooks, and Telnyx are verified before processing.
 
 ---
 
-## 26. Technical Foundation
+## 28. Technical Foundation
 
 ScooPilot is built on a modern, scalable technology stack designed for reliability and performance.
 
@@ -483,6 +570,7 @@ ScooPilot is built on a modern, scalable technology stack designed for reliabili
 - **Responsive Design** — Every screen in ScooPilot is fully responsive, working seamlessly on desktop monitors, tablets, and mobile phones.
 - **PostgreSQL Database** — Enterprise-grade relational database for reliable, ACID-compliant data storage with full backup and recovery.
 - **Object Storage** — Cloud-based file storage for proof-of-service photos, yard measurement images, company logos, and document attachments.
+- **AI Infrastructure** — Powered by Anthropic Claude 3.5 (Haiku for speed-critical tasks, Sonnet for complex reasoning). All product AI features run on Claude — import mapping, profitability advising, pricing optimization, onboarding extraction, and the Rover assistant.
 
 ---
 
