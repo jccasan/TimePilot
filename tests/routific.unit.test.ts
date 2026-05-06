@@ -35,10 +35,8 @@ const GOOD_OUTPUT = {
 };
 
 function mockFetchResponses(submitResponse: unknown, pollResponse: unknown) {
-  let callCount = 0;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
     const urlStr = String(url);
-    callCount++;
     if (urlStr.includes("/v1/vrp-long")) {
       return {
         ok: true,
@@ -165,11 +163,7 @@ describe("routificOptimize", () => {
         output: {
           routes: {
             vehicle_1: {
-              visits: [
-                { location_id: "beta" },
-                { location_id: "alpha" },
-                { location_id: "gamma" },
-              ],
+              visits: [{ location_id: "beta" }, { location_id: "alpha" }, { location_id: "gamma" }],
             },
           },
         },

@@ -85,10 +85,7 @@ function approximateDistance(
 }
 
 /** Submit a VRP-long job to Routific and return the job ID. */
-async function submitJob(
-  token: string,
-  body: Record<string, unknown>
-): Promise<string> {
+async function submitJob(token: string, body: Record<string, unknown>): Promise<string> {
   const res = await fetch(`${ROUTIFIC_API_BASE}/v1/vrp-long`, {
     method: "POST",
     headers: {
@@ -107,10 +104,7 @@ async function submitJob(
 }
 
 /** Poll until the job reaches a terminal state, then return the output. */
-async function pollJob(
-  token: string,
-  jobId: string
-): Promise<Record<string, unknown>> {
+async function pollJob(token: string, jobId: string): Promise<Record<string, unknown>> {
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
 
