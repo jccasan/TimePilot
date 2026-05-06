@@ -39,13 +39,13 @@ export interface RoutificResult {
 
 export interface RoutificOptions {
   /**
-   * Maximum total route duration in minutes, measured from an implicit shift start of 08:00.
-   * When provided, Routific's shift window is set to 08:00 – (08:00 + maxDurationMinutes).
+   * Maximum total route duration in whole hours, measured from a fixed shift start of 08:00.
+   * When provided, Routific's shift window is set to 08:00 – (08:00 + maxDurationHours).
    * If stops cannot all be served within the window, Routific returns unserved stops and the
    * caller falls back to the internal nearest-neighbour + 2-opt algorithm.
    * When absent the shift window is not constrained — matching the previous unconstrained behavior.
    */
-  maxDurationMinutes?: number;
+  maxDurationHours?: number;
 }
 
 /**
@@ -162,16 +162,16 @@ export async function routificOptimize(
   }
 
   // Build shift window only when a duration cap is explicitly requested.
-  // When maxDurationMinutes is absent we leave the window unconstrained (original behavior).
+  // When maxDurationHours is absent we leave the window unconstrained (original behavior).
   let shiftStart: string | undefined;
   let shiftEnd: string | undefined;
-  if (options?.maxDurationMinutes != null && options.maxDurationMinutes > 0) {
+  if (options?.maxDurationHours != null && options.maxDurationHours > 0) {
     const startTotalMin = 8 * 60; // fixed shift start: 08:00
-    const endTotalMin = startTotalMin + options.maxDurationMinutes;
+    const endTotalMin = startTotalMin + options.maxDurationHours * 60;
     const endH = Math.floor(endTotalMin / 60);
     const endM = endTotalMin % 60;
-    shiftStart = "8:00";
-    shiftEnd = `${endH}:${String(endM).padStart(2, "0")}`;
+    shiftStart = "08:00";
+    shiftEnd = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
   }
 
   console.log(

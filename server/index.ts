@@ -583,6 +583,21 @@ async function ensureMinStopsPerDaySchema() {
   }
 }
 
+async function ensureMaxRouteDurationHoursSchema() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(
+      `ALTER TABLE companies ADD COLUMN IF NOT EXISTS max_route_duration_hours INTEGER;`
+    );
+    console.log("[Migration] max_route_duration_hours column verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure max_route_duration_hours:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function repairDuplicateStopOrders() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -2883,6 +2898,7 @@ async function seedLakeErieScoopersAccount() {
   await ensureAttachmentsSchema();
   await ensureMaxStopsSchema();
   await ensureMinStopsPerDaySchema();
+  await ensureMaxRouteDurationHoursSchema();
   await ensureCanadaMarketColumns();
   await migrateServicePlansToAgreementsAndJobs();
   await repairServicePlanDayOfWeek();

@@ -1735,7 +1735,7 @@ export default function RoutesPage() {
   const { data: company } = useQuery<{
     name: string;
     maxStopsPerRoute?: number | null;
-    maxRouteDurationMinutes?: number | null;
+    maxRouteDurationHours?: number | null;
     startLatitude?: string | null;
     startLongitude?: string | null;
   }>({ queryKey: ["/api/company"] });
@@ -1781,32 +1781,32 @@ export default function RoutesPage() {
   }, [company?.maxStopsPerRoute]);
 
   useEffect(() => {
-    if (company?.maxRouteDurationMinutes != null) {
-      setMaxDurationInput(String(company.maxRouteDurationMinutes));
+    if (company?.maxRouteDurationHours != null) {
+      setMaxDurationInput(String(company.maxRouteDurationHours));
     }
-  }, [company?.maxRouteDurationMinutes]);
+  }, [company?.maxRouteDurationHours]);
 
   const handleSaveMaxDuration = async () => {
     const val = maxDurationInput.trim();
-    const minutes = val === "" ? null : parseInt(val, 10);
-    if (val !== "" && (isNaN(minutes!) || minutes! < 30)) {
+    const hours = val === "" ? null : parseInt(val, 10);
+    if (val !== "" && (isNaN(hours!) || hours! < 1 || hours! > 12)) {
       toast({
         title: "Invalid value",
-        description: "Max route duration must be at least 30 minutes.",
+        description: "Max route duration must be a whole number between 1 and 12 hours.",
         variant: "destructive",
       });
       return;
     }
     setIsSavingDuration(true);
     try {
-      await apiRequest("PATCH", "/api/company", { maxRouteDurationMinutes: minutes });
+      await apiRequest("PATCH", "/api/company", { maxRouteDurationHours: hours });
       await queryClient.invalidateQueries({ queryKey: ["/api/company"] });
       toast({
-        title: minutes == null ? "Duration cap cleared" : "Duration cap saved",
+        title: hours == null ? "Duration cap cleared" : "Duration cap saved",
         description:
-          minutes == null
+          hours == null
             ? "Route optimization will no longer be time-capped."
-            : `Routific will cap each route at ${minutes} minutes when optimizing.`,
+            : `Routific will cap each route at ${hours} hour${hours === 1 ? "" : "s"} when optimizing.`,
       });
     } catch (err: unknown) {
       toast({
@@ -2871,18 +2871,19 @@ export default function RoutesPage() {
             </div>
             <div
               className="flex items-center gap-1.5"
-              title="Cap the maximum route duration passed to the route optimizer (in minutes). Leave blank for no cap."
+              title="Cap the maximum route duration passed to the route optimizer (in hours, 1–12). Leave blank for no cap."
             >
               <Label
                 htmlFor="max-duration-input"
                 className="text-xs text-muted-foreground whitespace-nowrap"
               >
-                Max min
+                Max hrs
               </Label>
               <Input
                 id="max-duration-input"
                 type="number"
-                min={30}
+                min={1}
+                max={12}
                 placeholder="none"
                 value={maxDurationInput}
                 onChange={(e) => setMaxDurationInput(e.target.value)}

@@ -535,8 +535,8 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         const routificResult = await routificOptimize(
           clusterStops,
           startPoint,
-          company.maxRouteDurationMinutes && company.maxRouteDurationMinutes > 0
-            ? { maxDurationMinutes: company.maxRouteDurationMinutes }
+          company.maxRouteDurationHours && company.maxRouteDurationHours > 0
+            ? { maxDurationHours: company.maxRouteDurationHours }
             : undefined
         );
         const orderedIds = routificResult
@@ -758,8 +758,8 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
             const routificRes = await routificOptimizeBulk(
               clusterStops,
               startPoint,
-              company.maxRouteDurationMinutes && company.maxRouteDurationMinutes > 0
-                ? { maxDurationMinutes: company.maxRouteDurationMinutes }
+              company.maxRouteDurationHours && company.maxRouteDurationHours > 0
+                ? { maxDurationHours: company.maxRouteDurationHours }
                 : undefined
             );
             const orderedIds = routificRes
@@ -993,9 +993,9 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const minStopsPerDay =
         company.minStopsPerDay && company.minStopsPerDay > 0 ? company.minStopsPerDay : undefined;
 
-      const maxRouteDurationMinutes =
-        company.maxRouteDurationMinutes && company.maxRouteDurationMinutes > 0
-          ? company.maxRouteDurationMinutes
+      const maxRouteDurationHours =
+        company.maxRouteDurationHours && company.maxRouteDurationHours > 0
+          ? company.maxRouteDurationHours
           : undefined;
 
       const result = await analyzeWeeklySchedule(weeklyStops, startPoint, {
@@ -1004,7 +1004,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         includeSaturday,
         maxStopsPerDay,
         minStopsPerDay,
-        maxRouteDurationMinutes,
+        maxRouteDurationHours,
       });
 
       const { calculateAllCustomerProfitability } =
@@ -1332,9 +1332,9 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
             maxStopsPerDay,
             minStopsPerDay,
             numTechs,
-            maxRouteDurationMinutes:
-              company.maxRouteDurationMinutes && company.maxRouteDurationMinutes > 0
-                ? company.maxRouteDurationMinutes
+            maxRouteDurationHours:
+              company.maxRouteDurationHours && company.maxRouteDurationHours > 0
+                ? company.maxRouteDurationHours
                 : undefined,
           });
 

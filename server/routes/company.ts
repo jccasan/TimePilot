@@ -365,7 +365,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "venmoHandle",
         "maxStopsPerRoute",
         "minStopsPerDay",
-        "maxRouteDurationMinutes",
+        "maxRouteDurationHours",
         "country",
         "currency",
         "taxRatePercent",
