@@ -1680,6 +1680,11 @@ export default function RoutesPage() {
   const [geocodeAlert, setGeocodeAlert] = useState<{ routeId: string; stops: FailedStop[] } | null>(
     null
   );
+  const [fixedStopIds, setFixedStopIds] = useState<Set<string>>(new Set());
+  const [fixingStop, setFixingStop] = useState<FailedStop | null>(null);
+  const [fixLat, setFixLat] = useState("");
+  const [fixLng, setFixLng] = useState("");
+  const [fixErrors, setFixErrors] = useState<{ lat?: string; lng?: string }>({});
   const [showZones, setShowZones] = useState(false);
   const [showWeeklyOptimizer, setShowWeeklyOptimizer] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -2492,6 +2497,27 @@ export default function RoutesPage() {
     },
   });
 
+  const fixCoordinatesMutation = useMutation({
+    mutationFn: async ({ propertyId, latitude, longitude }: { propertyId: string; latitude: number; longitude: number }) => {
+      const res = await apiRequest("PATCH", `/api/properties/${propertyId}`, { latitude, longitude });
+      return res.json();
+    },
+    onSuccess: (_data, { propertyId }) => {
+      const stop = fixingStop;
+      if (stop && stop.propertyId === propertyId) {
+        setFixedStopIds((prev) => new Set([...prev, stop.servicePlanId]));
+        toast({ title: "Coordinates saved", description: `${stop.name} can now be included in optimization.` });
+        setFixingStop(null);
+        setFixLat("");
+        setFixLng("");
+        setFixErrors({});
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save coordinates", description: err.message, variant: "destructive" });
+    },
+  });
+
   const reverseRouteMutation = useMutation({
     mutationFn: async (routeId: string) => {
       setReversingRouteId(routeId);
@@ -2956,65 +2982,208 @@ export default function RoutesPage() {
                           <X className="h-4 w-4" />
                         </button>
                       </div>
-                      <ul className="space-y-1 ml-7" data-testid="list-geocode-failed-stops">
-                        {geocodeAlert.stops.map((stop) => (
-                          <li
-                            key={stop.servicePlanId}
-                            className="flex items-start gap-2 text-xs text-orange-800 dark:text-orange-200"
-                          >
-                            <MapPin className="h-3 w-3 shrink-0 mt-0.5 text-orange-500" />
-                            <span>
-                              <span className="font-medium">{stop.name}</span>
-                              {stop.address && stop.address !== "No address" && (
-                                <span className="text-orange-600 dark:text-orange-400">
-                                  {" "}
-                                  — {stop.address}
-                                </span>
+                      {(() => {
+                        const remainingStops = geocodeAlert.stops.filter(
+                          (s) => !fixedStopIds.has(s.servicePlanId)
+                        );
+                        const allFixed = remainingStops.length === 0;
+                        return (
+                          <>
+                            {allFixed ? (
+                              <div className="ml-7 flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
+                                <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                                <span>All stops have coordinates — ready to retry optimization.</span>
+                              </div>
+                            ) : (
+                              <ul className="space-y-1.5 ml-7" data-testid="list-geocode-failed-stops">
+                                {remainingStops.map((stop) => (
+                                  <li
+                                    key={stop.servicePlanId}
+                                    className="flex items-center gap-2 text-xs text-orange-800 dark:text-orange-200"
+                                  >
+                                    <MapPin className="h-3 w-3 shrink-0 text-orange-500" />
+                                    <span className="flex-1 min-w-0">
+                                      <span className="font-medium">{stop.name}</span>
+                                      {stop.address && stop.address !== "No address" && (
+                                        <span className="text-orange-600 dark:text-orange-400">
+                                          {" "}
+                                          — {stop.address}
+                                        </span>
+                                      )}
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-xs px-2 shrink-0 border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-950/50"
+                                      onClick={() => {
+                                        setFixingStop(stop);
+                                        setFixLat("");
+                                        setFixLng("");
+                                        setFixErrors({});
+                                      }}
+                                      data-testid={`button-fix-stop-${stop.servicePlanId}`}
+                                    >
+                                      Fix
+                                    </Button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            <div className="flex items-center gap-2 ml-7">
+                              {!allFixed && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-950/50"
+                                  onClick={() => {
+                                    const ids = new Set(remainingStops.map((s) => s.servicePlanId));
+                                    setHighlightedStopIds(ids);
+                                    const firstId = remainingStops[0]?.servicePlanId;
+                                    if (firstId) {
+                                      requestAnimationFrame(() => {
+                                        const el = document.querySelector(
+                                          `[data-testid="draggable-stop-${firstId}"]`
+                                        );
+                                        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                                      });
+                                    }
+                                  }}
+                                  data-testid="button-show-ungeocoded-stops"
+                                >
+                                  <MapPin className="h-3 w-3 mr-1" />
+                                  Show stops
+                                </Button>
                               )}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="flex items-center gap-2 ml-7">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-950/50"
-                          onClick={() => {
-                            const ids = new Set(geocodeAlert.stops.map((s) => s.servicePlanId));
-                            setHighlightedStopIds(ids);
-                            const firstId = geocodeAlert.stops[0]?.servicePlanId;
-                            if (firstId) {
-                              requestAnimationFrame(() => {
-                                const el = document.querySelector(
-                                  `[data-testid="draggable-stop-${firstId}"]`
-                                );
-                                el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                              });
-                            }
-                          }}
-                          data-testid="button-show-ungeocoded-stops"
-                        >
-                          <MapPin className="h-3 w-3 mr-1" />
-                          Show stops
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-950/50"
-                          onClick={() => retryGeocodeMutation.mutate(geocodeAlert.routeId)}
-                          disabled={retryGeocodeMutation.isPending}
-                          data-testid="button-retry-geocoding"
-                        >
-                          {retryGeocodeMutation.isPending ? (
-                            <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                          ) : (
-                            <RotateCcw className="h-3 w-3 mr-1" />
-                          )}
-                          Retry geocoding
-                        </Button>
-                      </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-950/50"
+                                onClick={() => retryGeocodeMutation.mutate(geocodeAlert.routeId)}
+                                disabled={retryGeocodeMutation.isPending}
+                                data-testid="button-retry-geocoding"
+                              >
+                                {retryGeocodeMutation.isPending ? (
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                ) : (
+                                  <RotateCcw className="h-3 w-3 mr-1" />
+                                )}
+                                {allFixed ? "Retry optimization" : "Retry geocoding"}
+                              </Button>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
+                  )}
+
+                  {fixingStop && (
+                    <Dialog open={!!fixingStop} onOpenChange={(open) => { if (!open) { setFixingStop(null); setFixLat(""); setFixLng(""); setFixErrors({}); } }}>
+                      <DialogContent className="sm:max-w-md" data-testid="dialog-fix-coordinates">
+                        <DialogHeader>
+                          <DialogTitle>Fix coordinates</DialogTitle>
+                          <DialogDescription>
+                            Enter the latitude and longitude for this property so it can be included in route optimization.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-2">
+                          <div className="rounded-md bg-muted px-3 py-2 text-sm">
+                            <span className="font-medium">{fixingStop.name}</span>
+                            {fixingStop.address && fixingStop.address !== "No address" && (
+                              <div className="text-muted-foreground mt-0.5">{fixingStop.address}</div>
+                            )}
+                          </div>
+                          <a
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fixingStop.address && fixingStop.address !== "No address" ? fixingStop.address : fixingStop.name)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-sm text-primary underline underline-offset-2 hover:opacity-80"
+                            data-testid="link-open-google-maps"
+                          >
+                            <MapPin className="h-3.5 w-3.5" />
+                            Open in Google Maps
+                          </a>
+                          <div className="rounded-md border bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground space-y-1">
+                            <p className="font-medium text-foreground">How to get coordinates:</p>
+                            <ol className="list-decimal list-inside space-y-1">
+                              <li>Open Google Maps and navigate to the correct location.</li>
+                              <li>Right-click the exact spot on the map.</li>
+                              <li>The coordinates appear at the top of the menu — click them to copy.</li>
+                              <li>Paste the latitude and longitude into the fields below.</li>
+                            </ol>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <Label htmlFor="fix-lat">Latitude</Label>
+                              <Input
+                                id="fix-lat"
+                                type="number"
+                                step="any"
+                                placeholder="e.g. 40.7128"
+                                value={fixLat}
+                                onChange={(e) => { setFixLat(e.target.value); setFixErrors((prev) => ({ ...prev, lat: undefined })); }}
+                                data-testid="input-fix-latitude"
+                              />
+                              {fixErrors.lat && (
+                                <p className="text-xs text-destructive" data-testid="error-fix-latitude">{fixErrors.lat}</p>
+                              )}
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor="fix-lng">Longitude</Label>
+                              <Input
+                                id="fix-lng"
+                                type="number"
+                                step="any"
+                                placeholder="e.g. -74.0060"
+                                value={fixLng}
+                                onChange={(e) => { setFixLng(e.target.value); setFixErrors((prev) => ({ ...prev, lng: undefined })); }}
+                                data-testid="input-fix-longitude"
+                              />
+                              {fixErrors.lng && (
+                                <p className="text-xs text-destructive" data-testid="error-fix-longitude">{fixErrors.lng}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            variant="outline"
+                            onClick={() => { setFixingStop(null); setFixLat(""); setFixLng(""); setFixErrors({}); }}
+                            data-testid="button-fix-cancel"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              const latNum = parseFloat(fixLat);
+                              const lngNum = parseFloat(fixLng);
+                              const errors: { lat?: string; lng?: string } = {};
+                              if (fixLat.trim() === "" || isNaN(latNum)) {
+                                errors.lat = "Enter a valid latitude.";
+                              } else if (latNum < -90 || latNum > 90) {
+                                errors.lat = "Latitude must be between -90 and 90.";
+                              }
+                              if (fixLng.trim() === "" || isNaN(lngNum)) {
+                                errors.lng = "Enter a valid longitude.";
+                              } else if (lngNum < -180 || lngNum > 180) {
+                                errors.lng = "Longitude must be between -180 and 180.";
+                              }
+                              if (Object.keys(errors).length > 0) {
+                                setFixErrors(errors);
+                                return;
+                              }
+                              fixCoordinatesMutation.mutate({ propertyId: fixingStop!.propertyId, latitude: latNum, longitude: lngNum });
+                            }}
+                            disabled={fixCoordinatesMutation.isPending}
+                            data-testid="button-fix-save"
+                          >
+                            {fixCoordinatesMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            ) : null}
+                            Save
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   )}
 
                   {totalStopsForDay === 0 && (

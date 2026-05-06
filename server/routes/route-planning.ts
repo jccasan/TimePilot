@@ -900,6 +900,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const ungeocodedStops: {
         servicePlanId: string;
         contactId: string;
+        propertyId: string;
         name: string;
         address: string;
       }[] = [];
@@ -913,6 +914,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
             ungeocodedStops.push({
               servicePlanId: sp.id,
               contactId: sp.contactId,
+              propertyId: sp.propertyId,
               name: contact ? `${contact.firstName} ${contact.lastName}`.trim() : "Unknown",
               address: prop
                 ? [prop.streetAddress, prop.city, prop.state, prop.zipCode]
