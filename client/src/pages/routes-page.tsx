@@ -1685,6 +1685,9 @@ export default function RoutesPage() {
   const [fixLat, setFixLat] = useState("");
   const [fixLng, setFixLng] = useState("");
   const [fixErrors, setFixErrors] = useState<{ lat?: string; lng?: string }>({});
+  const [fixPreviewCoords, setFixPreviewCoords] = useState<{ lat: string; lng: string } | null>(
+    null
+  );
   const [showZones, setShowZones] = useState(false);
   const [showWeeklyOptimizer, setShowWeeklyOptimizer] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -1737,6 +1740,36 @@ export default function RoutesPage() {
   }>({ queryKey: ["/api/company"] });
   const [maxStopsInput, setMaxStopsInput] = useState<string>("");
   const [isApplyingSplit, setIsApplyingSplit] = useState(false);
+
+  const { data: mapboxTokenData } = useQuery<{ token: string }>({
+    queryKey: ["/api/mapbox-token"],
+    staleTime: Infinity,
+  });
+
+  useEffect(() => {
+    const latNum = parseFloat(fixLat);
+    const lngNum = parseFloat(fixLng);
+    const valid =
+      fixLat.trim() !== "" &&
+      !isNaN(latNum) &&
+      latNum >= -90 &&
+      latNum <= 90 &&
+      fixLng.trim() !== "" &&
+      !isNaN(lngNum) &&
+      lngNum >= -180 &&
+      lngNum <= 180;
+
+    if (!valid) {
+      setFixPreviewCoords(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setFixPreviewCoords({ lat: fixLat, lng: fixLng });
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [fixLat, fixLng]);
 
   useEffect(() => {
     if (company?.maxStopsPerRoute != null) {
@@ -3108,6 +3141,7 @@ export default function RoutesPage() {
                           setFixLat("");
                           setFixLng("");
                           setFixErrors({});
+                          setFixPreviewCoords(null);
                         }
                       }}
                     >
@@ -3197,6 +3231,32 @@ export default function RoutesPage() {
                               )}
                             </div>
                           </div>
+                          {fixPreviewCoords && mapboxTokenData?.token ? (
+                            <div
+                              className="rounded-md overflow-hidden border"
+                              data-testid="map-pin-preview"
+                            >
+                              <img
+                                src={`https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/pin-s+1a7340(${fixPreviewCoords.lng},${fixPreviewCoords.lat})/${fixPreviewCoords.lng},${fixPreviewCoords.lat},16,0/400x200@2x?access_token=${mapboxTokenData.token}`}
+                                alt="Map pin preview"
+                                className="w-full h-[150px] object-cover"
+                                data-testid="img-map-pin-preview"
+                              />
+                              <p className="text-[10px] text-muted-foreground text-center py-1 bg-muted/50">
+                                Confirm the pin is on the correct building
+                              </p>
+                            </div>
+                          ) : (fixLat.trim() !== "" || fixLng.trim() !== "") &&
+                            !(fixPreviewCoords && mapboxTokenData?.token) ? (
+                            <div
+                              className="rounded-md border bg-muted/30 flex items-center justify-center h-[150px]"
+                              data-testid="map-pin-preview-loading"
+                            >
+                              <p className="text-xs text-muted-foreground">
+                                Enter valid coordinates to see a preview
+                              </p>
+                            </div>
+                          ) : null}
                         </div>
                         <DialogFooter>
                           <Button
@@ -3206,6 +3266,7 @@ export default function RoutesPage() {
                               setFixLat("");
                               setFixLng("");
                               setFixErrors({});
+                              setFixPreviewCoords(null);
                             }}
                             data-testid="button-fix-cancel"
                           >
