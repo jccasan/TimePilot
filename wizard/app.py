@@ -62,15 +62,21 @@ def _check_admin_key(provided: str) -> bool:
 
 
 def _is_admin_authed() -> bool:
-    """Return True if the request carries valid admin credentials (session or header/param)."""
+    """Return True if the request carries valid admin credentials (session or header/form).
+
+    Admin keys are intentionally NOT accepted via URL query parameters to prevent
+    secret leakage through Referer headers sent to third-party resources.
+    """
     if session.get("wizard_admin_authed"):
         return True
     provided = (
         request.headers.get("X-Admin-Key", "")
-        or request.args.get("admin_key", "")
         or request.form.get("admin_key", "")
     )
-    return bool(provided and _check_admin_key(provided))
+    if provided and _check_admin_key(provided):
+        session["wizard_admin_authed"] = True
+        return True
+    return False
 
 
 def _require_admin():
@@ -842,15 +848,11 @@ def verify_location_api():
 
 @app.route("/admin/credentials/<phone>", methods=["GET", "POST"])
 def admin_credentials(phone: str):
-    # Auth via header or query param
-    provided_key = (
-        request.headers.get("X-Admin-Key", "")
-        or request.args.get("admin_key", "")
-        or request.form.get("admin_key", "")
-    )
-    if not _check_admin_key(provided_key):
+    # Auth via session or header only — query-param auth is intentionally excluded
+    # to prevent the admin key from appearing in URLs and leaking via Referer headers.
+    if not _is_admin_authed():
         return render_template("admin_creds.html", phone=phone, tenant=None,
-                               error="Invalid admin key. Access denied.", admin_key=""), 403
+                               error="Invalid admin key. Access denied."), 403
 
     tenant = get_tenant(phone)
     if not tenant:
@@ -869,7 +871,6 @@ def admin_credentials(phone: str):
         phone=phone,
         tenant=tenant,
         error=None,
-        admin_key=provided_key,
         saved=saved,
     )
 
