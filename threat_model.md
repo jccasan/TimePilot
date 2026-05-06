@@ -18,39 +18,40 @@ Users include tenant owners/admins/technicians, customer portal users, public pr
 ## Trust Boundaries
 
 - **Browser/mobile client to Express API** — all frontend state is untrusted. Server-side authentication, authorization, and tenant scoping must be enforced on every protected route.
-- **Public internet to public routes** — signup/quote flows, portal login/reset, webhook receivers, and the Flask wizard expose unauthenticated entry points. This is the highest-risk boundary for spoofing, brute force, and broken access control.
+- **Public internet to public routes** — signup/quote flows, portal login/reset, public quote-view actions, webhook receivers, and the Flask wizard expose unauthenticated entry points. This is the highest-risk boundary for spoofing, brute force, broken access control, and PII disclosure.
 - **Express API to PostgreSQL** — the backend has broad read/write access to tenant data and session state. Query scoping and injection resistance are critical.
 - **Express API to object storage** — uploads are stored in a nominally private object namespace, then served back through app routes. Read authorization must be enforced consistently.
 - **Express API to external providers** — Stripe, Twilio/Telnyx, SendGrid, QuickBooks, Mapbox, OpenAI, and Retell calls cross service trust boundaries and require request authenticity plus secret handling.
 - **Main app to separate wizard service** — `wizard/` is a separate production-reachable service with its own datastore, filesystem, and auth model. It must not rely on the main app’s protections.
 - **Tenant user to tenant admin/platform admin** — owner/admin-only actions must be enforced server-side; tenant isolation must hold across all companies.
+- **Machine credentials to staff identities** — API keys and other integration credentials must remain least-privileged machine principals rather than inheriting full owner/admin identity.
 
 ## Scan Anchors
 
-- **Production entry points:** `server/index.ts`, `server/routes.ts`, `server/replit_integrations/object_storage/`, `wizard/app.py`.
-- **Highest-risk code areas:** auth/session handling in `server/routes.ts`; client token storage in `client/src/hooks/use-auth.ts` and `client/src/lib/queryClient.ts`; public portal routes; webhook routes; object storage download path; all of `wizard/`.
-- **Public surfaces:** public quote routes, portal login/reset flows, webhooks, and the Flask wizard routes under `/`, `/start`, `/onboard/<phone>`, `/ready/<phone>`, `/upload/<phone>`, `/uploads/<phone>/<filename>`, `/download/<phone>/<filename>`, `/handbook/<phone>`, and `/api/verify-location`.
-- **Authenticated/admin surfaces:** most `/api/*` routes behind `isAuthenticated`; company membership and role checks are concentrated in `getCompanyContext()` and `requireRole()`.
+- **Production entry points:** `server/index.ts`, `server/routes/index.ts`, `server/replit_integrations/object_storage/`, `wizard/app.py`.
+- **Highest-risk code areas:** auth/session handling in `server/routes/auth.ts` and `server/routes/shared.ts`; public and portal routes in `server/routes/public-routes.ts` and `server/routes/portal.ts`; team membership lifecycle in `server/routes/company.ts` and `server/storage.ts`; API-key creation and use in `server/routes/automation.ts`; object storage download path; all of `wizard/`.
+- **Public surfaces:** public signup and quote routes, `/api/public/contact-lookup/:slug`, portal login/reset flows, public portal quote routes, webhooks, and the Flask wizard routes under `/`, `/start`, `/onboard/<phone>`, `/ready/<phone>`, `/upload/<phone>`, `/uploads/<phone>/<filename>`, `/download/<phone>/<filename>`, `/handbook/<phone>`, and `/api/verify-location`.
+- **Authenticated/admin surfaces:** most `/api/*` routes behind `isAuthenticated`; company membership and role checks are concentrated in `getCompanyContext()` and `requireRole()`; API-key behavior is centralized in `server/routes/shared.ts`.
 - **Usually ignore unless reachability changes:** local task files, docs, and mockup/dev-only experiments. Do **not** ignore `wizard/`; `replit.md` documents it as production-reachable.
 
 ## Threat Categories
 
 ### Spoofing
 
-The system accepts several identity mechanisms: session cookies, bearer tokens derived from session IDs, scoped API keys, portal tokens, and third-party webhook signatures. The application must validate each mechanism server-side, rate-limit public authentication endpoints, and fail closed when webhook verification secrets are absent. Public routes must not treat guessable business identifiers such as phone numbers as proof of identity.
+The system accepts several identity mechanisms: session cookies, bearer tokens derived from session IDs, scoped API keys, portal tokens, and third-party webhook signatures. The application must validate each mechanism server-side, rate-limit public authentication endpoints, and fail closed when webhook verification secrets are absent. Public routes must not treat guessable business identifiers such as phone numbers, quote IDs, contact IDs, slugs, email+ZIP pairs, or URL parameters as proof of identity. API keys must not be silently upgraded into staff identities.
 
 ### Tampering
 
-Tenant users, portal users, and public callers can all submit mutable business data. The platform must ensure every state-changing route verifies the caller’s authorization for the specific tenant/resource being modified. Public quote acceptance, onboarding flows, upload endpoints, and any route that writes schedules, billing state, or business configuration must not rely on client-side restrictions or opaque-but-unauthenticated identifiers.
+Tenant users, portal users, and public callers can all submit mutable business data. The platform must ensure every state-changing route verifies the caller’s authorization for the specific tenant/resource being modified. Public quote acceptance, onboarding flows, upload endpoints, and any route that writes schedules, billing state, or business configuration must not rely on client-side restrictions or opaque-but-unauthenticated identifiers. Deactivated memberships must lose write access immediately, including existing sessions.
 
 ### Information Disclosure
 
-Scoopilot stores sensitive customer, billing, routing, and media data, plus wizard-generated config files and API keys. API responses, file download routes, logs, and object storage download paths must not expose tenant data outside the intended audience. Files placed in private storage namespaces must remain inaccessible unless the caller is authorized for that exact object.
+Scoopilot stores sensitive customer, billing, routing, and media data, plus wizard-generated config files and API keys. API responses, file download routes, logs, and object storage download paths must not expose tenant data outside the intended audience. Files placed in private storage namespaces must remain inaccessible unless the caller is authorized for that exact object. Public convenience endpoints must not disclose customer identity or service-address data without stronger proof of control.
 
 ### Denial of Service
 
-The app exposes public authentication and integration endpoints and performs potentially expensive work such as geocoding, quote generation, file processing, and third-party API calls. Public and low-trust endpoints must be rate-limited and bounded by request size/timeouts so attackers cannot cheaply consume compute or provider quotas.
+The app exposes public authentication and integration endpoints and performs potentially expensive work such as geocoding, quote generation, file processing, and third-party API calls. Public and low-trust endpoints must be rate-limited and bounded by request size/timeouts so attackers cannot cheaply consume compute or provider quotas. This includes the customer portal login boundary, not just reset and signup flows.
 
 ### Elevation of Privilege
 
-This is a multi-tenant system with owner/admin/tech and customer-portal roles, plus a separate wizard service. The platform must uphold strict tenant isolation and prevent IDOR/broken-function-level access control across company data, uploaded files, quotes, portal resources, and wizard onboarding artifacts. Any route that bypasses role checks, object ACLs, or tenant scoping can convert a low-privilege or unauthenticated position into broad data access or tenant takeover.
+This is a multi-tenant system with owner/admin/tech and customer-portal roles, plus a separate wizard service. The platform must uphold strict tenant isolation and prevent IDOR/broken-function-level access control across company data, uploaded files, quotes, portal resources, and wizard onboarding artifacts. Any route that bypasses role checks, object ACLs, tenant scoping, deactivation state, or machine-principal scope boundaries can convert a low-privilege or unauthenticated position into broad data access or tenant takeover.
