@@ -1,4 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("../server/services/routific", () => ({
+  routificOptimize: vi.fn().mockResolvedValue(null),
+}));
+
 import { analyzeWeeklySchedule, mergeSmallClusters } from "../server/services/weekly-optimizer";
 import type { WeeklyStop } from "../server/services/weekly-optimizer";
 
