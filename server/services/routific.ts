@@ -37,6 +37,21 @@ export interface RoutificResult {
   totalDuration: number;
 }
 
+export interface RoutificOptions {
+  /**
+   * Shift start time in "H:MM" or "HH:MM" format (24-hour). Defaults to "8:00".
+   * Routific will not schedule any stop before this time.
+   */
+  shiftStart?: string;
+  /**
+   * Shift end time in "H:MM" or "HH:MM" format (24-hour). Defaults to "12:00" (4 hours from shift start).
+   * Routific will not schedule any stop that would finish after this time, effectively capping
+   * the maximum route duration. If stops cannot all be served within the window, Routific will
+   * return unserved stops and the caller will fall back to the internal algorithm.
+   */
+  shiftEnd?: string;
+}
+
 /**
  * Extract an ordered list of visit IDs from a Routific VRP solution.
  * The actual Routific VRP-Long output shape is:
@@ -139,7 +154,8 @@ async function pollJob(token: string, jobId: string): Promise<Record<string, unk
  */
 export async function routificOptimize(
   stops: RoutificStop[],
-  startPoint?: RoutificStartPoint
+  startPoint?: RoutificStartPoint,
+  options?: RoutificOptions
 ): Promise<RoutificResult | null> {
   if (stops.length <= 1) return null;
 
@@ -149,7 +165,12 @@ export async function routificOptimize(
     return null;
   }
 
-  console.log(`[routific] Submitting VRP: ${stops.length} stops, startPoint=${!!startPoint}`);
+  const shiftStart = options?.shiftStart ?? "8:00";
+  const shiftEnd = options?.shiftEnd ?? "12:00";
+
+  console.log(
+    `[routific] Submitting VRP: ${stops.length} stops, startPoint=${!!startPoint}, shift=${shiftStart}-${shiftEnd}`
+  );
 
   try {
     const depotLat = startPoint?.latitude ?? stops[0].latitude;
@@ -159,8 +180,8 @@ export async function routificOptimize(
     for (const stop of stops) {
       visits[stop.id] = {
         location: { name: stop.id, lat: stop.latitude, lng: stop.longitude },
-        start: "8:00",
-        end: "17:00",
+        start: shiftStart,
+        end: shiftEnd,
         duration: stop.durationMinutes ?? 5,
       };
     }
@@ -169,6 +190,8 @@ export async function routificOptimize(
       vehicle_1: {
         start_location: { id: "depot", lat: depotLat, lng: depotLng },
         end_location: { id: "depot", lat: depotLat, lng: depotLng },
+        shift_start: shiftStart,
+        shift_end: shiftEnd,
       },
     };
 
