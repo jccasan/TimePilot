@@ -32,10 +32,10 @@ export default function PortalResetPassword() {
       });
       return;
     }
-    if (password.length < 6) {
+    if (password.length < 10) {
       toast({
         title: "Too short",
-        description: "Password must be at least 6 characters.",
+        description: "Password must be at least 10 characters.",
         variant: "destructive",
       });
       return;
@@ -94,7 +94,7 @@ export default function PortalResetPassword() {
               <Input
                 id="password"
                 type="password"
-                placeholder="At least 6 characters"
+                placeholder="At least 10 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 data-testid="input-new-password"

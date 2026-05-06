@@ -46,6 +46,8 @@ import {
 export async function registerPortalRoutes(app: Express): Promise<void> {
   // ================ Client Portal Routes ================
 
+  const loginFailCounts = new Map<string, { count: number; resetAt: number }>();
+
   app.post("/api/portal/login", async (req: Request, res: Response) => {
     try {
       const { email: rawEmail, password } = req.body;
@@ -53,6 +55,16 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: "Email and password are required" });
       }
       const email = String(rawEmail).trim().toLowerCase();
+
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const rateLimitKey = `${clientIp}:${email}`;
+      const now = Date.now();
+      const failEntry = loginFailCounts.get(rateLimitKey);
+      if (failEntry && failEntry.resetAt > now && failEntry.count >= 5) {
+        return res.status(429).json({
+          error: "Too many failed login attempts. Please try again later.",
+        });
+      }
 
       const allCompanies = await storage.listCompanies();
       let foundContact = null;
@@ -77,7 +89,18 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         }
       }
 
+      const recordFailedAttempt = () => {
+        const nowTs = Date.now();
+        const existing = loginFailCounts.get(rateLimitKey);
+        if (existing && existing.resetAt > nowTs) {
+          existing.count++;
+        } else {
+          loginFailCounts.set(rateLimitKey, { count: 1, resetAt: nowTs + 15 * 60 * 1000 });
+        }
+      };
+
       if (!foundContact) {
+        recordFailedAttempt();
         if (hasAccessButNoPassword) {
           return res.status(401).json({
             error: "Your account needs a password. Please use 'Forgot Password' to set one up.",
@@ -87,6 +110,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       }
 
       if (!foundContact.portalPasswordHash) {
+        recordFailedAttempt();
         return res.status(401).json({
           error: "Your account needs a password. Please use 'Forgot Password' to set one up.",
         });
@@ -100,8 +124,11 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         });
       });
       if (!passwordValid) {
+        recordFailedAttempt();
         return res.status(401).json({ error: "Invalid email or password" });
       }
+
+      loginFailCounts.delete(rateLimitKey);
 
       const token = crypto.randomBytes(32).toString("hex");
       const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
@@ -223,8 +250,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const { token, password } = req.body;
       if (!token || !password)
         return res.status(400).json({ error: "Token and password are required" });
-      if (String(password).length < 6)
-        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      if (String(password).length < 10)
+        return res.status(400).json({ error: "Password must be at least 10 characters" });
 
       const allCompanies = await storage.listCompanies();
       let foundContact = null;
@@ -1106,9 +1133,15 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
   app.get("/api/portal/quotes/:id", async (req: Request, res: Response) => {
     try {
       const quoteId = p(req.params.id);
+      const requestToken = typeof req.query.token === "string" ? req.query.token.trim() : "";
       const allQuotes = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
       const quoteRow = allQuotes.rows?.[0];
       if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
+
+      const storedToken = quoteRow.quote_token as string | null;
+      if (!storedToken || !requestToken || storedToken !== requestToken) {
+        return res.status(403).json({ error: "Invalid or missing quote access token" });
+      }
 
       const isExpired =
         quoteRow.status === "expired" ||
@@ -1157,6 +1190,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
   app.post("/api/portal/quotes/:id/accept", async (req: Request, res: Response) => {
     try {
       const quoteId = p(req.params.id);
+      const requestToken = typeof req.query.token === "string" ? req.query.token.trim() : "";
       const { tier } = req.body;
       if (!tier || !["essential", "premium", "deluxe"].includes(tier)) {
         return res.status(400).json({ error: "Must select a tier: essential, premium, or deluxe" });
@@ -1165,6 +1199,11 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const result = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
       const quoteRow = result.rows?.[0];
       if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
+
+      const storedToken = quoteRow.quote_token as string | null;
+      if (!storedToken || !requestToken || storedToken !== requestToken) {
+        return res.status(403).json({ error: "Invalid or missing quote access token" });
+      }
 
       if (quoteRow.status !== "sent" && quoteRow.status !== "draft") {
         return res.status(400).json({ error: "This quote has already been " + quoteRow.status });
@@ -1232,9 +1271,15 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
   app.post("/api/portal/quotes/:id/decline", async (req: Request, res: Response) => {
     try {
       const quoteId = p(req.params.id);
+      const requestToken = typeof req.query.token === "string" ? req.query.token.trim() : "";
       const result = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
       const quoteRow = result.rows?.[0];
       if (!quoteRow) return res.status(404).json({ error: "Quote not found" });
+
+      const storedToken = quoteRow.quote_token as string | null;
+      if (!storedToken || !requestToken || storedToken !== requestToken) {
+        return res.status(403).json({ error: "Invalid or missing quote access token" });
+      }
 
       if (quoteRow.status !== "sent" && quoteRow.status !== "draft") {
         return res.status(400).json({ error: "This quote has already been " + quoteRow.status });

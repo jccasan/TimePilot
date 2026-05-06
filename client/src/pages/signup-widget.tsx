@@ -783,16 +783,7 @@ export default function SignupWidget() {
         if (!res.ok) return;
         const data = await res.json();
         if (data.found) {
-          setFormData((prev) => ({
-            ...prev,
-            firstName: data.firstName || prev.firstName,
-            lastName: data.lastName || prev.lastName,
-            streetAddress: data.streetAddress || prev.streetAddress,
-            city: data.city || prev.city,
-            state: data.state || prev.state,
-          }));
-          const hasAddress = !!(data.streetAddress && data.city && data.state);
-          setReturningContactPrefilled(hasAddress);
+          setReturningContactPrefilled(false);
           setCurrentStep(2);
         }
       } catch {}

@@ -1357,12 +1357,12 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       const now = Date.now();
       const entry = contactLookupRateLimit.get(clientIp);
       if (entry && entry.resetAt > now) {
-        if (entry.count >= 10) {
+        if (entry.count >= 5) {
           return res.status(429).json({ error: "Too many requests. Please try again later." });
         }
         entry.count++;
       } else {
-        contactLookupRateLimit.set(clientIp, { count: 1, resetAt: now + 60 * 60 * 1000 });
+        contactLookupRateLimit.set(clientIp, { count: 1, resetAt: now + 15 * 60 * 1000 });
       }
 
       const slug = p(req.params.slug);
@@ -1391,14 +1391,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       }
 
       const [contact] = await db
-        .select({
-          firstName: contacts.firstName,
-          lastName: contacts.lastName,
-          streetAddress: contacts.streetAddress,
-          city: contacts.city,
-          state: contacts.state,
-          zipCode: contacts.zipCode,
-        })
+        .select({ id: contacts.id })
         .from(contacts)
         .where(
           and(
@@ -1409,18 +1402,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         )
         .limit(1);
 
-      if (!contact) {
-        return res.json({ found: false });
-      }
-
-      return res.json({
-        found: true,
-        firstName: contact.firstName || "",
-        lastName: contact.lastName || "",
-        streetAddress: contact.streetAddress || "",
-        city: contact.city || "",
-        state: contact.state || "",
-      });
+      return res.json({ found: !!contact });
     } catch (err) {
       handleError(res, err);
     }

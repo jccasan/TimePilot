@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { randomUUID } from "crypto";
 import { maskEmail } from "../utils/pii";
 import { storage } from "../storage";
 import { companies } from "@shared/schema";
@@ -661,7 +662,15 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       };
 
       const slug = ((company as Record<string, unknown>).slug as string) || companyId;
-      const acceptUrl = `${req.protocol}://${req.get("host")}/portal/${slug}/quotes/${quote.id}`;
+      const quoteToken =
+        ((quote as Record<string, unknown>).quoteToken as string | null | undefined) ||
+        randomUUID();
+      if (!(quote as Record<string, unknown>).quoteToken) {
+        await storage.updateQuote(p(req.params.id), companyId, {
+          quoteToken,
+        } as Partial<import("@shared/schema").InsertQuote>);
+      }
+      const acceptUrl = `${req.protocol}://${req.get("host")}/portal/${slug}/quotes/${quote.id}?token=${encodeURIComponent(quoteToken)}`;
 
       const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : undefined;
 
