@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../server/services/routific", () => ({
   routificOptimize: vi.fn().mockResolvedValue(null),
@@ -6,6 +6,7 @@ vi.mock("../server/services/routific", () => ({
 
 import { analyzeWeeklySchedule, mergeSmallClusters } from "../server/services/weekly-optimizer";
 import type { WeeklyStop } from "../server/services/weekly-optimizer";
+import * as routificModule from "../server/services/routific";
 
 function makeStop(id: string, lat: number, lng: number, day = "monday"): WeeklyStop {
   return {
@@ -155,5 +156,68 @@ describe("under-minimum cluster enforcement", () => {
 
     const totalStops = merged.reduce((sum, cl) => sum + cl.length, 0);
     expect(totalStops).toBe(7);
+  });
+});
+
+describe("optimizeStopOrder fallback behavior", () => {
+  const mockedRoutificOptimize = routificModule.routificOptimize as ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    mockedRoutificOptimize.mockResolvedValue(null);
+  });
+
+  it("preserves all stops when routificOptimize returns null (fallback active)", async () => {
+    mockedRoutificOptimize.mockResolvedValue(null);
+    const stops = makeGrid(6);
+    const result = await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 6 });
+    expect(result.proposed.totalStops).toBe(6);
+  });
+
+  it("produces a valid schedule with correct stop count when routificOptimize returns null", async () => {
+    mockedRoutificOptimize.mockResolvedValue(null);
+    const stops = makeGrid(8);
+    const result = await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 4 });
+    // 8 stops / 4 per day = 2 days required
+    const active = result.proposed.days.filter((d) => d.totalStops > 0);
+    expect(active.length).toBe(2);
+    expect(result.proposed.totalStops).toBe(8);
+  });
+
+  it("calls routificOptimize for each group of stops being optimized", async () => {
+    mockedRoutificOptimize.mockResolvedValue(null);
+    const stops = makeGrid(4);
+    await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 4 });
+    // routificOptimize should have been invoked at least once (one day group)
+    expect(mockedRoutificOptimize).toHaveBeenCalled();
+  });
+
+  it("uses orderedIds from routificOptimize result when it returns successfully", async () => {
+    const stops = makeGrid(3);
+    const ids = stops.map((s) => s.servicePlanId);
+    const reversedIds = [...ids].reverse();
+
+    mockedRoutificOptimize.mockResolvedValue({
+      orderedIds: reversedIds,
+      totalDistance: 5.0,
+      totalDuration: 20,
+    });
+
+    const result = await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 3 });
+
+    // Find the one active day and verify stop IDs are in the Routific-returned order
+    const activeDay = result.proposed.days.find((d) => d.totalStops > 0);
+    expect(activeDay).toBeDefined();
+    const resultIds = activeDay!.routes
+      .flatMap((r) => r.stops)
+      .map((s: WeeklyStop) => s.servicePlanId);
+    expect(resultIds).toEqual(reversedIds);
+  });
+
+  it("does not lose any stops across multiple day groups when routificOptimize always returns null", async () => {
+    mockedRoutificOptimize.mockResolvedValue(null);
+    const stops = makeGrid(10);
+    const result = await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 5 });
+    // 10 stops split across 2 days (5 per day); all must be present in output
+    expect(result.proposed.totalStops).toBe(10);
   });
 });
