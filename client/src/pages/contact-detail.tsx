@@ -39,6 +39,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -161,6 +163,10 @@ export default function ContactDetail() {
   const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
   const [measurePropertyId, setMeasurePropertyId] = useState<string | null>(null);
   const [editAddressPropertyId, setEditAddressPropertyId] = useState<string | null>(null);
+  const [fixCoordPropertyId, setFixCoordPropertyId] = useState<string | null>(null);
+  const [fixLat, setFixLat] = useState("");
+  const [fixLng, setFixLng] = useState("");
+  const [fixErrors, setFixErrors] = useState<{ lat?: string; lng?: string }>({});
   const [editNotes, setEditNotes] = useState("");
   const [newTagName, setNewTagName] = useState("");
   const smsComposeRef = useRef<HTMLDivElement>(null);
@@ -381,6 +387,36 @@ export default function ContactDetail() {
     onError: (error: Error) => {
       toast({
         title: "Error updating address",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const fixCoordinatesMutation = useMutation({
+    mutationFn: async ({
+      propertyId,
+      latitude,
+      longitude,
+    }: {
+      propertyId: string;
+      latitude: number;
+      longitude: number;
+    }) => {
+      await apiRequest("PATCH", `/api/properties/${propertyId}`, { latitude, longitude });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/properties?contactId=${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      toast({ title: "Coordinates saved", description: "Property location has been updated." });
+      setFixCoordPropertyId(null);
+      setFixLat("");
+      setFixLng("");
+      setFixErrors({});
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error saving coordinates",
         description: error.message,
         variant: "destructive",
       });
@@ -1136,6 +1172,26 @@ export default function ContactDetail() {
                               {editAddressPropertyId === prop.id ? "Cancel" : "Edit Address"}
                             </Button>
                           )}
+                          {(!prop.latitude ||
+                            !prop.longitude ||
+                            Number(prop.latitude) === 0 ||
+                            Number(prop.longitude) === 0) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs gap-1"
+                              onClick={() => {
+                                setFixCoordPropertyId(prop.id);
+                                setFixLat("");
+                                setFixLng("");
+                                setFixErrors({});
+                              }}
+                              data-testid={`button-set-coordinates-${prop.id}`}
+                            >
+                              <MapPin className="h-3.5 w-3.5" />
+                              Set coordinates
+                            </Button>
+                          )}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
@@ -1434,6 +1490,152 @@ export default function ContactDetail() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={!!fixCoordPropertyId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setFixCoordPropertyId(null);
+            setFixLat("");
+            setFixLng("");
+            setFixErrors({});
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" data-testid="dialog-fix-coordinates">
+          <DialogHeader>
+            <DialogTitle>Set coordinates manually</DialogTitle>
+            <DialogDescription>
+              Enter the latitude and longitude for this property so it can be included in route
+              optimization.
+            </DialogDescription>
+          </DialogHeader>
+          {fixCoordPropertyId &&
+            (() => {
+              const prop = properties?.find((p) => p.id === fixCoordPropertyId);
+              if (!prop) return null;
+              const propAddress = `${prop.streetAddress}, ${prop.city}, ${prop.state} ${prop.zipCode}`;
+              return (
+                <div className="space-y-4 py-2">
+                  <div className="rounded-md bg-muted px-3 py-2 text-sm">
+                    <span className="font-medium">{prop.streetAddress}</span>
+                    <div className="text-muted-foreground mt-0.5">
+                      {prop.city}, {prop.state} {prop.zipCode}
+                    </div>
+                  </div>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(propAddress)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-primary underline underline-offset-2 hover:opacity-80"
+                    data-testid="link-open-google-maps"
+                  >
+                    <MapPin className="h-3.5 w-3.5" />
+                    Open in Google Maps
+                  </a>
+                  <div className="rounded-md border bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground space-y-1">
+                    <p className="font-medium text-foreground">How to get coordinates:</p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>Open Google Maps and navigate to the correct location.</li>
+                      <li>Right-click the exact spot on the map.</li>
+                      <li>The coordinates appear at the top of the menu — click them to copy.</li>
+                      <li>Paste the latitude and longitude into the fields below.</li>
+                    </ol>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="fix-coord-lat">Latitude</Label>
+                      <Input
+                        id="fix-coord-lat"
+                        type="number"
+                        step="any"
+                        placeholder="e.g. 40.7128"
+                        value={fixLat}
+                        onChange={(e) => {
+                          setFixLat(e.target.value);
+                          setFixErrors((prev) => ({ ...prev, lat: undefined }));
+                        }}
+                        data-testid="input-fix-latitude"
+                      />
+                      {fixErrors.lat && (
+                        <p className="text-xs text-destructive" data-testid="error-fix-latitude">
+                          {fixErrors.lat}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="fix-coord-lng">Longitude</Label>
+                      <Input
+                        id="fix-coord-lng"
+                        type="number"
+                        step="any"
+                        placeholder="e.g. -74.0060"
+                        value={fixLng}
+                        onChange={(e) => {
+                          setFixLng(e.target.value);
+                          setFixErrors((prev) => ({ ...prev, lng: undefined }));
+                        }}
+                        data-testid="input-fix-longitude"
+                      />
+                      {fixErrors.lng && (
+                        <p className="text-xs text-destructive" data-testid="error-fix-longitude">
+                          {fixErrors.lng}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setFixCoordPropertyId(null);
+                setFixLat("");
+                setFixLng("");
+                setFixErrors({});
+              }}
+              data-testid="button-fix-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const latNum = parseFloat(fixLat);
+                const lngNum = parseFloat(fixLng);
+                const errors: { lat?: string; lng?: string } = {};
+                if (fixLat.trim() === "" || isNaN(latNum)) {
+                  errors.lat = "Enter a valid latitude.";
+                } else if (latNum < -90 || latNum > 90) {
+                  errors.lat = "Latitude must be between -90 and 90.";
+                }
+                if (fixLng.trim() === "" || isNaN(lngNum)) {
+                  errors.lng = "Enter a valid longitude.";
+                } else if (lngNum < -180 || lngNum > 180) {
+                  errors.lng = "Longitude must be between -180 and 180.";
+                }
+                if (Object.keys(errors).length > 0) {
+                  setFixErrors(errors);
+                  return;
+                }
+                fixCoordinatesMutation.mutate({
+                  propertyId: fixCoordPropertyId!,
+                  latitude: latNum,
+                  longitude: lngNum,
+                });
+              }}
+              disabled={fixCoordinatesMutation.isPending}
+              data-testid="button-fix-save"
+            >
+              {fixCoordinatesMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <RouteAssignmentCard servicePlans={servicePlansForPricing} routes={allRoutes} />
 
