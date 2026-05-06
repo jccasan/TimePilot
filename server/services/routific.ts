@@ -1,17 +1,20 @@
 /**
  * Routific VRP integration.
  *
- * Wraps the `routific` npm client and exposes a single async function
- * `routificOptimize` that accepts our internal stop/start-point shapes and
- * returns an ordered list of stop IDs plus estimated distance and duration.
+ * Calls the Routific REST API directly (vrp-long async endpoint) using fetch,
+ * bypassing the `routific` npm package which has a broken uuid/v4 transitive
+ * dependency that crashes the server in the tsx/Node.js 20 environment.
  *
  * Falls back gracefully: if the token is missing, the API call fails, or the
  * solution is unusable the function returns `null` so callers can fall back to
  * the internal nearest-neighbour + 2-opt algorithm.
  */
 
-import Routific from "routific";
 import { haversineDistance } from "./route-optimizer";
+
+const ROUTIFIC_API_BASE = "https://api.routific.com";
+const POLL_INTERVAL_MS = 2000;
+const MAX_POLL_ATTEMPTS = 30; // 60 seconds max
 
 export interface RoutificStop {
   id: string;
@@ -32,17 +35,6 @@ export interface RoutificResult {
   totalDistance: number;
   /** Estimated total driving duration in minutes as returned by Routific. */
   totalDuration: number;
-}
-
-let _client: InstanceType<typeof Routific.Client> | null = null;
-
-function getClient(): InstanceType<typeof Routific.Client> | null {
-  const token = process.env.ROUTIFIC_API_TOKEN;
-  if (!token) return null;
-  if (!_client) {
-    _client = new Routific.Client({ token, pollDelay: 1500 });
-  }
-  return _client;
 }
 
 /**
@@ -68,7 +60,6 @@ function extractOrderedIds(
     }
   }
 
-  // Every input stop must appear in the output
   if (ordered.length !== stopIds.size) return null;
   return ordered;
 }
@@ -93,6 +84,60 @@ function approximateDistance(
   return Math.round(total * 100) / 100;
 }
 
+/** Submit a VRP-long job to Routific and return the job ID. */
+async function submitJob(
+  token: string,
+  body: Record<string, unknown>
+): Promise<string> {
+  const res = await fetch(`${ROUTIFIC_API_BASE}/v1/vrp-long`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Routific submit ${res.status}: ${text}`);
+  }
+  const data = (await res.json()) as { job_id?: string };
+  if (!data.job_id) throw new Error("Routific submit: no job_id in response");
+  return data.job_id;
+}
+
+/** Poll until the job reaches a terminal state, then return the output. */
+async function pollJob(
+  token: string,
+  jobId: string
+): Promise<Record<string, unknown>> {
+  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+    const res = await fetch(`${ROUTIFIC_API_BASE}/jobs/${jobId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Routific poll ${res.status}: ${text}`);
+    }
+
+    const data = (await res.json()) as {
+      status?: string;
+      output?: Record<string, unknown>;
+    };
+
+    if (data.status === "finished") {
+      return data.output ?? {};
+    }
+    if (data.status === "error") {
+      throw new Error(`Routific job ${jobId} failed with status=error`);
+    }
+    // status === "pending" or "processing" — keep polling
+  }
+  throw new Error(`Routific job ${jobId} timed out after ${MAX_POLL_ATTEMPTS} polls`);
+}
+
 /**
  * Call Routific VRP to optimise stop order.
  * Returns `null` on any failure so callers fall back to the internal algorithm.
@@ -109,57 +154,44 @@ export async function routificOptimize(
     return null;
   }
 
-  const client = getClient();
-  if (!client) return null;
-
   console.log(`[routific] Submitting VRP: ${stops.length} stops, startPoint=${!!startPoint}`);
 
   try {
-    const vrp = new Routific.Vrp();
-
-    for (const stop of stops) {
-      vrp.addVisit(stop.id, {
-        location: {
-          name: stop.id,
-          lat: stop.latitude,
-          lng: stop.longitude,
-        },
-        start: "8:00",
-        end: "17:00",
-        duration: stop.durationMinutes ?? 5,
-      });
-    }
-
     const depotLat = startPoint?.latitude ?? stops[0].latitude;
     const depotLng = startPoint?.longitude ?? stops[0].longitude;
 
-    vrp.addVehicle("vehicle_1", {
-      start_location: {
-        id: "depot",
-        lat: depotLat,
-        lng: depotLng,
-      },
-      end_location: {
-        id: "depot",
-        lat: depotLat,
-        lng: depotLng,
-      },
-    });
+    const visits: Record<string, unknown> = {};
+    for (const stop of stops) {
+      visits[stop.id] = {
+        location: { name: stop.id, lat: stop.latitude, lng: stop.longitude },
+        start: "8:00",
+        end: "17:00",
+        duration: stop.durationMinutes ?? 5,
+      };
+    }
 
-    vrp.addOption("traffic", "slow");
-
-    const result = (await client.route(vrp)) as {
-      jobId: string;
-      solution: Record<string, unknown>;
+    const fleet: Record<string, unknown> = {
+      vehicle_1: {
+        start_location: { id: "depot", lat: depotLat, lng: depotLng },
+        end_location: { id: "depot", lat: depotLat, lng: depotLng },
+      },
     };
 
-    const { solution } = result;
+    const jobId = await submitJob(token, {
+      visits,
+      fleet,
+      options: { traffic: "slow" },
+    });
+
+    console.log(`[routific] Job ${jobId} submitted, polling…`);
+
+    const solution = await pollJob(token, jobId);
+
     console.log(
-      `[routific] Job ${result.jobId} finished. Solution keys: ${Object.keys(solution ?? {}).join(", ")}`
+      `[routific] Job ${jobId} finished. Solution keys: ${Object.keys(solution).join(", ")}`
     );
 
-    // Log num_unserved so we know if Routific skipped any stops
-    if (solution?.num_unserved) {
+    if (solution.num_unserved) {
       console.warn(
         `[routific] ${solution.num_unserved} stop(s) unserved — falling back to internal algorithm`
       );
@@ -170,7 +202,7 @@ export async function routificOptimize(
     const orderedIds = extractOrderedIds(solution, stopIds);
     if (!orderedIds) {
       console.warn(
-        `[routific] extractOrderedIds returned null (expected ${stopIds.size} stops, got different shape). Solution routes: ${JSON.stringify(solution?.routes ?? {}).substring(0, 300)}`
+        `[routific] extractOrderedIds returned null (expected ${stopIds.size} stops). Routes: ${JSON.stringify(solution?.routes ?? {}).substring(0, 300)}`
       );
       return null;
     }
@@ -179,9 +211,6 @@ export async function routificOptimize(
     const orderedStops = orderedIds.map((id) => stopMap.get(id)!);
     const totalDistance = approximateDistance(orderedStops, startPoint);
 
-    // Routific returns estimated finish times per visit; derive total duration
-    // from the last visit's arrival vs depot departure. If unavailable, fall
-    // back to a simple speed estimate (25 mph average).
     let totalDuration = (totalDistance / 25) * 60;
     try {
       const routes = solution.routes as Record<
@@ -192,7 +221,6 @@ export async function routificOptimize(
       const lastVisit = vehicleVisits[vehicleVisits.length - 1];
       if (lastVisit?.arrival_time) {
         const [h, m] = lastVisit.arrival_time.split(":").map(Number);
-        // Routific defaults start at 8:00; total duration = last arrival − 8:00
         totalDuration = (h - 8) * 60 + m;
       }
     } catch {
