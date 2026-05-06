@@ -661,28 +661,39 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
               const sorted = [...routeStops].sort(
                 (a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0)
               );
-              const coordStops = sorted
-                .map((s) => {
-                  if (!s.propertyId) return null;
-                  const pr = propertyMap.get(s.propertyId);
-                  if (!pr?.latitude || !pr?.longitude) return null;
-                  const lat = parseFloat(String(pr.latitude));
-                  const lon = parseFloat(String(pr.longitude));
-                  if (isNaN(lat) || isNaN(lon)) return null;
-                  return { latitude: lat, longitude: lon };
-                })
-                .filter((c): c is { latitude: number; longitude: number } => c !== null);
 
-              if (coordStops.length >= 2) {
-                const insertIdx = cheapestInsertionIndex(coordStops, {
-                  latitude: newLat,
-                  longitude: newLon,
-                });
+              // Build a list of stops that have valid coordinates, tracking their
+              // position in `sorted` so the insertion index maps back correctly even
+              // when some stops are missing geocoding data.
+              const stopsWithCoords: {
+                latitude: number;
+                longitude: number;
+                sortedIndex: number;
+              }[] = [];
+              for (let i = 0; i < sorted.length; i++) {
+                const s = sorted[i];
+                if (!s.propertyId) continue;
+                const pr = propertyMap.get(s.propertyId);
+                if (!pr?.latitude || !pr?.longitude) continue;
+                const lat = parseFloat(String(pr.latitude));
+                const lon = parseFloat(String(pr.longitude));
+                if (isNaN(lat) || isNaN(lon)) continue;
+                stopsWithCoords.push({ latitude: lat, longitude: lon, sortedIndex: i });
+              }
 
-                if (insertIdx < sorted.length) {
-                  // Inserting into the middle — push existing stops at or above this
-                  // position up by one to make room.
-                  const thresholdOrder = sorted[insertIdx].stopOrder ?? insertIdx + 1;
+              if (stopsWithCoords.length >= 2) {
+                const insertIdx = cheapestInsertionIndex(
+                  stopsWithCoords.map((s) => ({ latitude: s.latitude, longitude: s.longitude })),
+                  { latitude: newLat, longitude: newLon }
+                );
+
+                if (insertIdx < stopsWithCoords.length) {
+                  // Insert before the stop at stopsWithCoords[insertIdx].
+                  // Use that stop's actual stopOrder as the threshold so gaps in
+                  // numbering from prior operations are respected.
+                  const targetSortedIndex = stopsWithCoords[insertIdx].sortedIndex;
+                  const thresholdOrder =
+                    sorted[targetSortedIndex].stopOrder ?? targetSortedIndex + 1;
                   await db
                     .update(servicePlans)
                     .set({ stopOrder: sql`${servicePlans.stopOrder} + 1` })
@@ -696,7 +707,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
                     );
                   insertionOrder = thresholdOrder;
                 } else {
-                  // cheapestInsertionIndex chose the tail — append
+                  // cheapestInsertionIndex chose the tail — append after the last stop
                   const maxOrder = sorted.reduce((m, s) => Math.max(m, s.stopOrder ?? 0), 0);
                   insertionOrder = maxOrder + 1;
                 }

@@ -2498,15 +2498,29 @@ export default function RoutesPage() {
   });
 
   const fixCoordinatesMutation = useMutation({
-    mutationFn: async ({ propertyId, latitude, longitude }: { propertyId: string; latitude: number; longitude: number }) => {
-      const res = await apiRequest("PATCH", `/api/properties/${propertyId}`, { latitude, longitude });
+    mutationFn: async ({
+      propertyId,
+      latitude,
+      longitude,
+    }: {
+      propertyId: string;
+      latitude: number;
+      longitude: number;
+    }) => {
+      const res = await apiRequest("PATCH", `/api/properties/${propertyId}`, {
+        latitude,
+        longitude,
+      });
       return res.json();
     },
     onSuccess: (_data, { propertyId }) => {
       const stop = fixingStop;
       if (stop && stop.propertyId === propertyId) {
         setFixedStopIds((prev) => new Set([...prev, stop.servicePlanId]));
-        toast({ title: "Coordinates saved", description: `${stop.name} can now be included in optimization.` });
+        toast({
+          title: "Coordinates saved",
+          description: `${stop.name} can now be included in optimization.`,
+        });
         setFixingStop(null);
         setFixLat("");
         setFixLng("");
@@ -2514,7 +2528,11 @@ export default function RoutesPage() {
       }
     },
     onError: (err: Error) => {
-      toast({ title: "Failed to save coordinates", description: err.message, variant: "destructive" });
+      toast({
+        title: "Failed to save coordinates",
+        description: err.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -2992,10 +3010,15 @@ export default function RoutesPage() {
                             {allFixed ? (
                               <div className="ml-7 flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
                                 <CheckCircle className="h-3.5 w-3.5 shrink-0" />
-                                <span>All stops have coordinates — ready to retry optimization.</span>
+                                <span>
+                                  All stops have coordinates — ready to retry optimization.
+                                </span>
                               </div>
                             ) : (
-                              <ul className="space-y-1.5 ml-7" data-testid="list-geocode-failed-stops">
+                              <ul
+                                className="space-y-1.5 ml-7"
+                                data-testid="list-geocode-failed-stops"
+                              >
                                 {remainingStops.map((stop) => (
                                   <li
                                     key={stop.servicePlanId}
@@ -3077,19 +3100,32 @@ export default function RoutesPage() {
                   )}
 
                   {fixingStop && (
-                    <Dialog open={!!fixingStop} onOpenChange={(open) => { if (!open) { setFixingStop(null); setFixLat(""); setFixLng(""); setFixErrors({}); } }}>
+                    <Dialog
+                      open={!!fixingStop}
+                      onOpenChange={(open) => {
+                        if (!open) {
+                          setFixingStop(null);
+                          setFixLat("");
+                          setFixLng("");
+                          setFixErrors({});
+                        }
+                      }}
+                    >
                       <DialogContent className="sm:max-w-md" data-testid="dialog-fix-coordinates">
                         <DialogHeader>
                           <DialogTitle>Fix coordinates</DialogTitle>
                           <DialogDescription>
-                            Enter the latitude and longitude for this property so it can be included in route optimization.
+                            Enter the latitude and longitude for this property so it can be included
+                            in route optimization.
                           </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4 py-2">
                           <div className="rounded-md bg-muted px-3 py-2 text-sm">
                             <span className="font-medium">{fixingStop.name}</span>
                             {fixingStop.address && fixingStop.address !== "No address" && (
-                              <div className="text-muted-foreground mt-0.5">{fixingStop.address}</div>
+                              <div className="text-muted-foreground mt-0.5">
+                                {fixingStop.address}
+                              </div>
                             )}
                           </div>
                           <a
@@ -3107,7 +3143,9 @@ export default function RoutesPage() {
                             <ol className="list-decimal list-inside space-y-1">
                               <li>Open Google Maps and navigate to the correct location.</li>
                               <li>Right-click the exact spot on the map.</li>
-                              <li>The coordinates appear at the top of the menu — click them to copy.</li>
+                              <li>
+                                The coordinates appear at the top of the menu — click them to copy.
+                              </li>
                               <li>Paste the latitude and longitude into the fields below.</li>
                             </ol>
                           </div>
@@ -3120,11 +3158,19 @@ export default function RoutesPage() {
                                 step="any"
                                 placeholder="e.g. 40.7128"
                                 value={fixLat}
-                                onChange={(e) => { setFixLat(e.target.value); setFixErrors((prev) => ({ ...prev, lat: undefined })); }}
+                                onChange={(e) => {
+                                  setFixLat(e.target.value);
+                                  setFixErrors((prev) => ({ ...prev, lat: undefined }));
+                                }}
                                 data-testid="input-fix-latitude"
                               />
                               {fixErrors.lat && (
-                                <p className="text-xs text-destructive" data-testid="error-fix-latitude">{fixErrors.lat}</p>
+                                <p
+                                  className="text-xs text-destructive"
+                                  data-testid="error-fix-latitude"
+                                >
+                                  {fixErrors.lat}
+                                </p>
                               )}
                             </div>
                             <div className="space-y-1.5">
@@ -3135,11 +3181,19 @@ export default function RoutesPage() {
                                 step="any"
                                 placeholder="e.g. -74.0060"
                                 value={fixLng}
-                                onChange={(e) => { setFixLng(e.target.value); setFixErrors((prev) => ({ ...prev, lng: undefined })); }}
+                                onChange={(e) => {
+                                  setFixLng(e.target.value);
+                                  setFixErrors((prev) => ({ ...prev, lng: undefined }));
+                                }}
                                 data-testid="input-fix-longitude"
                               />
                               {fixErrors.lng && (
-                                <p className="text-xs text-destructive" data-testid="error-fix-longitude">{fixErrors.lng}</p>
+                                <p
+                                  className="text-xs text-destructive"
+                                  data-testid="error-fix-longitude"
+                                >
+                                  {fixErrors.lng}
+                                </p>
                               )}
                             </div>
                           </div>
@@ -3147,7 +3201,12 @@ export default function RoutesPage() {
                         <DialogFooter>
                           <Button
                             variant="outline"
-                            onClick={() => { setFixingStop(null); setFixLat(""); setFixLng(""); setFixErrors({}); }}
+                            onClick={() => {
+                              setFixingStop(null);
+                              setFixLat("");
+                              setFixLng("");
+                              setFixErrors({});
+                            }}
                             data-testid="button-fix-cancel"
                           >
                             Cancel
@@ -3171,7 +3230,11 @@ export default function RoutesPage() {
                                 setFixErrors(errors);
                                 return;
                               }
-                              fixCoordinatesMutation.mutate({ propertyId: fixingStop!.propertyId, latitude: latNum, longitude: lngNum });
+                              fixCoordinatesMutation.mutate({
+                                propertyId: fixingStop!.propertyId,
+                                latitude: latNum,
+                                longitude: lngNum,
+                              });
                             }}
                             disabled={fixCoordinatesMutation.isPending}
                             data-testid="button-fix-save"
