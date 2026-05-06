@@ -235,83 +235,82 @@ export function registerPlannerRoutes(app: Express): void {
               appliedRouteCount.stopsUpdated += 1;
             }
 
-            // Reposition any stops already on this route that the plan did not
-            // cover (orphans from a previous assignment). They keep their routeId
-            // but get a cheapest-insertion stopOrder relative to the newly-ordered
-            // plan stops so the route stays roughly contiguous.
+            // If there is exactly one pre-existing stop on this route that the plan
+            // did not cover (an incremental add — e.g. a manually-assigned stop
+            // that wasn't included in this plan run), reposition it using cheapest
+            // insertion relative to the newly-ordered plan stops.  We limit this to
+            // exactly one orphan to avoid cascading renumbering that would conflict
+            // with the plan's already-optimal ordering.
             const allRouteStops = await storage.getServicePlans(companyId, {
               routeId: dbRoute.id,
               isActive: true,
             });
             const orphanStops = allRouteStops.filter((s) => !planServicePlanIds.has(s.id));
 
-            if (orphanStops.length > 0 && plannedRoute.assignedStops.length >= 1) {
-              const allProperties = await storage.getProperties(companyId);
-              const propertyMap = new Map(allProperties.map((pr) => [pr.id, pr]));
+            if (orphanStops.length === 1 && plannedRoute.assignedStops.length >= 2) {
+              const orphan = orphanStops[0];
+              if (orphan.propertyId) {
+                const allProperties = await storage.getProperties(companyId);
+                const propertyMap = new Map(allProperties.map((pr) => [pr.id, pr]));
 
-              // Build the ordered sequence of newly-applied plan stops with coordinates.
-              const planCoordsOrdered = [...plannedRoute.assignedStops]
-                .sort((a, b) => a.stopOrder - b.stopOrder)
-                .map((s) => {
-                  const sp = planByContactId.get(s.customerId);
-                  if (!sp?.propertyId) return null;
-                  const pr = propertyMap.get(sp.propertyId);
-                  if (!pr?.latitude || !pr?.longitude) return null;
-                  const lat = parseFloat(String(pr.latitude));
-                  const lon = parseFloat(String(pr.longitude));
-                  if (isNaN(lat) || isNaN(lon)) return null;
-                  return { latitude: lat, longitude: lon };
-                })
-                .filter((c): c is { latitude: number; longitude: number } => c !== null);
-
-              if (planCoordsOrdered.length >= 1) {
-                // Insert orphans one at a time; re-read current stop list between
-                // insertions so each successive orphan sees the updated order.
-                let currentSequence = [...planCoordsOrdered];
-                const maxPlanOrder = plannedRoute.assignedStops.reduce(
-                  (m, s) => Math.max(m, s.stopOrder),
-                  0
+                // Build the ordered sequence of plan stops with coordinates and
+                // their actual assigned stopOrder values.
+                const planStopsSorted = [...plannedRoute.assignedStops].sort(
+                  (a, b) => a.stopOrder - b.stopOrder
                 );
-                let nextAppendOrder = maxPlanOrder + 1;
-
-                for (const orphan of orphanStops) {
-                  if (!orphan.propertyId) continue;
-                  const pr = propertyMap.get(orphan.propertyId);
+                const planCoordsOrdered: { latitude: number; longitude: number }[] = [];
+                const planStopOrders: number[] = [];
+                for (const s of planStopsSorted) {
+                  const sp = planByContactId.get(s.customerId);
+                  if (!sp?.propertyId) continue;
+                  const pr = propertyMap.get(sp.propertyId);
                   if (!pr?.latitude || !pr?.longitude) continue;
                   const lat = parseFloat(String(pr.latitude));
                   const lon = parseFloat(String(pr.longitude));
                   if (isNaN(lat) || isNaN(lon)) continue;
+                  planCoordsOrdered.push({ latitude: lat, longitude: lon });
+                  planStopOrders.push(s.stopOrder);
+                }
 
-                  const newCoord = { latitude: lat, longitude: lon };
-                  const insertIdx = cheapestInsertionIndex(currentSequence, newCoord);
+                const orphanProp = propertyMap.get(orphan.propertyId);
+                if (orphanProp?.latitude && orphanProp?.longitude) {
+                  const oLat = parseFloat(String(orphanProp.latitude));
+                  const oLon = parseFloat(String(orphanProp.longitude));
+                  if (!isNaN(oLat) && !isNaN(oLon) && planCoordsOrdered.length >= 2) {
+                    const insertIdx = cheapestInsertionIndex(planCoordsOrdered, {
+                      latitude: oLat,
+                      longitude: oLon,
+                    });
 
-                  if (insertIdx < currentSequence.length) {
-                    // Find the stopOrder of the plan stop at insertIdx.
-                    // Plan stops are ordered 1..N; insertIdx maps directly into
-                    // the sorted plan coords array so stop number = insertIdx + 1.
-                    const thresholdOrder = insertIdx + 1;
-                    await db
-                      .update(servicePlans)
-                      .set({ stopOrder: sql`${servicePlans.stopOrder} + 1` })
-                      .where(
-                        and(
-                          eq(servicePlans.routeId, dbRoute.id),
-                          eq(servicePlans.companyId, companyId),
-                          gte(servicePlans.stopOrder, thresholdOrder),
-                          eq(servicePlans.isActive, true)
-                        )
+                    if (insertIdx < planStopOrders.length) {
+                      // Insert before the plan stop at insertIdx; use its actual
+                      // stopOrder as the threshold so renumbering is correct even
+                      // when plan stop orders are not contiguous.
+                      const thresholdOrder = planStopOrders[insertIdx];
+                      await db
+                        .update(servicePlans)
+                        .set({ stopOrder: sql`${servicePlans.stopOrder} + 1` })
+                        .where(
+                          and(
+                            eq(servicePlans.routeId, dbRoute.id),
+                            eq(servicePlans.companyId, companyId),
+                            gte(servicePlans.stopOrder, thresholdOrder),
+                            eq(servicePlans.isActive, true)
+                          )
+                        );
+                      await storage.updateServicePlan(orphan.id, companyId, {
+                        stopOrder: thresholdOrder,
+                      });
+                    } else {
+                      // Tail insertion — append after the last plan stop
+                      const maxPlanOrder = planStopOrders.reduce(
+                        (m, o) => Math.max(m, o),
+                        0
                       );
-                    await storage.updateServicePlan(orphan.id, companyId, {
-                      stopOrder: thresholdOrder,
-                    });
-                    // Splice into currentSequence to keep future insertions accurate
-                    currentSequence.splice(insertIdx, 0, newCoord);
-                  } else {
-                    await storage.updateServicePlan(orphan.id, companyId, {
-                      stopOrder: nextAppendOrder,
-                    });
-                    currentSequence.push(newCoord);
-                    nextAppendOrder += 1;
+                      await storage.updateServicePlan(orphan.id, companyId, {
+                        stopOrder: maxPlanOrder + 1,
+                      });
+                    }
                   }
                 }
               }

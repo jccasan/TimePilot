@@ -582,7 +582,6 @@ export function cheapestInsertionIndex(
   newStop: { latitude: number; longitude: number }
 ): number {
   if (orderedStops.length === 0) return 0;
-  if (orderedStops.length === 1) return 0;
 
   let bestIdx = 0;
   let bestCost = Infinity;
