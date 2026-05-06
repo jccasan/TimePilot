@@ -431,6 +431,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
 
       const { kMeansClustering } = await import("../services/weekly-optimizer");
       const { optimizeRoute: optimizeCluster } = await import("../services/route-optimizer");
+      const { routificOptimize } = await import("../services/routific");
 
       const weeklyStops = routePlans
         .map((sp) => {
@@ -531,21 +532,24 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           latitude: s.latitude,
           longitude: s.longitude,
         }));
-        const result = optimizeCluster(clusterStops, startPoint);
+        const routificResult = await routificOptimize(clusterStops, startPoint);
+        const orderedIds = routificResult
+          ? routificResult.orderedIds
+          : optimizeCluster(clusterStops, startPoint).orderedIds;
 
-        for (let si = 0; si < result.orderedIds.length; si++) {
-          await storage.updateServicePlan(result.orderedIds[si], companyId, {
+        for (let si = 0; si < orderedIds.length; si++) {
+          await storage.updateServicePlan(orderedIds[si], companyId, {
             routeId: targetRouteId,
             stopOrder: si + 1,
           });
-          allAffectedPlanIds.push(result.orderedIds[si]);
+          allAffectedPlanIds.push(orderedIds[si]);
         }
 
-        const unordered = cluster.filter((s) => !result.orderedIds.includes(s.id));
+        const unordered = cluster.filter((s) => !orderedIds.includes(s.id));
         for (let si = 0; si < unordered.length; si++) {
           await storage.updateServicePlan(unordered[si].id, companyId, {
             routeId: targetRouteId,
-            stopOrder: result.orderedIds.length + si + 1,
+            stopOrder: orderedIds.length + si + 1,
           });
           allAffectedPlanIds.push(unordered[si].id);
         }
@@ -656,6 +660,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
 
       const { kMeansClustering } = await import("../services/weekly-optimizer");
       const { optimizeRoute: optimizeCluster } = await import("../services/route-optimizer");
+      const { routificOptimize: routificOptimizeBulk } = await import("../services/routific");
       const allProperties = await storage.getProperties(companyId);
       const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
@@ -744,20 +749,23 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
               latitude: s.latitude,
               longitude: s.longitude,
             }));
-            const result = optimizeCluster(clusterStops, startPoint);
+            const routificRes = await routificOptimizeBulk(clusterStops, startPoint);
+            const orderedIds = routificRes
+              ? routificRes.orderedIds
+              : optimizeCluster(clusterStops, startPoint).orderedIds;
 
-            for (let si = 0; si < result.orderedIds.length; si++) {
-              await storage.updateServicePlan(result.orderedIds[si], companyId, {
+            for (let si = 0; si < orderedIds.length; si++) {
+              await storage.updateServicePlan(orderedIds[si], companyId, {
                 routeId: targetRouteId,
                 stopOrder: si + 1,
               });
-              allAffectedPlanIds.push(result.orderedIds[si]);
+              allAffectedPlanIds.push(orderedIds[si]);
             }
-            const unordered = cluster.filter((s) => !result.orderedIds.includes(s.id));
+            const unordered = cluster.filter((s) => !orderedIds.includes(s.id));
             for (let si = 0; si < unordered.length; si++) {
               await storage.updateServicePlan(unordered[si].id, companyId, {
                 routeId: targetRouteId,
-                stopOrder: result.orderedIds.length + si + 1,
+                stopOrder: orderedIds.length + si + 1,
               });
               allAffectedPlanIds.push(unordered[si].id);
             }

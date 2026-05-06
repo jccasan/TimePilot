@@ -9,6 +9,7 @@ import {
   calculateTotalDistance,
   getMapboxRouteMetrics,
 } from "../route-optimizer";
+import { routificOptimize } from "../routific";
 import { geocodeAddress } from "../geocode";
 import { getCompanyToday } from "../../utils/company-date";
 import { getDemoCompanyId } from "../../utils/demo";
@@ -144,17 +145,29 @@ async function optimizeSingleRoute(
   const originalDistance = originalMapbox?.distance ?? calculateTotalDistance(stops, startPoint);
   const originalMinutes = originalMapbox?.duration ?? (originalDistance / 25) * 60;
 
-  const result = await optimizeRouteAsync(stops, startPoint);
-  const isDegraded = result.degraded;
+  const routificResult = await routificOptimize(stops, startPoint);
+  let orderedIds: string[];
+  let isDegraded = false;
+  let routingEngine: string;
+
+  if (routificResult) {
+    orderedIds = routificResult.orderedIds;
+    routingEngine = "routific";
+  } else {
+    const fallback = await optimizeRouteAsync(stops, startPoint);
+    orderedIds = fallback.orderedIds;
+    isDegraded = fallback.degraded;
+    routingEngine = fallback.degraded ? "haversine" : "mapbox";
+  }
 
   const stopsById = new Map(stops.map((s) => [s.id, s]));
-  const optimizedStops = result.orderedIds.map((id) => stopsById.get(id)!);
+  const optimizedStops = orderedIds.map((id) => stopsById.get(id)!);
 
   const originalOrderIds = stops.map((s) => s.id);
-  const stopsActuallyMoved = result.orderedIds.filter((id, i) => originalOrderIds[i] !== id).length;
+  const stopsActuallyMoved = orderedIds.filter((id, i) => originalOrderIds[i] !== id).length;
 
-  for (let i = 0; i < result.orderedIds.length; i++) {
-    await storage.updateServicePlan(result.orderedIds[i], companyId, { stopOrder: i + 1 });
+  for (let i = 0; i < orderedIds.length; i++) {
+    await storage.updateServicePlan(orderedIds[i], companyId, { stopOrder: i + 1 });
   }
 
   const plansWithoutCoords = routePlans.filter((sp) => {
@@ -163,7 +176,7 @@ async function optimizeSingleRoute(
   });
   for (const plan of plansWithoutCoords) {
     await storage.updateServicePlan(plan.id, companyId, {
-      stopOrder: result.orderedIds.length + 1,
+      stopOrder: orderedIds.length + 1,
     });
   }
 
@@ -172,8 +185,12 @@ async function optimizeSingleRoute(
   }
 
   const optimizedMapbox = await getMapboxRouteMetrics(optimizedStops, startPoint);
-  const optimizedDistance = optimizedMapbox?.distance ?? result.totalDistance;
-  const optimizedMinutes = optimizedMapbox?.duration ?? (result.totalDistance / 25) * 60;
+  const optimizedDistance =
+    optimizedMapbox?.distance ??
+    routificResult?.totalDistance ??
+    calculateTotalDistance(optimizedStops, startPoint);
+  const optimizedMinutes =
+    optimizedMapbox?.duration ?? routificResult?.totalDuration ?? (optimizedDistance / 25) * 60;
 
   const milesSaved = Math.max(0, Math.round((originalDistance - optimizedDistance) * 10) / 10);
   const minutesSaved = Math.max(0, Math.round(originalMinutes - optimizedMinutes));
@@ -229,10 +246,10 @@ async function optimizeSingleRoute(
       hasStartPoint: !!startPoint,
       creditsUsed: isDemoCompanyForCredits ? 0 : creditsRequired,
       creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - creditsRequired,
-      routingEngine: optimizedMapbox ? "mapbox" : "haversine",
+      routingEngine,
       lastOptimizedAt: new Date().toISOString(),
       optimizedStopHash: stopHash,
-      order: result.orderedIds,
+      order: orderedIds,
       degraded: isDegraded,
       degradedReason: isDegraded
         ? "Optimization used estimated distances — live drive times were temporarily unavailable."

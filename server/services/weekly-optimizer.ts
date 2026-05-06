@@ -4,6 +4,7 @@ import {
   buildChunkedDistMap,
   ROUTE_MATRIX_LIMIT,
 } from "./route-optimizer";
+import { routificOptimize } from "./routific";
 
 type TimeDistMap = Map<string, Map<string, number>>;
 
@@ -294,9 +295,23 @@ async function optimizeStopOrder(
     longitude: s.longitude,
   }));
 
-  const { map: distMap, degraded } = await fetchDistMapForStops(routeStops, startPoint);
-  const result = optimizeRoute(routeStops, startPoint, distMap);
-  const orderMap = new Map(result.orderedIds.map((id, idx) => [id, idx]));
+  const routificResult = await routificOptimize(routeStops, startPoint);
+  let orderedIds: string[];
+  let degraded = false;
+
+  if (routificResult) {
+    orderedIds = routificResult.orderedIds;
+  } else {
+    const { map: distMap, degraded: distDegraded } = await fetchDistMapForStops(
+      routeStops,
+      startPoint
+    );
+    const result = optimizeRoute(routeStops, startPoint, distMap);
+    orderedIds = result.orderedIds;
+    degraded = distDegraded;
+  }
+
+  const orderMap = new Map(orderedIds.map((id, idx) => [id, idx]));
   return {
     stops: [...stops].sort(
       (a, b) => (orderMap.get(a.servicePlanId) ?? 0) - (orderMap.get(b.servicePlanId) ?? 0)
