@@ -303,10 +303,7 @@ export function registerPlannerRoutes(app: Express): void {
                       });
                     } else {
                       // Tail insertion — append after the last plan stop
-                      const maxPlanOrder = planStopOrders.reduce(
-                        (m, o) => Math.max(m, o),
-                        0
-                      );
+                      const maxPlanOrder = planStopOrders.reduce((m, o) => Math.max(m, o), 0);
                       await storage.updateServicePlan(orphan.id, companyId, {
                         stopOrder: maxPlanOrder + 1,
                       });
