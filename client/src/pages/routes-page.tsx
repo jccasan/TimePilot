@@ -1735,10 +1735,13 @@ export default function RoutesPage() {
   const { data: company } = useQuery<{
     name: string;
     maxStopsPerRoute?: number | null;
+    maxRouteDurationMinutes?: number | null;
     startLatitude?: string | null;
     startLongitude?: string | null;
   }>({ queryKey: ["/api/company"] });
   const [maxStopsInput, setMaxStopsInput] = useState<string>("");
+  const [maxDurationInput, setMaxDurationInput] = useState<string>("");
+  const [isSavingDuration, setIsSavingDuration] = useState(false);
   const [isApplyingSplit, setIsApplyingSplit] = useState(false);
 
   const { data: mapboxTokenData } = useQuery<{ token: string }>({
@@ -1776,6 +1779,45 @@ export default function RoutesPage() {
       setMaxStopsInput(String(company.maxStopsPerRoute));
     }
   }, [company?.maxStopsPerRoute]);
+
+  useEffect(() => {
+    if (company?.maxRouteDurationMinutes != null) {
+      setMaxDurationInput(String(company.maxRouteDurationMinutes));
+    }
+  }, [company?.maxRouteDurationMinutes]);
+
+  const handleSaveMaxDuration = async () => {
+    const val = maxDurationInput.trim();
+    const minutes = val === "" ? null : parseInt(val, 10);
+    if (val !== "" && (isNaN(minutes!) || minutes! < 30)) {
+      toast({
+        title: "Invalid value",
+        description: "Max route duration must be at least 30 minutes.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsSavingDuration(true);
+    try {
+      await apiRequest("PATCH", "/api/company", { maxRouteDurationMinutes: minutes });
+      await queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({
+        title: minutes == null ? "Duration cap cleared" : "Duration cap saved",
+        description:
+          minutes == null
+            ? "Route optimization will no longer be time-capped."
+            : `Routific will cap each route at ${minutes} minutes when optimizing.`,
+      });
+    } catch (err: unknown) {
+      toast({
+        title: "Failed to save",
+        description: (err as Error)?.message || "Could not save duration setting.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingDuration(false);
+    }
+  };
 
   const handleApplyMaxStops = async () => {
     const val = maxStopsInput.trim();
@@ -2825,6 +2867,41 @@ export default function RoutesPage() {
                 data-testid="button-apply-max-stops"
               >
                 {isApplyingSplit ? <Loader2 className="h-3 w-3 animate-spin" /> : "Apply"}
+              </Button>
+            </div>
+            <div
+              className="flex items-center gap-1.5"
+              title="Cap the maximum route duration passed to the route optimizer (in minutes). Leave blank for no cap."
+            >
+              <Label
+                htmlFor="max-duration-input"
+                className="text-xs text-muted-foreground whitespace-nowrap"
+              >
+                Max min
+              </Label>
+              <Input
+                id="max-duration-input"
+                type="number"
+                min={30}
+                placeholder="none"
+                value={maxDurationInput}
+                onChange={(e) => setMaxDurationInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveMaxDuration();
+                }}
+                className="w-16 h-8 text-xs"
+                data-testid="input-max-duration"
+                disabled={isSavingDuration}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs px-2"
+                onClick={handleSaveMaxDuration}
+                disabled={isSavingDuration}
+                data-testid="button-save-max-duration"
+              >
+                {isSavingDuration ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
               </Button>
             </div>
             <Button

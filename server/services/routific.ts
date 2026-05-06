@@ -39,17 +39,13 @@ export interface RoutificResult {
 
 export interface RoutificOptions {
   /**
-   * Shift start time in "H:MM" or "HH:MM" format (24-hour). Defaults to "8:00".
-   * Routific will not schedule any stop before this time.
+   * Maximum total route duration in minutes, measured from an implicit shift start of 08:00.
+   * When provided, Routific's shift window is set to 08:00 – (08:00 + maxDurationMinutes).
+   * If stops cannot all be served within the window, Routific returns unserved stops and the
+   * caller falls back to the internal nearest-neighbour + 2-opt algorithm.
+   * When absent the shift window is not constrained — matching the previous unconstrained behavior.
    */
-  shiftStart?: string;
-  /**
-   * Shift end time in "H:MM" or "HH:MM" format (24-hour). Defaults to "12:00" (4 hours from shift start).
-   * Routific will not schedule any stop that would finish after this time, effectively capping
-   * the maximum route duration. If stops cannot all be served within the window, Routific will
-   * return unserved stops and the caller will fall back to the internal algorithm.
-   */
-  shiftEnd?: string;
+  maxDurationMinutes?: number;
 }
 
 /**
@@ -165,11 +161,22 @@ export async function routificOptimize(
     return null;
   }
 
-  const shiftStart = options?.shiftStart ?? "8:00";
-  const shiftEnd = options?.shiftEnd ?? "12:00";
+  // Build shift window only when a duration cap is explicitly requested.
+  // When maxDurationMinutes is absent we leave the window unconstrained (original behavior).
+  let shiftStart: string | undefined;
+  let shiftEnd: string | undefined;
+  if (options?.maxDurationMinutes != null && options.maxDurationMinutes > 0) {
+    const startTotalMin = 8 * 60; // fixed shift start: 08:00
+    const endTotalMin = startTotalMin + options.maxDurationMinutes;
+    const endH = Math.floor(endTotalMin / 60);
+    const endM = endTotalMin % 60;
+    shiftStart = "8:00";
+    shiftEnd = `${endH}:${String(endM).padStart(2, "0")}`;
+  }
 
   console.log(
-    `[routific] Submitting VRP: ${stops.length} stops, startPoint=${!!startPoint}, shift=${shiftStart}-${shiftEnd}`
+    `[routific] Submitting VRP: ${stops.length} stops, startPoint=${!!startPoint}` +
+      (shiftEnd ? `, shift=${shiftStart}-${shiftEnd}` : ", shift=unconstrained")
   );
 
   try {
@@ -178,21 +185,24 @@ export async function routificOptimize(
 
     const visits: Record<string, unknown> = {};
     for (const stop of stops) {
-      visits[stop.id] = {
+      const visit: Record<string, unknown> = {
         location: { name: stop.id, lat: stop.latitude, lng: stop.longitude },
-        start: shiftStart,
-        end: shiftEnd,
         duration: stop.durationMinutes ?? 5,
       };
+      if (shiftStart) visit.start = shiftStart;
+      if (shiftEnd) visit.end = shiftEnd;
+      visits[stop.id] = visit;
     }
 
+    const vehicle: Record<string, unknown> = {
+      start_location: { id: "depot", lat: depotLat, lng: depotLng },
+      end_location: { id: "depot", lat: depotLat, lng: depotLng },
+    };
+    if (shiftStart) vehicle.shift_start = shiftStart;
+    if (shiftEnd) vehicle.shift_end = shiftEnd;
+
     const fleet: Record<string, unknown> = {
-      vehicle_1: {
-        start_location: { id: "depot", lat: depotLat, lng: depotLng },
-        end_location: { id: "depot", lat: depotLat, lng: depotLng },
-        shift_start: shiftStart,
-        shift_end: shiftEnd,
-      },
+      vehicle_1: vehicle,
     };
 
     const jobId = await submitJob(token, {

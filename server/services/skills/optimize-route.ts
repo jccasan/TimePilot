@@ -145,7 +145,11 @@ async function optimizeSingleRoute(
   const originalDistance = originalMapbox?.distance ?? calculateTotalDistance(stops, startPoint);
   const originalMinutes = originalMapbox?.duration ?? (originalDistance / 25) * 60;
 
-  const routificResult = await routificOptimize(stops, startPoint);
+  const routificOptions =
+    company?.maxRouteDurationMinutes != null && company.maxRouteDurationMinutes > 0
+      ? { maxDurationMinutes: company.maxRouteDurationMinutes }
+      : undefined;
+  const routificResult = await routificOptimize(stops, startPoint, routificOptions);
   let orderedIds: string[];
   let isDegraded = false;
   let routingEngine: string;

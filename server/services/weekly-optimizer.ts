@@ -227,7 +227,8 @@ async function splitIntoSubRoutes(
   day: string,
   startPoint?: StartPoint,
   maxStops: number = MAX_STOPS_PER_ROUTE,
-  minRoutes: number = 1
+  minRoutes: number = 1,
+  maxDurationMinutes?: number
 ): Promise<{ routes: ProposedRoute[]; degraded: boolean }> {
   if (stops.length === 0) return { routes: [], degraded: false };
 
@@ -237,7 +238,8 @@ async function splitIntoSubRoutes(
   if (numRoutes <= 1) {
     const { stops: optimizedStops, degraded: orderDegraded } = await optimizeStopOrder(
       stops,
-      startPoint
+      startPoint,
+      maxDurationMinutes
     );
     const metrics = await computeDayMetrics(optimizedStops, startPoint);
     return {
@@ -266,7 +268,8 @@ async function splitIntoSubRoutes(
           : `${capitalize(day)} Route`;
       const { stops: optimizedStops, degraded: orderDegraded } = await optimizeStopOrder(
         cluster,
-        startPoint
+        startPoint,
+        maxDurationMinutes
       );
       const metrics = await computeDayMetrics(optimizedStops, startPoint);
       if (orderDegraded || metrics.degraded) anyDegraded = true;
@@ -285,7 +288,8 @@ async function splitIntoSubRoutes(
 
 async function optimizeStopOrder(
   stops: WeeklyStop[],
-  startPoint?: StartPoint
+  startPoint?: StartPoint,
+  maxDurationMinutes?: number
 ): Promise<{ stops: WeeklyStop[]; degraded: boolean }> {
   if (stops.length <= 1) return { stops, degraded: false };
 
@@ -295,7 +299,9 @@ async function optimizeStopOrder(
     longitude: s.longitude,
   }));
 
-  const routificResult = await routificOptimize(routeStops, startPoint);
+  const routificOptions =
+    maxDurationMinutes != null && maxDurationMinutes > 0 ? { maxDurationMinutes } : undefined;
+  const routificResult = await routificOptimize(routeStops, startPoint, routificOptions);
   let orderedIds: string[];
   let degraded = false;
 
@@ -334,6 +340,7 @@ export async function analyzeWeeklySchedule(
     maxStopsPerDay?: number;
     minStopsPerDay?: number;
     numTechs?: number;
+    maxRouteDurationMinutes?: number;
   } = {}
 ): Promise<WeeklyOptimizationResult> {
   const {
@@ -343,6 +350,7 @@ export async function analyzeWeeklySchedule(
     maxStopsPerDay,
     minStopsPerDay,
     numTechs,
+    maxRouteDurationMinutes,
   } = options;
   const activeDays = includeSaturday ? ALL_DAYS : WORK_DAYS;
   const minRoutesPerDay = numTechs && numTechs > 1 ? numTechs : 1;
@@ -369,7 +377,8 @@ export async function analyzeWeeklySchedule(
       day,
       startPoint,
       maxStopsPerDay,
-      minRoutesPerDay
+      minRoutesPerDay,
+      maxRouteDurationMinutes
     );
     if (splitDegraded) anyDegraded = true;
     const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
@@ -400,7 +409,8 @@ export async function analyzeWeeklySchedule(
         day,
         startPoint,
         maxStopsPerDay,
-        minRoutesPerDay
+        minRoutesPerDay,
+        maxRouteDurationMinutes
       );
       if (splitDegraded) anyDegraded = true;
       const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
@@ -454,7 +464,8 @@ export async function analyzeWeeklySchedule(
           day,
           startPoint,
           maxStopsPerDay,
-          clusterMin[ci]
+          clusterMin[ci],
+          maxRouteDurationMinutes
         );
         if (splitDegraded) anyDegraded = true;
         routes.push(...subRoutes);
