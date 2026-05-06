@@ -124,7 +124,10 @@ async function buildSettings(companyId: string): Promise<RoutePlannerSettings> {
   }
 
   // Mapbox config — only if token is present.
-  const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN;
+  const mapboxToken =
+    process.env.MAPBOX_ACCESS_TOKEN ||
+    process.env.MAPBOX_PUBLIC_TOKEN ||
+    process.env.MAPBOX_SECRET_TOKEN;
   const mapboxConfig = mapboxToken
     ? {
         accessToken: mapboxToken,

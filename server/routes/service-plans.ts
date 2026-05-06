@@ -2,7 +2,8 @@ import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql, eq, and, gte } from "drizzle-orm";
-import { visits } from "@shared/schema";
+import { visits, servicePlans } from "@shared/schema";
+import { cheapestInsertionIndex } from "../services/route-optimizer";
 import { z } from "zod";
 import { createStripeCustomer } from "../services/stripe";
 import {
@@ -644,8 +645,73 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
           routeId: (body.routeId as string | null | undefined) ?? undefined,
           isActive: true,
         });
-        const maxOrder = routeStops.reduce((m, s) => Math.max(m, s.stopOrder ?? 0), 0);
-        body.stopOrder = maxOrder + 1;
+
+        let insertionOrder: number | null = null;
+
+        if (routeStops.length >= 2 && existing.propertyId) {
+          const allProperties = await storage.getProperties(companyId);
+          const propertyMap = new Map(allProperties.map((pr) => [pr.id, pr]));
+          const newProp = propertyMap.get(existing.propertyId);
+
+          if (newProp?.latitude && newProp?.longitude) {
+            const newLat = parseFloat(String(newProp.latitude));
+            const newLon = parseFloat(String(newProp.longitude));
+
+            if (!isNaN(newLat) && !isNaN(newLon)) {
+              const sorted = [...routeStops].sort(
+                (a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0)
+              );
+              const coordStops = sorted
+                .map((s) => {
+                  if (!s.propertyId) return null;
+                  const pr = propertyMap.get(s.propertyId);
+                  if (!pr?.latitude || !pr?.longitude) return null;
+                  const lat = parseFloat(String(pr.latitude));
+                  const lon = parseFloat(String(pr.longitude));
+                  if (isNaN(lat) || isNaN(lon)) return null;
+                  return { latitude: lat, longitude: lon };
+                })
+                .filter((c): c is { latitude: number; longitude: number } => c !== null);
+
+              if (coordStops.length >= 2) {
+                const insertIdx = cheapestInsertionIndex(coordStops, {
+                  latitude: newLat,
+                  longitude: newLon,
+                });
+
+                if (insertIdx < sorted.length) {
+                  // Inserting into the middle — push existing stops at or above this
+                  // position up by one to make room.
+                  const thresholdOrder = sorted[insertIdx].stopOrder ?? insertIdx + 1;
+                  await db
+                    .update(servicePlans)
+                    .set({ stopOrder: sql`${servicePlans.stopOrder} + 1` })
+                    .where(
+                      and(
+                        eq(servicePlans.routeId, body.routeId as string),
+                        eq(servicePlans.companyId, companyId),
+                        gte(servicePlans.stopOrder, thresholdOrder),
+                        eq(servicePlans.isActive, true)
+                      )
+                    );
+                  insertionOrder = thresholdOrder;
+                } else {
+                  // cheapestInsertionIndex chose the tail — append
+                  const maxOrder = sorted.reduce((m, s) => Math.max(m, s.stopOrder ?? 0), 0);
+                  insertionOrder = maxOrder + 1;
+                }
+              }
+            }
+          }
+        }
+
+        if (insertionOrder !== null) {
+          body.stopOrder = insertionOrder;
+        } else {
+          // Fallback: route has <2 stops, no coordinates, or property unknown — append
+          const maxOrder = routeStops.reduce((m, s) => Math.max(m, s.stopOrder ?? 0), 0);
+          body.stopOrder = maxOrder + 1;
+        }
       }
 
       if (body.routeId && !body.dayOfWeek) {

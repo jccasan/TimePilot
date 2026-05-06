@@ -565,6 +565,57 @@ export async function getRouteMetricsWithLegs(
   return { totalDistance, totalDuration, legs };
 }
 
+/**
+ * Cheapest-insertion heuristic: given an ordered sequence of stops on an already-
+ * optimized route, returns the zero-based insertion index that minimises the extra
+ * haversine distance added by the new stop.
+ *
+ * Edge cases:
+ *  - 0 existing stops → return 0
+ *  - 1 existing stop  → return 0 (either side adds the same distance; prepend)
+ *  - Insertion before the first stop costs d(new, stops[0])
+ *  - Insertion after the last stop costs d(stops[n-1], new)
+ *  - Insertion between i and i+1 costs d(i, new) + d(new, i+1) − d(i, i+1)
+ */
+export function cheapestInsertionIndex(
+  orderedStops: { latitude: number; longitude: number }[],
+  newStop: { latitude: number; longitude: number }
+): number {
+  if (orderedStops.length === 0) return 0;
+  if (orderedStops.length === 1) return 0;
+
+  let bestIdx = 0;
+  let bestCost = Infinity;
+
+  for (let i = 0; i <= orderedStops.length; i++) {
+    let cost: number;
+    if (i === 0) {
+      cost = haversineDistance(
+        newStop.latitude,
+        newStop.longitude,
+        orderedStops[0].latitude,
+        orderedStops[0].longitude
+      );
+    } else if (i === orderedStops.length) {
+      const last = orderedStops[orderedStops.length - 1];
+      cost = haversineDistance(last.latitude, last.longitude, newStop.latitude, newStop.longitude);
+    } else {
+      const prev = orderedStops[i - 1];
+      const next = orderedStops[i];
+      cost =
+        haversineDistance(prev.latitude, prev.longitude, newStop.latitude, newStop.longitude) +
+        haversineDistance(newStop.latitude, newStop.longitude, next.latitude, next.longitude) -
+        haversineDistance(prev.latitude, prev.longitude, next.latitude, next.longitude);
+    }
+    if (cost < bestCost) {
+      bestCost = cost;
+      bestIdx = i;
+    }
+  }
+
+  return bestIdx;
+}
+
 export async function getMapboxRouteMetrics(
   stops: Stop[],
   startPoint?: StartPoint

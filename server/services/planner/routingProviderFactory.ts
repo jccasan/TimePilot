@@ -8,7 +8,10 @@ import type { RoutingProvider } from "./routingProvider";
 import type { MapboxConfig } from "./types";
 
 export function createRoutingProvider(): RoutingProvider {
-  const token = process.env.MAPBOX_ACCESS_TOKEN;
+  const token =
+    process.env.MAPBOX_ACCESS_TOKEN ||
+    process.env.MAPBOX_PUBLIC_TOKEN ||
+    process.env.MAPBOX_SECRET_TOKEN;
   if (token) {
     const config: MapboxConfig = {
       accessToken: token,
