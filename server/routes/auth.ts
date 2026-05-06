@@ -83,7 +83,12 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.patch("/api/auth/import-mode", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
+      if (req._apiKeyAuth) {
+        return res
+          .status(403)
+          .json({ error: "This endpoint requires user session authentication" });
+      }
+      const userId = req.session.userId as string;
       const { enabled } = req.body;
       if (typeof enabled !== "boolean") {
         return res.status(400).json({ error: "enabled must be a boolean" });
@@ -103,7 +108,12 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.get("/api/auth/user", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
+      if (req._apiKeyAuth) {
+        return res
+          .status(403)
+          .json({ error: "This endpoint requires user session authentication" });
+      }
+      const userId = req.session.userId as string;
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ message: "User not found" });
       const { passwordHash: _passwordHash, ...safeUser } = user;
@@ -129,7 +139,12 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
     isAuthenticated,
     async (req: Request, res: Response) => {
       try {
-        const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
+        if (req._apiKeyAuth) {
+          return res
+            .status(403)
+            .json({ error: "This endpoint requires user session authentication" });
+        }
+        const userId = req.session.userId as string;
         const { url } = req.body;
         if (!url || typeof url !== "string") {
           return res.status(400).json({ error: "URL is required" });
@@ -165,7 +180,12 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.get("/api/tours/status", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
+      if (req._apiKeyAuth) {
+        return res
+          .status(403)
+          .json({ error: "This endpoint requires user session authentication" });
+      }
+      const userId = req.session.userId as string;
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ error: "Not found" });
       return res.json({ completions: user.tourCompletions || {} });
@@ -176,7 +196,12 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.post("/api/tours/complete", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
+      if (req._apiKeyAuth) {
+        return res
+          .status(403)
+          .json({ error: "This endpoint requires user session authentication" });
+      }
+      const userId = req.session.userId as string;
       const { tourId, version } = req.body;
       if (!tourId || typeof tourId !== "string")
         return res.status(400).json({ error: "tourId is required" });
@@ -199,7 +224,12 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.get("/api/tutorials/progress", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
+      if (req._apiKeyAuth) {
+        return res
+          .status(403)
+          .json({ error: "This endpoint requires user session authentication" });
+      }
+      const userId = req.session.userId as string;
       const user = await getUserById(userId);
       if (!user) return res.status(401).json({ error: "Not found" });
       const completions = ((user.tourCompletions as unknown) || {}) as Record<string, unknown>;
@@ -226,7 +256,12 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.post("/api/tutorials/progress", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
+      if (req._apiKeyAuth) {
+        return res
+          .status(403)
+          .json({ error: "This endpoint requires user session authentication" });
+      }
+      const userId = req.session.userId as string;
       const { tutorialId, currentStep, completed, version } = req.body;
       if (!tutorialId || typeof tutorialId !== "string")
         return res.status(400).json({ error: "tutorialId required" });
@@ -355,7 +390,12 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
   app.post("/api/auth/change-password", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session.userId ?? req._apiKeyAuth?.userId) as string;
+      if (req._apiKeyAuth) {
+        return res
+          .status(403)
+          .json({ error: "Password changes are not permitted for API key authenticated requests" });
+      }
+      const userId = req.session.userId;
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const { newPassword } = req.body;
       if (!newPassword) return res.status(400).json({ error: "New password is required" });

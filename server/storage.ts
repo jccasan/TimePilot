@@ -1079,7 +1079,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCompaniesForUser(userId: string): Promise<CompanyUser[]> {
-    return db.select().from(companyUsers).where(eq(companyUsers.userId, userId));
+    return db
+      .select()
+      .from(companyUsers)
+      .where(and(eq(companyUsers.userId, userId), eq(companyUsers.isActive, true)));
   }
 
   async createCompanyUser(data: InsertCompanyUser): Promise<CompanyUser> {

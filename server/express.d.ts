@@ -12,7 +12,7 @@ declare global {
   namespace Express {
     interface Request {
       adminUser?: { userId: string; email: string };
-      _apiKeyAuth?: { userId: string; companyId: string; role: string };
+      _apiKeyAuth?: { companyId: string; scopes: string[]; keyId: string };
     }
   }
 }

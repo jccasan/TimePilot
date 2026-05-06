@@ -24,6 +24,10 @@ export const CHANGE_PASSWORD_EXEMPT_PATHS = [
   "/api/auth/logout",
 ];
 
+// Paths that API key authentication is permitted to reach.
+// Everything else requires a human user session.
+export const API_KEY_ALLOWED_PATH_PREFIXES = ["/api/voice/"];
+
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   let userId = req.session.userId;
   let authMethod = userId ? "session-cookie" : "none";
@@ -73,29 +77,31 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
         if (apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date()) {
           return res.status(401).json({ message: "API key has expired" });
         }
-        const companyUsers_ = await storage.getCompanyUsers(apiKey.companyId);
-        const ownerOrAdmin =
-          companyUsers_.find((cu) => cu.role === "owner" && cu.isActive !== false) ||
-          companyUsers_.find((cu) => cu.role === "admin" && cu.isActive !== false);
-        if (ownerOrAdmin) {
-          userId = ownerOrAdmin.userId;
-          req._apiKeyAuth = {
-            userId: ownerOrAdmin.userId,
-            companyId: apiKey.companyId,
-            role: ownerOrAdmin.role,
-          };
-          authMethod = "api-key";
-          storage.updateApiKeyLastUsed(apiKey.id).catch(console.error);
+        const isAllowedPath = API_KEY_ALLOWED_PATH_PREFIXES.some((prefix) =>
+          req.path.startsWith(prefix)
+        );
+        if (!isAllowedPath) {
+          return res.status(403).json({
+            message:
+              "API key access is not permitted for this endpoint. Use a user session or request the appropriate scope.",
+          });
         }
+        req._apiKeyAuth = {
+          companyId: apiKey.companyId,
+          scopes: (apiKey.scopes as string[]) ?? [],
+          keyId: apiKey.id,
+        };
+        authMethod = "api-key";
+        storage.updateApiKeyLastUsed(apiKey.id).catch(console.error);
       } else {
         return res.status(401).json({ message: "Invalid API key" });
       }
     }
   }
-  if (!userId) {
+  if (!userId && !req._apiKeyAuth) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  if (authMethod !== "api-key" && !CHANGE_PASSWORD_EXEMPT_PATHS.includes(req.path)) {
+  if (authMethod !== "api-key" && userId && !CHANGE_PASSWORD_EXEMPT_PATHS.includes(req.path)) {
     const user = await getUserById(userId);
     if (user?.mustChangePassword) {
       return res.status(403).json({ error: "Password change required", mustChangePassword: true });
@@ -105,11 +111,13 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 };
 
 export async function getCompanyContext(req: Request) {
-  const apiKeyAuth = req._apiKeyAuth as
-    | { userId: string; companyId: string; role: string }
-    | undefined;
+  const apiKeyAuth = req._apiKeyAuth;
   if (apiKeyAuth) {
-    return { userId: apiKeyAuth.userId, companyId: apiKeyAuth.companyId, role: apiKeyAuth.role };
+    return {
+      userId: `apikey_${apiKeyAuth.keyId}`,
+      companyId: apiKeyAuth.companyId,
+      role: "api_key",
+    };
   }
   const userId = req.session.userId;
   if (!userId) {
@@ -126,6 +134,19 @@ export async function getCompanyContext(req: Request) {
 export function requireRole(role: string, allowed: string[] = ["owner", "admin"]) {
   if (!allowed.includes(role)) {
     throw { status: 403, message: "Insufficient permissions" };
+  }
+}
+
+export function requireApiKeyScope(req: Request, required: string): void {
+  const apiKeyAuth = req._apiKeyAuth;
+  if (!apiKeyAuth) {
+    throw { status: 403, message: "Scope check requires API key authentication" };
+  }
+  if (!apiKeyAuth.scopes.includes(required)) {
+    throw {
+      status: 403,
+      message: `API key missing required scope: ${required}`,
+    };
   }
 }
 

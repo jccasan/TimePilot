@@ -2566,8 +2566,8 @@ Respond with exactly one category from the list above and nothing else.`;
     legacyHeaders: false,
     validate: { xForwardedForHeader: false, default: true },
     keyGenerator: (req: Request) => {
-      const apiKeyAuth = req._apiKeyAuth as { userId: string } | undefined;
-      if (apiKeyAuth?.userId) return `api:${apiKeyAuth.userId}`;
+      const apiKeyAuth = req._apiKeyAuth;
+      if (apiKeyAuth?.keyId) return `api:${apiKeyAuth.keyId}`;
       const sessionUserId = req.session.userId;
       if (sessionUserId) return `session:${sessionUserId}`;
       return "unauthenticated";
