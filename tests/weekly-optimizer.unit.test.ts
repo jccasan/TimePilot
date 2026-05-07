@@ -5,17 +5,14 @@ vi.mock("../server/services/routific", () => ({
 }));
 
 vi.mock("../server/services/route-optimizer", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../server/services/route-optimizer")>();
+  const actual = await importOriginal<typeof import("../server/services/route-optimizer")>();
   return {
     ...actual,
-    optimizeRouteAsync: vi.fn().mockImplementation(
-      async (stops: Array<{ id: string }>) => ({
-        orderedIds: stops.map((s) => s.id),
-        totalDistance: 0,
-        degraded: false,
-      })
-    ),
+    optimizeRouteAsync: vi.fn().mockImplementation(async (stops: Array<{ id: string }>) => ({
+      orderedIds: stops.map((s) => s.id),
+      totalDistance: 0,
+      degraded: false,
+    })),
   };
 });
 
@@ -177,8 +174,9 @@ describe("under-minimum cluster enforcement", () => {
 
 describe("optimizeStopOrder fallback behavior", () => {
   const mockedRoutificOptimize = routificModule.routificOptimize as ReturnType<typeof vi.fn>;
-  const mockedOptimizeRouteAsync =
-    routeOptimizerModule.optimizeRouteAsync as ReturnType<typeof vi.fn>;
+  const mockedOptimizeRouteAsync = routeOptimizerModule.optimizeRouteAsync as ReturnType<
+    typeof vi.fn
+  >;
 
   beforeEach(() => {
     mockedRoutificOptimize.mockResolvedValue(null);
@@ -227,13 +225,11 @@ describe("optimizeStopOrder fallback behavior", () => {
     // Queue two Routific responses:
     //   1. current-schedule call → null (no impact on test assertion)
     //   2. proposed-schedule call → reversedIds (the result we want to verify)
-    mockedRoutificOptimize
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        orderedIds: reversedIds,
-        totalDistance: 5.0,
-        totalDuration: 20,
-      });
+    mockedRoutificOptimize.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      orderedIds: reversedIds,
+      totalDistance: 5.0,
+      totalDuration: 20,
+    });
 
     const result = await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 3 });
 
