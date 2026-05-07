@@ -95,7 +95,8 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 
 async function geocodeBatch(
   items: Array<{ id: string; street: string; city: string; state: string; zip: string }>,
-  concurrency = GEOCODE_CONCURRENCY
+  concurrency = GEOCODE_CONCURRENCY,
+  companyId?: string | null
 ): Promise<Map<string, { latitude: string; longitude: string } | null>> {
   const sem = new Semaphore(concurrency);
   const results = new Map<string, { latitude: string; longitude: string } | null>();
@@ -104,7 +105,14 @@ async function geocodeBatch(
     items.map(async (item) => {
       await sem.acquire();
       try {
-        const coords = await geocodeAddress(item.street, item.city, item.state, item.zip);
+        const coords = await geocodeAddress(
+          item.street,
+          item.city,
+          item.state,
+          item.zip,
+          null,
+          companyId
+        );
         results.set(item.id, coords);
       } catch {
         results.set(item.id, null);
@@ -320,7 +328,7 @@ async function runCompetitorImport(payload: CompetitorImportPayload): Promise<vo
       }
 
       if (addressItems.length > 0) {
-        const geocodedMap = await geocodeBatch(addressItems);
+        const geocodedMap = await geocodeBatch(addressItems, GEOCODE_CONCURRENCY, companyId);
 
         const propertyValues = addressItems.map((addr) => {
           const { pc } = toInsert[addr.pcIdx];
@@ -537,7 +545,7 @@ async function runCsvContactsImport(payload: CsvContactsPayload): Promise<void> 
     }
 
     if (addressItems.length > 0) {
-      const geocodedMap = await geocodeBatch(addressItems);
+      const geocodedMap = await geocodeBatch(addressItems, GEOCODE_CONCURRENCY, companyId);
 
       const propertyValues = addressItems.map((addr) => {
         const coords = geocodedMap.get(addr.id);

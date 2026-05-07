@@ -753,8 +753,10 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
       if (!token) return res.json([]);
 
       let countryFilter = "us";
+      let autocompleteCompanyId: string | null = null;
       try {
         const { companyId } = await getCompanyContext(req);
+        autocompleteCompanyId = companyId;
         const co = await storage.getCompany(companyId);
         if (co?.country === "ca") countryFilter = "ca";
       } catch {}
@@ -820,7 +822,7 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
         };
       });
       setAutocompleteCache(q, countryFilter, features);
-      trackApiCall("mapbox", "autocomplete");
+      trackApiCall("mapbox", "autocomplete", 1, autocompleteCompanyId);
       res.json(features);
     } catch {
       res.json([]);

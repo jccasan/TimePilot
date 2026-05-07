@@ -12,17 +12,36 @@ export type ApiMetric =
 
 const DAILY_THRESHOLD = parseInt(process.env.GEOCODE_DAILY_THRESHOLD || "1000", 10);
 
+/** The date from which per-tenant Mapbox/OpenAI attribution is tracked in api_usage_daily. */
+export const API_ATTRIBUTION_START_DATE = process.env.API_ATTRIBUTION_START_DATE || "2026-05-07";
+
 let thresholdNotifiedForDay = "";
 
-export function trackApiCall(provider: ApiProvider, metric: ApiMetric, count = 1): void {
-  db.execute(
-    sql`
-    INSERT INTO api_usage_daily (id, date, provider, metric, calls)
-    VALUES (gen_random_uuid(), CURRENT_DATE, ${provider}, ${metric}, ${count})
-    ON CONFLICT (date, provider, metric)
-    DO UPDATE SET calls = api_usage_daily.calls + ${count}
-  `
-  )
+export function trackApiCall(
+  provider: ApiProvider,
+  metric: ApiMetric,
+  count = 1,
+  companyId?: string | null
+): void {
+  const upsertPromise = companyId
+    ? db.execute(
+        sql`
+        INSERT INTO api_usage_daily (id, date, provider, metric, company_id, calls)
+        VALUES (gen_random_uuid(), CURRENT_DATE, ${provider}, ${metric}, ${companyId}, ${count})
+        ON CONFLICT (date, provider, metric, company_id) WHERE company_id IS NOT NULL
+        DO UPDATE SET calls = api_usage_daily.calls + ${count}
+      `
+      )
+    : db.execute(
+        sql`
+        INSERT INTO api_usage_daily (id, date, provider, metric, calls)
+        VALUES (gen_random_uuid(), CURRENT_DATE, ${provider}, ${metric}, ${count})
+        ON CONFLICT (date, provider, metric) WHERE company_id IS NULL
+        DO UPDATE SET calls = api_usage_daily.calls + ${count}
+      `
+      );
+
+  upsertPromise
     .then(() => {
       if (provider === "mapbox" && (metric === "geocode" || metric === "autocomplete")) {
         checkDailyThreshold().catch(() => {});
@@ -169,6 +188,21 @@ function buildTrend(byDate: Record<string, number>): { date: string; calls: numb
   for (let i = 29; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
+    const ds = d.toISOString().slice(0, 10);
+    trend.push({ date: ds, calls: byDate[ds] || 0 });
+  }
+  return trend;
+}
+
+function buildMonthTrend(
+  byDate: Record<string, number>,
+  monthStartStr: string
+): { date: string; calls: number }[] {
+  const trend: { date: string; calls: number }[] = [];
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const start = new Date(monthStartStr + "T00:00:00Z");
+  const end = new Date(todayStr + "T00:00:00Z");
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
     const ds = d.toISOString().slice(0, 10);
     trend.push({ date: ds, calls: byDate[ds] || 0 });
   }
@@ -342,4 +376,157 @@ export async function getRoutificTenantStats(): Promise<RoutificTenantStat[]> {
     avgStopCount: Number(row.avg_stop_count),
     lastCallAt: row.last_call_at,
   }));
+}
+
+export interface TenantUsageRow {
+  companyId: string | null;
+  companyName: string;
+  totalCalls: number;
+  estimatedCostUsd: number;
+  firstActivity: string | null;
+  lastActivity: string | null;
+  dailyTrend: { date: string; calls: number }[];
+}
+
+export async function getProviderBreakdown(provider: string): Promise<TenantUsageRow[]> {
+  const now = new Date();
+  const monthStartStr = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+
+  if (provider === "telnyx") {
+    const result = await db.execute(sql`
+      SELECT
+        sm.company_id,
+        COALESCE(c.name, 'Unknown') AS company_name,
+        COALESCE(SUM(sm.segments), 0)::int AS total_calls,
+        MIN(DATE(sm.created_at))::text AS first_activity,
+        MAX(DATE(sm.created_at))::text AS last_activity
+      FROM sms_messages sm
+      LEFT JOIN companies c ON c.id = sm.company_id
+      WHERE sm.direction = 'outbound'
+        AND sm.created_at >= ${monthStartStr}
+      GROUP BY sm.company_id, c.name
+      ORDER BY total_calls DESC
+    `);
+
+    const dailyResult = await db.execute(sql`
+      SELECT
+        sm.company_id,
+        DATE(sm.created_at)::text AS date,
+        COALESCE(SUM(sm.segments), 0)::int AS calls
+      FROM sms_messages sm
+      WHERE sm.direction = 'outbound'
+        AND sm.created_at >= ${monthStartStr}
+      GROUP BY sm.company_id, DATE(sm.created_at)
+      ORDER BY sm.company_id, date
+    `);
+
+    const dailyByCompany: Record<string, Record<string, number>> = {};
+    for (const r of dailyResult.rows as {
+      company_id: string | null;
+      date: string;
+      calls: number;
+    }[]) {
+      const key = r.company_id ?? "__null__";
+      if (!dailyByCompany[key]) dailyByCompany[key] = {};
+      dailyByCompany[key][r.date] = Number(r.calls);
+    }
+
+    return (
+      result.rows as {
+        company_id: string | null;
+        company_name: string;
+        total_calls: number;
+        first_activity: string | null;
+        last_activity: string | null;
+      }[]
+    ).map((r) => {
+      const key = r.company_id ?? "__null__";
+      const byDate = dailyByCompany[key] ?? {};
+      return {
+        companyId: r.company_id,
+        companyName: r.company_name,
+        totalCalls: Number(r.total_calls),
+        estimatedCostUsd: Number(r.total_calls) * TELNYX_COST_PER_SEGMENT,
+        firstActivity: r.first_activity,
+        lastActivity: r.last_activity,
+        dailyTrend: buildMonthTrend(byDate, monthStartStr),
+      };
+    });
+  }
+
+  const providerFilter =
+    provider === "openai" ? ["openai", "claude"] : ["mapbox", "mapbox_searchbox"];
+
+  const isMapbox = provider === "mapbox";
+  const costExpr = isMapbox
+    ? sql`COALESCE(SUM(aud.calls * CASE
+          WHEN aud.metric = 'geocode' THEN ${MAPBOX_COST_PER_CALL.geocode}
+          WHEN aud.metric = 'autocomplete' THEN ${MAPBOX_COST_PER_CALL.autocomplete}
+          WHEN aud.metric = 'directions' THEN ${MAPBOX_COST_PER_CALL.directions}
+          WHEN aud.metric = 'matrix' THEN ${MAPBOX_COST_PER_CALL.matrix}
+          ELSE 0.005
+        END), 0)`
+    : sql`COALESCE(SUM(aud.calls) * ${OPENAI_ROVER_CHAT_COST_PER_CALL}, 0)`;
+
+  const result = await db.execute(sql`
+    SELECT
+      aud.company_id,
+      COALESCE(c.name, 'Unattributed') AS company_name,
+      COALESCE(SUM(aud.calls), 0)::int AS total_calls,
+      ${costExpr} AS estimated_cost_usd,
+      MIN(aud.date)::text AS first_activity,
+      MAX(aud.date)::text AS last_activity
+    FROM api_usage_daily aud
+    LEFT JOIN companies c ON c.id = aud.company_id
+    WHERE aud.provider = ANY(${providerFilter})
+      AND aud.date >= ${monthStartStr}
+    GROUP BY aud.company_id, c.name
+    ORDER BY total_calls DESC
+  `);
+
+  const dailyResult = await db.execute(sql`
+    SELECT
+      aud.company_id,
+      aud.date::text AS date,
+      COALESCE(SUM(aud.calls), 0)::int AS calls
+    FROM api_usage_daily aud
+    WHERE aud.provider = ANY(${providerFilter})
+      AND aud.date >= ${monthStartStr}
+    GROUP BY aud.company_id, aud.date
+    ORDER BY aud.company_id, aud.date
+  `);
+
+  const dailyByCompany: Record<string, Record<string, number>> = {};
+  for (const r of dailyResult.rows as {
+    company_id: string | null;
+    date: string;
+    calls: number;
+  }[]) {
+    const key = r.company_id ?? "__null__";
+    if (!dailyByCompany[key]) dailyByCompany[key] = {};
+    dailyByCompany[key][r.date] = Number(r.calls);
+  }
+
+  return (
+    result.rows as {
+      company_id: string | null;
+      company_name: string;
+      total_calls: number;
+      estimated_cost_usd: number;
+      first_activity: string | null;
+      last_activity: string | null;
+    }[]
+  ).map((r) => {
+    const key = r.company_id ?? "__null__";
+    const byDate = dailyByCompany[key] ?? {};
+    return {
+      companyId: r.company_id,
+      companyName: r.company_name,
+      totalCalls: Number(r.total_calls),
+      estimatedCostUsd: Number(r.estimated_cost_usd),
+      firstActivity: r.first_activity,
+      lastActivity: r.last_activity,
+      dailyTrend: buildMonthTrend(byDate, monthStartStr),
+    };
+  });
 }

@@ -1,9 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import {
   Building2,
   Users,
@@ -26,6 +34,9 @@ import {
   Clock,
   Route,
   TrendingDown,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from "lucide-react";
 import { BarChart, Bar, Tooltip, ResponsiveContainer, XAxis } from "recharts";
 import { TIER_CONFIG } from "@shared/schema";
@@ -64,6 +75,21 @@ interface RoutificTenantStat {
   fallbackCalls: number;
   avgStopCount: number;
   lastCallAt: string | null;
+}
+
+interface TenantUsageRow {
+  companyId: string | null;
+  companyName: string;
+  totalCalls: number;
+  estimatedCostUsd: number;
+  firstActivity: string | null;
+  lastActivity: string | null;
+  dailyTrend: { date: string; calls: number }[];
+}
+
+interface BreakdownResponse {
+  rows: TenantUsageRow[];
+  attributionStartDate: string | null;
 }
 
 const METRIC_LABELS: Record<string, string> = {
@@ -106,34 +132,279 @@ function CostSparkline({ data }: { data: { date: string; calls: number }[] }) {
   );
 }
 
+function TenantBreakdownSheet({
+  provider,
+  title,
+  unit,
+  open,
+  onClose,
+}: {
+  provider: string;
+  title: string;
+  unit: string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [expandedTenant, setExpandedTenant] = useState<string | null>(null);
+
+  const { data: breakdown, isLoading } = useQuery<BreakdownResponse>({
+    queryKey: ["/api/admin/api-costs", provider, "breakdown"],
+    queryFn: adminFetchFn(`/api/admin/api-costs/${provider}/breakdown`),
+    enabled: open,
+    staleTime: 60000,
+  });
+
+  const rows = breakdown?.rows;
+  const attributionStartDate = breakdown?.attributionStartDate ?? null;
+  const showAttributionNote = !!attributionStartDate;
+
+  const totalCalls = rows?.reduce((s, r) => s + r.totalCalls, 0) ?? 0;
+  const totalCost = rows?.reduce((s, r) => s + r.estimatedCostUsd, 0) ?? 0;
+
+  return (
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-2xl overflow-y-auto"
+        data-testid={`sheet-breakdown-${provider}`}
+      >
+        <SheetHeader className="mb-4">
+          <SheetTitle>{title} — Per-Tenant Breakdown</SheetTitle>
+          <SheetDescription>
+            This month's usage attributed by tenant, sorted by volume.
+          </SheetDescription>
+        </SheetHeader>
+
+        {showAttributionNote && (
+          <div className="flex items-start gap-2 mb-4 p-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+            <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>
+              {title} attribution available from <strong>{attributionStartDate}</strong> onward.
+              Earlier usage shows as "Unattributed" — historical backfill is not feasible.
+            </span>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-14 bg-muted rounded animate-pulse" />
+            ))}
+          </div>
+        ) : !rows || rows.length === 0 ? (
+          <div className="py-12 text-center text-muted-foreground">
+            <p className="text-sm">No usage data for this month yet.</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between mb-3 px-1">
+              <p className="text-xs text-muted-foreground">
+                {rows.length} tenant{rows.length !== 1 ? "s" : ""} active this month
+              </p>
+              <p className="text-xs font-medium">
+                Total: {totalCalls.toLocaleString()} {unit} · est. ${totalCost.toFixed(2)}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {rows.map((row, idx) => {
+                const key = row.companyId ?? `__null_${idx}`;
+                const isExpanded = expandedTenant === key;
+                const costStr =
+                  row.estimatedCostUsd < 0.01 && row.estimatedCostUsd > 0
+                    ? "<$0.01"
+                    : `$${row.estimatedCostUsd.toFixed(2)}`;
+                const isUnattributed = row.companyId === null;
+
+                return (
+                  <div
+                    key={key}
+                    className="border rounded-lg overflow-hidden"
+                    data-testid={`breakdown-row-${idx}`}
+                  >
+                    <button
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors"
+                      onClick={() => setExpandedTenant(isExpanded ? null : key)}
+                      data-testid={`breakdown-toggle-${idx}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium truncate">{row.companyName}</p>
+                            {isUnattributed && (
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5">
+                                pre-deploy
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {row.firstActivity && row.lastActivity
+                              ? `${row.firstActivity} – ${row.lastActivity}`
+                              : "—"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 shrink-0">
+                        <div className="text-right">
+                          <p className="text-sm font-semibold tabular-nums">
+                            {row.totalCalls.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{unit}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
+                            {costStr}
+                          </p>
+                          <p className="text-xs text-muted-foreground">est.</p>
+                        </div>
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="border-t px-4 py-3 bg-muted/20">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">
+                          Day-by-day usage this month
+                        </p>
+                        {row.dailyTrend.every((d) => d.calls === 0) ? (
+                          <p className="text-xs text-muted-foreground italic">
+                            No daily data available
+                          </p>
+                        ) : (
+                          <>
+                            <ResponsiveContainer width="100%" height={60}>
+                              <BarChart
+                                data={
+                                  row.dailyTrend.filter((d) => d.calls > 0).length > 0
+                                    ? row.dailyTrend
+                                    : []
+                                }
+                                margin={{ top: 2, right: 0, left: 0, bottom: 0 }}
+                              >
+                                <Bar
+                                  dataKey="calls"
+                                  fill="currentColor"
+                                  className="text-primary/60"
+                                  radius={[2, 2, 0, 0]}
+                                />
+                                <Tooltip
+                                  content={({ active, payload }) => {
+                                    if (!active || !payload?.length) return null;
+                                    const d = payload[0].payload as {
+                                      date: string;
+                                      calls: number;
+                                    };
+                                    return (
+                                      <div className="bg-popover border rounded px-2 py-1 text-xs shadow-md">
+                                        <p className="font-medium">{d.date}</p>
+                                        <p>
+                                          {d.calls.toLocaleString()} {unit}
+                                        </p>
+                                      </div>
+                                    );
+                                  }}
+                                />
+                                <XAxis dataKey="date" hide />
+                              </BarChart>
+                            </ResponsiveContainer>
+                            <div className="mt-2 max-h-40 overflow-y-auto">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="text-muted-foreground border-b">
+                                    <th className="text-left py-1">Date</th>
+                                    <th className="text-right py-1">{unit}</th>
+                                    {provider !== "mapbox" && (
+                                      <th className="text-right py-1">Est. cost</th>
+                                    )}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {row.dailyTrend
+                                    .filter((d) => d.calls > 0)
+                                    .reverse()
+                                    .map((d) => {
+                                      const dayCost =
+                                        provider === "telnyx"
+                                          ? d.calls * 0.005
+                                          : provider === "openai"
+                                            ? d.calls * 0.0001
+                                            : null;
+                                      return (
+                                        <tr key={d.date} className="border-b border-muted">
+                                          <td className="py-1">{d.date}</td>
+                                          <td className="text-right py-1 tabular-nums">
+                                            {d.calls.toLocaleString()}
+                                          </td>
+                                          {dayCost !== null && (
+                                            <td className="text-right py-1 tabular-nums text-amber-600 dark:text-amber-400">
+                                              ${dayCost.toFixed(3)}
+                                            </td>
+                                          )}
+                                        </tr>
+                                      );
+                                    })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function ApiCostCard({
   title,
+  provider: _provider,
   icon: Icon,
   iconColor,
   summary,
   unit,
   isLoading,
   testId,
+  onClick,
 }: {
   title: string;
+  provider?: string;
   icon: React.ElementType;
   iconColor: string;
   summary: ProviderCostSummary | undefined;
   unit: string;
   isLoading: boolean;
   testId: string;
+  onClick?: () => void;
 }) {
   const cost = summary?.estimatedMonthlyCostUsd ?? 0;
   const costStr = cost < 0.01 && cost > 0 ? "<$0.01" : `$${cost.toFixed(2)}`;
 
   return (
-    <Card data-testid={testId}>
+    <Card
+      data-testid={testId}
+      className={onClick ? "hover-elevate cursor-pointer transition-shadow" : ""}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => e.key === "Enter" && onClick() : undefined}
+    >
       <CardContent className="pt-4 pb-4 px-4">
         <div className="flex items-center gap-2 mb-3">
           <div className={`p-1.5 rounded-md ${iconColor}`}>
             <Icon className="h-4 w-4" />
           </div>
-          <p className="font-medium text-sm">{title}</p>
+          <p className="font-medium text-sm flex-1">{title}</p>
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
         </div>
 
         {isLoading ? (
@@ -210,6 +481,11 @@ function ApiCostCard({
 export default function AdminDashboard() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [drillDown, setDrillDown] = useState<{
+    provider: string;
+    title: string;
+    unit: string;
+  } | null>(null);
 
   const { data: stats, isLoading: statsLoading } = useQuery<{
     totalCompanies: number;
@@ -314,6 +590,36 @@ export default function AdminDashboard() {
     { label: "Total Contacts", value: stats?.totalContacts ?? 0, icon: Contact2 },
     { label: "Total Visits", value: stats?.totalVisits ?? 0, icon: CalendarCheck },
     { label: "Platform MRR", value: `$${(stats?.mrr ?? 0).toFixed(2)}`, icon: DollarSign },
+  ];
+
+  const costCardDefs = [
+    {
+      provider: "mapbox",
+      title: "Mapbox",
+      icon: Map,
+      iconColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+      summary: apiCosts?.mapbox,
+      unit: "calls",
+      testId: "card-api-cost-mapbox",
+    },
+    {
+      provider: "openai",
+      title: "OpenAI (Rover AI)",
+      icon: BrainCircuit,
+      iconColor: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400",
+      summary: apiCosts?.openai,
+      unit: "calls",
+      testId: "card-api-cost-openai",
+    },
+    {
+      provider: "telnyx",
+      title: "Telnyx SMS",
+      icon: MessageSquare,
+      iconColor: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400",
+      summary: apiCosts?.telnyx,
+      unit: "segments",
+      testId: "card-api-cost-telnyx",
+    },
   ];
 
   return (
@@ -532,37 +838,26 @@ export default function AdminDashboard() {
         <div className="mb-3">
           <h2 className="text-lg font-semibold">API Cost Monitor</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Platform-wide usage and estimated spend across paid third-party APIs
+            Platform-wide usage and estimated spend — click a card to see per-tenant detail
           </p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <ApiCostCard
-            title="Mapbox"
-            icon={Map}
-            iconColor="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
-            summary={apiCosts?.mapbox}
-            unit="calls"
-            isLoading={costsLoading}
-            testId="card-api-cost-mapbox"
-          />
-          <ApiCostCard
-            title="OpenAI (Rover AI)"
-            icon={BrainCircuit}
-            iconColor="bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400"
-            summary={apiCosts?.openai}
-            unit="calls"
-            isLoading={costsLoading}
-            testId="card-api-cost-openai"
-          />
-          <ApiCostCard
-            title="Telnyx SMS"
-            icon={MessageSquare}
-            iconColor="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
-            summary={apiCosts?.telnyx}
-            unit="segments"
-            isLoading={costsLoading}
-            testId="card-api-cost-telnyx"
-          />
+          {costCardDefs.map((def) => (
+            <ApiCostCard
+              key={def.provider}
+              provider={def.provider}
+              title={def.title}
+              icon={def.icon}
+              iconColor={def.iconColor}
+              summary={def.summary}
+              unit={def.unit}
+              isLoading={costsLoading}
+              testId={def.testId}
+              onClick={() =>
+                setDrillDown({ provider: def.provider, title: def.title, unit: def.unit })
+              }
+            />
+          ))}
           <ApiCostCard
             title="Routific"
             icon={Route}
@@ -649,6 +944,16 @@ export default function AdminDashboard() {
           )}
         </div>
       </div>
+
+      {drillDown && (
+        <TenantBreakdownSheet
+          provider={drillDown.provider}
+          title={drillDown.title}
+          unit={drillDown.unit}
+          open={true}
+          onClose={() => setDrillDown(null)}
+        />
+      )}
 
       <div data-testid="section-system-health">
         <div className="flex items-center gap-2 mb-3">

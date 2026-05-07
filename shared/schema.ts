@@ -3136,12 +3136,13 @@ export const apiUsageDaily = pgTable(
     provider: varchar("provider", { length: 50 }).notNull(),
     metric: varchar("metric", { length: 50 }).notNull(),
     calls: integer("calls").notNull().default(0),
+    companyId: varchar("company_id").references(() => companies.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
     index("idx_api_usage_daily_date").on(table.date),
     index("idx_api_usage_daily_provider").on(table.provider),
-    uniqueIndex("idx_api_usage_daily_uniq").on(table.date, table.provider, table.metric),
+    index("idx_api_usage_daily_company").on(table.companyId),
   ]
 );
 

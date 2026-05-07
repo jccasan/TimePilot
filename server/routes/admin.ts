@@ -179,6 +179,29 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get(
+    "/api/admin/api-costs/:provider/breakdown",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const provider = String(req.params.provider);
+        const validProviders = ["mapbox", "openai", "telnyx"];
+        if (!validProviders.includes(provider)) {
+          return res
+            .status(400)
+            .json({ error: "Invalid provider. Must be mapbox, openai, or telnyx." });
+        }
+        const { getProviderBreakdown, API_ATTRIBUTION_START_DATE } =
+          await import("../services/api-usage");
+        const rows = await getProviderBreakdown(provider);
+        const attributionStartDate = provider === "telnyx" ? null : API_ATTRIBUTION_START_DATE;
+        res.json({ rows, attributionStartDate });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
   // Platform admin: view ALL message exceptions (including zero-candidate items)
   app.get("/api/admin/message-exceptions", isAdmin, async (req: Request, res: Response) => {
     try {

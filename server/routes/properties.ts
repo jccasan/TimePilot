@@ -47,7 +47,9 @@ export async function registerPropertiesRoutes(app: Express): Promise<void> {
           parsed.streetAddress,
           parsed.city,
           parsed.state,
-          parsed.zipCode
+          parsed.zipCode,
+          null,
+          companyId
         );
         if (coords) {
           (parsed as Record<string, unknown>).latitude = coords.latitude;
@@ -88,7 +90,9 @@ export async function registerPropertiesRoutes(app: Express): Promise<void> {
             merged.streetAddress,
             merged.city,
             merged.state,
-            merged.zipCode
+            merged.zipCode,
+            null,
+            companyId
           );
           if (coords) {
             updateData.latitude = coords.latitude;

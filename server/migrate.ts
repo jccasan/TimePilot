@@ -101,6 +101,33 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] system_health_checks table ensured");
 
+    // Add company_id to api_usage_daily for per-tenant attribution
+    await client.query(`
+      ALTER TABLE api_usage_daily
+        ADD COLUMN IF NOT EXISTS company_id VARCHAR REFERENCES companies(id) ON DELETE SET NULL
+    `);
+    // Replace the single unique index with two partial unique indexes:
+    //   - one for platform-wide rows (company_id IS NULL)
+    //   - one for per-tenant rows (company_id IS NOT NULL)
+    await client.query(`
+      DROP INDEX IF EXISTS idx_api_usage_daily_uniq
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_api_usage_daily_uniq_global
+        ON api_usage_daily (date, provider, metric)
+        WHERE company_id IS NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_api_usage_daily_uniq_tenant
+        ON api_usage_daily (date, provider, metric, company_id)
+        WHERE company_id IS NOT NULL
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_api_usage_daily_company
+        ON api_usage_daily (company_id)
+    `);
+    console.log("[Migration] api_usage_daily company_id attribution column and indexes ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

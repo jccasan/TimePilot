@@ -97,7 +97,8 @@ export async function geocodeAddress(
   city?: string | null,
   state?: string | null,
   zipCode?: string | null,
-  country?: string | null
+  country?: string | null,
+  companyId?: string | null
 ): Promise<{ latitude: string; longitude: string } | null> {
   const tokens = [process.env.MAPBOX_PUBLIC_TOKEN, process.env.MAPBOX_SECRET_TOKEN].filter(
     Boolean
@@ -155,7 +156,7 @@ export async function geocodeAddress(
               err instanceof Error ? err.message : err
             );
           });
-          trackApiCall("mapbox_searchbox", "geocode");
+          trackApiCall("mapbox_searchbox", "geocode", 1, companyId);
           return sbResult;
         }
         geocodeCache.set(cacheKey, { value: null, storedAt: Date.now() });
@@ -180,7 +181,7 @@ export async function geocodeAddress(
       storage.setGeocodeCache(cacheKey, result.latitude, result.longitude).catch((err) => {
         console.warn("[GeocodeCache] DB write failed:", err instanceof Error ? err.message : err);
       });
-      trackApiCall("mapbox", "geocode");
+      trackApiCall("mapbox", "geocode", 1, companyId);
       return result;
     } catch {
       continue;

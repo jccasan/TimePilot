@@ -639,7 +639,9 @@ export async function executeToolCall(
             streetAddress,
             cityArg || null,
             stateArg || null,
-            zipArg || null
+            zipArg || null,
+            null,
+            companyId
           );
           if (coords) {
             latitude = coords.latitude;
@@ -1214,7 +1216,7 @@ export async function streamRoverChat(
       ),
     ]);
 
-    trackApiCall("claude", "rover_chat");
+    trackApiCall("claude", "rover_chat", 1, companyId);
 
     if (signal?.aborted) return;
 
@@ -1306,7 +1308,7 @@ export async function streamRoverChat(
         ),
       ]);
 
-      trackApiCall("claude", "rover_chat");
+      trackApiCall("claude", "rover_chat", 1, companyId);
     }
 
     if (!signal?.aborted) {

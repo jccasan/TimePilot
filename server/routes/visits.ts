@@ -673,10 +673,13 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       const companyName = company?.name || "Your service provider";
 
       let travelMinutes = 10;
-      const mapbox = await fetchMapboxDirections([
-        { longitude: lon, latitude: lat },
-        { longitude: destLon, latitude: destLat },
-      ]);
+      const mapbox = await fetchMapboxDirections(
+        [
+          { longitude: lon, latitude: lat },
+          { longitude: destLon, latitude: destLat },
+        ],
+        companyId
+      );
       if (mapbox) {
         travelMinutes = mapbox.duration;
       } else {
@@ -1028,10 +1031,13 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
                   const nxtLon = nextProperty.longitude ? parseFloat(nextProperty.longitude) : null;
 
                   if (curLat && curLon && nxtLat && nxtLon) {
-                    const mapbox = await fetchMapboxDirections([
-                      { longitude: curLon, latitude: curLat },
-                      { longitude: nxtLon, latitude: nxtLat },
-                    ]);
+                    const mapbox = await fetchMapboxDirections(
+                      [
+                        { longitude: curLon, latitude: curLat },
+                        { longitude: nxtLon, latitude: nxtLat },
+                      ],
+                      companyId
+                    );
 
                     if (mapbox) {
                       travelMinutes = mapbox.duration;

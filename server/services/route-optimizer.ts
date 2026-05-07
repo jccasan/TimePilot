@@ -41,7 +41,8 @@ function sleep(ms: number): Promise<void> {
  * Retries up to 3 times with exponential backoff on 429 responses.
  */
 export async function fetchDriveTimeMatrix(
-  coords: { latitude: number; longitude: number }[]
+  coords: { latitude: number; longitude: number }[],
+  companyId?: string | null
 ): Promise<number[][] | null> {
   const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
   if (!token || coords.length < 2 || coords.length > 25) return null;
@@ -73,7 +74,7 @@ export async function fetchDriveTimeMatrix(
       }
       const data = await res.json();
       if (!data.durations) return null;
-      trackApiCall("mapbox", "matrix");
+      trackApiCall("mapbox", "matrix", 1, companyId);
       // Convert seconds to minutes
       return (data.durations as number[][]).map((row) => row.map((v) => v / 60));
     } catch {
@@ -342,7 +343,8 @@ const MAPBOX_MATRIX_CAP = 25; // Hard Mapbox API limit per call
 
 export async function buildChunkedDistMap(
   stops: Stop[],
-  startPoint?: StartPoint
+  startPoint?: StartPoint,
+  companyId?: string | null
 ): Promise<{ map: TimeDistMap | undefined; degraded: boolean }> {
   if (stops.length < 1 || stops.length > ROUTE_MATRIX_LIMIT)
     return { map: undefined, degraded: false };
@@ -368,7 +370,7 @@ export async function buildChunkedDistMap(
     }
     if (coords.length < 2) break;
 
-    const matrix = await fetchDriveTimeMatrix(coords);
+    const matrix = await fetchDriveTimeMatrix(coords, companyId);
     if (!matrix) return { map: undefined, degraded: true }; // Any chunk failure → full haversine fallback
 
     for (let ri = 0; ri < chunkIds.length; ri++) {
@@ -389,13 +391,14 @@ export async function buildChunkedDistMap(
  */
 export async function optimizeRouteAsync(
   stops: Stop[],
-  startPoint?: StartPoint
+  startPoint?: StartPoint,
+  companyId?: string | null
 ): Promise<{ orderedIds: string[]; totalDistance: number; degraded: boolean }> {
   let distMap: TimeDistMap | undefined;
   let degraded = false;
 
   if (stops.length <= ROUTE_MATRIX_LIMIT) {
-    const result = await buildChunkedDistMap(stops, startPoint);
+    const result = await buildChunkedDistMap(stops, startPoint, companyId);
     distMap = result.map;
     degraded = result.degraded;
   }
@@ -404,7 +407,8 @@ export async function optimizeRouteAsync(
 }
 
 export async function fetchMapboxDirections(
-  coordinates: { longitude: number; latitude: number }[]
+  coordinates: { longitude: number; latitude: number }[],
+  companyId?: string | null
 ): Promise<{ distance: number; duration: number } | null> {
   const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
   if (!token || coordinates.length < 2) return null;
@@ -427,7 +431,7 @@ export async function fetchMapboxDirections(
       const data = await res.json();
       const route = data.routes?.[0];
       if (!route) return null;
-      trackApiCall("mapbox", "directions");
+      trackApiCall("mapbox", "directions", 1, companyId);
       return { distance: route.distance / 1609.34, duration: route.duration / 60 };
     } catch (_err) {
       console.log("[route-optimizer] Mapbox Directions API error, falling back to haversine");
@@ -454,7 +458,7 @@ export async function fetchMapboxDirections(
       const data = await res.json();
       const route = data.routes?.[0];
       if (!route) return null;
-      trackApiCall("mapbox", "directions");
+      trackApiCall("mapbox", "directions", 1, companyId);
       totalDistance += route.distance;
       totalDuration += route.duration;
     } catch {
@@ -483,7 +487,8 @@ export interface RouteMetricsDetail {
 
 export async function fetchMapboxDirectionsWithLegs(
   coordinates: { longitude: number; latitude: number }[],
-  stopIds: (string | null)[]
+  stopIds: (string | null)[],
+  companyId?: string | null
 ): Promise<RouteMetricsDetail | null> {
   const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
   if (!token || coordinates.length < 2) return null;
@@ -498,7 +503,7 @@ export async function fetchMapboxDirectionsWithLegs(
     const route = data.routes?.[0];
     if (!route) return null;
 
-    trackApiCall("mapbox", "directions");
+    trackApiCall("mapbox", "directions", 1, companyId);
     const legs: RouteLeg[] = [];
     if (route.legs && Array.isArray(route.legs)) {
       for (let i = 0; i < route.legs.length; i++) {

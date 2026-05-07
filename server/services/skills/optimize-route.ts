@@ -145,7 +145,7 @@ async function optimizeSingleRoute(
   const originalDistance = originalMapbox?.distance ?? calculateTotalDistance(stops, startPoint);
   const originalMinutes = originalMapbox?.duration ?? (originalDistance / 25) * 60;
 
-  const internalResult = await optimizeRouteAsync(stops, startPoint);
+  const internalResult = await optimizeRouteAsync(stops, startPoint, companyId);
   let orderedIds: string[];
   let isDegraded = false;
   let routingEngine: string;

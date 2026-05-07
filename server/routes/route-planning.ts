@@ -895,7 +895,9 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           prop.streetAddress!,
           prop.city,
           prop.state,
-          prop.zipCode
+          prop.zipCode,
+          null,
+          companyId
         );
         if (coords) {
           const updated = await storage.updateProperty(prop.id, companyId, {
@@ -1273,7 +1275,9 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
                 prop.streetAddress,
                 prop.city,
                 prop.state,
-                prop.zipCode
+                prop.zipCode,
+                null,
+                companyId
               );
               if (coords) {
                 const updated = await storage.updateProperty(prop.id, companyId, {
