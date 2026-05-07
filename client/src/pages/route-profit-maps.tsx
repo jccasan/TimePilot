@@ -867,7 +867,8 @@ export default function RouteProfitMaps() {
                       <div className="bg-muted/30 border-t">
                         {route.totalRevenueCents === 0 && (
                           <div className="mx-3 mt-3 mb-1 rounded border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/30 px-2.5 py-2 text-[11px] text-yellow-700 dark:text-yellow-400">
-                            These stops have no pricing configured. Set a price on each service plan to see revenue and margin calculations.
+                            These stops have no pricing configured. Set a price on each service plan
+                            to see revenue and margin calculations.
                           </div>
                         )}
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 text-xs">
