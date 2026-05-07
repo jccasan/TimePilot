@@ -169,6 +169,16 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get("/api/admin/routific-tenant-stats", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { getRoutificTenantStats } = await import("../services/api-usage");
+      const stats = await getRoutificTenantStats();
+      res.json(stats);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // Platform admin: view ALL message exceptions (including zero-candidate items)
   app.get("/api/admin/message-exceptions", isAdmin, async (req: Request, res: Response) => {
     try {

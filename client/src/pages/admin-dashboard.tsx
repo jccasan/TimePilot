@@ -24,6 +24,8 @@ import {
   MessageSquare,
   ShieldCheck,
   Clock,
+  Route,
+  TrendingDown,
 } from "lucide-react";
 import { BarChart, Bar, Tooltip, ResponsiveContainer, XAxis } from "recharts";
 import { TIER_CONFIG } from "@shared/schema";
@@ -51,6 +53,17 @@ interface AllApiCosts {
   mapbox: ProviderCostSummary;
   openai: ProviderCostSummary;
   telnyx: ProviderCostSummary;
+  routific: ProviderCostSummary;
+}
+
+interface RoutificTenantStat {
+  companyId: number | null;
+  companyName: string;
+  totalCalls: number;
+  successCalls: number;
+  fallbackCalls: number;
+  avgStopCount: number;
+  lastCallAt: string | null;
 }
 
 const METRIC_LABELS: Record<string, string> = {
@@ -242,6 +255,14 @@ export default function AdminDashboard() {
   const { data: apiCosts, isLoading: costsLoading } = useQuery<AllApiCosts>({
     queryKey: ["/api/admin/api-costs"],
     queryFn: adminFetchFn("/api/admin/api-costs"),
+    refetchInterval: 300000,
+  });
+
+  const { data: routificTenantStats, isLoading: routificTenantLoading } = useQuery<
+    RoutificTenantStat[]
+  >({
+    queryKey: ["/api/admin/routific-tenant-stats"],
+    queryFn: adminFetchFn("/api/admin/routific-tenant-stats"),
     refetchInterval: 300000,
   });
 
@@ -514,7 +535,7 @@ export default function AdminDashboard() {
             Platform-wide usage and estimated spend across paid third-party APIs
           </p>
         </div>
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
           <ApiCostCard
             title="Mapbox"
             icon={Map}
@@ -542,6 +563,90 @@ export default function AdminDashboard() {
             isLoading={costsLoading}
             testId="card-api-cost-telnyx"
           />
+          <ApiCostCard
+            title="Routific"
+            icon={Route}
+            iconColor="bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400"
+            summary={apiCosts?.routific}
+            unit="calls"
+            isLoading={costsLoading}
+            testId="card-api-cost-routific"
+          />
+        </div>
+
+        <div className="mt-4" data-testid="section-routific-tenant-usage">
+          <h3 className="text-sm font-semibold mb-2">Routific — Tenant Breakdown (last 30 days)</h3>
+          {routificTenantLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-10 bg-muted rounded animate-pulse" />
+              ))}
+            </div>
+          ) : !routificTenantStats || routificTenantStats.length === 0 ? (
+            <Card>
+              <CardContent className="py-4 text-center text-muted-foreground">
+                <TrendingDown className="h-5 w-5 mx-auto mb-1 opacity-40" />
+                <p className="text-sm">No Routific calls recorded in the last 30 days</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm" data-testid="table-routific-tenants">
+                    <thead>
+                      <tr className="border-b text-left">
+                        <th className="px-4 py-2 font-medium text-muted-foreground">Tenant</th>
+                        <th className="px-4 py-2 font-medium text-muted-foreground text-right">
+                          Total
+                        </th>
+                        <th className="px-4 py-2 font-medium text-muted-foreground text-right">
+                          Success
+                        </th>
+                        <th className="px-4 py-2 font-medium text-muted-foreground text-right">
+                          Fallback
+                        </th>
+                        <th className="px-4 py-2 font-medium text-muted-foreground text-right">
+                          Avg stops
+                        </th>
+                        <th className="px-4 py-2 font-medium text-muted-foreground text-right">
+                          Est. cost
+                        </th>
+                        <th className="px-4 py-2 font-medium text-muted-foreground">Last call</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {routificTenantStats.map((stat, i) => (
+                        <tr
+                          key={stat.companyId ?? i}
+                          className="border-b last:border-0 hover:bg-muted/40 transition-colors"
+                          data-testid={`row-routific-tenant-${stat.companyId ?? i}`}
+                        >
+                          <td className="px-4 py-2 font-medium">{stat.companyName}</td>
+                          <td className="px-4 py-2 text-right tabular-nums">
+                            {stat.totalCalls.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2 text-right tabular-nums text-green-700 dark:text-green-400">
+                            {stat.successCalls.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2 text-right tabular-nums text-amber-600 dark:text-amber-400">
+                            {stat.fallbackCalls.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2 text-right tabular-nums">{stat.avgStopCount}</td>
+                          <td className="px-4 py-2 text-right tabular-nums text-amber-600 dark:text-amber-400">
+                            ${(stat.totalCalls * 0.25).toFixed(2)}
+                          </td>
+                          <td className="px-4 py-2 text-muted-foreground text-xs">
+                            {stat.lastCallAt ? new Date(stat.lastCallAt).toLocaleDateString() : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 

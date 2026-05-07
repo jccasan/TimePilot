@@ -3260,3 +3260,22 @@ export const systemHealthChecks = pgTable("system_health_checks", {
 });
 
 export type SystemHealthCheck = typeof systemHealthChecks.$inferSelect;
+
+export const routificUsageLog = pgTable(
+  "routific_usage_log",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    companyId: integer("company_id"),
+    stopCount: integer("stop_count").notNull(),
+    success: boolean("success").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_routific_usage_log_company").on(table.companyId),
+    index("idx_routific_usage_log_created_at").on(table.createdAt),
+  ]
+);
+
+export type RoutificUsageLog = typeof routificUsageLog.$inferSelect;

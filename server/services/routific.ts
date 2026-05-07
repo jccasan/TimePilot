@@ -11,6 +11,7 @@
  */
 
 import { haversineDistance } from "./route-optimizer";
+import { trackRoutificCall } from "./api-usage";
 
 const ROUTIFIC_API_BASE = "https://api.routific.com";
 const POLL_INTERVAL_MS = 2000;
@@ -151,8 +152,17 @@ async function pollJob(token: string, jobId: string): Promise<Record<string, unk
 export async function routificOptimize(
   stops: RoutificStop[],
   startPoint?: RoutificStartPoint,
-  options?: RoutificOptions
+  optionsOrCompanyId?: RoutificOptions | number | null,
+  companyId?: number | null
 ): Promise<RoutificResult | null> {
+  // Support legacy call signature: routificOptimize(stops, startPoint, companyId)
+  let options: RoutificOptions | undefined;
+  let resolvedCompanyId: number | null = companyId ?? null;
+  if (typeof optionsOrCompanyId === "number" || optionsOrCompanyId === null) {
+    resolvedCompanyId = optionsOrCompanyId ?? null;
+  } else {
+    options = optionsOrCompanyId;
+  }
   if (stops.length <= 1) return null;
 
   const token = process.env.ROUTIFIC_API_TOKEN;
@@ -255,10 +265,12 @@ export async function routificOptimize(
     console.log(
       `[routific] SUCCESS — ${stops.length} stops optimized, ${totalDistance} mi estimated`
     );
+    trackRoutificCall(resolvedCompanyId, stops.length, true);
     return { orderedIds, totalDistance, totalDuration };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[routific] API error (falling back): ${message}`);
+    trackRoutificCall(resolvedCompanyId, stops.length, false);
     return null;
   }
 }
