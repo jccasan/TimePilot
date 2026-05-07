@@ -1141,6 +1141,94 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.patch("/api/jobs/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const job = await storage.getJob(p(req.params.id), companyId);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+
+      const oldRouteId = job.routeId;
+
+      const allowedFields = [
+        "routeId",
+        "stopOrder",
+        "jobStatus",
+        "dayOfWeek",
+        "startTime",
+        "endTime",
+        "anytime",
+        "assignedUserId",
+        "visitInstructions",
+      ];
+      const body: Record<string, unknown> = {};
+      for (const key of allowedFields) {
+        if (req.body[key] !== undefined) body[key] = req.body[key];
+      }
+      if (body.routeId === "") body.routeId = null;
+
+      const updated = await storage.updateJob(
+        p(req.params.id),
+        companyId,
+        body as Parameters<typeof storage.updateJob>[2]
+      );
+
+      const newRouteId = updated.routeId;
+
+      if (job.servicePlanId) {
+        const spUpdate: Record<string, unknown> = {};
+        if (body.routeId !== undefined) spUpdate.routeId = body.routeId ?? null;
+        if (body.stopOrder !== undefined) spUpdate.stopOrder = body.stopOrder;
+        if (body.assignedUserId !== undefined) spUpdate.assignedUserId = body.assignedUserId;
+        if (Object.keys(spUpdate).length > 0) {
+          await storage.updateServicePlan(
+            job.servicePlanId,
+            companyId,
+            spUpdate as Parameters<typeof storage.updateServicePlan>[2]
+          );
+        }
+      }
+
+      if (oldRouteId && oldRouteId !== newRouteId) {
+        storage.renumberRouteStops(oldRouteId, companyId).catch(console.error);
+      }
+      if (newRouteId && newRouteId !== oldRouteId) {
+        storage.renumberRouteStops(newRouteId, companyId).catch(console.error);
+      }
+
+      res.json(updated);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.delete("/api/jobs/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const job = await storage.getJob(p(req.params.id), companyId);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+
+      const routeId = job.routeId;
+
+      if (job.servicePlanId) {
+        await storage.updateServicePlan(job.servicePlanId, companyId, {
+          isActive: false,
+          routeId: null,
+          stopOrder: 0,
+        } as Parameters<typeof storage.updateServicePlan>[2]);
+      }
+
+      await storage.deleteJob(p(req.params.id), companyId);
+
+      if (routeId) {
+        storage.renumberRouteStops(routeId, companyId).catch(console.error);
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // ================ Service Zone Routes ================
 
   app.get("/api/service-zones", isAuthenticated, async (req: Request, res: Response) => {
