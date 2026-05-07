@@ -850,14 +850,38 @@ export default function AdminCompanyDetail() {
                         </Badge>
                       </div>
                     )}
-                    {company.trialEndsAt && (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm text-muted-foreground">Trial Ends</span>
-                        <span className="text-sm" data-testid="text-trial-ends-at">
-                          {new Date(company.trialEndsAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    )}
+                    {company.trialEndsAt &&
+                      (() => {
+                        const now = new Date();
+                        const end = new Date(company.trialEndsAt);
+                        const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+                        const days = Math.round(
+                          (endDay.getTime() - nowDay.getTime()) / (1000 * 60 * 60 * 24)
+                        );
+                        const isExpired = days < 0;
+                        const label = isExpired
+                          ? `expired ${Math.abs(days)} day${Math.abs(days) !== 1 ? "s" : ""} ago`
+                          : days === 0
+                            ? "expires today"
+                            : `${days} day${days !== 1 ? "s" : ""} left`;
+                        return (
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm text-muted-foreground">Trial Ends</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm" data-testid="text-trial-ends-at">
+                                {new Date(company.trialEndsAt).toLocaleDateString()}
+                              </span>
+                              <span
+                                className={`text-xs font-medium ${isExpired ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}
+                                data-testid="text-trial-days-remaining"
+                              >
+                                {label}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     {company.customMaxUsers != null && (
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-muted-foreground">Seat Limit</span>

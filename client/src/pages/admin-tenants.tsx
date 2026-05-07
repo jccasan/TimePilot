@@ -97,6 +97,19 @@ function formatScheduledDeletion(deletedAt: string | null): string {
   });
 }
 
+function formatTrialDaysRemaining(trialEndsAt: string | Date | null | undefined): string | null {
+  if (!trialEndsAt) return null;
+  const now = new Date();
+  const end = new Date(trialEndsAt);
+  // Normalize to start of local calendar day so boundary is date-based, not time-based
+  const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  const days = Math.round((endDay.getTime() - nowDay.getTime()) / (1000 * 60 * 60 * 24));
+  if (days < 0) return `expired ${Math.abs(days)} day${Math.abs(days) !== 1 ? "s" : ""} ago`;
+  if (days === 0) return "expires today";
+  return `${days} day${days !== 1 ? "s" : ""} left`;
+}
+
 export default function AdminTenants() {
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -401,6 +414,20 @@ export default function AdminTenants() {
                           <Badge variant="outline" data-testid={`badge-status-${c.id}`}>
                             {c.subscriptionStatus}
                           </Badge>
+                          {c.subscriptionStatus === "trialing" &&
+                            (() => {
+                              const label = formatTrialDaysRemaining(c.trialEndsAt);
+                              if (!label) return null;
+                              const isExpired = label.startsWith("expired");
+                              return (
+                                <span
+                                  className={`text-xs font-medium ${isExpired ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}
+                                  data-testid={`text-trial-days-${c.id}`}
+                                >
+                                  {label}
+                                </span>
+                              );
+                            })()}
                           {c.nearUserLimit && (
                             <Badge
                               variant="destructive"

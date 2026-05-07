@@ -376,26 +376,25 @@ export default function AdminDashboard() {
         </Card>
       </Link>
 
-      {webhookStatus && (
+      {webhookStatus && webhookStatus.configured && (
         <Card
-          className={`${webhookStatus.configured && webhookStatus.inSync === false ? "border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/10" : ""}`}
+          className={`${webhookStatus.inSync === false ? "border-amber-300 dark:border-amber-700 bg-amber-50/30 dark:bg-amber-950/10" : ""}`}
           data-testid="card-retell-webhook-status"
         >
           <CardContent className="pt-5 pb-4 px-5">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex items-start gap-3">
                 <div
-                  className={`p-2 rounded-lg ${!webhookStatus.configured ? "bg-muted" : webhookStatus.inSync ? "bg-green-100 dark:bg-green-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}
+                  className={`p-2 rounded-lg ${webhookStatus.inSync ? "bg-green-100 dark:bg-green-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}
                 >
                   <Webhook
-                    className={`h-5 w-5 ${!webhookStatus.configured ? "text-muted-foreground" : webhookStatus.inSync ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}
+                    className={`h-5 w-5 ${webhookStatus.inSync ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}
                   />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium text-sm">Retell Webhook</p>
-                    {webhookStatus.configured &&
-                      webhookStatus.inSync !== undefined &&
+                    {webhookStatus.inSync !== undefined &&
                       (webhookStatus.inSync ? (
                         <CheckCircle2
                           className="h-4 w-4 text-green-600 dark:text-green-400"
@@ -407,46 +406,46 @@ export default function AdminDashboard() {
                           data-testid="icon-webhook-out-of-sync"
                         />
                       ))}
+                    <span
+                      className="text-xs text-muted-foreground"
+                      data-testid="text-retell-platform-only"
+                    >
+                      Platform agent only — tenant agents are managed per-company.
+                    </span>
                   </div>
-                  {!webhookStatus.configured ? (
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      {webhookStatus.reason || "Not configured"}
-                    </p>
-                  ) : (
-                    <div className="mt-1 space-y-0.5">
-                      {webhookStatus.fetchError ? (
-                        <p
-                          className="text-xs text-amber-700 dark:text-amber-400"
-                          data-testid="text-webhook-fetch-error"
-                        >
-                          Could not reach Retell API: {webhookStatus.fetchError}
+                  <div className="mt-1 space-y-0.5">
+                    {webhookStatus.fetchError ? (
+                      <p
+                        className="text-xs text-amber-700 dark:text-amber-400"
+                        data-testid="text-webhook-fetch-error"
+                      >
+                        Could not reach Retell API: {webhookStatus.fetchError}
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium">Registered:</span>{" "}
+                          <span data-testid="text-registered-url">
+                            {webhookStatus.registeredUrl || "—"}
+                          </span>
                         </p>
-                      ) : (
-                        <>
-                          <p className="text-xs text-muted-foreground">
-                            <span className="font-medium">Registered:</span>{" "}
-                            <span data-testid="text-registered-url">
-                              {webhookStatus.registeredUrl || "—"}
-                            </span>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-medium">Expected:</span>{" "}
+                          <span data-testid="text-expected-url">
+                            {webhookStatus.expectedUrl || "—"}
+                          </span>
+                        </p>
+                        {webhookStatus.inSync === false && (
+                          <p
+                            className="text-xs text-amber-700 dark:text-amber-400 font-medium mt-1"
+                            data-testid="text-webhook-mismatch"
+                          >
+                            URL mismatch — re-sync to update the Retell agent
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            <span className="font-medium">Expected:</span>{" "}
-                            <span data-testid="text-expected-url">
-                              {webhookStatus.expectedUrl || "—"}
-                            </span>
-                          </p>
-                          {webhookStatus.inSync === false && (
-                            <p
-                              className="text-xs text-amber-700 dark:text-amber-400 font-medium mt-1"
-                              data-testid="text-webhook-mismatch"
-                            >
-                              URL mismatch — re-sync to update the Retell agent
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
               {webhookStatus.configured && (
