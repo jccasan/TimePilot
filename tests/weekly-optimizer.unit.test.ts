@@ -4,9 +4,25 @@ vi.mock("../server/services/routific", () => ({
   routificOptimize: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock("../server/services/route-optimizer", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../server/services/route-optimizer")>();
+  return {
+    ...actual,
+    optimizeRouteAsync: vi.fn().mockImplementation(
+      async (stops: Array<{ id: string }>) => ({
+        orderedIds: stops.map((s) => s.id),
+        totalDistance: 0,
+        degraded: false,
+      })
+    ),
+  };
+});
+
 import { analyzeWeeklySchedule, mergeSmallClusters } from "../server/services/weekly-optimizer";
 import type { WeeklyStop } from "../server/services/weekly-optimizer";
 import * as routificModule from "../server/services/routific";
+import * as routeOptimizerModule from "../server/services/route-optimizer";
 
 function makeStop(id: string, lat: number, lng: number, day = "monday"): WeeklyStop {
   return {
@@ -161,20 +177,25 @@ describe("under-minimum cluster enforcement", () => {
 
 describe("optimizeStopOrder fallback behavior", () => {
   const mockedRoutificOptimize = routificModule.routificOptimize as ReturnType<typeof vi.fn>;
+  const mockedOptimizeRouteAsync =
+    routeOptimizerModule.optimizeRouteAsync as ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     mockedRoutificOptimize.mockResolvedValue(null);
+    mockedOptimizeRouteAsync.mockImplementation(async (stops: Array<{ id: string }>) => ({
+      orderedIds: stops.map((s) => s.id),
+      totalDistance: 0,
+      degraded: false,
+    }));
   });
 
-  it("preserves all stops when routificOptimize returns null (fallback active)", async () => {
-    mockedRoutificOptimize.mockResolvedValue(null);
+  it("preserves all stops when internal algorithm succeeds (Routific not called)", async () => {
     const stops = makeGrid(6);
     const result = await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 6 });
     expect(result.proposed.totalStops).toBe(6);
   });
 
-  it("produces a valid schedule with correct stop count when routificOptimize returns null", async () => {
-    mockedRoutificOptimize.mockResolvedValue(null);
+  it("produces a valid schedule with correct stop count when internal algorithm succeeds", async () => {
     const stops = makeGrid(8);
     const result = await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 4 });
     // 8 stops / 4 per day = 2 days required
@@ -183,24 +204,36 @@ describe("optimizeStopOrder fallback behavior", () => {
     expect(result.proposed.totalStops).toBe(8);
   });
 
-  it("calls routificOptimize for each group of stops being optimized", async () => {
-    mockedRoutificOptimize.mockResolvedValue(null);
+  it("does not call routificOptimize when internal algorithm succeeds (non-degraded)", async () => {
+    // Internal algorithm returns degraded=false → Routific is never reached
     const stops = makeGrid(4);
     await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 4 });
-    // routificOptimize should have been invoked at least once (one day group)
-    expect(mockedRoutificOptimize).toHaveBeenCalled();
+    expect(mockedRoutificOptimize).not.toHaveBeenCalled();
   });
 
-  it("uses orderedIds from routificOptimize result when it returns successfully", async () => {
+  it("uses orderedIds from routificOptimize when internal result is degraded", async () => {
     const stops = makeGrid(3);
     const ids = stops.map((s) => s.servicePlanId);
     const reversedIds = [...ids].reverse();
 
-    mockedRoutificOptimize.mockResolvedValue({
-      orderedIds: reversedIds,
-      totalDistance: 5.0,
-      totalDuration: 20,
-    });
+    // analyzeWeeklySchedule calls optimizeStopOrder (→ optimizeRouteAsync) twice:
+    //   pass 1: current-schedule iteration — all stops land on monday by default
+    //   pass 2: proposed-schedule iteration — the single clustered day
+    // Both must be set to degraded=true so the Routific fallback fires on the proposed pass.
+    mockedOptimizeRouteAsync
+      .mockResolvedValueOnce({ orderedIds: ids, totalDistance: 0, degraded: true }) // current
+      .mockResolvedValueOnce({ orderedIds: ids, totalDistance: 0, degraded: true }); // proposed
+
+    // Queue two Routific responses:
+    //   1. current-schedule call → null (no impact on test assertion)
+    //   2. proposed-schedule call → reversedIds (the result we want to verify)
+    mockedRoutificOptimize
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        orderedIds: reversedIds,
+        totalDistance: 5.0,
+        totalDuration: 20,
+      });
 
     const result = await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 3 });
 
@@ -214,7 +247,6 @@ describe("optimizeStopOrder fallback behavior", () => {
   });
 
   it("does not lose any stops across multiple day groups when routificOptimize always returns null", async () => {
-    mockedRoutificOptimize.mockResolvedValue(null);
     const stops = makeGrid(10);
     const result = await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 5 });
     // 10 stops split across 2 days (5 per day); all must be present in output

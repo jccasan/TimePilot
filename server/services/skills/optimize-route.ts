@@ -145,23 +145,29 @@ async function optimizeSingleRoute(
   const originalDistance = originalMapbox?.distance ?? calculateTotalDistance(stops, startPoint);
   const originalMinutes = originalMapbox?.duration ?? (originalDistance / 25) * 60;
 
-  const routificOptions =
-    company?.maxRouteDurationHours != null && company.maxRouteDurationHours > 0
-      ? { maxDurationHours: company.maxRouteDurationHours }
-      : undefined;
-  const routificResult = await routificOptimize(stops, startPoint, routificOptions);
+  const internalResult = await optimizeRouteAsync(stops, startPoint);
   let orderedIds: string[];
   let isDegraded = false;
   let routingEngine: string;
+  let routificResult: Awaited<ReturnType<typeof routificOptimize>> = null;
 
-  if (routificResult) {
-    orderedIds = routificResult.orderedIds;
-    routingEngine = "routific";
+  if (!internalResult.degraded) {
+    orderedIds = internalResult.orderedIds;
+    routingEngine = "internal";
   } else {
-    const fallback = await optimizeRouteAsync(stops, startPoint);
-    orderedIds = fallback.orderedIds;
-    isDegraded = fallback.degraded;
-    routingEngine = fallback.degraded ? "haversine" : "mapbox";
+    const routificOptions =
+      company?.maxRouteDurationHours != null && company.maxRouteDurationHours > 0
+        ? { maxDurationHours: company.maxRouteDurationHours }
+        : undefined;
+    routificResult = await routificOptimize(stops, startPoint, routificOptions);
+    if (routificResult) {
+      orderedIds = routificResult.orderedIds;
+      routingEngine = "routific";
+    } else {
+      orderedIds = internalResult.orderedIds;
+      isDegraded = true;
+      routingEngine = "haversine";
+    }
   }
 
   const stopsById = new Map(stops.map((s) => [s.id, s]));

@@ -430,7 +430,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
       const { kMeansClustering } = await import("../services/weekly-optimizer");
-      const { optimizeRoute: optimizeCluster } = await import("../services/route-optimizer");
+      const { optimizeRouteAsync: optimizeCluster } = await import("../services/route-optimizer");
       const { routificOptimize } = await import("../services/routific");
 
       const weeklyStops = routePlans
@@ -532,16 +532,22 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           latitude: s.latitude,
           longitude: s.longitude,
         }));
-        const routificResult = await routificOptimize(
-          clusterStops,
-          startPoint,
-          company.maxRouteDurationHours && company.maxRouteDurationHours > 0
-            ? { maxDurationHours: company.maxRouteDurationHours }
-            : undefined
-        );
-        const orderedIds = routificResult
-          ? routificResult.orderedIds
-          : optimizeCluster(clusterStops, startPoint).orderedIds;
+        const internalClusterResult = await optimizeCluster(clusterStops, startPoint);
+        let orderedIds: string[];
+        if (!internalClusterResult.degraded) {
+          orderedIds = internalClusterResult.orderedIds;
+        } else {
+          const routificResult = await routificOptimize(
+            clusterStops,
+            startPoint,
+            company.maxRouteDurationHours && company.maxRouteDurationHours > 0
+              ? { maxDurationHours: company.maxRouteDurationHours }
+              : undefined
+          );
+          orderedIds = routificResult
+            ? routificResult.orderedIds
+            : internalClusterResult.orderedIds;
+        }
 
         for (let si = 0; si < orderedIds.length; si++) {
           await storage.updateServicePlan(orderedIds[si], companyId, {
@@ -665,7 +671,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       }
 
       const { kMeansClustering } = await import("../services/weekly-optimizer");
-      const { optimizeRoute: optimizeCluster } = await import("../services/route-optimizer");
+      const { optimizeRouteAsync: optimizeCluster } = await import("../services/route-optimizer");
       const { routificOptimize: routificOptimizeBulk } = await import("../services/routific");
       const allProperties = await storage.getProperties(companyId);
       const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
@@ -755,16 +761,20 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
               latitude: s.latitude,
               longitude: s.longitude,
             }));
-            const routificRes = await routificOptimizeBulk(
-              clusterStops,
-              startPoint,
-              company.maxRouteDurationHours && company.maxRouteDurationHours > 0
-                ? { maxDurationHours: company.maxRouteDurationHours }
-                : undefined
-            );
-            const orderedIds = routificRes
-              ? routificRes.orderedIds
-              : optimizeCluster(clusterStops, startPoint).orderedIds;
+            const internalBulkResult = await optimizeCluster(clusterStops, startPoint);
+            let orderedIds: string[];
+            if (!internalBulkResult.degraded) {
+              orderedIds = internalBulkResult.orderedIds;
+            } else {
+              const routificRes = await routificOptimizeBulk(
+                clusterStops,
+                startPoint,
+                company.maxRouteDurationHours && company.maxRouteDurationHours > 0
+                  ? { maxDurationHours: company.maxRouteDurationHours }
+                  : undefined
+              );
+              orderedIds = routificRes ? routificRes.orderedIds : internalBulkResult.orderedIds;
+            }
 
             for (let si = 0; si < orderedIds.length; si++) {
               await storage.updateServicePlan(orderedIds[si], companyId, {

@@ -2706,7 +2706,7 @@ async function runTests() {
 
   let createdContactId = "";
 
-  await test("API key auth creates lead with correct company", "ApiKeyAuth", async () => {
+  await test("API key auth is restricted to /api/voice/ paths", "ApiKeyAuth", async () => {
     const createKeyRes = await req("POST", "/api/api-keys", {
       name: "E2E Test Key",
       scopes: ["contacts.write"],
@@ -2714,6 +2714,8 @@ async function runTests() {
     assert(createKeyRes.status === 201, `Expected 201 got ${createKeyRes.status}`);
     const rawKey = createKeyRes.data.rawKey;
 
+    // API keys are restricted to /api/voice/ paths (Task #731 security hardening).
+    // Attempting to use an API key on any other endpoint returns 403.
     const contactRes = await req(
       "POST",
       "/api/contacts",
@@ -2726,16 +2728,9 @@ async function runTests() {
       { "X-API-Key": rawKey, Authorization: "" }
     );
     assert(
-      contactRes.status === 201,
-      `Expected 201 got ${contactRes.status}: ${JSON.stringify(contactRes.data)}`
+      contactRes.status === 403,
+      `Expected 403 got ${contactRes.status}: ${JSON.stringify(contactRes.data)}`
     );
-    assert(
-      contactRes.data.status === "lead",
-      `Expected status 'lead' got '${contactRes.data.status}'`
-    );
-    assert(!!contactRes.data.companyId, "Expected companyId in response");
-    assert(!!contactRes.data.id, "Expected id in response");
-    createdContactId = contactRes.data.id;
 
     await req("DELETE", `/api/api-keys/${createKeyRes.data.id}`);
   });

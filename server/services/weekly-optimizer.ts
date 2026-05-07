@@ -1,6 +1,7 @@
 import {
   haversineDistance,
   optimizeRoute,
+  optimizeRouteAsync,
   buildChunkedDistMap,
   ROUTE_MATRIX_LIMIT,
 } from "./route-optimizer";
@@ -299,22 +300,22 @@ async function optimizeStopOrder(
     longitude: s.longitude,
   }));
 
-  const routificOptions =
-    maxDurationHours != null && maxDurationHours > 0 ? { maxDurationHours } : undefined;
-  const routificResult = await routificOptimize(routeStops, startPoint, routificOptions);
+  const internalResult = await optimizeRouteAsync(routeStops, startPoint);
   let orderedIds: string[];
   let degraded = false;
 
-  if (routificResult) {
-    orderedIds = routificResult.orderedIds;
+  if (!internalResult.degraded) {
+    orderedIds = internalResult.orderedIds;
   } else {
-    const { map: distMap, degraded: distDegraded } = await fetchDistMapForStops(
-      routeStops,
-      startPoint
-    );
-    const result = optimizeRoute(routeStops, startPoint, distMap);
-    orderedIds = result.orderedIds;
-    degraded = distDegraded;
+    const routificOptions =
+      maxDurationHours != null && maxDurationHours > 0 ? { maxDurationHours } : undefined;
+    const routificResult = await routificOptimize(routeStops, startPoint, routificOptions);
+    if (routificResult) {
+      orderedIds = routificResult.orderedIds;
+    } else {
+      orderedIds = internalResult.orderedIds;
+      degraded = true;
+    }
   }
 
   const orderMap = new Map(orderedIds.map((id, idx) => [id, idx]));
