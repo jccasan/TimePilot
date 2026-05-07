@@ -706,7 +706,7 @@ export default function RouteProfitMaps() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-yellow-500 inline-block shrink-0"></span>
-                <span>Marginal (0-15% margin)</span>
+                <span>Marginal (0–15% margin, or stops with no pricing set)</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-red-500 inline-block shrink-0"></span>
@@ -846,8 +846,14 @@ export default function RouteProfitMaps() {
                           </div>
                           <div className="text-[11px] text-muted-foreground mt-0.5">
                             {route.dayOfWeek.charAt(0).toUpperCase() + route.dayOfWeek.slice(1)} |{" "}
-                            {route.totalStops} stops | {formatDollars(route.totalProfitCents)}{" "}
-                            profit
+                            {route.totalStops} stops |{" "}
+                            {route.totalRevenueCents === 0 ? (
+                              <span className="text-yellow-600 dark:text-yellow-400">
+                                no pricing set
+                              </span>
+                            ) : (
+                              <>{formatDollars(route.totalProfitCents)} profit</>
+                            )}
                           </div>
                         </div>
                         {isExpanded ? (
@@ -859,6 +865,11 @@ export default function RouteProfitMaps() {
                     </div>
                     {isExpanded && (
                       <div className="bg-muted/30 border-t">
+                        {route.totalRevenueCents === 0 && (
+                          <div className="mx-3 mt-3 mb-1 rounded border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/30 px-2.5 py-2 text-[11px] text-yellow-700 dark:text-yellow-400">
+                            These stops have no pricing configured. Set a price on each service plan to see revenue and margin calculations.
+                          </div>
+                        )}
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 p-3 text-xs">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Revenue/visit:</span>
