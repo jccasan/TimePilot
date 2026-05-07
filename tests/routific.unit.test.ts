@@ -14,7 +14,11 @@ vi.mock("../server/services/route-optimizer", () => ({
   haversineDistance: vi.fn(() => 1.5),
 }));
 
-import { routificOptimize } from "../server/services/routific";
+import {
+  routificOptimize,
+  resetCircuitBreaker,
+  getCircuitBreakerState,
+} from "../server/services/routific";
 
 const THREE_STOPS = [
   { id: "alpha", latitude: 40.0, longitude: -80.0 },
@@ -54,11 +58,17 @@ function mockFetchResponses(submitResponse: unknown, pollResponse: unknown) {
   });
 }
 
+/** Mock fetch so submit succeeds but the network call throws. */
+function mockFetchThrows(err: Error) {
+  vi.spyOn(globalThis, "fetch").mockRejectedValue(err);
+}
+
 describe("routificOptimize", () => {
   const originalToken = process.env.ROUTIFIC_API_TOKEN;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetCircuitBreaker();
   });
 
   afterEach(() => {
@@ -68,6 +78,7 @@ describe("routificOptimize", () => {
       process.env.ROUTIFIC_API_TOKEN = originalToken;
     }
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it("returns null when ROUTIFIC_API_TOKEN is not set", async () => {
@@ -187,5 +198,156 @@ describe("routificOptimize", () => {
     expect(result).not.toBeNull();
     // haversineDistance returns 1.5 per call; start + 3 stops = 3 legs = 4.5 mi
     expect(result!.totalDistance).toBeCloseTo(4.5, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Circuit-breaker tests
+// ---------------------------------------------------------------------------
+
+describe("circuit-breaker", () => {
+  const originalToken = process.env.ROUTIFIC_API_TOKEN;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetCircuitBreaker();
+    process.env.ROUTIFIC_API_TOKEN = "test-token";
+  });
+
+  afterEach(() => {
+    if (originalToken === undefined) {
+      delete process.env.ROUTIFIC_API_TOKEN;
+    } else {
+      process.env.ROUTIFIC_API_TOKEN = originalToken;
+    }
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("starts in closed state", () => {
+    expect(getCircuitBreakerState()).toBe("closed");
+  });
+
+  it("remains closed after fewer than threshold failures", async () => {
+    mockFetchThrows(new Error("timeout"));
+
+    // Two failures — threshold is 3
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+
+    expect(getCircuitBreakerState()).toBe("closed");
+  });
+
+  it("opens after reaching the failure threshold", async () => {
+    mockFetchThrows(new Error("timeout"));
+
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+
+    expect(getCircuitBreakerState()).toBe("open");
+  });
+
+  it("skips the API call and returns null immediately when open", async () => {
+    mockFetchThrows(new Error("timeout"));
+
+    // Trip the breaker
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+
+    expect(getCircuitBreakerState()).toBe("open");
+
+    // Reset spy so we can count future calls cleanly
+    vi.restoreAllMocks();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    // This call should be skipped entirely
+    const result = await routificOptimize(THREE_STOPS);
+    expect(result).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("transitions to half-open after the cooldown expires", async () => {
+    // Use real timers — trip the breaker with real fetch errors, then
+    // manipulate Date.now to simulate the cooldown elapsing.
+    mockFetchThrows(new Error("timeout"));
+
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+
+    expect(getCircuitBreakerState()).toBe("open");
+
+    // Simulate cooldown elapsed by mocking Date.now
+    const realNow = Date.now;
+    vi.spyOn(Date, "now").mockReturnValue(realNow() + 61_000);
+
+    vi.restoreAllMocks();
+    vi.spyOn(Date, "now").mockReturnValue(realNow() + 61_000);
+    mockFetchResponses({ job_id: "job-probe" }, { status: "finished", output: GOOD_OUTPUT });
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await routificOptimize(THREE_STOPS);
+
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  it("closes the breaker when the probe request succeeds", async () => {
+    mockFetchThrows(new Error("timeout"));
+
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+
+    const realNow = Date.now;
+    vi.restoreAllMocks();
+    vi.spyOn(Date, "now").mockReturnValue(realNow() + 61_000);
+    mockFetchResponses({ job_id: "job-probe" }, { status: "finished", output: GOOD_OUTPUT });
+    await routificOptimize(THREE_STOPS);
+
+    expect(getCircuitBreakerState()).toBe("closed");
+  });
+
+  it("re-opens the breaker when the probe request fails", async () => {
+    mockFetchThrows(new Error("timeout"));
+
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+
+    // Simulate cooldown elapsed, but probe also fails
+    const realNow = Date.now;
+    vi.spyOn(Date, "now").mockReturnValue(realNow() + 61_000);
+    await routificOptimize(THREE_STOPS);
+
+    expect(getCircuitBreakerState()).toBe("open");
+  });
+
+  it("resets to closed after a successful call following failures below threshold", async () => {
+    mockFetchThrows(new Error("timeout"));
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+
+    // Now succeed — breaker should stay closed and consecutive count resets
+    vi.restoreAllMocks();
+    mockFetchResponses({ job_id: "job-ok" }, { status: "finished", output: GOOD_OUTPUT });
+    const result = await routificOptimize(THREE_STOPS);
+
+    expect(result).not.toBeNull();
+    expect(getCircuitBreakerState()).toBe("closed");
+  });
+
+  it("does not count token-missing calls against the failure threshold", async () => {
+    delete process.env.ROUTIFIC_API_TOKEN;
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    // Many calls without a token — breaker must stay closed
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+    await routificOptimize(THREE_STOPS);
+
+    expect(getCircuitBreakerState()).toBe("closed");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
