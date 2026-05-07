@@ -899,6 +899,9 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         clearRouteOptimizationState(existing.routeId, companyId).catch(console.error);
       }
       await storage.deleteServicePlan(p(req.params.id), companyId);
+      if (existing.routeId) {
+        await storage.renumberRouteStops(existing.routeId, companyId);
+      }
       const { userId } = await getCompanyContext(req);
       auditLog(
         companyId,
