@@ -17,6 +17,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@google-cloud/storage": "^7.19.0",
     "@hookform/resolvers": "^3.10.0",
+    "@horseman/react": "file:attached_assets/horseman-react-1.0.0_1778182144126.tgz",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-alert-dialog": "^1.1.7",

@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import crypto from "crypto";
 import { maskEmail } from "../utils/pii";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -407,5 +408,28 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
     } catch (err) {
       handleError(res, err);
     }
+  });
+
+  app.post("/api/auth/sso", (req: Request, res: Response) => {
+    const { token } = req.body as { token?: string };
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ message: "Missing token" });
+    }
+    const dotIdx = token.lastIndexOf(".");
+    if (dotIdx === -1) {
+      return res.status(401).json({ message: "Invalid token format" });
+    }
+    const payload = token.slice(0, dotIdx);
+    const sig = token.slice(dotIdx + 1);
+    const secret = process.env.SESSION_SECRET || "scoopilot-dev-secret";
+    const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+    if (!crypto.timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"))) {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+    const ts = parseInt(payload, 10);
+    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
+      return res.status(401).json({ message: "Token expired" });
+    }
+    return res.json({ ok: true, role: "admin" });
   });
 }

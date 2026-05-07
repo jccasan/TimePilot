@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HorsemanCRM } from "@horseman/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -99,6 +100,35 @@ const METRIC_LABELS: Record<string, string> = {
   matrix: "Matrix",
   rover_chat: "Rover Chat",
 };
+
+function HorsemanCRMWidget() {
+  const { data, isLoading, isError } = useQuery<{ token: string }>({
+    queryKey: ["/api/admin/horseman-token"],
+    queryFn: adminFetchFn("/api/admin/horseman-token"),
+    staleTime: 4 * 60 * 1000,
+  });
+
+  if (isLoading) {
+    return <div className="h-24 bg-muted rounded animate-pulse" />;
+  }
+
+  if (isError || !data?.token) {
+    return (
+      <p className="text-xs text-muted-foreground italic">
+        Horseman CRM unavailable — could not obtain SSO token.
+      </p>
+    );
+  }
+
+  return (
+    <HorsemanCRM
+      baseUrl=""
+      ssoToken={data.token}
+      className="min-h-[120px] rounded-md"
+      data-testid="horseman-crm-embed"
+    />
+  );
+}
 
 function CostSparkline({ data }: { data: { date: string; calls: number }[] }) {
   const last30 = data.slice(-30);
@@ -1154,6 +1184,15 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       )}
+
+      <div data-testid="section-horseman-crm">
+        <h2 className="text-lg font-semibold mb-3">Horseman CRM</h2>
+        <Card>
+          <CardContent className="pt-4 pb-4 px-4">
+            <HorsemanCRMWidget />
+          </CardContent>
+        </Card>
+      </div>
 
       <div>
         <div className="flex items-center justify-between mb-3">

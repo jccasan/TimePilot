@@ -2904,4 +2904,11 @@ Respond with exactly one category from the list above and nothing else.`;
       handleError(res, err);
     }
   });
+
+  app.get("/api/admin/horseman-token", isAdmin, (_req: Request, res: Response) => {
+    const secret = process.env.SESSION_SECRET || "scoopilot-dev-secret";
+    const payload = String(Date.now());
+    const sig = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+    res.json({ token: `${payload}.${sig}` });
+  });
 }
