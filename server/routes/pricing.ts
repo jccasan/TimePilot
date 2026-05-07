@@ -1984,6 +1984,9 @@ Rules:
         if (stops.length === 0) continue;
 
         stops.sort((a, b) => a.stopOrder - b.stopOrder);
+        stops.forEach((s, idx) => {
+          s.stopOrder = idx + 1;
+        });
         const avgMargin = totalRev > 0 ? Math.round((totalProfit / totalRev) * 10000) / 100 : 0;
         const routeStatus: "profitable" | "marginal" | "unprofitable" =
           avgMargin > 15 ? "profitable" : avgMargin >= 0 ? "marginal" : "unprofitable";

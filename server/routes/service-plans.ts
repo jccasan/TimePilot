@@ -229,6 +229,21 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         }
       }
 
+      const affectedRouteIds = new Set<string>();
+      for (const planId of ids) {
+        const existing = planMap.get(planId);
+        if (!existing) continue;
+        const result = results.find((r) => r.id === planId);
+        if (!result) continue;
+        if (result.routeId !== existing.routeId) {
+          if (result.routeId) affectedRouteIds.add(result.routeId);
+          if (existing.routeId) affectedRouteIds.add(existing.routeId);
+        }
+      }
+      for (const rId of Array.from(affectedRouteIds)) {
+        storage.renumberRouteStops(rId, companyId).catch(console.error);
+      }
+
       res.json({ updated: results.length, results });
     } catch (err) {
       handleError(res, err);
@@ -258,6 +273,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
 
       if (plan.routeId) {
         clearRouteOptimizationState(plan.routeId, companyId).catch(console.error);
+        storage.renumberRouteStops(plan.routeId, companyId).catch(console.error);
       }
 
       const { userId } = await getCompanyContext(req);

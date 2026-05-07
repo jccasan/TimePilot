@@ -307,7 +307,7 @@ export default function ProfitabilityMap({
           });
         }
 
-        validStops.forEach((stop) => {
+        validStops.forEach((stop, stopIdx) => {
           const color = useRouteColors ? route.color || "#3b82f6" : STATUS_COLORS[stop.status];
           const el = document.createElement("div");
           el.setAttribute("data-testid", `marker-stop-${stop.propertyId}`);
@@ -324,7 +324,7 @@ export default function ProfitabilityMap({
           el.style.border = "2px solid white";
           el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
           el.style.cursor = "pointer";
-          el.textContent = String(stop.stopOrder || "");
+          el.textContent = String(stopIdx + 1);
 
           const popupEl = document.createElement("div");
           popupEl.dataset.testid = `popup-stop-${stop.propertyId}`;
@@ -339,7 +339,7 @@ export default function ProfitabilityMap({
             Object.assign(addrEl.style, { fontSize: "12px", color: "#666" });
             const stopEl = document.createElement("div");
             Object.assign(stopEl.style, { marginTop: "4px", fontSize: "11px", color: "#888" });
-            stopEl.textContent = `Stop #${stop.stopOrder}`;
+            stopEl.textContent = `Stop #${stopIdx + 1}`;
             popupEl.append(stopEl);
           } else {
             Object.assign(addrEl.style, { fontSize: "12px", color: "#666", marginBottom: "6px" });
