@@ -390,6 +390,8 @@ export const companies = pgTable("companies", {
   retellAgentId: varchar("retell_agent_id", { length: 255 }),
   retellKnowledgeBaseId: varchar("retell_knowledge_base_id", { length: 255 }),
   portingPhoneNumber: varchar("porting_phone_number", { length: 20 }),
+  voiceAreaCodePreference: varchar("voice_area_code_preference", { length: 3 }),
+  voiceNumberPortingStatus: varchar("voice_number_porting_status", { length: 20 }),
   venmoHandle: varchar("venmo_handle", { length: 100 }),
   billingCadence: text("billing_cadence").notNull().default("per_visit"),
   billingTrigger: text("billing_trigger").notNull().default("after_job"),

@@ -659,6 +659,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   // Store the porting request; actual porting requires carrier paperwork
                   const numberToPort = phoneOrAreaCodeValue || "(not provided)";
                   (companyUpdates as Record<string, unknown>).portingPhoneNumber = numberToPort;
+                  (companyUpdates as Record<string, unknown>).voiceNumberPortingStatus = "pending";
                   console.log(
                     `[Retell] Port request received for company "${company.name}" (${company.id}): ${maskPhone(numberToPort)}`
                   );

@@ -571,6 +571,420 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }
   );
 
+  // ================ Voice Agent Config & AI Endpoints ================
+
+  app.get("/api/voice/config", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      res.json({
+        voiceAreaCodePreference: company.voiceAreaCodePreference || null,
+        voiceNumberPortingStatus: company.voiceNumberPortingStatus || null,
+        dedicatedPhoneNumber: company.dedicatedPhoneNumber || null,
+        portingPhoneNumber: company.portingPhoneNumber || null,
+        websiteUrl: (company as Record<string, unknown>).websiteUrl || null,
+        voiceAgentGreeting: company.voiceAgentGreeting || null,
+        voiceAgentPricingSummary: company.voiceAgentPricingSummary || null,
+        voiceAgentServiceArea: company.voiceAgentServiceArea || null,
+        voiceAgentPolicies: company.voiceAgentPolicies || null,
+        voiceAgentSpecialLines: company.voiceAgentSpecialLines || null,
+        retellAgentId: company.retellAgentId || null,
+        retellKnowledgeBaseId: company.retellKnowledgeBaseId || null,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.patch("/api/voice/config", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role, userId } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+
+      const allowed = [
+        "voiceAreaCodePreference",
+        "websiteUrl",
+        "voiceAgentGreeting",
+        "voiceAgentPricingSummary",
+        "voiceAgentServiceArea",
+        "voiceAgentPolicies",
+        "voiceAgentSpecialLines",
+      ] as const;
+
+      const updates: Record<string, unknown> = {};
+      for (const key of allowed) {
+        if (key in req.body) {
+          updates[key] = req.body[key] ?? null;
+        }
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      // Server-side validation for sensitive fields
+      if (
+        updates.voiceAreaCodePreference !== null &&
+        updates.voiceAreaCodePreference !== undefined
+      ) {
+        const ac = String(updates.voiceAreaCodePreference);
+        if (!/^\d{3}$/.test(ac)) {
+          return res
+            .status(400)
+            .json({ error: "voiceAreaCodePreference must be exactly 3 digits (e.g. 206)" });
+        }
+      }
+      if (updates.websiteUrl !== null && updates.websiteUrl !== undefined) {
+        try {
+          const u = new URL(String(updates.websiteUrl));
+          if (!["http:", "https:"].includes(u.protocol)) throw new Error("bad protocol");
+        } catch {
+          return res.status(400).json({ error: "websiteUrl must be a valid HTTP or HTTPS URL" });
+        }
+      }
+
+      const updated = await storage.updateCompany(
+        companyId,
+        updates as Parameters<typeof storage.updateCompany>[1]
+      );
+      auditLog(
+        companyId,
+        userId,
+        "settings",
+        companyId,
+        "update",
+        { new: updates },
+        req.ip || undefined
+      );
+
+      res.json({ success: true, company: updated });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/voice/generate-docs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!company.voicePlanStatus || company.voicePlanStatus !== "active") {
+        return res.status(403).json({ error: "Voice plan not active" });
+      }
+
+      const servicePricingItems = await storage.getServicePricing(companyId);
+      const serviceZones = await storage.getServiceZones(companyId);
+
+      const pricingLines = servicePricingItems
+        .filter((sp) => sp.isActive)
+        .map((sp) => `${sp.name}: $${sp.basePrice}/${sp.unit.replace("per_", "")}`)
+        .join("; ");
+
+      const serviceAreaZips = [
+        ...new Set(serviceZones.filter((z) => z.isActive).map((z) => z.zipCode)),
+      ].join(", ");
+
+      const contextData = {
+        companyName: company.name,
+        businessEmail: company.email,
+        businessPhone: company.phone,
+        businessAddress: company.address,
+        websiteUrl: (company as Record<string, unknown>).websiteUrl,
+        businessDescription: (company as Record<string, unknown>).businessDescription,
+        serviceAreaDescription: (company as Record<string, unknown>).serviceAreaDescription,
+        serviceAreaZips,
+        pricingLines,
+        existingGreeting: company.voiceAgentGreeting,
+        existingPolicies: company.voiceAgentPolicies,
+        existingServiceArea: company.voiceAgentServiceArea,
+      };
+
+      const { openai } = await import("../replit_integrations/audio/client");
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `You are a professional business assistant helping configure an AI voice receptionist for a pet waste removal company. Generate natural, professional content for the agent. Return ONLY valid JSON with these fields: greeting (string, warm phone greeting under 50 words), pricingSummary (string, clear pricing overview for callers, under 100 words), serviceArea (string, service area description for callers, under 60 words), policies (string, key business policies the agent should know, under 150 words, newline-separated). All content should be conversational and friendly.`,
+          },
+          {
+            role: "user",
+            content: `Generate voice agent content for: ${JSON.stringify(contextData)}`,
+          },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 600,
+      });
+
+      const raw = completion.choices[0]?.message?.content || "{}";
+      let generated: Record<string, string>;
+      try {
+        generated = JSON.parse(raw);
+      } catch {
+        generated = {};
+      }
+
+      res.json({
+        success: true,
+        greeting:
+          generated.greeting || `Thank you for calling ${company.name}! How can I help you today?`,
+        pricingSummary:
+          generated.pricingSummary || pricingLines || "Contact us for pricing information.",
+        serviceArea: generated.serviceArea || serviceAreaZips || "We serve your local area.",
+        policies: generated.policies || "We're here to help. Please call during business hours.",
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/voice/upload-document", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!company.voicePlanStatus || company.voicePlanStatus !== "active") {
+        return res.status(403).json({ error: "Voice plan not active" });
+      }
+
+      const retellApiKey = process.env.RETELL_API_KEY;
+      if (!retellApiKey) return res.status(400).json({ error: "RETELL_API_KEY not configured" });
+
+      const kbId = company.retellKnowledgeBaseId;
+      if (!kbId) {
+        return res.status(400).json({
+          error:
+            "No knowledge base configured for this agent. Run 'Push to Agent' first to create one.",
+        });
+      }
+
+      const multer = (await import("multer")).default;
+      const upload = multer({
+        storage: multer.memoryStorage(),
+        limits: { fileSize: 10 * 1024 * 1024 },
+        fileFilter: (_req, file, cb) => {
+          const allowed = [
+            "application/pdf",
+            "text/plain",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          ];
+          if (allowed.includes(file.mimetype) || file.originalname.match(/\.(pdf|txt|docx)$/i)) {
+            cb(null, true);
+          } else {
+            cb(new Error("Only PDF, TXT, and DOCX files are supported"));
+          }
+        },
+      }).single("file");
+
+      await new Promise<void>((resolve, reject) => {
+        upload(req, res, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
+      const file = (req as Request & { file?: Express.Multer.File }).file;
+      if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+      // Step 1: Persist file to object storage (.private) for tenant record-keeping
+      let objectPath: string | null = null;
+      try {
+        const { ObjectStorageService } =
+          await import("../replit_integrations/object_storage/objectStorage");
+        const oss = new ObjectStorageService();
+        const uploadURL = await oss.getObjectEntityUploadURL();
+        objectPath = oss.normalizeObjectEntityPath(uploadURL);
+        const putRes = await fetch(uploadURL, {
+          method: "PUT",
+          body: file.buffer,
+          headers: { "Content-Type": file.mimetype || "application/octet-stream" },
+        });
+        if (!putRes.ok) {
+          console.warn(
+            `[voice/upload-doc] Object storage PUT failed (${putRes.status}) — continuing`
+          );
+          objectPath = null;
+        }
+      } catch (storageErr) {
+        console.warn("[voice/upload-doc] Object storage unavailable — continuing:", storageErr);
+      }
+
+      // Step 2: Push file to Retell knowledge base
+      const formData = new FormData();
+      const blob = new Blob([file.buffer], { type: file.mimetype });
+      formData.append("file", blob, file.originalname);
+      formData.append("knowledge_base_id", kbId);
+
+      const uploadRes = await fetch("https://api.retellai.com/upload-knowledge-base-file", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${retellApiKey}` },
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        console.error(`[Retell KB upload] Failed (${uploadRes.status}): ${errText}`);
+        return res.status(502).json({
+          error: `Failed to upload document to knowledge base: ${uploadRes.statusText}`,
+        });
+      }
+
+      res.json({
+        success: true,
+        message: `"${file.originalname}" uploaded to the knowledge base.`,
+        objectPath,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/voice/sync-agent", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role, userId } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!company.voicePlanStatus || company.voicePlanStatus !== "active") {
+        return res.status(403).json({ error: "Voice plan not active" });
+      }
+
+      const retellApiKey = process.env.RETELL_API_KEY;
+      if (!retellApiKey) return res.status(400).json({ error: "RETELL_API_KEY not configured" });
+
+      const agentId = company.retellAgentId || process.env.RETELL_AGENT_ID || null;
+      if (!agentId) return res.status(400).json({ error: "No Retell agent ID configured" });
+
+      const results: string[] = [];
+
+      const websiteUrl = (company as Record<string, unknown>).websiteUrl as string | null;
+
+      if (!company.dedicatedPhoneNumber && !company.portingPhoneNumber) {
+        try {
+          const { provisionRetellNumber } = await import("../services/retell");
+          const areaCode =
+            company.voiceAreaCodePreference ||
+            (company.phone ? company.phone.replace(/\D/g, "").slice(0, 3) : "703");
+          const phoneNumber = await provisionRetellNumber({ areaCode, agentId });
+          await storage.updateCompany(companyId, {
+            dedicatedPhoneNumber: phoneNumber,
+          } as Parameters<typeof storage.updateCompany>[1]);
+          results.push(`Provisioned phone number: ${phoneNumber}`);
+        } catch (phoneErr) {
+          console.warn("[voice/sync-agent] Phone provisioning failed:", phoneErr);
+          results.push("Phone provisioning skipped (will retry next sync)");
+        }
+      }
+
+      if (websiteUrl && !company.retellKnowledgeBaseId) {
+        try {
+          const { seedRetellKnowledgeBase } = await import("../services/retell");
+          const kbId = await seedRetellKnowledgeBase({
+            tenantId: companyId,
+            agentId,
+            websiteUrl,
+          });
+          await storage.updateCompany(companyId, { retellKnowledgeBaseId: kbId } as Parameters<
+            typeof storage.updateCompany
+          >[1]);
+          results.push("Knowledge base created from website");
+        } catch (kbErr) {
+          console.warn("[voice/sync-agent] KB creation failed:", kbErr);
+          results.push("Knowledge base creation failed — check website URL and retry");
+        }
+      } else if (websiteUrl && company.retellKnowledgeBaseId) {
+        try {
+          const patchRes = await fetch(
+            `https://api.retellai.com/update-knowledge-base/${company.retellKnowledgeBaseId}`,
+            {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${retellApiKey}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ knowledge_base_urls: [websiteUrl] }),
+            }
+          );
+          if (patchRes.ok) results.push("Knowledge base URL refreshed");
+          else results.push("Knowledge base URL update skipped");
+        } catch {
+          results.push("Knowledge base URL refresh skipped");
+        }
+      }
+
+      const promptSections: string[] = [];
+      if (company.voiceAgentGreeting) {
+        promptSections.push(`GREETING:\n${company.voiceAgentGreeting}`);
+      }
+      if (company.voiceAgentPricingSummary) {
+        promptSections.push(`PRICING:\n${company.voiceAgentPricingSummary}`);
+      }
+      if (company.voiceAgentServiceArea) {
+        promptSections.push(`SERVICE AREA:\n${company.voiceAgentServiceArea}`);
+      }
+      if (company.voiceAgentPolicies) {
+        promptSections.push(`POLICIES:\n${company.voiceAgentPolicies}`);
+      }
+      if (company.voiceAgentSpecialLines) {
+        promptSections.push(`SPECIAL INSTRUCTIONS:\n${company.voiceAgentSpecialLines}`);
+      }
+
+      if (promptSections.length > 0) {
+        const agentPrompt = `You are an AI phone receptionist for ${company.name}, a pet waste removal service.\n\n${promptSections.join("\n\n")}`;
+        try {
+          const patchRes = await fetch(`https://api.retellai.com/update-agent/${agentId}`, {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${retellApiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ agent_prompt: agentPrompt }),
+          });
+          if (patchRes.ok) results.push("Agent prompt updated with all configured fields");
+          else results.push("Agent prompt update skipped (Retell API error)");
+        } catch {
+          results.push("Agent prompt update skipped");
+        }
+      }
+
+      try {
+        await registerRetellWebhook(agentId);
+        results.push("Webhook registered");
+      } catch (whErr) {
+        console.warn("[voice/sync-agent] Webhook registration failed:", whErr);
+        results.push("Webhook registration failed — try Re-register Webhook manually");
+      }
+
+      auditLog(
+        companyId,
+        userId,
+        "settings",
+        companyId,
+        "update",
+        { new: { voiceAgentSync: true } },
+        req.ip || undefined
+      );
+      const freshCompany = await storage.getCompany(companyId);
+
+      res.json({
+        success: true,
+        results,
+        dedicatedPhoneNumber: freshCompany?.dedicatedPhoneNumber || null,
+        retellKnowledgeBaseId: freshCompany?.retellKnowledgeBaseId || null,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // ================ Voice Agent Webhook Status (voice-plan-gated) ================
 
   app.get("/api/voice/webhook-status", isAuthenticated, async (req: Request, res: Response) => {

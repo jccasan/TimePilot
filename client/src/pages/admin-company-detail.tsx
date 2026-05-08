@@ -282,6 +282,25 @@ export default function AdminCompanyDetail() {
     },
   });
 
+  const portingStatusMutation = useMutation({
+    mutationFn: async (status: string) => {
+      const res = await adminRequest("PATCH", `/api/admin/companies/${id}`, {
+        voiceNumberPortingStatus: status || null,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update porting status");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies", id] });
+      toast({ title: "Porting status updated" });
+    },
+    onError: (err: any) =>
+      toast({ title: "Update failed", description: err.message, variant: "destructive" }),
+  });
+
   const resetPasswordMutation = useMutation({
     mutationFn: async ({ userId, newPassword }: { userId: string; newPassword?: string }) => {
       const res = await adminRequest(
@@ -647,6 +666,51 @@ export default function AdminCompanyDetail() {
                 </CardContent>
               </Card>
             </div>
+          )}
+
+          {(company?.portingPhoneNumber || company?.voiceNumberPortingStatus) && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Phone className="h-4 w-4" /> Voice Number Porting
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {company.portingPhoneNumber && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-muted-foreground">Porting Number</span>
+                    <span
+                      className="text-sm font-mono font-medium"
+                      data-testid="text-admin-porting-phone"
+                    >
+                      {company.portingPhoneNumber}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground">Porting Status</span>
+                  <Select
+                    value={company.voiceNumberPortingStatus || "none"}
+                    onValueChange={(v) => portingStatusMutation.mutate(v === "none" ? "" : v)}
+                    disabled={portingStatusMutation.isPending}
+                  >
+                    <SelectTrigger className="w-40 h-8 text-sm" data-testid="select-porting-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not Set</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="complete">Complete</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Update when the tenant's existing phone number is being ported to their voice
+                  agent. The tenant sees this status in Settings &gt; Voice Agent.
+                </p>
+              </CardContent>
+            </Card>
           )}
 
           {voiceCalls && voiceCalls.length > 0 && (

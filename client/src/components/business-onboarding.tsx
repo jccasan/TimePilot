@@ -13,6 +13,7 @@ import { ZipMapSelector, RadiusMapSelector } from "@/components/zip-map-selector
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -45,6 +46,9 @@ import {
   PartyPopper,
   AlertCircle,
   Image,
+  PhoneCall,
+  Wand2,
+  Clock,
 } from "lucide-react";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 
@@ -63,6 +67,7 @@ type BusinessOnboardingStatus = {
     pricingConfig: PricingConfig | null;
     stripeConnectAccountId: string | null;
     stripeConnectOnboarded: boolean;
+    voicePlanStatus: string | null;
   };
 };
 
@@ -81,7 +86,16 @@ type WebsiteInsights = {
   suggestedPricingMode: "aggressive" | "standard" | "premium";
 };
 
-const STEPS = [
+const BASE_STEPS = [
+  { key: "profile", label: "Company Profile", icon: Building2 },
+  { key: "intelligence", label: "Business Intelligence", icon: Globe },
+  { key: "pricing", label: "Pricing Setup", icon: DollarSign },
+  { key: "payments", label: "Payment Processing", icon: CreditCard },
+  { key: "voice", label: "Voice Agent", icon: PhoneCall },
+  { key: "launch", label: "Review & Launch", icon: Rocket },
+];
+
+const NON_VOICE_STEPS = [
   { key: "profile", label: "Company Profile", icon: Building2 },
   { key: "intelligence", label: "Business Intelligence", icon: Globe },
   { key: "pricing", label: "Pricing Setup", icon: DollarSign },
@@ -103,13 +117,15 @@ type ProfileFormValues = z.infer<typeof profileSchema>;
 function StepIndicator({
   currentStep,
   completedSteps,
+  steps,
 }: {
   currentStep: number;
   completedSteps: number[];
+  steps: typeof BASE_STEPS;
 }) {
   return (
     <div className="flex items-center gap-1 w-full mb-8" data-testid="stepper-indicator">
-      {STEPS.map((step, idx) => {
+      {steps.map((step, idx) => {
         const isActive = idx === currentStep;
         const isCompleted = completedSteps.includes(idx);
         const Icon = step.icon;
@@ -134,7 +150,7 @@ function StepIndicator({
                 {step.label}
               </span>
             </div>
-            {idx < STEPS.length - 1 && (
+            {idx < steps.length - 1 && (
               <div
                 className={`h-0.5 w-full mx-1 mt-[-1.25rem] ${isCompleted ? "bg-green-500" : "bg-muted"}`}
               />
@@ -1267,6 +1283,374 @@ function ReviewLaunchStep({
   );
 }
 
+function VoiceAgentSetupStep({
+  companyData,
+  onNext,
+  onBack,
+  onSkip,
+  isPending,
+}: {
+  companyData: BusinessOnboardingStatus["companyData"];
+  onNext: (data?: Record<string, unknown>) => void;
+  onBack: () => void;
+  onSkip: () => void;
+  isPending: boolean;
+}) {
+  const { toast } = useToast();
+  // Prefill area code from saved preference or company phone
+  const phoneAreaCode = companyData.phone?.replace(/\D/g, "").slice(0, 3) ?? "";
+  const [areaCode, setAreaCode] = useState(phoneAreaCode);
+  const [websiteUrl, setWebsiteUrl] = useState(companyData.websiteUrl || "");
+  const [greeting, setGreeting] = useState("");
+  const [pricingSummary, setPricingSummary] = useState("");
+  const [serviceArea, setServiceArea] = useState("");
+  const [policies, setPolicies] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [docsGenerated, setDocsGenerated] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [synced, setSynced] = useState(false);
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const docUploadRef = useRef<HTMLInputElement>(null);
+
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    try {
+      const res = await apiRequest("POST", "/api/voice/generate-docs", {});
+      if (res.ok) {
+        const data = await res.json();
+        if (data.greeting) setGreeting(data.greeting);
+        if (data.pricingSummary) setPricingSummary(data.pricingSummary);
+        if (data.serviceArea) setServiceArea(data.serviceArea);
+        if (data.policies) setPolicies(data.policies);
+        setDocsGenerated(true);
+        toast({ title: "Content generated", description: "Review and edit the fields below." });
+      } else {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Generation failed");
+      }
+    } catch (err: any) {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadFileName(file.name);
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/voice/upload-document", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Upload failed");
+      }
+      toast({ title: "Document uploaded", description: `"${file.name}" added to knowledge base.` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+      setUploadFileName(null);
+    } finally {
+      setIsUploading(false);
+      if (docUploadRef.current) docUploadRef.current.value = "";
+    }
+  };
+
+  const saveAndSync = async (): Promise<boolean> => {
+    setIsSyncing(true);
+    try {
+      await apiRequest("PATCH", "/api/voice/config", {
+        voiceAreaCodePreference: areaCode.replace(/\D/g, "").slice(0, 3) || null,
+        websiteUrl: websiteUrl || null,
+        voiceAgentGreeting: greeting || null,
+        voiceAgentPricingSummary: pricingSummary || null,
+        voiceAgentServiceArea: serviceArea || null,
+        voiceAgentPolicies: policies || null,
+      });
+      const res = await apiRequest("POST", "/api/voice/sync-agent", {});
+      const data = await res.json();
+      if (res.ok) {
+        setSynced(true);
+        toast({
+          title: "Agent configured",
+          description: data.results?.join("; ") || "Voice agent provisioned successfully.",
+        });
+        return true;
+      } else {
+        throw new Error(data.error || "Sync failed");
+      }
+    } catch (err: any) {
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+      return false;
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleContinue = async () => {
+    // Auto-trigger sync before advancing — saves all config and provisions agent
+    await saveAndSync();
+    // Advance regardless of sync result (user can retry from Settings)
+    onNext({
+      voiceAreaCodePreference: areaCode.replace(/\D/g, "").slice(0, 3) || null,
+      websiteUrl: websiteUrl || null,
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold">Voice Agent Setup</h2>
+        <p className="text-muted-foreground mt-1">
+          Your plan includes an AI phone agent. Configure it now — everything can be fine-tuned in
+          Settings &gt; Voice Agent later.
+        </p>
+      </div>
+
+      <div className="rounded-lg border bg-primary/5 p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <PhoneCall className="h-5 w-5 text-primary" />
+          <span className="font-medium text-sm">Voice Plan Active</span>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Your AI agent will answer calls, quote pricing, and capture leads automatically. Clicking
+          "Continue" will provision your dedicated number and activate the agent.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        {/* Area code */}
+        <div className="space-y-2">
+          <Label htmlFor="onboarding-area-code">Preferred Area Code</Label>
+          <Input
+            id="onboarding-area-code"
+            value={areaCode}
+            onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))}
+            placeholder="e.g. 206"
+            maxLength={3}
+            className="w-36"
+            data-testid="input-onboarding-area-code"
+          />
+          <p className="text-xs text-muted-foreground">
+            Pre-filled from your business phone. Leave blank to let us choose.
+          </p>
+        </div>
+
+        {/* Website URL */}
+        <div className="space-y-2">
+          <Label htmlFor="onboarding-website-url">Website URL (Knowledge Base Source)</Label>
+          <Input
+            id="onboarding-website-url"
+            value={websiteUrl}
+            onChange={(e) => setWebsiteUrl(e.target.value)}
+            placeholder="https://yourcompany.com"
+            data-testid="input-onboarding-website-url"
+          />
+          <p className="text-xs text-muted-foreground">
+            Your website will be scraped and added to the agent's knowledge base.
+          </p>
+        </div>
+
+        {/* AI Generate + editable script fields */}
+        <div className="rounded-lg border p-4 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium flex items-center gap-1.5">
+                <Wand2 className="h-4 w-4 text-primary" />
+                AI Generate Scripts
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Generate greeting, pricing summary, service area, and policies from your business
+                data. Edit the fields below before saving.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              data-testid="button-onboarding-generate-voice-docs"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Generating…
+                </>
+              ) : (
+                <>
+                  <Wand2 className="h-4 w-4 mr-1" /> AI Generate
+                </>
+              )}
+            </Button>
+          </div>
+
+          {docsGenerated && (
+            <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
+              Content generated — review and edit below before continuing.
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="ob-voice-greeting" className="text-xs">
+                Agent Greeting
+              </Label>
+              <Textarea
+                id="ob-voice-greeting"
+                value={greeting}
+                onChange={(e) => setGreeting(e.target.value)}
+                placeholder="Thank you for calling [Company]! How can I help you today?"
+                rows={2}
+                data-testid="input-ob-voice-greeting"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ob-voice-pricing" className="text-xs">
+                Pricing Summary
+              </Label>
+              <Textarea
+                id="ob-voice-pricing"
+                value={pricingSummary}
+                onChange={(e) => setPricingSummary(e.target.value)}
+                placeholder="Our weekly service starts at $25 for one dog..."
+                rows={2}
+                data-testid="input-ob-voice-pricing"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ob-voice-service-area" className="text-xs">
+                Service Area
+              </Label>
+              <Textarea
+                id="ob-voice-service-area"
+                value={serviceArea}
+                onChange={(e) => setServiceArea(e.target.value)}
+                placeholder="We serve the greater Seattle area including..."
+                rows={2}
+                data-testid="input-ob-voice-service-area"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ob-voice-policies" className="text-xs">
+                Policies & Notes
+              </Label>
+              <Textarea
+                id="ob-voice-policies"
+                value={policies}
+                onChange={(e) => setPolicies(e.target.value)}
+                placeholder="We require gate access. Cancellations need 24 hours notice..."
+                rows={2}
+                data-testid="input-ob-voice-policies"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Document Upload — only available after KB is created via Push to Agent */}
+        <div className="rounded-lg border p-4 space-y-2">
+          <p className="text-sm font-medium">Upload Document to Knowledge Base (optional)</p>
+          {synced ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                PDF, TXT, or DOCX files added here supplement your agent's knowledge.
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={docUploadRef}
+                  type="file"
+                  accept=".pdf,.txt,.docx"
+                  onChange={handleDocUpload}
+                  className="hidden"
+                  data-testid="input-ob-voice-doc-upload"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => docUploadRef.current?.click()}
+                  disabled={isUploading}
+                  data-testid="button-ob-voice-upload-doc"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" /> Uploading…
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-1" /> Choose File
+                    </>
+                  )}
+                </Button>
+                {uploadFileName && !isUploading && (
+                  <span className="text-xs text-muted-foreground truncate max-w-[160px]">
+                    {uploadFileName}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Document upload becomes available after the knowledge base is created. Complete "Push
+              to Agent" above (or click Continue — it runs automatically) to enable uploads.
+            </p>
+          )}
+        </div>
+
+        {synced && (
+          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+            <CheckCircle2 className="h-4 w-4" />
+            Agent configured — number provisioned and knowledge base created.
+          </div>
+        )}
+
+        <div className="rounded-lg border border-dashed p-3 space-y-1">
+          <p className="text-sm font-medium flex items-center gap-1.5">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            Fine-tune Later
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Go to <strong>Settings &gt; Voice Agent</strong> after launch to upload more documents,
+            update scripts, and monitor call logs.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <Button variant="outline" onClick={onBack} data-testid="button-voice-back">
+          <ArrowLeft className="h-4 w-4 mr-1" /> Back
+        </Button>
+        <div className="flex-1" />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onSkip}
+          className="text-muted-foreground"
+          data-testid="button-voice-skip"
+        >
+          <SkipForward className="h-4 w-4 mr-1" /> Skip
+        </Button>
+        <Button
+          onClick={handleContinue}
+          disabled={isPending || isSyncing}
+          data-testid="button-voice-continue"
+        >
+          {isPending || isSyncing ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <ArrowRight className="h-4 w-4 mr-2" />
+          )}
+          {isSyncing ? "Configuring…" : "Continue"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function BusinessOnboarding({
   onComplete,
   onDismiss,
@@ -1279,16 +1663,25 @@ export default function BusinessOnboarding({
     queryKey: ["/api/onboarding/business-status"],
   });
 
+  const hasVoicePlan = status?.companyData?.voicePlanStatus === "active";
+  const STEPS = hasVoicePlan ? BASE_STEPS : NON_VOICE_STEPS;
+  const VOICE_STEP_IDX = 4;
+  const LAUNCH_STEP_IDX = hasVoicePlan ? 5 : 4;
+
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
 
   useEffect(() => {
     if (status) {
-      const step = Math.min(status.currentStep, 4);
+      let step = Math.min(status.currentStep, hasVoicePlan ? 5 : 4);
+      // If non-voice user lands on voice step (4), redirect to launch (4 mapped to 4 for non-voice = launch)
+      if (!hasVoicePlan && step >= 4) {
+        step = 4;
+      }
       setCurrentStep(step);
       setCompletedSteps(Array.from({ length: step }, (_, i) => i));
     }
-  }, [status]);
+  }, [status, hasVoicePlan]);
 
   const stepMutation = useMutation({
     mutationFn: async ({ step, data }: { step: number; data?: Record<string, unknown> }) => {
@@ -1371,7 +1764,7 @@ export default function BusinessOnboarding({
 
       <div className="flex-1 overflow-auto">
         <div className="max-w-3xl mx-auto px-6 py-8">
-          <StepIndicator currentStep={currentStep} completedSteps={completedSteps} />
+          <StepIndicator currentStep={currentStep} completedSteps={completedSteps} steps={STEPS} />
 
           {currentStep === 0 && (
             <CompanyProfileStep
@@ -1411,7 +1804,17 @@ export default function BusinessOnboarding({
             />
           )}
 
-          {currentStep === 4 && (
+          {currentStep === VOICE_STEP_IDX && hasVoicePlan && (
+            <VoiceAgentSetupStep
+              companyData={status.companyData}
+              onNext={(data) => stepMutation.mutate({ step: VOICE_STEP_IDX, data })}
+              onBack={handleBack}
+              onSkip={handleSkip}
+              isPending={stepMutation.isPending}
+            />
+          )}
+
+          {currentStep === LAUNCH_STEP_IDX && (
             <ReviewLaunchStep
               companyData={status.companyData}
               onComplete={() => completeMutation.mutate()}

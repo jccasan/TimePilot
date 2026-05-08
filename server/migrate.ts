@@ -128,6 +128,16 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] api_usage_daily company_id attribution column and indexes ensured");
 
+    // Voice Agent columns on companies table
+    await client.query(`
+      ALTER TABLE companies
+        ADD COLUMN IF NOT EXISTS voice_area_code_preference VARCHAR(3),
+        ADD COLUMN IF NOT EXISTS voice_number_porting_status VARCHAR(20)
+    `);
+    console.log(
+      "[Migration] voice_area_code_preference and voice_number_porting_status columns ensured"
+    );
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

@@ -123,7 +123,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
         const demoId = await getDemoCompanyId();
         const isDemo = demoId && demoId === companyId;
         const result = await db.execute(
-          sql`SELECT name, email, phone, address, logo_url, website_url, business_description, service_area_description, pricing_config, stripe_connect_account_id, stripe_connect_onboarded, business_onboarding_step, business_onboarding_complete FROM companies WHERE id = ${companyId}`
+          sql`SELECT name, email, phone, address, logo_url, website_url, business_description, service_area_description, pricing_config, stripe_connect_account_id, stripe_connect_onboarded, business_onboarding_step, business_onboarding_complete, voice_plan_status FROM companies WHERE id = ${companyId}`
         );
         const rows = result.rows as Record<string, unknown>[];
         if (!rows || rows.length === 0) return res.status(404).json({ error: "Company not found" });
@@ -146,6 +146,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
             pricingConfig: row.pricing_config,
             stripeConnectAccountId: row.stripe_connect_account_id,
             stripeConnectOnboarded: row.stripe_connect_onboarded,
+            voicePlanStatus: row.voice_plan_status,
           },
         });
       } catch (err) {
@@ -170,7 +171,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
           return res.json({ success: true, nextStep: 0 });
         }
 
-        if (typeof step !== "number" || step < 0 || step > 4) {
+        if (typeof step !== "number" || step < 0 || step > 5) {
           return res.status(400).json({ error: "Invalid step number" });
         }
 
@@ -191,6 +192,16 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
         } else if (step === 2 && data?.pricingConfig) {
           await db.execute(
             sql`UPDATE companies SET pricing_config = ${JSON.stringify(data.pricingConfig)}::jsonb, business_onboarding_step = ${step + 1} WHERE id = ${companyId}`
+          );
+        } else if (step === 4 && data) {
+          const areaCode = (data.voiceAreaCodePreference as string) || null;
+          const websiteUrl = (data.websiteUrl as string) || null;
+          await db.execute(
+            sql`UPDATE companies SET
+              voice_area_code_preference = ${areaCode},
+              website_url = COALESCE(${websiteUrl}, website_url),
+              business_onboarding_step = ${step + 1}
+            WHERE id = ${companyId}`
           );
         } else {
           await db.execute(
@@ -215,7 +226,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
         const demoId = await getDemoCompanyId();
         if (!demoId || demoId !== companyId) {
           await db.execute(
-            sql`UPDATE companies SET business_onboarding_complete = true, business_onboarding_step = 5 WHERE id = ${companyId}`
+            sql`UPDATE companies SET business_onboarding_complete = true, business_onboarding_step = 6 WHERE id = ${companyId}`
           );
         }
         res.json({ success: true });

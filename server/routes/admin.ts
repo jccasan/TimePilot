@@ -1298,7 +1298,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
-      const { name, email, phone, address, routeCredits } = req.body;
+      const { name, email, phone, address, routeCredits, voiceNumberPortingStatus } = req.body;
       const updates: Record<string, unknown> = {};
       if (name !== undefined) {
         if (typeof name !== "string" || name.trim().length < 2)
@@ -1323,6 +1323,15 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
         if (isNaN(credits) || credits < 0 || String(credits) !== creditsStr.trim())
           return res.status(400).json({ error: "Route credits must be a non-negative integer" });
         updates.routeCredits = credits;
+      }
+      if (voiceNumberPortingStatus !== undefined) {
+        const validPortingStatuses = ["pending", "in_progress", "complete", null, ""];
+        if (!validPortingStatuses.includes(voiceNumberPortingStatus)) {
+          return res
+            .status(400)
+            .json({ error: "Invalid porting status. Must be pending, in_progress, or complete." });
+        }
+        updates.voiceNumberPortingStatus = voiceNumberPortingStatus || null;
       }
 
       if (Object.keys(updates).length === 0)
