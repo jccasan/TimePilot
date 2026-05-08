@@ -1104,6 +1104,32 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }
   });
 
+  // ================ Voice Call Log ================
+
+  app.get("/api/voice/calls", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin", "tech"]);
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const calls = await storage.getVoiceCalls(companyId, limit);
+      res.json(calls);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.get("/api/voice/calls/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin", "tech"]);
+      const call = await storage.getVoiceCallById(companyId, p(req.params.id));
+      if (!call) return res.status(404).json({ error: "Call not found" });
+      res.json(call);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // ================ Webhook Routes ================
 
   app.get("/api/webhooks", isAuthenticated, async (req: Request, res: Response) => {

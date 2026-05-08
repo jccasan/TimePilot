@@ -1750,6 +1750,7 @@ export const voiceCalls = pgTable(
     companyId: varchar("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
+    contactId: varchar("contact_id").references(() => contacts.id, { onDelete: "set null" }),
     retellCallId: varchar("retell_call_id", { length: 255 }),
     callerPhone: varchar("caller_phone", { length: 30 }),
     agentPhone: varchar("agent_phone", { length: 30 }),
@@ -1757,6 +1758,7 @@ export const voiceCalls = pgTable(
     durationMinutes: integer("duration_minutes").notNull().default(0),
     outcome: varchar("outcome", { length: 50 }),
     summary: text("summary"),
+    recordingUrl: text("recording_url"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

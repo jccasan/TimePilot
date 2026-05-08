@@ -1853,7 +1853,8 @@ function VoiceAgentSection({ company }: { company: Company | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const hasActiveVoicePlan = company?.voicePlanStatus === "active";
-  const [activeTab, setActiveTab] = useState<"phone" | "config" | "sync">("phone");
+  const [activeTab, setActiveTab] = useState<"phone" | "config" | "sync" | "calls">("phone");
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [areaCode, setAreaCode] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [greeting, setGreeting] = useState("");
@@ -1874,6 +1875,30 @@ function VoiceAgentSection({ company }: { company: Company | null }) {
     queryKey: ["/api/voice/webhook-status"],
     enabled: hasActiveVoicePlan,
   });
+
+  type VoiceCallEntry = {
+    id: string;
+    contactId: string | null;
+    retellCallId: string | null;
+    callerPhone: string | null;
+    agentPhone: string | null;
+    durationSeconds: number;
+    durationMinutes: number;
+    outcome: string | null;
+    summary: string | null;
+    recordingUrl: string | null;
+    metadata: Record<string, unknown> | null;
+    createdAt: string;
+  };
+
+  const callsQuery = useQuery<VoiceCallEntry[]>({
+    queryKey: ["/api/voice/calls"],
+    enabled: hasActiveVoicePlan && activeTab === "calls",
+  });
+
+  const selectedCall = selectedCallId
+    ? ((callsQuery.data ?? []).find((c) => c.id === selectedCallId) ?? null)
+    : null;
 
   useEffect(() => {
     if (voiceConfigQuery.data) {
@@ -2068,10 +2093,15 @@ function VoiceAgentSection({ company }: { company: Company | null }) {
     },
   };
 
-  const tabs: { key: "phone" | "config" | "sync"; label: string; icon: React.ElementType }[] = [
+  const tabs: {
+    key: "phone" | "config" | "sync" | "calls";
+    label: string;
+    icon: React.ElementType;
+  }[] = [
     { key: "phone", label: "Phone Number", icon: PhoneCall },
     { key: "config", label: "Agent Configuration", icon: Wand2 },
     { key: "sync", label: "Status & Sync", icon: RefreshCw },
+    { key: "calls", label: "Call Log", icon: FileText },
   ];
 
   return (
@@ -2570,6 +2600,240 @@ function VoiceAgentSection({ company }: { company: Company | null }) {
                 ) : (
                   <p className="text-sm text-muted-foreground">Unable to load webhook status.</p>
                 )}
+              </div>
+            )}
+
+            {/* Call Log Tab */}
+            {activeTab === "calls" && (
+              <div className="space-y-3 pt-1">
+                {callsQuery.isLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                  </div>
+                ) : !callsQuery.data || callsQuery.data.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-8 text-center">
+                    <PhoneCall className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">No call records yet.</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Calls handled by your voice agent will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">
+                        {callsQuery.data.length} call{callsQuery.data.length !== 1 ? "s" : ""} total
+                        &nbsp;·&nbsp;
+                        {callsQuery.data.reduce((s, c) => s + (c.durationMinutes || 0), 0)} min
+                      </p>
+                    </div>
+                    <div className="rounded-lg border overflow-hidden">
+                      <table className="w-full text-sm" data-testid="table-call-log">
+                        <thead>
+                          <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
+                            <th className="py-2 px-3">Date / Time</th>
+                            <th className="py-2 px-3">Caller</th>
+                            <th className="py-2 px-3">Duration</th>
+                            <th className="py-2 px-3">Outcome</th>
+                            <th className="py-2 px-3">Summary</th>
+                            <th className="py-2 px-3 text-right">Details</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {callsQuery.data.map((call) => (
+                            <tr
+                              key={call.id}
+                              className="border-b last:border-0 hover:bg-muted/20 transition-colors"
+                              data-testid={`row-call-${call.id}`}
+                            >
+                              <td className="py-2 px-3 whitespace-nowrap text-xs">
+                                {new Date(call.createdAt).toLocaleDateString()}{" "}
+                                <span className="text-muted-foreground">
+                                  {new Date(call.createdAt).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                              </td>
+                              <td className="py-2 px-3 whitespace-nowrap text-xs font-mono">
+                                {call.callerPhone || "Unknown"}
+                              </td>
+                              <td className="py-2 px-3 whitespace-nowrap text-xs">
+                                {call.durationMinutes > 0
+                                  ? `${call.durationMinutes}m ${call.durationSeconds % 60}s`
+                                  : `${call.durationSeconds}s`}
+                              </td>
+                              <td className="py-2 px-3">
+                                <Badge
+                                  variant={call.outcome === "successful" ? "default" : "secondary"}
+                                  className={
+                                    call.outcome === "successful"
+                                      ? "bg-green-600 hover:bg-green-700 text-white text-xs"
+                                      : "text-xs"
+                                  }
+                                  data-testid={`badge-call-outcome-${call.id}`}
+                                >
+                                  {call.outcome || "unknown"}
+                                </Badge>
+                                {call.contactId && (
+                                  <a
+                                    href={`/contacts/${call.contactId}`}
+                                    className="ml-1.5 inline-flex items-center gap-0.5 text-xs text-primary hover:underline"
+                                    data-testid={`link-call-contact-${call.id}`}
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    Contact
+                                  </a>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 text-xs text-muted-foreground max-w-[200px] truncate">
+                                {call.summary || "--"}
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  onClick={() => setSelectedCallId(call.id)}
+                                  data-testid={`button-call-details-${call.id}`}
+                                >
+                                  View
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+
+                {/* Call Detail Dialog */}
+                <Dialog
+                  open={!!selectedCall}
+                  onOpenChange={(open) => {
+                    if (!open) setSelectedCallId(null);
+                  }}
+                >
+                  <DialogContent className="max-w-lg" data-testid="dialog-call-detail">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <PhoneCall className="h-4 w-4" />
+                        Call Detail
+                      </DialogTitle>
+                    </DialogHeader>
+                    {selectedCall && (
+                      <div className="space-y-4 text-sm">
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                          <div>
+                            <p className="text-muted-foreground">Date</p>
+                            <p className="font-medium">
+                              {new Date(selectedCall.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Caller</p>
+                            <p className="font-mono font-medium">
+                              {selectedCall.callerPhone || "Unknown"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Duration</p>
+                            <p className="font-medium">
+                              {selectedCall.durationMinutes > 0
+                                ? `${selectedCall.durationMinutes}m ${selectedCall.durationSeconds % 60}s`
+                                : `${selectedCall.durationSeconds}s`}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Outcome</p>
+                            <Badge
+                              variant={
+                                selectedCall.outcome === "successful" ? "default" : "secondary"
+                              }
+                              className={
+                                selectedCall.outcome === "successful"
+                                  ? "bg-green-600 text-white text-xs mt-0.5"
+                                  : "text-xs mt-0.5"
+                              }
+                            >
+                              {selectedCall.outcome || "unknown"}
+                            </Badge>
+                          </div>
+                          {selectedCall.contactId && (
+                            <div className="col-span-2">
+                              <p className="text-muted-foreground">Linked Contact</p>
+                              <a
+                                href={`/contacts/${selectedCall.contactId}`}
+                                className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                                data-testid="link-detail-contact"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                View Contact Record
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {selectedCall.summary && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Summary</p>
+                            <p className="text-sm leading-relaxed bg-muted/40 rounded p-3">
+                              {selectedCall.summary}
+                            </p>
+                          </div>
+                        )}
+
+                        {(() => {
+                          const analysis = selectedCall.metadata?.callAnalysis as
+                            | Record<string, unknown>
+                            | undefined;
+                          const transcript = analysis?.transcript as string | undefined;
+                          return transcript ? (
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Transcript</p>
+                              <div
+                                className="text-xs leading-relaxed bg-muted/40 rounded p-3 max-h-48 overflow-y-auto whitespace-pre-wrap"
+                                data-testid="text-call-transcript"
+                              >
+                                {transcript}
+                              </div>
+                            </div>
+                          ) : null;
+                        })()}
+
+                        {selectedCall.recordingUrl && (
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Recording</p>
+                            <audio
+                              controls
+                              src={selectedCall.recordingUrl}
+                              className="w-full h-10"
+                              data-testid="audio-call-recording"
+                            />
+                            <a
+                              href={selectedCall.recordingUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                              data-testid="link-call-recording"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Open recording in new tab
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <DialogFooter>
+                      <Button variant="outline" size="sm" onClick={() => setSelectedCallId(null)}>
+                        Close
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
           </>

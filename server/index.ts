@@ -398,6 +398,10 @@ async function ensureCompanyColumns() {
       CREATE INDEX IF NOT EXISTS idx_voice_calls_created ON voice_calls(created_at);
     `);
     await pool.query(`
+      ALTER TABLE voice_calls ADD COLUMN IF NOT EXISTS contact_id VARCHAR REFERENCES contacts(id) ON DELETE SET NULL;
+      ALTER TABLE voice_calls ADD COLUMN IF NOT EXISTS recording_url TEXT;
+    `);
+    await pool.query(`
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS quote_defaults JSONB;
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
     `);

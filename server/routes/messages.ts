@@ -1577,8 +1577,29 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
 
       const companyId = matchedCompany.id;
 
+      const recordingUrl = callData.recording_url || callData.stereo_recording_url || null;
+
+      // Try to link to an existing contact by caller phone
+      let linkedContactId: string | null = null;
+      if (callData.from_number) {
+        try {
+          const allContacts = await storage.getContacts(companyId);
+          const digits = (callData.from_number as string).replace(/\D/g, "");
+          const match = allContacts.find((c) => {
+            const cDigits = (c.phone || "").replace(/\D/g, "");
+            return (
+              cDigits.length >= 10 && digits.length >= 10 && digits.endsWith(cDigits.slice(-10))
+            );
+          });
+          if (match) linkedContactId = match.id;
+        } catch {
+          /* non-critical */
+        }
+      }
+
       await storage.createVoiceCall({
         companyId,
+        contactId: linkedContactId,
         retellCallId,
         callerPhone: callData.from_number || null,
         agentPhone: callData.to_number || null,
@@ -1586,6 +1607,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         durationMinutes,
         outcome,
         summary,
+        recordingUrl,
         metadata: {
           disconnectionReason: callData.disconnection_reason,
           callAnalysis: callData.call_analysis,

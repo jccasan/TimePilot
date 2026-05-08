@@ -863,6 +863,7 @@ export interface IStorage {
     data: Partial<Pick<InsertVoiceCall, "outcome" | "summary" | "metadata">>
   ): Promise<VoiceCall>;
   getVoiceCalls(companyId: string, limit?: number): Promise<VoiceCall[]>;
+  getVoiceCallById(companyId: string, id: string): Promise<VoiceCall | undefined>;
   getVoiceCallByRetellId(retellCallId: string): Promise<VoiceCall | undefined>;
   getVoiceCallSummary(
     companyId: string,
@@ -4447,6 +4448,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(voiceCalls.companyId, companyId))
       .orderBy(desc(voiceCalls.createdAt))
       .limit(limit);
+  }
+
+  async getVoiceCallById(companyId: string, id: string): Promise<VoiceCall | undefined> {
+    const [call] = await db
+      .select()
+      .from(voiceCalls)
+      .where(and(eq(voiceCalls.companyId, companyId), eq(voiceCalls.id, id)));
+    return call;
   }
 
   async getVoiceCallByRetellId(retellCallId: string): Promise<VoiceCall | undefined> {
