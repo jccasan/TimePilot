@@ -985,6 +985,61 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }
   });
 
+  // ================ Voice Agent Dashboard Status (combined, voice-plan-gated) ================
+
+  app.get("/api/voice/dashboard-status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+
+      const company = await storage.getCompany(companyId);
+      if (!company?.voicePlanStatus || company.voicePlanStatus !== "active") {
+        return res.status(403).json({ error: "Voice plan not active" });
+      }
+
+      const retellApiKey = process.env.RETELL_API_KEY;
+      let webhookConfigured = false;
+      let webhookRegistered = false;
+
+      if (retellApiKey) {
+        const agentId = company.retellAgentId || process.env.RETELL_AGENT_ID || null;
+        if (agentId) {
+          webhookConfigured = true;
+          try {
+            const expectedUrl = getAppBaseUrl() ? `${getAppBaseUrl()}/api/webhooks/retell` : null;
+            const agentRes = await fetch(`https://api.retellai.com/get-agent/${agentId}`, {
+              headers: {
+                Authorization: `Bearer ${retellApiKey}`,
+                "Content-Type": "application/json",
+              },
+            });
+            if (agentRes.ok) {
+              const agentData = (await agentRes.json()) as { webhook_url?: string };
+              const currentUrl: string | null = agentData.webhook_url || null;
+              webhookRegistered = !!currentUrl && !!expectedUrl && currentUrl === expectedUrl;
+            }
+          } catch {
+            // webhook check failed — leave webhookRegistered false
+          }
+        }
+      }
+
+      const calls = await storage.getVoiceCalls(companyId, 1);
+      const lastCallAt = calls.length > 0 ? calls[0].createdAt : null;
+
+      res.json({
+        dedicatedPhoneNumber: company.dedicatedPhoneNumber || null,
+        portingPhoneNumber: company.portingPhoneNumber || null,
+        voiceNumberPortingStatus: company.voiceNumberPortingStatus || null,
+        webhookConfigured,
+        webhookRegistered,
+        lastCallAt,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // ================ Voice Agent Webhook Status (voice-plan-gated) ================
 
   app.get("/api/voice/webhook-status", isAuthenticated, async (req: Request, res: Response) => {

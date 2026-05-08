@@ -135,6 +135,10 @@ import {
   Info,
   AlertOctagon,
   List,
+  Phone,
+  Bot,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -178,6 +182,7 @@ type CompanyStats = {
 type CompanyData = {
   id: string;
   dashboardLayout?: any;
+  voicePlanStatus?: string | null;
   [key: string]: unknown;
 };
 
@@ -433,6 +438,7 @@ const WIDGET_DEFS: {
   minW: number;
   minH: number;
   category: "stats" | "insights" | "tools";
+  requiresVoicePlan?: boolean;
 }[] = [
   {
     id: "business_health",
@@ -675,6 +681,18 @@ const WIDGET_DEFS: {
     minW: 4,
     minH: 3,
     category: "insights",
+  },
+  {
+    id: "voice_agent",
+    label: "Voice Agent",
+    icon: Bot,
+    description: "Live phone number, webhook health, and last call time",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
+    requiresVoicePlan: true,
   },
 ];
 
@@ -2875,6 +2893,123 @@ function GridWidgetsSection({
   );
 }
 
+type VoiceAgentStatus = {
+  dedicatedPhoneNumber: string | null;
+  portingPhoneNumber: string | null;
+  voiceNumberPortingStatus: string | null;
+  webhookConfigured: boolean;
+  webhookRegistered: boolean;
+  lastCallAt: string | null;
+};
+
+function VoiceAgentWidget() {
+  const { data, isLoading } = useQuery<VoiceAgentStatus>({
+    queryKey: ["/api/voice/dashboard-status"],
+    refetchInterval: 60_000,
+  });
+
+  // Only the provisioned dedicated number is shown as primary text.
+  // When porting is in progress (no dedicated number yet), show a status badge instead.
+  const dedicatedPhone = data?.dedicatedPhoneNumber ?? null;
+  const portingStatus = data?.voiceNumberPortingStatus ?? null;
+  const portingPhone = data?.portingPhoneNumber ?? null;
+
+  const getPortingLabel = (status: string | null) => {
+    if (status === "pending") return "Porting: Pending";
+    if (status === "in_progress") return "Porting: In Progress";
+    if (status === "complete") return "Porting: Complete";
+    return null;
+  };
+
+  const webhookColor = !data?.webhookConfigured
+    ? "text-yellow-600 dark:text-yellow-400"
+    : data.webhookRegistered
+      ? "text-green-600 dark:text-green-400"
+      : "text-red-600 dark:text-red-400";
+
+  const webhookLabel = !data?.webhookConfigured
+    ? "Not configured"
+    : data.webhookRegistered
+      ? "Healthy"
+      : "Misconfigured";
+
+  const formatLastCall = (ts: string | null) => {
+    if (!ts) return "No calls yet";
+    const d = new Date(ts);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHrs = Math.floor(diffMins / 60);
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    return d.toLocaleDateString();
+  };
+
+  return (
+    <Card className="h-full flex flex-col" data-testid="widget-voice-agent">
+      <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
+        <CardTitle className="text-sm font-medium">Voice Agent</CardTitle>
+        <Bot className="h-4 w-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent className="flex-1 flex flex-col justify-between px-4 pb-3 pt-0 gap-2">
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2" data-testid="text-voice-agent-phone">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                {dedicatedPhone ? (
+                  <span className="text-sm font-medium">{dedicatedPhone}</span>
+                ) : portingStatus && portingStatus !== "complete" ? (
+                  <div className="flex flex-col gap-0.5">
+                    <Badge variant="secondary" className="text-[10px] w-fit">
+                      {getPortingLabel(portingStatus)}
+                    </Badge>
+                    {portingPhone && (
+                      <span className="text-[10px] text-muted-foreground">{portingPhone}</span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">No number provisioned</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2" data-testid="text-voice-agent-webhook">
+                {data?.webhookRegistered ? (
+                  <Wifi className={`h-3.5 w-3.5 shrink-0 ${webhookColor}`} />
+                ) : (
+                  <WifiOff className={`h-3.5 w-3.5 shrink-0 ${webhookColor}`} />
+                )}
+                <span className={`text-xs ${webhookColor}`}>{webhookLabel}</span>
+              </div>
+              <div className="flex items-center gap-2" data-testid="text-voice-agent-last-call">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground">
+                  {formatLastCall(data?.lastCallAt ?? null)}
+                </span>
+              </div>
+            </div>
+            <Link href="/settings">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs h-7"
+                data-testid="button-voice-agent-configure"
+              >
+                Configure
+                <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function WidgetLibraryDrawer({
   open,
   onClose,
@@ -2882,6 +3017,7 @@ function WidgetLibraryDrawer({
   onAddWidget,
   onRemoveWidget,
   onResetLayout,
+  hasVoicePlan,
 }: {
   open: boolean;
   onClose: () => void;
@@ -2889,6 +3025,7 @@ function WidgetLibraryDrawer({
   onAddWidget: (id: string) => void;
   onRemoveWidget: (id: string) => void;
   onResetLayout: () => void;
+  hasVoicePlan?: boolean;
 }) {
   const categories = [
     { key: "stats", label: "Stats" },
@@ -2925,7 +3062,9 @@ function WidgetLibraryDrawer({
           </Button>
           <div className="border-t pt-4" />
           {categories.map((cat) => {
-            const widgets = WIDGET_DEFS.filter((w) => w.category === cat.key);
+            const widgets = WIDGET_DEFS.filter(
+              (w) => w.category === cat.key && (!w.requiresVoicePlan || hasVoicePlan)
+            );
             return (
               <div key={cat.key}>
                 <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 tracking-wider">
@@ -3023,6 +3162,10 @@ export default function Dashboard() {
     refetchInterval: 60_000,
   });
 
+  // Determine voice plan and admin access before layout so they can influence defaults
+  const hasVoicePlan =
+    company?.voicePlanStatus === "active" && (user?.role === "owner" || user?.role === "admin");
+
   const savedLayout = useMemo(() => {
     if (!company) return null;
     return migrateLayout(company.dashboardLayout);
@@ -3049,8 +3192,10 @@ export default function Dashboard() {
     if (savedLayout !== null) {
       return savedLayout.length > 0 ? savedLayout : [];
     }
-    return generateDefaultLayout(DEFAULT_WIDGET_IDS);
-  }, [localLayout, savedLayout]);
+    // No saved layout: generate voice-aware default
+    const defaultIds = hasVoicePlan ? [...DEFAULT_WIDGET_IDS, "voice_agent"] : DEFAULT_WIDGET_IDS;
+    return generateDefaultLayout(defaultIds);
+  }, [localLayout, savedLayout, hasVoicePlan]);
 
   const activeWidgetIds = useMemo(() => currentLayout.map((l) => l.i), [currentLayout]);
 
@@ -3142,12 +3287,43 @@ export default function Dashboard() {
   );
 
   const handleResetLayout = useCallback(() => {
-    const defaultLayout = generateDefaultLayout(DEFAULT_WIDGET_IDS);
+    const ids = hasVoicePlan ? [...DEFAULT_WIDGET_IDS, "voice_agent"] : DEFAULT_WIDGET_IDS;
+    const defaultLayout = generateDefaultLayout(ids);
     setLocalLayout(defaultLayout);
     userInteractedRef.current = true;
     saveMutation.mutate(defaultLayout);
     toast({ title: "Dashboard reset to default layout" });
-  }, [saveMutation, toast]);
+  }, [hasVoicePlan, saveMutation, toast]);
+
+  // Auto-inject voice_agent widget for active voice-plan owners/admins who have
+  // a saved layout that pre-dates this feature (localLayout is not null once loaded).
+  const voiceInjectedRef = useRef(false);
+  useEffect(() => {
+    if (!hasVoicePlan) return;
+    if (voiceInjectedRef.current) return;
+    // Only run when a saved layout has been loaded into localLayout
+    if (localLayout === null) return;
+    if (localLayout.some((item) => item.i === "voice_agent")) {
+      voiceInjectedRef.current = true;
+      return;
+    }
+    const def = WIDGET_DEFS.find((w) => w.id === "voice_agent");
+    if (!def) return;
+    const maxY = localLayout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+    const newItem: LayoutItem = {
+      i: "voice_agent",
+      x: 0,
+      y: maxY,
+      w: def.defaultW,
+      h: def.defaultH,
+      minW: def.minW,
+      minH: def.minH,
+    };
+    const newLayout = [...localLayout, newItem];
+    voiceInjectedRef.current = true;
+    setLocalLayout(newLayout);
+    saveMutation.mutate(newLayout);
+  }, [hasVoicePlan, localLayout, saveMutation]);
 
   const tierKey = stats?.subscriptionTier as keyof typeof TIER_CONFIG | undefined;
   const tierInfo = tierKey ? TIER_CONFIG[tierKey] : null;
@@ -3522,6 +3698,9 @@ export default function Dashboard() {
         );
       case "business_health":
         return <BusinessHealthWidget />;
+      case "voice_agent":
+        if (!hasVoicePlan) return null;
+        return <VoiceAgentWidget />;
       default:
         return null;
     }
@@ -3631,6 +3810,7 @@ export default function Dashboard() {
         onAddWidget={handleAddWidget}
         onRemoveWidget={handleRemoveWidget}
         onResetLayout={handleResetLayout}
+        hasVoicePlan={hasVoicePlan}
       />
     </div>
   );
