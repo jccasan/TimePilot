@@ -9,6 +9,8 @@ type SafeUser = Omit<User, "passwordHash"> & {
   setupDone?: boolean;
   sessionToken?: string;
   importMode?: boolean;
+  subscriptionStatus?: string | null;
+  voicePlanStatus?: string | null;
 };
 
 async function fetchUser(): Promise<SafeUser | null> {

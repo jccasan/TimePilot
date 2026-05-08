@@ -4,6 +4,7 @@ import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   LayoutDashboard,
   Calendar,
@@ -35,6 +36,7 @@ import {
   HelpCircle,
   GraduationCap,
   MessageCircle,
+  Lock,
 } from "lucide-react";
 import {
   Sidebar,
@@ -63,30 +65,69 @@ import { useTutorialContext } from "@/hooks/use-tutorials";
 import { AddContactDialog } from "@/components/add-contact-dialog";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
 
-const menuSections = [
+type MenuItem = {
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
+  requiresSubscription?: boolean;
+  requiresVoice?: boolean;
+};
+
+const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
   {
     label: "Run the Business",
     key: "run",
     items: [
       { title: "Dashboard", url: "/", icon: LayoutDashboard },
-      { title: "Customers", url: "/contacts", icon: ContactRound },
-      { title: "Schedule", url: "/scheduling", icon: Calendar },
-      { title: "Routes", url: "/routes", icon: MapPin },
-      { title: "Field Map", url: "/field-view", icon: Map },
-      { title: "Invoices", url: "/invoices", icon: FileText },
-      { title: "Messages", url: "/communications", icon: MessageSquare },
+      { title: "Customers", url: "/contacts", icon: ContactRound, requiresSubscription: true },
+      { title: "Schedule", url: "/scheduling", icon: Calendar, requiresSubscription: true },
+      { title: "Routes", url: "/routes", icon: MapPin, requiresSubscription: true },
+      { title: "Field Map", url: "/field-view", icon: Map, requiresSubscription: true },
+      { title: "Invoices", url: "/invoices", icon: FileText, requiresSubscription: true },
+      {
+        title: "Messages",
+        url: "/communications",
+        icon: MessageSquare,
+        requiresSubscription: true,
+      },
     ],
   },
   {
     label: "Make More Money",
     key: "money",
     items: [
-      { title: "Business Overview", url: "/business-overview", icon: Activity },
-      { title: "Profitability", url: "/profitability", icon: TrendingUp },
-      { title: "Route Profit Maps", url: "/route-profit-maps", icon: Map },
-      { title: "Pricing Tools", url: "/pricing-calculator", icon: Calculator },
-      { title: "Reports", url: "/reports", icon: BarChart3 },
-      { title: "Overhead Costs", url: "/overhead-costs", icon: DollarSign },
+      {
+        title: "Business Overview",
+        url: "/business-overview",
+        icon: Activity,
+        requiresSubscription: true,
+      },
+      {
+        title: "Profitability",
+        url: "/profitability",
+        icon: TrendingUp,
+        requiresSubscription: true,
+      },
+      {
+        title: "Route Profit Maps",
+        url: "/route-profit-maps",
+        icon: Map,
+        requiresSubscription: true,
+      },
+      {
+        title: "Pricing Tools",
+        url: "/pricing-calculator",
+        icon: Calculator,
+        requiresSubscription: true,
+      },
+      { title: "Reports", url: "/reports", icon: BarChart3, requiresSubscription: true },
+      {
+        title: "Overhead Costs",
+        url: "/overhead-costs",
+        icon: DollarSign,
+        requiresSubscription: true,
+      },
     ],
   },
   {
@@ -94,9 +135,9 @@ const menuSections = [
     key: "setup",
     items: [
       { title: "Settings", url: "/settings", icon: Settings },
-      { title: "Automations", url: "/automation", icon: Zap },
-      { title: "Integrations", url: "/integrations", icon: Plug },
-      { title: "Import Data", url: "/migration", icon: Database },
+      { title: "Automations", url: "/automation", icon: Zap, requiresSubscription: true },
+      { title: "Integrations", url: "/integrations", icon: Plug, requiresSubscription: true },
+      { title: "Import Data", url: "/migration", icon: Database, requiresSubscription: true },
     ],
   },
 ];
@@ -143,6 +184,12 @@ export function AppSidebar({
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
 
+  // Determine plan access
+  const subscriptionStatus = user?.subscriptionStatus;
+  const voicePlanStatus = user?.voicePlanStatus;
+  const hasMainSubscription = subscriptionStatus === "active" || subscriptionStatus === "trialing";
+  const hasVoicePlan = voicePlanStatus === "active";
+
   const { data: company } = useQuery<{ logoUrl: string | null; name: string }>({
     queryKey: ["/api/company"],
   });
@@ -163,6 +210,24 @@ export function AppSidebar({
   const handleNavClick = () => {
     if (isMobile) setOpenMobile(false);
   };
+
+  function isItemLocked(item: MenuItem): boolean {
+    if (item.requiresSubscription && !hasMainSubscription) return true;
+    if (item.requiresVoice && !hasVoicePlan) return true;
+    return false;
+  }
+
+  function getLockTooltip(item: MenuItem): string {
+    if (item.requiresVoice && !hasVoicePlan)
+      return "Add the Voice Agent plan to access this feature";
+    return "Upgrade to full plan to access this feature";
+  }
+
+  function handleLockedClick(e: React.MouseEvent) {
+    e.preventDefault();
+    navigate("/billing");
+    handleNavClick();
+  }
 
   return (
     <Sidebar>
@@ -199,49 +264,55 @@ export function AppSidebar({
                 className="w-full justify-start gap-2"
                 size="sm"
                 data-testid="button-quick-create"
+                disabled={!hasMainSubscription}
+                title={
+                  !hasMainSubscription ? "Upgrade to full plan to use quick-create" : undefined
+                }
               >
                 <Plus className="h-4 w-4" />
                 Create
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuLabel>Quick Create</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setAddContactOpen(true)}
-                data-testid="quick-create-contact"
-              >
-                <UserPlus className="h-4 w-4 mr-2" />
-                New Customer
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  navigate("/quotes?create=true");
-                  handleNavClick();
-                }}
-                data-testid="quick-create-quote"
-              >
-                <ClipboardCheck className="h-4 w-4 mr-2" />
-                New Quote
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setGenerateInvoiceOpen(true)}
-                data-testid="quick-create-invoice"
-              >
-                <Receipt className="h-4 w-4 mr-2" />
-                New Invoice
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  navigate("/scheduling?addJob=1");
-                  handleNavClick();
-                }}
-                data-testid="quick-create-job"
-              >
-                <Briefcase className="h-4 w-4 mr-2" />
-                New Job
-              </DropdownMenuItem>
-            </DropdownMenuContent>
+            {hasMainSubscription && (
+              <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuLabel>Quick Create</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setAddContactOpen(true)}
+                  data-testid="quick-create-contact"
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  New Customer
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    navigate("/quotes?create=true");
+                    handleNavClick();
+                  }}
+                  data-testid="quick-create-quote"
+                >
+                  <ClipboardCheck className="h-4 w-4 mr-2" />
+                  New Quote
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setGenerateInvoiceOpen(true)}
+                  data-testid="quick-create-invoice"
+                >
+                  <Receipt className="h-4 w-4 mr-2" />
+                  New Invoice
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    navigate("/scheduling?addJob=1");
+                    handleNavClick();
+                  }}
+                  data-testid="quick-create-job"
+                >
+                  <Briefcase className="h-4 w-4 mr-2" />
+                  New Job
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            )}
           </DropdownMenu>
         </div>
         <AddContactDialog open={addContactOpen} onOpenChange={setAddContactOpen} />
@@ -289,6 +360,32 @@ export function AppSidebar({
                             : location === item.url ||
                               location.startsWith(item.url + "/") ||
                               location.startsWith(item.url + "?");
+
+                        const locked = isItemLocked(item);
+
+                        if (locked) {
+                          return (
+                            <SidebarMenuItem key={item.title}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <SidebarMenuButton
+                                    data-testid={`link-${item.title.toLowerCase().replace(/[\s/&]/g, "-")}`}
+                                    data-locked="true"
+                                    className="opacity-60 cursor-pointer"
+                                    onClick={handleLockedClick}
+                                  >
+                                    <item.icon className="h-4 w-4" />
+                                    <span>{item.title}</span>
+                                    <Lock className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                  </SidebarMenuButton>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-[200px]">
+                                  {getLockTooltip(item)}
+                                </TooltipContent>
+                              </Tooltip>
+                            </SidebarMenuItem>
+                          );
+                        }
 
                         return (
                           <SidebarMenuItem key={item.title}>

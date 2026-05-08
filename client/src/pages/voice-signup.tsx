@@ -77,13 +77,20 @@ export default function VoiceSignup() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-white dark:from-green-950 dark:to-background flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
-          <CardContent className="p-8 text-center space-y-4">
+          <CardContent className="p-8 text-center space-y-5">
             <CheckCircle className="h-16 w-16 text-green-600 mx-auto" />
-            <h2 className="text-2xl font-bold">Voice Plan Activated</h2>
-            <p className="text-muted-foreground">
-              Your voice agent plan has been successfully activated. You can now configure your
-              voice agent in your ScooPilot dashboard.
+            <h2 className="text-2xl font-bold" data-testid="text-voice-success-heading">
+              Voice Plan Activated
+            </h2>
+            <p className="text-muted-foreground" data-testid="text-voice-success-body">
+              Your voice agent plan has been successfully activated. Check your email for login
+              credentials and head to your dashboard to complete setup.
             </p>
+            <a href="/" className="block">
+              <Button className="w-full" size="lg" data-testid="button-voice-success-dashboard">
+                Go to Dashboard
+              </Button>
+            </a>
           </CardContent>
         </Card>
       </div>

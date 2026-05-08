@@ -111,6 +111,7 @@ import {
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Link } from "wouter";
+import { UpgradeWall } from "@/components/upgrade-wall";
 
 const companyFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -1850,7 +1851,12 @@ function VoiceAgentSection({ company }: { company: Company | null }) {
     },
   });
 
-  if (!hasActiveVoicePlan) return null;
+  if (!hasActiveVoicePlan)
+    return (
+      <div className="h-full overflow-auto p-4">
+        <UpgradeWall type="voice" featureName="Voice Agent" />
+      </div>
+    );
 
   const status = statusQuery.data;
 
@@ -5747,13 +5753,21 @@ export default function Settings() {
       case "voice_api_docs":
         return (
           <div className="h-full overflow-auto">
-            <VoiceApiDocsSection />
+            {company?.voicePlanStatus === "active" ? (
+              <VoiceApiDocsSection />
+            ) : (
+              <UpgradeWall type="voice" featureName="Voice API Docs" />
+            )}
           </div>
         );
       case "call_tracking":
         return (
           <div className="h-full overflow-auto">
-            <CallTrackingSection />
+            {company?.voicePlanStatus === "active" ? (
+              <CallTrackingSection />
+            ) : (
+              <UpgradeWall type="voice" featureName="Call Tracking" />
+            )}
           </div>
         );
       case "voice_agent":

@@ -761,6 +761,84 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               console.log(
                 `[Stripe Voice] checkout.session.completed: activated ${voicePlan} for company "${company.name}" (${company.id})`
               );
+
+              // ── Step 5: Auto-create owner account if company has none ──
+              try {
+                const purchaserEmail =
+                  (
+                    session as Stripe.Checkout.Session & {
+                      customer_details?: { email?: string | null };
+                    }
+                  ).customer_details?.email ||
+                  (session as Stripe.Checkout.Session & { customer_email?: string | null })
+                    .customer_email ||
+                  null;
+
+                if (purchaserEmail) {
+                  // Check if there's already an owner for this company
+                  const { companyUsers: companyUsersTable } = await import("@shared/schema");
+                  const existingOwners = await db
+                    .select({ userId: companyUsersTable.userId })
+                    .from(companyUsersTable)
+                    .where(
+                      and(
+                        eq(companyUsersTable.companyId, company.id),
+                        eq(companyUsersTable.role, "owner"),
+                        eq(companyUsersTable.isActive, true)
+                      )
+                    )
+                    .limit(1);
+
+                  if (existingOwners.length === 0) {
+                    // No owner — create one for the purchaser
+                    const existingUser = await getUserByEmail(purchaserEmail);
+                    const appUrl = getAppBaseUrl() || "https://scoopilot.com";
+                    let ownerUser = existingUser;
+
+                    if (!existingUser) {
+                      const { randomBytes } = await import("crypto");
+                      const tempPassword = randomBytes(8).toString("hex");
+                      ownerUser = await createUserWithTempPassword(
+                        purchaserEmail,
+                        "",
+                        "",
+                        tempPassword
+                      );
+                      await storage.addUserToCompany(ownerUser.id, company.id, "owner");
+                      console.log(
+                        `[Stripe Voice] Auto-created owner account for ${maskEmail(purchaserEmail)} on company "${company.name}" (${company.id})`
+                      );
+
+                      // Send welcome email with credentials
+                      const { subject, text, html } = buildWelcomeEmailContent({
+                        firstName: "there",
+                        companyName: company.name,
+                        appUrl,
+                        email: purchaserEmail,
+                        tempPassword,
+                      });
+                      await sendEmail({
+                        to: purchaserEmail,
+                        subject,
+                        text,
+                        html,
+                        bypassClientSuppression: true,
+                      });
+                    } else {
+                      // Existing user without owner role — add as owner
+                      await storage.addUserToCompany(existingUser.id, company.id, "owner");
+                      console.log(
+                        `[Stripe Voice] Linked existing user ${maskEmail(purchaserEmail)} as owner on company "${company.name}" (${company.id})`
+                      );
+                    }
+                  }
+                }
+              } catch (ownerErr: unknown) {
+                console.error(
+                  `[Stripe Voice] Failed to auto-create owner for company "${company.name}" (${company.id}):`,
+                  ownerErr instanceof Error ? ownerErr.message : String(ownerErr)
+                );
+              }
             }
           }
         }

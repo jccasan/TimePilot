@@ -57,6 +57,13 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       const memberships = await storage.getCompaniesForUser(result.user.id);
       const role = memberships.length > 0 ? memberships[0].role : "tech";
       const companyId = memberships.length > 0 ? memberships[0].companyId : null;
+      let subscriptionStatus: string | null = null;
+      let voicePlanStatus: string | null = null;
+      if (companyId) {
+        const company = await storage.getCompany(companyId);
+        subscriptionStatus = company?.subscriptionStatus ?? null;
+        voicePlanStatus = company?.voicePlanStatus ?? null;
+      }
 
       let setupDone = false;
       try {
@@ -76,6 +83,8 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         companyId,
         setupDone,
         sessionToken: req.sessionID,
+        subscriptionStatus,
+        voicePlanStatus,
       });
     } catch (err) {
       handleError(res, err);
@@ -121,7 +130,14 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       const memberships = await storage.getCompaniesForUser(userId);
       const role = memberships.length > 0 ? memberships[0].role : "tech";
       const companyId = memberships.length > 0 ? memberships[0].companyId : null;
-      return res.json({ ...safeUser, role, companyId });
+      let subscriptionStatus: string | null = null;
+      let voicePlanStatus: string | null = null;
+      if (companyId) {
+        const company = await storage.getCompany(companyId);
+        subscriptionStatus = company?.subscriptionStatus ?? null;
+        voicePlanStatus = company?.voicePlanStatus ?? null;
+      }
+      return res.json({ ...safeUser, role, companyId, subscriptionStatus, voicePlanStatus });
     } catch (err) {
       handleError(res, err);
     }

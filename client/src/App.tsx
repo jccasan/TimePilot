@@ -35,6 +35,7 @@ import RoverChatbot, { type RoverChatbotHandle } from "@/components/rover-chatbo
 import BusinessOnboarding from "@/components/business-onboarding";
 import { ImportModePopup } from "@/components/import-mode-popup";
 import { ImportModeBanner } from "@/components/import-mode-banner";
+import { SubscriptionGate } from "@/components/subscription-gate";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const AuthPage = lazy(() => import("@/pages/auth-page"));
@@ -118,34 +119,94 @@ function Router() {
     <Suspense fallback={<PageLoader />}>
       <Switch>
         <Route path="/" component={Dashboard} />
-        <Route path="/contacts" component={Contacts} />
-        <Route path="/contacts/:id" component={ContactDetail} />
-        <Route path="/scheduling" component={Scheduling} />
-        <Route path="/routes" component={RoutesPage} />
+        <Route path="/contacts">
+          <SubscriptionGate featureName="Customers">
+            <Contacts />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/contacts/:id">
+          <SubscriptionGate featureName="Customers">
+            <ContactDetail />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/scheduling">
+          <SubscriptionGate featureName="Schedule">
+            <Scheduling />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/routes">
+          <SubscriptionGate featureName="Routes">
+            <RoutesPage />
+          </SubscriptionGate>
+        </Route>
         <Route path="/jobs">
           <Redirect to="/scheduling" />
         </Route>
         <Route path="/pipeline" component={Pipeline} />
         <Route path="/m/today" component={TechMobile} />
         <Route path="/quotes" component={Quotes} />
-        <Route path="/invoices" component={Invoices} />
+        <Route path="/invoices">
+          <SubscriptionGate featureName="Invoices">
+            <Invoices />
+          </SubscriptionGate>
+        </Route>
         <Route path="/billing" component={Billing} />
-        <Route path="/automation" component={Automation} />
+        <Route path="/automation">
+          <SubscriptionGate featureName="Automations">
+            <Automation />
+          </SubscriptionGate>
+        </Route>
         <Route path="/api-keys" component={ApiKeysPage} />
         <Route path="/webhooks" component={WebhooksPage} />
         <Route path="/pricing" component={Pricing} />
-        <Route path="/pricing-calculator" component={PricingCalculator} />
-        <Route path="/business-overview" component={BusinessOverview} />
-        <Route path="/profitability" component={Profitability} />
-        <Route path="/profitability/:contactId" component={ProfitabilityDetail} />
-        <Route path="/route-profit-maps" component={RouteProfitMaps} />
-        <Route path="/field-view" component={FieldView} />
+        <Route path="/pricing-calculator">
+          <SubscriptionGate featureName="Pricing Tools">
+            <PricingCalculator />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/business-overview">
+          <SubscriptionGate featureName="Business Overview">
+            <BusinessOverview />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/profitability">
+          <SubscriptionGate featureName="Profitability">
+            <Profitability />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/profitability/:contactId">
+          <SubscriptionGate featureName="Profitability">
+            <ProfitabilityDetail />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/route-profit-maps">
+          <SubscriptionGate featureName="Route Profit Maps">
+            <RouteProfitMaps />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/field-view">
+          <SubscriptionGate featureName="Field Map">
+            <FieldView />
+          </SubscriptionGate>
+        </Route>
         <Route path="/ai-pricing-optimizer">
           <Redirect to="/pricing-calculator?tab=simulator" />
         </Route>
-        <Route path="/overhead-costs" component={OverheadCosts} />
-        <Route path="/communications" component={Communications} />
-        <Route path="/reports" component={Reports} />
+        <Route path="/overhead-costs">
+          <SubscriptionGate featureName="Overhead Costs">
+            <OverheadCosts />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/communications">
+          <SubscriptionGate featureName="Messages">
+            <Communications />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/reports">
+          <SubscriptionGate featureName="Reports">
+            <Reports />
+          </SubscriptionGate>
+        </Route>
         <Route path="/analytics">
           <Redirect to="/reports?tab=analytics" />
         </Route>
@@ -154,8 +215,16 @@ function Router() {
         <Route path="/integrations">
           <Redirect to="/settings" />
         </Route>
-        <Route path="/migration" component={MigrationPage} />
-        <Route path="/import/:batchId/resolve" component={ImportResolverPage} />
+        <Route path="/migration">
+          <SubscriptionGate featureName="Import Data">
+            <MigrationPage />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/import/:batchId/resolve">
+          <SubscriptionGate featureName="Import Data">
+            <ImportResolverPage />
+          </SubscriptionGate>
+        </Route>
         <Route path="/command-center" component={CommandCenter} />
         <Route component={NotFound} />
       </Switch>
