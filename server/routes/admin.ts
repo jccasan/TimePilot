@@ -2914,10 +2914,38 @@ Respond with exactly one category from the list above and nothing else.`;
     }
   });
 
-  app.get("/api/admin/horseman-token", isAdmin, (_req: Request, res: Response) => {
-    const secret = process.env.SESSION_SECRET || "scoopilot-dev-secret";
-    const payload = String(Date.now());
-    const sig = crypto.createHmac("sha256", secret).update(payload).digest("hex");
-    res.json({ token: `${payload}.${sig}` });
+  app.get("/api/admin/horseman-token", isAdmin, (req: Request, res: Response) => {
+    const secret = process.env.HORSEMAN_SSO_SECRET;
+    const baseUrl = (process.env.HORSEMAN_BASE_URL ?? "").replace(/\/+$/, "");
+
+    if (!secret) {
+      return res.status(503).json({ message: "HORSEMAN_SSO_SECRET is not configured." });
+    }
+    if (!baseUrl) {
+      return res.status(503).json({ message: "HORSEMAN_BASE_URL is not configured." });
+    }
+
+    const b64url = (s: string) =>
+      Buffer.from(s).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+
+    const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+    const now = Math.floor(Date.now() / 1000);
+    const claims = {
+      iss: "scoopilot",
+      email: req.adminUser!.email,
+      role: "admin",
+      iat: now,
+      exp: now + 300,
+    };
+    const payload = b64url(JSON.stringify(claims));
+    const sig = crypto
+      .createHmac("sha256", secret)
+      .update(`${header}.${payload}`)
+      .digest("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
+
+    res.json({ token: `${header}.${payload}.${sig}`, baseUrl });
   });
 }

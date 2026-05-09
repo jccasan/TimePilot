@@ -105,7 +105,7 @@ const METRIC_LABELS: Record<string, string> = {
 function HorsemanCRMWidget() {
   const { crmPath, setCrmPath } = useAdminCrm();
 
-  const { data, isLoading, isError } = useQuery<{ token: string }>({
+  const { data, isLoading, isError } = useQuery<{ token: string; baseUrl: string }>({
     queryKey: ["/api/admin/horseman-token"],
     queryFn: adminFetchFn("/api/admin/horseman-token"),
     staleTime: 4 * 60 * 1000,
@@ -115,10 +115,10 @@ function HorsemanCRMWidget() {
     return <div className="h-64 bg-muted rounded animate-pulse" />;
   }
 
-  if (isError || !data?.token) {
+  if (isError || !data?.token || !data?.baseUrl) {
     return (
       <p className="text-xs text-muted-foreground italic">
-        Horseman CRM unavailable — could not obtain SSO token.
+        Horseman CRM unavailable — HORSEMAN_SSO_SECRET or HORSEMAN_BASE_URL is not configured.
       </p>
     );
   }
@@ -129,7 +129,7 @@ function HorsemanCRMWidget() {
         hideSidebar
         path={crmPath}
         onNavigate={setCrmPath}
-        baseUrl="https://horseman-AnchorAI.replit.app"
+        baseUrl={data.baseUrl}
         ssoToken={data.token}
         style={{ height: "100%", width: "100%" }}
         data-testid="horseman-crm-embed"
