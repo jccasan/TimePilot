@@ -2932,7 +2932,7 @@ Respond with exactly one category from the list above and nothing else.`;
     const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
     const now = Math.floor(Date.now() / 1000);
     const claims = {
-      iss: "scoopilot",
+      iss: process.env.HORSEMAN_TENANT_SLUG ?? "scoopilot",
       email: req.adminUser!.email,
       role: "admin",
       iat: now,
