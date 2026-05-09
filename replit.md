@@ -15,6 +15,9 @@ Scoopilot is a production-ready vertical SaaS application designed for pet waste
   2. Present those potential side effects to the user clearly before writing any code.
   3. Wait for the user's approval before proceeding with changes that touch anything outside the explicitly requested scope.
   4. Never make unrequested changes — even if something looks like a bug or improvement opportunity, flag it and ask first.
+- **Protected core functionality — do not modify without explicit user approval:**
+  - `client/src/components/business-onboarding.tsx` — the business onboarding wizard (steps, flow, service area map, pricing setup, voice agent step). Any change to steps, step order, field layout, or wizard behavior requires notifying the user and waiting for approval before proceeding.
+  - `client/src/components/zip-map-selector.tsx` — the ZIP code and radius map selectors used in onboarding.
 
 ## System Architecture
 
