@@ -39,6 +39,7 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  RotateCcw,
 } from "lucide-react";
 import { BarChart, Bar, Tooltip, ResponsiveContainer, XAxis } from "recharts";
 import { TIER_CONFIG } from "@shared/schema";
@@ -615,6 +616,27 @@ export default function AdminDashboard() {
     },
   });
 
+  const resetDemoMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminRequest("POST", "/api/admin/demo/reset");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Demo account reset",
+        description:
+          "Onboarding flags have been cleared. The demo is ready for a fresh walkthrough.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Reset failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const recentTenants = (companies || [])
     .sort(
       (a: any, b: any) =>
@@ -832,6 +854,38 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       )}
+
+      <Card data-testid="card-demo-reset">
+        <CardContent className="pt-5 pb-4 px-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/40">
+                <RotateCcw className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Demo Account</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Clears onboarding flags on the <span className="font-mono">poop-scoop-demo</span>{" "}
+                  company so visitors start fresh.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => resetDemoMutation.mutate()}
+              disabled={resetDemoMutation.isPending}
+              data-testid="button-reset-demo"
+              className="shrink-0"
+            >
+              <RotateCcw
+                className={`h-3.5 w-3.5 mr-1.5 ${resetDemoMutation.isPending ? "animate-spin" : ""}`}
+              />
+              {resetDemoMutation.isPending ? "Resetting…" : "Reset Demo"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid md:grid-cols-2 gap-4">
         <Link href="/admin/tenants">

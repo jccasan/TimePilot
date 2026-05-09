@@ -51,6 +51,7 @@ import {
   p,
   notify,
   seedDefaultLeadSources,
+  getDemoCompanyId,
 } from "./shared";
 
 export async function registerAdminRoutes(app: Express): Promise<void> {
@@ -2947,5 +2948,23 @@ Respond with exactly one category from the list above and nothing else.`;
       .replace(/=/g, "");
 
     res.json({ token: `${header}.${payload}.${sig}`, baseUrl });
+  });
+
+  // ================ Demo Account Management ================
+  app.post("/api/admin/demo/reset", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const demoId = await getDemoCompanyId();
+      if (!demoId) {
+        return res.status(404).json({
+          error: "Demo company not found. No company with slug 'poop-scoop-demo' exists.",
+        });
+      }
+      await db.execute(
+        sql`UPDATE companies SET business_onboarding_step = 0, business_onboarding_complete = false WHERE id = ${demoId}`
+      );
+      return res.json({ ok: true, companyId: demoId });
+    } catch (err) {
+      handleError(res, err);
+    }
   });
 }
