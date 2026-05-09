@@ -1912,7 +1912,6 @@ function VoiceAgentSection({ company }: { company: Company | null }) {
     enabled: hasActiveVoicePlan && activeTab === "config",
   });
 
-
   useEffect(() => {
     if (voiceConfigQuery.data) {
       const d = voiceConfigQuery.data;
