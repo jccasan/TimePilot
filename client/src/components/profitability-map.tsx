@@ -82,7 +82,8 @@ export default function ProfitabilityMap({
 
     (async () => {
       const mapboxgl = (await import("mapbox-gl")).default;
-      if (cancelled) return;
+      if (cancelled || !mapContainerRef.current) return;
+      const container = mapContainerRef.current;
 
       try {
         const workerModule = await import("mapbox-gl/dist/mapbox-gl-csp-worker?worker");
@@ -97,7 +98,7 @@ export default function ProfitabilityMap({
         allStops.length > 0 ? [allStops[0].longitude, allStops[0].latitude] : [-98.5795, 39.8283];
 
       const map = new mapboxgl.Map({
-        container: mapContainerRef.current!,
+        container,
         style: "mapbox://styles/mapbox/light-v11",
         center,
         zoom: allStops.length > 0 ? 11 : 4,

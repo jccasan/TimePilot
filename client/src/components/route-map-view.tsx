@@ -51,7 +51,8 @@ export default function RouteMapView({
 
     (async () => {
       const mapboxgl = (await import("mapbox-gl")).default;
-      if (cancelled) return;
+      if (cancelled || !mapContainerRef.current) return;
+      const container = mapContainerRef.current;
 
       mapboxgl.accessToken = tokenData.token;
 
@@ -69,7 +70,7 @@ export default function RouteMapView({
       const defaultZoom = stops.length > 0 ? 12 : hasCompanyCoords ? 12 : 8;
 
       const map = new mapboxgl.Map({
-        container: mapContainerRef.current!,
+        container,
         style: "mapbox://styles/mapbox/streets-v12",
         center,
         zoom: defaultZoom,

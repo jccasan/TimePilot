@@ -2681,13 +2681,17 @@ function RouteMapPreviewWidget() {
     const loadMap = async () => {
       const mapboxgl = (await import("mapbox-gl")).default;
       await import("mapbox-gl/dist/mapbox-gl.css");
+
+      if (!mapContainerRef.current) return;
+      const container = mapContainerRef.current;
+
       mapboxgl.accessToken = tokenData.token;
 
       const centerLat = mapData.startLat || 37.7749;
       const centerLng = mapData.startLng || -77.4194;
 
       const map = new mapboxgl.Map({
-        container: mapContainerRef.current!,
+        container,
         style: "mapbox://styles/mapbox/light-v11",
         center: [centerLng, centerLat],
         zoom: 10,

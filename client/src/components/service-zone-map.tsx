@@ -81,11 +81,12 @@ export function ServiceZoneMap({
       await import("mapbox-gl/dist/mapbox-gl.css");
 
       if (cancelled || !mapContainerRef.current) return;
+      const container = mapContainerRef.current;
 
       mapboxgl.accessToken = tokenData.token;
 
       const map = new mapboxgl.Map({
-        container: mapContainerRef.current,
+        container,
         style: "mapbox://styles/mapbox/streets-v12",
         center: [-98.5, 39.8],
         zoom: 4,

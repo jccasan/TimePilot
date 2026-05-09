@@ -218,7 +218,8 @@ export default function FieldView() {
 
     (async () => {
       const mapboxgl = (await import("mapbox-gl")).default;
-      if (cancelled) return;
+      if (cancelled || !mapContainerRef.current) return;
+      const container = mapContainerRef.current;
 
       mapboxgl.accessToken = tokenData.token;
 
@@ -229,7 +230,7 @@ export default function FieldView() {
             : [-98.5795, 39.8283];
 
         const map = new mapboxgl.Map({
-          container: mapContainerRef.current!,
+          container,
           style: "mapbox://styles/mapbox/streets-v12",
           center,
           zoom: validVisits.length > 0 ? 11 : 4,
