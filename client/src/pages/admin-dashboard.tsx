@@ -3,7 +3,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { HorsemanCRM, HORSEMAN_NAV_SECTIONS } from "@horseman/react";
+import { HorsemanCRM } from "@horseman/react";
+import { useAdminCrm } from "@/contexts/admin-crm-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -102,7 +103,7 @@ const METRIC_LABELS: Record<string, string> = {
 };
 
 function HorsemanCRMWidget() {
-  const [crmPath, setCrmPath] = useState("/");
+  const { crmPath, setCrmPath } = useAdminCrm();
 
   const { data, isLoading, isError } = useQuery<{ token: string }>({
     queryKey: ["/api/admin/horseman-token"],
@@ -123,42 +124,16 @@ function HorsemanCRMWidget() {
   }
 
   return (
-    <div className="flex gap-0 rounded-md border overflow-hidden" style={{ minHeight: 600 }}>
-      <nav className="w-44 shrink-0 border-r bg-muted/40 py-3 px-2 overflow-y-auto">
-        {HORSEMAN_NAV_SECTIONS.map((section) => (
-          <div key={section.label} className="mb-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 mb-1">
-              {section.label}
-            </p>
-            {section.items.map((item) => (
-              <button
-                key={item.path}
-                data-testid={`horseman-nav-${item.path.replace(/\//g, "")}`}
-                onClick={() => setCrmPath(item.path)}
-                className={[
-                  "w-full text-left text-sm px-2 py-1 rounded transition-colors",
-                  crmPath === item.path
-                    ? "bg-primary text-primary-foreground font-medium"
-                    : "text-foreground hover:bg-muted",
-                ].join(" ")}
-              >
-                {item.name}
-              </button>
-            ))}
-          </div>
-        ))}
-      </nav>
-      <div className="flex-1 min-w-0">
-        <HorsemanCRM
-          hideSidebar
-          path={crmPath}
-          onNavigate={setCrmPath}
-          baseUrl="https://horseman-AnchorAI.replit.app"
-          ssoToken={data.token}
-          style={{ height: "100%", width: "100%" }}
-          data-testid="horseman-crm-embed"
-        />
-      </div>
+    <div className="rounded-md border overflow-hidden" style={{ minHeight: 600 }}>
+      <HorsemanCRM
+        hideSidebar
+        path={crmPath}
+        onNavigate={setCrmPath}
+        baseUrl="https://horseman-AnchorAI.replit.app"
+        ssoToken={data.token}
+        style={{ height: "100%", width: "100%" }}
+        data-testid="horseman-crm-embed"
+      />
     </div>
   );
 }
