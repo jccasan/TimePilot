@@ -2915,6 +2915,58 @@ Respond with exactly one category from the list above and nothing else.`;
     }
   });
 
+  // Proxy all Horseman API calls through our backend to avoid browser CORS restrictions.
+  // The HorsemanCRM component will use /api/horseman-proxy as its baseUrl so every
+  // fetch it makes is same-origin and never hits the Horseman server directly.
+  app.all("/api/horseman-proxy/*", isAdmin, async (req: Request, res: Response) => {
+    const base = (process.env.HORSEMAN_BASE_URL ?? "").replace(/\/+$/, "");
+    if (!base) {
+      return res.status(503).json({ message: "HORSEMAN_BASE_URL not configured" });
+    }
+
+    // req.params[0] is everything after /api/horseman-proxy/
+    const upstreamPath = `/${(req.params as Record<string, string>)[0] ?? ""}`;
+    const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    const url = `${base}${upstreamPath}${qs}`;
+
+    const forwardHeaders: Record<string, string> = {};
+    if (req.headers["content-type"]) {
+      forwardHeaders["content-type"] = req.headers["content-type"] as string;
+    }
+    // Forward all cookies except the ScooPilot session cookie — Horseman won't
+    // understand it and it should never be sent to a third-party service.
+    const rawCookie = req.headers.cookie ?? "";
+    const filtered = rawCookie
+      .split(";")
+      .map((c) => c.trim())
+      .filter((c) => !c.startsWith("scoopilot.sid=") && !c.startsWith("connect.sid="))
+      .join("; ")
+      .trim();
+    if (filtered) forwardHeaders["cookie"] = filtered;
+
+    const init: RequestInit = { method: req.method, headers: forwardHeaders, redirect: "follow" };
+    if (["POST", "PUT", "PATCH"].includes(req.method) && req.body) {
+      init.body = JSON.stringify(req.body);
+    }
+
+    try {
+      const upstream = await fetch(url, init);
+
+      // Forward Set-Cookie so the browser stores Horseman session cookies
+      const setCookie = upstream.headers.get("set-cookie");
+      if (setCookie) res.setHeader("set-cookie", setCookie);
+
+      const contentType = upstream.headers.get("content-type") ?? "";
+      if (contentType) res.setHeader("content-type", contentType);
+
+      res.status(upstream.status);
+      const buf = await upstream.arrayBuffer();
+      res.send(Buffer.from(buf));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/admin/horseman-token", isAdmin, (req: Request, res: Response) => {
     const secret = process.env.HORSEMAN_SSO_SECRET;
     const baseUrl = (process.env.HORSEMAN_BASE_URL ?? "").replace(/\/+$/, "");
@@ -2947,7 +2999,9 @@ Respond with exactly one category from the list above and nothing else.`;
       .replace(/\//g, "_")
       .replace(/=/g, "");
 
-    res.json({ token: `${header}.${payload}.${sig}`, baseUrl });
+    // Return the proxy path as baseUrl — the HorsemanCRM component will use this
+    // as a prefix for all its API calls, keeping them same-origin and CORS-free.
+    res.json({ token: `${header}.${payload}.${sig}`, baseUrl: "/api/horseman-proxy" });
   });
 
   // ================ Demo Account Management ================
