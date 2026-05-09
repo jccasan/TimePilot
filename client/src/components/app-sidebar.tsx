@@ -37,6 +37,7 @@ import {
   GraduationCap,
   MessageCircle,
   Lock,
+  ClipboardList,
 } from "lucide-react";
 import {
   Sidebar,
@@ -89,6 +90,12 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
         title: "Messages",
         url: "/communications",
         icon: MessageSquare,
+        requiresSubscription: true,
+      },
+      {
+        title: "Quotes",
+        url: "/quotes",
+        icon: ClipboardList,
         requiresSubscription: true,
       },
     ],
