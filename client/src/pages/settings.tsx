@@ -65,6 +65,7 @@ import {
   Wand2,
   Radio,
   Clock,
+  Trash2,
 } from "lucide-react";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -1849,6 +1850,12 @@ type GeneratedDocs = {
   policies: string;
 };
 
+type KbDocument = {
+  fileId: string;
+  filename: string;
+  createdAt: string | null;
+};
+
 function VoiceAgentSection({ company }: { company: Company | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -1899,6 +1906,12 @@ function VoiceAgentSection({ company }: { company: Company | null }) {
   const selectedCall = selectedCallId
     ? ((callsQuery.data ?? []).find((c) => c.id === selectedCallId) ?? null)
     : null;
+
+  const kbDocumentsQuery = useQuery<{ documents: KbDocument[] }>({
+    queryKey: ["/api/voice/kb-documents"],
+    enabled: hasActiveVoicePlan && activeTab === "config",
+  });
+
 
   useEffect(() => {
     if (voiceConfigQuery.data) {
@@ -1976,9 +1989,28 @@ function VoiceAgentSection({ company }: { company: Company | null }) {
       });
       setUploadFileName(null);
       if (docUploadRef.current) docUploadRef.current.value = "";
+      qc.invalidateQueries({ queryKey: ["/api/voice/kb-documents"] });
     },
     onError: (err: any) => {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteDocMutation = useMutation({
+    mutationFn: async (fileId: string) => {
+      const res = await apiRequest("DELETE", `/api/voice/kb-documents/${fileId}`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Delete failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Document deleted", description: "File removed from the knowledge base." });
+      qc.invalidateQueries({ queryKey: ["/api/voice/kb-documents"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -2440,6 +2472,69 @@ function VoiceAgentSection({ company }: { company: Company | null }) {
                     </p>
                   )}
                 </div>
+
+                {/* KB Documents List */}
+                {cfg?.retellKnowledgeBaseId && (
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5">
+                      <FileText className="h-4 w-4" />
+                      Uploaded Documents
+                    </Label>
+                    {kbDocumentsQuery.isLoading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-9 w-full" />
+                        <Skeleton className="h-9 w-full" />
+                      </div>
+                    ) : kbDocumentsQuery.data?.documents?.length === 0 ||
+                      !kbDocumentsQuery.data?.documents ? (
+                      <p className="text-xs text-muted-foreground py-2">
+                        No documents uploaded yet. Click Choose File to add one.
+                      </p>
+                    ) : (
+                      <div className="rounded-md border divide-y">
+                        {kbDocumentsQuery.data.documents.map((doc) => (
+                          <div
+                            key={doc.fileId}
+                            className="flex items-center justify-between px-3 py-2 gap-2"
+                            data-testid={`kb-document-row-${doc.fileId}`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p
+                                className="text-sm truncate"
+                                data-testid={`text-kb-filename-${doc.fileId}`}
+                              >
+                                {doc.filename}
+                              </p>
+                              {doc.createdAt && (
+                                <p
+                                  className="text-xs text-muted-foreground"
+                                  data-testid={`text-kb-date-${doc.fileId}`}
+                                >
+                                  {new Date(doc.createdAt).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => deleteDocMutation.mutate(doc.fileId)}
+                              disabled={deleteDocMutation.isPending}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                              data-testid={`button-delete-kb-doc-${doc.fileId}`}
+                            >
+                              {deleteDocMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                              <span className="sr-only">Delete</span>
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

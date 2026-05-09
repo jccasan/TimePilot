@@ -846,6 +846,120 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get("/api/voice/kb-documents", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!company.voicePlanStatus || company.voicePlanStatus !== "active") {
+        return res.status(403).json({ error: "Voice plan not active" });
+      }
+
+      const retellApiKey = process.env.RETELL_API_KEY;
+      if (!retellApiKey) return res.status(400).json({ error: "RETELL_API_KEY not configured" });
+
+      const kbId = company.retellKnowledgeBaseId;
+      if (!kbId) {
+        return res.json({ documents: [] });
+      }
+
+      const kbRes = await fetch(`https://api.retellai.com/get-knowledge-base/${kbId}`, {
+        headers: { Authorization: `Bearer ${retellApiKey}` },
+      });
+
+      if (!kbRes.ok) {
+        const errText = await kbRes.text();
+        console.error(`[Retell KB list] Failed (${kbRes.status}): ${errText}`);
+        return res.status(502).json({ error: "Failed to fetch knowledge base documents" });
+      }
+
+      const kbData = (await kbRes.json()) as {
+        knowledge_base_files?: Array<{
+          file_id: string;
+          filename?: string;
+          file_name?: string;
+          created_at?: number;
+        }>;
+      };
+
+      const documents = (kbData.knowledge_base_files || []).map((f) => ({
+        fileId: f.file_id,
+        filename: f.filename || f.file_name || f.file_id,
+        createdAt: f.created_at ? new Date(f.created_at * 1000).toISOString() : null,
+      }));
+
+      res.json({ documents });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.delete(
+    "/api/voice/kb-documents/:fileId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+
+        const company = await storage.getCompany(companyId);
+        if (!company) return res.status(404).json({ error: "Company not found" });
+        if (!company.voicePlanStatus || company.voicePlanStatus !== "active") {
+          return res.status(403).json({ error: "Voice plan not active" });
+        }
+
+        const retellApiKey = process.env.RETELL_API_KEY;
+        if (!retellApiKey) return res.status(400).json({ error: "RETELL_API_KEY not configured" });
+
+        const fileId = Array.isArray(req.params.fileId) ? req.params.fileId[0] : req.params.fileId;
+        if (!fileId) return res.status(400).json({ error: "Missing fileId" });
+
+        // Verify the fileId belongs to this company's knowledge base before deleting
+        const kbId = company.retellKnowledgeBaseId;
+        if (!kbId) {
+          return res.status(400).json({ error: "No knowledge base configured for this company" });
+        }
+
+        const verifyRes = await fetch(`https://api.retellai.com/get-knowledge-base/${kbId}`, {
+          headers: { Authorization: `Bearer ${retellApiKey}` },
+        });
+
+        if (!verifyRes.ok) {
+          return res.status(502).json({ error: "Failed to verify knowledge base ownership" });
+        }
+
+        const kbData = (await verifyRes.json()) as {
+          knowledge_base_files?: Array<{ file_id: string }>;
+        };
+
+        const ownedFileIds = new Set((kbData.knowledge_base_files || []).map((f) => f.file_id));
+        if (!ownedFileIds.has(fileId)) {
+          return res.status(403).json({ error: "File not found in this company's knowledge base" });
+        }
+
+        const delRes = await fetch(
+          `https://api.retellai.com/delete-knowledge-base-file/${fileId}`,
+          {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${retellApiKey}` },
+          }
+        );
+
+        if (!delRes.ok) {
+          const errText = await delRes.text();
+          console.error(`[Retell KB delete] Failed (${delRes.status}): ${errText}`);
+          return res.status(502).json({ error: "Failed to delete document from knowledge base" });
+        }
+
+        res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
   app.post("/api/voice/sync-agent", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role, userId } = await getCompanyContext(req);
