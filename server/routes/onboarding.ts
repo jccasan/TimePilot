@@ -25,12 +25,13 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
       if (!userId) return res.status(401).json({ error: "Not authenticated" });
       const result = await ensureCompanySetup(userId);
       const demoId = await getDemoCompanyId();
-      if (demoId && demoId === result.companyId) {
+      const isDemo = !!(demoId && demoId === result.companyId);
+      if (isDemo) {
         await db.execute(
           sql`UPDATE companies SET business_onboarding_step = 0, business_onboarding_complete = false WHERE id = ${result.companyId}`
         );
       }
-      return res.json(result);
+      return res.json({ ...result, isDemo });
     } catch (err) {
       handleError(res, err);
     }
@@ -39,6 +40,8 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
   app.get("/api/onboarding/status", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      const demoId = await getDemoCompanyId();
+      const isDemo = !!(demoId && demoId === companyId);
       const contactsList = await storage.getContacts(companyId);
       const routesList = await storage.getRoutes(companyId);
       const plansList = await storage.getServicePlans(companyId);
@@ -83,7 +86,9 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
         { key: "generate_route", label: "Generate your first route", completed: hasRoutes },
       ];
 
-      const isComplete = steps.filter((s) => s.key !== "service_zones").every((s) => s.completed);
+      const isComplete = isDemo
+        ? false
+        : steps.filter((s) => s.key !== "service_zones").every((s) => s.completed);
       res.json({
         isComplete,
         steps,
@@ -133,6 +138,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
         res.json({
           currentStep: step,
           isComplete: isDemo ? false : ((row.business_onboarding_complete as boolean) ?? false),
+          isDemo: !!isDemo,
           completedSteps,
           companyData: {
             name: row.name,

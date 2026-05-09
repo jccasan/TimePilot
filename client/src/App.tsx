@@ -291,7 +291,7 @@ function AuthenticatedLayout() {
     data: businessOnboarding,
     isLoading: businessOnboardingLoading,
     isError: businessOnboardingError,
-  } = useQuery<{ isComplete: boolean }>({
+  } = useQuery<{ isComplete: boolean; isDemo?: boolean }>({
     queryKey: ["/api/onboarding/business-status"],
     enabled: setupState === "ready",
     retry: 2,
@@ -301,13 +301,23 @@ function AuthenticatedLayout() {
     () => localStorage.getItem("scoopilot_setup_dismissed") === "true"
   );
   useEffect(() => {
+    if (businessOnboarding?.isDemo) {
+      localStorage.removeItem("scoopilot_setup_dismissed");
+      setSetupDismissed(false);
+      setBusinessOnboardingDone(false);
+    }
+  }, [businessOnboarding?.isDemo]);
+  useEffect(() => {
     const handler = () => setSetupDismissed(true);
     window.addEventListener("scoopilot:setup-dismissed", handler);
     return () => window.removeEventListener("scoopilot:setup-dismissed", handler);
   }, []);
   const isSetupDoneOrDismissed = onboardingStatus?.isComplete || setupDismissed;
 
-  const setupMutation = useMutation({
+  const setupMutation = useMutation<
+    { companyId: string; alreadySetup: boolean; isDemo: boolean },
+    Error
+  >({
     mutationFn: async () => {
       const { getAuthHeaders } = await import("@/lib/queryClient");
       const res = await fetch("/api/setup", {
@@ -326,7 +336,11 @@ function AuthenticatedLayout() {
       if (!res.ok) throw new Error(`Setup failed: ${res.status}`);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: { companyId: string; alreadySetup: boolean; isDemo: boolean }) => {
+      if (data?.isDemo) {
+        localStorage.removeItem("scoopilot_setup_dismissed");
+        setSetupDismissed(false);
+      }
       setSetupState("ready");
     },
     onError: (err: any) => {
