@@ -913,16 +913,26 @@ function CreateEditQuoteDialog({
     markupPct,
   ]);
 
-  const { data: calculatedPricing } = useQuery<TierPricing>({
+  const {
+    data: calculatedPricing,
+    isError: isPricingError,
+    error: pricingError,
+    refetch: refetchPricing,
+    isFetching: isPricingFetching,
+  } = useQuery<TierPricing>({
     queryKey: ["/api/quotes/calculate-pricing", pricingParams],
     queryFn: async () => {
       const res = await fetch(`/api/quotes/calculate-pricing?${pricingParams}`, {
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to calculate pricing");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Pricing request failed (${res.status})`);
+      }
       return res.json();
     },
     enabled: open,
+    retry: 1,
   });
 
   useEffect(() => {
@@ -935,6 +945,12 @@ function CreateEditQuoteDialog({
       }
     }
   }, [calculatedPricing, featuresCustomized]);
+
+  useEffect(() => {
+    if (isPricingError && !livePricing) {
+      setManualOverride(true);
+    }
+  }, [isPricingError, livePricing]);
 
   const { data: contactProperties } = useQuery<Property[]>({
     queryKey: ["/api/properties", { contactId }],
@@ -1113,7 +1129,10 @@ function CreateEditQuoteDialog({
 
   const handleSubmit = () => {
     const p = livePricing;
-    if (!p) return;
+    const usingManualOnly = !p && manualOverride;
+
+    if (!p && !usingManualOnly) return;
+    if (usingManualOnly && (!overrideEssential || !overridePremium || !overrideDeluxe)) return;
 
     const data: Record<string, unknown> = {
       type: quoteType,
@@ -1130,16 +1149,29 @@ function CreateEditQuoteDialog({
       notes: notes || null,
       internalNotes: internalNotes || null,
       isFirstTime,
-      essentialPrice:
-        manualOverride && overrideEssential ? overrideEssential : p.essential.toFixed(2),
-      premiumPrice: manualOverride && overridePremium ? overridePremium : p.premium.toFixed(2),
-      deluxePrice: manualOverride && overrideDeluxe ? overrideDeluxe : p.deluxe.toFixed(2),
-      initialCleanFee: overrideInitialClean || p.initialCleanFee.toFixed(2),
+      essentialPrice: usingManualOnly
+        ? overrideEssential
+        : manualOverride && overrideEssential
+          ? overrideEssential
+          : p!.essential.toFixed(2),
+      premiumPrice: usingManualOnly
+        ? overridePremium
+        : manualOverride && overridePremium
+          ? overridePremium
+          : p!.premium.toFixed(2),
+      deluxePrice: usingManualOnly
+        ? overrideDeluxe
+        : manualOverride && overrideDeluxe
+          ? overrideDeluxe
+          : p!.deluxe.toFixed(2),
+      initialCleanFee: overrideInitialClean || (p ? p.initialCleanFee.toFixed(2) : "0.00"),
       essentialFeatures:
-        customEssentialFeatures.length > 0 ? customEssentialFeatures : p.essentialFeatures,
-      premiumFeatures: customPremiumFeatures.length > 0 ? customPremiumFeatures : p.premiumFeatures,
-      deluxeFeatures: customDeluxeFeatures.length > 0 ? customDeluxeFeatures : p.deluxeFeatures,
-      pricingBreakdown: p.breakdown,
+        customEssentialFeatures.length > 0 ? customEssentialFeatures : p ? p.essentialFeatures : [],
+      premiumFeatures:
+        customPremiumFeatures.length > 0 ? customPremiumFeatures : p ? p.premiumFeatures : [],
+      deluxeFeatures:
+        customDeluxeFeatures.length > 0 ? customDeluxeFeatures : p ? p.deluxeFeatures : [],
+      pricingBreakdown: p ? p.breakdown : null,
       images: quoteImages.length > 0 ? quoteImages : null,
       expiresAt: expiresAt || null,
     };
@@ -1688,21 +1720,48 @@ function CreateEditQuoteDialog({
             </div>
           )}
 
-          {livePricing && (
+          {isPricingError && !livePricing && (
+            <div
+              data-testid="alert-pricing-error"
+              className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start justify-between gap-3"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-800">Could not load pricing</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  {(pricingError as Error)?.message || "Check your pricing settings or try again."}{" "}
+                  Enter prices manually below to continue.
+                </p>
+              </div>
+              <Button
+                data-testid="button-retry-pricing"
+                variant="outline"
+                size="sm"
+                className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100"
+                onClick={() => refetchPricing()}
+                disabled={isPricingFetching}
+              >
+                {isPricingFetching ? <Loader2 className="h-3 w-3 animate-spin" /> : "Retry"}
+              </Button>
+            </div>
+          )}
+
+          {(livePricing || (isPricingError && !livePricing)) && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-sm">Tier Pricing Preview</h3>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    data-testid="switch-manual-override"
-                    checked={manualOverride}
-                    onCheckedChange={setManualOverride}
-                  />
-                  <Label className="text-xs">Manual price override</Label>
-                </div>
+                {livePricing && (
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      data-testid="switch-manual-override"
+                      checked={manualOverride}
+                      onCheckedChange={setManualOverride}
+                    />
+                    <Label className="text-xs">Manual price override</Label>
+                  </div>
+                )}
               </div>
 
-              {manualOverride ? (
+              {manualOverride || (isPricingError && !livePricing) ? (
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <Label className="text-xs">Essential Price</Label>
@@ -1710,7 +1769,10 @@ function CreateEditQuoteDialog({
                       data-testid="input-override-essential"
                       type="number"
                       step="0.01"
-                      value={overrideEssential || livePricing.essential.toFixed(2)}
+                      placeholder="0.00"
+                      value={
+                        overrideEssential || (livePricing ? livePricing.essential.toFixed(2) : "")
+                      }
                       onChange={(e) => setOverrideEssential(e.target.value)}
                     />
                   </div>
@@ -1720,7 +1782,8 @@ function CreateEditQuoteDialog({
                       data-testid="input-override-premium"
                       type="number"
                       step="0.01"
-                      value={overridePremium || livePricing.premium.toFixed(2)}
+                      placeholder="0.00"
+                      value={overridePremium || (livePricing ? livePricing.premium.toFixed(2) : "")}
                       onChange={(e) => setOverridePremium(e.target.value)}
                     />
                   </div>
@@ -1730,12 +1793,13 @@ function CreateEditQuoteDialog({
                       data-testid="input-override-deluxe"
                       type="number"
                       step="0.01"
-                      value={overrideDeluxe || livePricing.deluxe.toFixed(2)}
+                      placeholder="0.00"
+                      value={overrideDeluxe || (livePricing ? livePricing.deluxe.toFixed(2) : "")}
                       onChange={(e) => setOverrideDeluxe(e.target.value)}
                     />
                   </div>
                 </div>
-              ) : (
+              ) : livePricing ? (
                 <TierPreviewCards
                   pricing={{
                     ...livePricing,
@@ -1753,19 +1817,21 @@ function CreateEditQuoteDialog({
                         : livePricing.deluxeFeatures,
                   }}
                 />
-              )}
+              ) : null}
 
-              <div className="flex justify-end">
-                <Button
-                  data-testid="button-edit-features"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditingFeatures(!editingFeatures)}
-                >
-                  <Pencil className="h-3 w-3 mr-1" />
-                  {editingFeatures ? "Done Editing Packages" : "Edit Packages"}
-                </Button>
-              </div>
+              {livePricing && (
+                <div className="flex justify-end">
+                  <Button
+                    data-testid="button-edit-features"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditingFeatures(!editingFeatures)}
+                  >
+                    <Pencil className="h-3 w-3 mr-1" />
+                    {editingFeatures ? "Done Editing Packages" : "Edit Packages"}
+                  </Button>
+                </div>
+              )}
 
               {editingFeatures && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border rounded-lg p-4 bg-muted/30">
@@ -1851,22 +1917,23 @@ function CreateEditQuoteDialog({
                 </div>
               )}
 
-              {(livePricing.initialCleanFee > 0 || isFirstTime || isInitialClean) && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
-                  <span className="text-sm text-amber-800 font-semibold">
-                    Initial Clean Fee (one-time)
-                  </span>
-                  <Input
-                    data-testid="input-override-initial-clean-preview"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    className="w-28 h-7 text-sm text-right"
-                    value={overrideInitialClean || livePricing.initialCleanFee.toFixed(2)}
-                    onChange={(e) => setOverrideInitialClean(e.target.value)}
-                  />
-                </div>
-              )}
+              {livePricing &&
+                (livePricing.initialCleanFee > 0 || isFirstTime || isInitialClean) && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+                    <span className="text-sm text-amber-800 font-semibold">
+                      Initial Clean Fee (one-time)
+                    </span>
+                    <Input
+                      data-testid="input-override-initial-clean-preview"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="w-28 h-7 text-sm text-right"
+                      value={overrideInitialClean || livePricing.initialCleanFee.toFixed(2)}
+                      onChange={(e) => setOverrideInitialClean(e.target.value)}
+                    />
+                  </div>
+                )}
             </div>
           )}
 
@@ -2020,7 +2087,12 @@ function CreateEditQuoteDialog({
             <Button
               data-testid="button-save-quote"
               onClick={handleSubmit}
-              disabled={!livePricing || !contactName || createMutation.isPending}
+              disabled={
+                (!livePricing &&
+                  !(manualOverride && overrideEssential && overridePremium && overrideDeluxe)) ||
+                !contactName ||
+                createMutation.isPending
+              }
             >
               {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {isEdit ? "Update Quote" : "Create Quote"}

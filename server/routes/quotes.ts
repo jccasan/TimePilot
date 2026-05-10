@@ -310,7 +310,11 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
     try {
       const { companyId } = await getCompanyContext(req);
       const company = await storage.getCompany(companyId);
-      const companyQuoteDefaults = company?.quoteDefaults ?? null;
+      if (!company) {
+        console.warn(`[calculate-pricing] company not found for companyId=${companyId}`);
+        return res.status(404).json({ error: "Company not found" });
+      }
+      const companyQuoteDefaults = company.quoteDefaults ?? null;
 
       const type = req.query.type as string;
       if (type === "residential") {
