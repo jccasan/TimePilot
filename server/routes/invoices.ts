@@ -47,8 +47,17 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0;
       const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 0;
 
-      if (page > 0 && limit > 0) {
-        const result = await storage.getInvoicesPage(companyId, filters, page, limit);
+      // When a contactId is present, always return all invoices for that contact (no pagination)
+      const usePagination = page > 0 && limit > 0 && !filters.contactId;
+
+      if (usePagination) {
+        // For the "all" tab (no specific status), exclude voided server-side so the total
+        // count reflects exactly what is displayed — no client-side filtering skew
+        const pageFilters: { contactId?: string; status?: string; excludeVoided?: boolean } = {
+          ...filters,
+        };
+        if (!pageFilters.status) pageFilters.excludeVoided = true;
+        const result = await storage.getInvoicesPage(companyId, pageFilters, page, limit);
         res.json({ invoices: result.data, total: result.total, page, pageSize: limit });
       } else {
         const invoicesList = await storage.getInvoices(companyId, filters);

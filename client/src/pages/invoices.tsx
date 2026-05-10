@@ -1119,47 +1119,16 @@ export default function Invoices() {
     }
   };
 
-  const isSpecialInvTab = ["unpaid", "overdue", "uninvoiced"].includes(statusFilter);
+  // Only "uninvoiced" skips pagination — it uses a separate summary endpoint.
+  // "overdue" and "unpaid" now use server-side virtual filters with pagination.
+  const isSpecialInvTab = statusFilter === "uninvoiced";
 
   const { data: invoicesResult, isLoading } = useQuery<{ data: Invoice[]; total: number }>({
-    queryKey: ["/api/invoices", statusFilter, isSpecialInvTab ? undefined : invPage],
+    queryKey: ["/api/invoices", statusFilter, invPage],
     queryFn: async () => {
       const token = localStorage.getItem("sessionToken");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      if (statusFilter === "unpaid") {
-        const [draft, sent, pending] = await Promise.all([
-          fetch("/api/invoices?status=draft", { credentials: "include", headers }).then((r) =>
-            r.ok ? r.json() : []
-          ),
-          fetch("/api/invoices?status=sent", { credentials: "include", headers }).then((r) =>
-            r.ok ? r.json() : []
-          ),
-          fetch("/api/invoices?status=pending", { credentials: "include", headers }).then((r) =>
-            r.ok ? r.json() : []
-          ),
-        ]);
-        const now = new Date();
-        const combined = [...draft, ...sent, ...pending];
-        const data = combined.filter(
-          (inv: Invoice) => !(inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now)
-        );
-        return { data, total: data.length };
-      }
-      if (statusFilter === "overdue") {
-        const r = await fetch("/api/invoices", { credentials: "include", headers });
-        if (!r.ok) throw new Error("Failed to fetch invoices");
-        const all: Invoice[] = await r.json();
-        const now = new Date();
-        const data = all.filter(
-          (inv: Invoice) =>
-            inv.status !== "paid" &&
-            inv.status !== "voided" &&
-            inv.dueDate &&
-            new Date(inv.dueDate + "T23:59:59") < now
-        );
-        return { data, total: data.length };
-      }
       const params = new URLSearchParams();
       if (statusFilter !== "all" && statusFilter !== "uninvoiced") {
         params.set("status", statusFilter);
@@ -1172,12 +1141,9 @@ export default function Invoices() {
       if (!r.ok) throw new Error("Failed to fetch invoices");
       const result = await r.json();
       if (result && typeof result === "object" && "invoices" in result) {
-        const data = (result.invoices as Invoice[]).filter(
-          (inv: Invoice) => inv.status !== "voided"
-        );
-        return { data, total: result.total as number };
+        return { data: result.invoices as Invoice[], total: result.total as number };
       }
-      const data = (result as Invoice[]).filter((inv: Invoice) => inv.status !== "voided");
+      const data = result as Invoice[];
       return { data, total: data.length };
     },
   });

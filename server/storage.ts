@@ -409,7 +409,7 @@ export interface IStorage {
   ): Promise<Invoice[]>;
   getInvoicesPage(
     companyId: string,
-    filters?: { contactId?: string; status?: string },
+    filters?: { contactId?: string; status?: string; excludeVoided?: boolean },
     page?: number,
     limit?: number
   ): Promise<{ data: Invoice[]; total: number }>;
@@ -2098,16 +2098,34 @@ export class DatabaseStorage implements IStorage {
 
   async getInvoicesPage(
     companyId: string,
-    filters?: { contactId?: string; status?: string },
+    filters?: { contactId?: string; status?: string; excludeVoided?: boolean },
     page: number = 1,
     limit: number = 50
   ): Promise<{ data: Invoice[]; total: number }> {
     const conditions = [eq(invoices.companyId, companyId)];
     if (filters?.contactId) conditions.push(eq(invoices.contactId, filters.contactId));
-    if (filters?.status)
+
+    if (filters?.status === "overdue") {
+      // Invoices that are past their due date and not yet paid or voided
       conditions.push(
-        eq(invoices.status, filters.status as (typeof invoices.$inferSelect)["status"])
+        sql`${invoices.status} NOT IN ('paid', 'voided')`,
+        sql`${invoices.dueDate} IS NOT NULL`,
+        sql`${invoices.dueDate} < CURRENT_DATE`
       );
+    } else if (filters?.status === "unpaid") {
+      // Draft/sent/pending invoices that are not yet past due
+      conditions.push(
+        sql`${invoices.status} IN ('draft', 'sent', 'pending')`,
+        sql`(${invoices.dueDate} IS NULL OR ${invoices.dueDate} >= CURRENT_DATE)`
+      );
+    } else {
+      if (filters?.status)
+        conditions.push(
+          eq(invoices.status, filters.status as (typeof invoices.$inferSelect)["status"])
+        );
+      if (filters?.excludeVoided) conditions.push(sql`${invoices.status} != 'voided'`);
+    }
+
     const offset = (page - 1) * limit;
     const [data, countResult] = await Promise.all([
       db

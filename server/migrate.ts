@@ -291,19 +291,21 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] Demo account voice_plan_status ensured active");
 
-    // GIN trigram index for fast contact search (name, email, phone)
+    // Per-column GIN trigram indexes for fast ILIKE searches on individual columns
+    // These allow PostgreSQL to use a bitmap OR scan across all four predicates
     await client.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
-    await client.query(
-      `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_contacts_search_trgm
-         ON contacts
-         USING GIN ((
-           coalesce(first_name,'') || ' ' ||
-           coalesce(last_name,'')  || ' ' ||
-           coalesce(email,'')      || ' ' ||
-           coalesce(phone,'')
-         ) gin_trgm_ops)`
-    );
-    console.log("[Migration] contacts GIN trigram index ensured");
+    for (const [indexName, colName] of [
+      ["idx_contacts_first_name_trgm", "first_name"],
+      ["idx_contacts_last_name_trgm", "last_name"],
+      ["idx_contacts_email_trgm", "email"],
+      ["idx_contacts_phone_trgm", "phone"],
+    ] as [string, string][]) {
+      await client.query(
+        `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${indexName}
+           ON contacts USING GIN (${colName} gin_trgm_ops)`
+      );
+    }
+    console.log("[Migration] contacts per-column GIN trigram indexes ensured");
 
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {

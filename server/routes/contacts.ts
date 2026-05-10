@@ -507,16 +507,14 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const contactsList = contactsResult.data;
       const stopOnlyOnlyIds = getStopOnlyOnlyContactIds(activePlans);
 
-      const contactIds = contactsList.map((c) => c.id);
       let onboardingMap = new Map<string, { pending: boolean; completed: boolean }>();
-      if (contactIds.length > 0) {
+      {
         const onboardingRows = await db.execute(sql`
           SELECT DISTINCT ON (contact_id) contact_id,
             onboarding_completed_at IS NULL AS pending,
             onboarding_completed_at IS NOT NULL AS completed
           FROM properties
           WHERE company_id = ${companyId}
-            AND contact_id = ANY(${contactIds}::text[])
           ORDER BY contact_id, onboarding_completed_at DESC NULLS LAST
         `);
         for (const row of onboardingRows.rows as {

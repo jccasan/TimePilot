@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql, eq, and } from "drizzle-orm";
-import { contacts, reminderLogs, type InsertVisit } from "@shared/schema";
+import { contacts, reminderLogs, type InsertVisit, type Visit } from "@shared/schema";
 import { ObjectStorageService } from "../replit_integrations/object_storage";
 import { sendEmail } from "../services/email";
 import {
@@ -35,30 +35,45 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       const { companyId, role, userId } = await getCompanyContext(req);
       const dateParam = req.query.date as string | undefined;
       const targetDate = dateParam || new Date().toISOString().split("T")[0];
-      let visitsList = await storage.getVisits(companyId, { date: targetDate });
 
+      // Query 1 of 2: routes (needed for tech filtering and route name/color)
       const isTech = role === "tech";
       const companyRoutes = await storage.getRoutes(companyId);
       const routeMap = new Map(companyRoutes.map((r) => [r.id, r]));
+      const techRouteIds = isTech
+        ? new Set(companyRoutes.filter((r) => r.technicianId === userId).map((r) => r.id))
+        : null;
 
-      if (isTech) {
-        const techRouteIds = new Set(
-          companyRoutes.filter((r) => r.technicianId === userId).map((r) => r.id)
-        );
-        visitsList = visitsList.filter((v) => v.routeId && techRouteIds.has(v.routeId));
-      }
-
-      // Single JOIN query to replace the N+1 loop (3-5 queries per visit → 1 total)
-      const visitIds = visitsList.map((v) => v.id);
+      // Query 2 of 2: single JOIN across visits + plans + properties + contacts + add-ons
+      // Filters by company_id + date, eliminating the old getVisits() call entirely
       type JoinRow = {
         visit_id: string;
+        v_service_plan_id: string;
+        v_job_id: string | null;
+        v_property_id: string;
+        v_route_id: string | null;
+        v_scheduled_date: string;
+        v_status: string;
+        v_en_route_at: Date | null;
+        v_started_at: Date | null;
+        v_completed_at: Date | null;
+        v_completed_by: string | null;
+        v_proof: string | null;
+        v_proof_before: string | null;
+        v_gate_closed: string | null;
+        v_extra_photos: unknown;
+        v_tech_notes: string | null;
+        v_invoice_id: string | null;
+        v_reminder_sent_at: Date | null;
+        v_created_at: Date;
+        v_updated_at: Date;
         stop_order: number | null;
         sp_contact_id: string | null;
         service_name: string | null;
         frequency: string | null;
         street_address: string | null;
         city: string | null;
-        state: string | null;
+        prop_state: string | null;
         gate_code: string | null;
         special_instructions: string | null;
         measured_yard_sqft: number | null;
@@ -75,46 +90,62 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         addon_name: string | null;
         addon_price: string | null;
       };
-      const joinRows =
-        visitIds.length > 0
-          ? ((
-              await db.execute(sql`
-            SELECT
-              v.id                        AS visit_id,
-              sp.stop_order               AS stop_order,
-              sp.contact_id               AS sp_contact_id,
-              sp.service_name             AS service_name,
-              sp.frequency                AS frequency,
-              p.street_address            AS street_address,
-              p.city                      AS city,
-              p.state                     AS state,
-              p.gate_code                 AS gate_code,
-              p.special_instructions      AS special_instructions,
-              p.measured_yard_sqft        AS measured_yard_sqft,
-              p.lot_size                  AS lot_size,
-              p.number_of_dogs            AS number_of_dogs,
-              p.has_dangerous_dog         AS has_dangerous_dog,
-              p.dangerous_dog_notes       AS dangerous_dog_notes,
-              p.latitude                  AS latitude,
-              p.longitude                 AS longitude,
-              c.id                        AS contact_id_col,
-              c.first_name                AS first_name,
-              c.last_name                 AS last_name,
-              c.phone                     AS phone,
-              spa.name                    AS addon_name,
-              spa.price                   AS addon_price
-            FROM visits v
-            LEFT JOIN service_plans sp  ON sp.id = v.service_plan_id
-            LEFT JOIN properties p      ON p.id = v.property_id
-            LEFT JOIN contacts c        ON c.id = sp.contact_id
-            LEFT JOIN service_plan_add_ons spa
-                   ON spa.service_plan_id = v.service_plan_id AND spa.is_active = true
-            WHERE v.id = ANY(${visitIds}::text[])
-          `)
-            ).rows as JoinRow[])
-          : [];
+      const joinRows = (
+        await db.execute(sql`
+          SELECT
+            v.id                             AS visit_id,
+            v.service_plan_id                AS v_service_plan_id,
+            v.job_id                         AS v_job_id,
+            v.property_id                    AS v_property_id,
+            v.route_id                       AS v_route_id,
+            v.scheduled_date                 AS v_scheduled_date,
+            v.status                         AS v_status,
+            v.en_route_at                    AS v_en_route_at,
+            v.started_at                     AS v_started_at,
+            v.completed_at                   AS v_completed_at,
+            v.completed_by                   AS v_completed_by,
+            v.proof_of_service_photo         AS v_proof,
+            v.proof_of_service_photo_before  AS v_proof_before,
+            v.gate_closed_photo              AS v_gate_closed,
+            v.extra_photos                   AS v_extra_photos,
+            v.technician_notes               AS v_tech_notes,
+            v.invoice_id                     AS v_invoice_id,
+            v.service_reminder_sent_at       AS v_reminder_sent_at,
+            v.created_at                     AS v_created_at,
+            v.updated_at                     AS v_updated_at,
+            sp.stop_order                    AS stop_order,
+            sp.contact_id                    AS sp_contact_id,
+            sp.service_name                  AS service_name,
+            sp.frequency                     AS frequency,
+            p.street_address                 AS street_address,
+            p.city                           AS city,
+            p.state                          AS prop_state,
+            p.gate_code                      AS gate_code,
+            p.special_instructions           AS special_instructions,
+            p.measured_yard_sqft             AS measured_yard_sqft,
+            p.lot_size                       AS lot_size,
+            p.number_of_dogs                 AS number_of_dogs,
+            p.has_dangerous_dog              AS has_dangerous_dog,
+            p.dangerous_dog_notes            AS dangerous_dog_notes,
+            p.latitude                       AS latitude,
+            p.longitude                      AS longitude,
+            c.id                             AS contact_id_col,
+            c.first_name                     AS first_name,
+            c.last_name                      AS last_name,
+            c.phone                          AS phone,
+            spa.name                         AS addon_name,
+            spa.price                        AS addon_price
+          FROM visits v
+          LEFT JOIN service_plans sp  ON sp.id = v.service_plan_id
+          LEFT JOIN properties p      ON p.id = v.property_id
+          LEFT JOIN contacts c        ON c.id = sp.contact_id
+          LEFT JOIN service_plan_add_ons spa
+                 ON spa.service_plan_id = v.service_plan_id AND spa.is_active = true
+          WHERE v.company_id = ${companyId} AND v.scheduled_date = ${targetDate}
+        `)
+      ).rows as JoinRow[];
 
-      // Aggregate join rows by visit id
+      // Build visit objects and per-visit aggregated data in a single pass
       type AggData = {
         stopOrder: number | null;
         contactId: string | null;
@@ -142,8 +173,34 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         } | null;
         addOns: { name: string; price: string }[];
       };
+      const visitMap = new Map<string, Visit>();
       const visitDataMap = new Map<string, AggData>();
       for (const row of joinRows) {
+        if (!visitMap.has(row.visit_id)) {
+          visitMap.set(row.visit_id, {
+            id: row.visit_id,
+            companyId,
+            servicePlanId: row.v_service_plan_id,
+            jobId: row.v_job_id,
+            propertyId: row.v_property_id,
+            routeId: row.v_route_id,
+            scheduledDate: row.v_scheduled_date,
+            status: row.v_status as Visit["status"],
+            enRouteAt: row.v_en_route_at,
+            startedAt: row.v_started_at,
+            completedAt: row.v_completed_at,
+            completedBy: row.v_completed_by,
+            proofOfServicePhoto: row.v_proof,
+            proofOfServicePhotoBefore: row.v_proof_before,
+            gateClosedPhoto: row.v_gate_closed,
+            extraPhotos: row.v_extra_photos as Visit["extraPhotos"],
+            technicianNotes: row.v_tech_notes,
+            invoiceId: row.v_invoice_id,
+            serviceReminderSentAt: row.v_reminder_sent_at,
+            createdAt: row.v_created_at,
+            updatedAt: row.v_updated_at,
+          });
+        }
         let entry = visitDataMap.get(row.visit_id);
         if (!entry) {
           entry = {
@@ -155,7 +212,7 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
               ? {
                   streetAddress: row.street_address,
                   city: row.city,
-                  state: row.state,
+                  state: row.prop_state,
                   gateCode: row.gate_code,
                   specialInstructions: row.special_instructions,
                   measuredYardSqft: row.measured_yard_sqft,
@@ -184,7 +241,10 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         }
       }
 
-      const enriched = visitsList.map((v) => {
+      // Build enriched list; apply tech-route filter in memory
+      const seen = new Set<string>();
+      const enriched: ReturnType<typeof buildEnrichedVisit>[] = [];
+      function buildEnrichedVisit(v: Visit) {
         const d = visitDataMap.get(v.id);
         const route = v.routeId ? routeMap.get(v.routeId) : null;
         return {
@@ -197,7 +257,14 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
           property: d?.property ?? null,
           contact: d?.contact ?? null,
         };
-      });
+      }
+      for (const row of joinRows) {
+        if (seen.has(row.visit_id)) continue;
+        seen.add(row.visit_id);
+        const v = visitMap.get(row.visit_id)!;
+        if (techRouteIds && !(v.routeId && techRouteIds.has(v.routeId))) continue;
+        enriched.push(buildEnrichedVisit(v));
+      }
 
       enriched.sort((a, b) => {
         const routeA = a.routeName ?? "";
