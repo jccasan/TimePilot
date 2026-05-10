@@ -86,9 +86,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
         { key: "generate_route", label: "Generate your first route", completed: hasRoutes },
       ];
 
-      const isComplete = isDemo
-        ? false
-        : steps.filter((s) => s.key !== "service_zones").every((s) => s.completed);
+      const isComplete = steps.filter((s) => s.key !== "service_zones").every((s) => s.completed);
       res.json({
         isComplete,
         steps,

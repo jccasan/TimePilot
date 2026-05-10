@@ -138,6 +138,22 @@ export async function runStartupMigrations(): Promise<void> {
       "[Migration] voice_area_code_preference and voice_number_porting_status columns ensured"
     );
 
+    // Ensure the demo account always has voice_plan_status = 'active' so the
+    // Voice Agent step is visible in the business onboarding wizard.
+    await client.query(`
+      UPDATE companies
+        SET voice_plan_status = 'active'
+      WHERE voice_plan_status IS DISTINCT FROM 'active'
+        AND id IN (
+          SELECT cu.company_id
+          FROM users u
+          JOIN company_users cu ON cu.user_id = u.id
+          WHERE u.email = 'demo@scoopilot.com'
+          LIMIT 1
+        )
+    `);
+    console.log("[Migration] Demo account voice_plan_status ensured active");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);
