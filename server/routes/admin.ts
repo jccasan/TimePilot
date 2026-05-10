@@ -2918,14 +2918,15 @@ Respond with exactly one category from the list above and nothing else.`;
   // Proxy all Horseman API calls through our backend to avoid browser CORS restrictions.
   // The HorsemanCRM component will use /api/horseman-proxy as its baseUrl so every
   // fetch it makes is same-origin and never hits the Horseman server directly.
-  app.all("/api/horseman-proxy/*", isAdmin, async (req: Request, res: Response) => {
+  // Express 5 requires named wildcards — bare `*` throws a path-to-regexp TypeError.
+  app.all("/api/horseman-proxy/{*proxyPath}", isAdmin, async (req: Request, res: Response) => {
     const base = (process.env.HORSEMAN_BASE_URL ?? "").replace(/\/+$/, "");
     if (!base) {
       return res.status(503).json({ message: "HORSEMAN_BASE_URL not configured" });
     }
 
-    // req.params[0] is everything after /api/horseman-proxy/
-    const upstreamPath = `/${(req.params as Record<string, string>)[0] ?? ""}`;
+    // req.params.proxyPath is everything after /api/horseman-proxy/
+    const upstreamPath = `/${(req.params as Record<string, string>).proxyPath ?? ""}`;
     const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
     const url = `${base}${upstreamPath}${qs}`;
 
