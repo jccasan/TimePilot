@@ -72,6 +72,7 @@ import {
   Clock,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   SendHorizonal,
   RefreshCw,
@@ -1029,6 +1030,8 @@ export default function Invoices() {
   const { formatMoney } = useCurrency();
   const { startTutorial, isTutorialCompleted } = useTutorialContext();
   const [statusFilter, setStatusFilter] = useState(getInitialTab);
+  const [invPage, setInvPage] = useState(1);
+  const INV_PAGE_SIZE = 50;
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
@@ -1079,6 +1082,7 @@ export default function Invoices() {
     try {
       localStorage.setItem("scoopilot_inv_status_filter", statusFilter);
     } catch {}
+    setInvPage(1);
   }, [statusFilter]);
 
   useEffect(() => {
@@ -1115,8 +1119,10 @@ export default function Invoices() {
     }
   };
 
-  const { data: invoices, isLoading } = useQuery<Invoice[]>({
-    queryKey: ["/api/invoices", statusFilter],
+  const isSpecialInvTab = ["unpaid", "overdue", "uninvoiced"].includes(statusFilter);
+
+  const { data: invoicesResult, isLoading } = useQuery<{ data: Invoice[]; total: number }>({
+    queryKey: ["/api/invoices", statusFilter, isSpecialInvTab ? undefined : invPage],
     queryFn: async () => {
       const token = localStorage.getItem("sessionToken");
       const headers: Record<string, string> = {};
@@ -1135,31 +1141,50 @@ export default function Invoices() {
         ]);
         const now = new Date();
         const combined = [...draft, ...sent, ...pending];
-        return combined.filter(
+        const data = combined.filter(
           (inv: Invoice) => !(inv.dueDate && new Date(inv.dueDate + "T23:59:59") < now)
         );
+        return { data, total: data.length };
       }
       if (statusFilter === "overdue") {
         const r = await fetch("/api/invoices", { credentials: "include", headers });
         if (!r.ok) throw new Error("Failed to fetch invoices");
         const all: Invoice[] = await r.json();
         const now = new Date();
-        return all.filter(
+        const data = all.filter(
           (inv: Invoice) =>
             inv.status !== "paid" &&
             inv.status !== "voided" &&
             inv.dueDate &&
             new Date(inv.dueDate + "T23:59:59") < now
         );
+        return { data, total: data.length };
       }
-      const queryParams =
-        statusFilter !== "all" && statusFilter !== "uninvoiced" ? `?status=${statusFilter}` : "";
-      const r = await fetch(`/api/invoices${queryParams}`, { credentials: "include", headers });
+      const params = new URLSearchParams();
+      if (statusFilter !== "all" && statusFilter !== "uninvoiced") {
+        params.set("status", statusFilter);
+      }
+      if (!isSpecialInvTab) {
+        params.set("page", String(invPage));
+        params.set("limit", String(INV_PAGE_SIZE));
+      }
+      const r = await fetch(`/api/invoices?${params}`, { credentials: "include", headers });
       if (!r.ok) throw new Error("Failed to fetch invoices");
-      const all = await r.json();
-      return all.filter((inv: Invoice) => inv.status !== "voided");
+      const result = await r.json();
+      if (result && typeof result === "object" && "invoices" in result) {
+        const data = (result.invoices as Invoice[]).filter(
+          (inv: Invoice) => inv.status !== "voided"
+        );
+        return { data, total: result.total as number };
+      }
+      const data = (result as Invoice[]).filter((inv: Invoice) => inv.status !== "voided");
+      return { data, total: data.length };
     },
   });
+
+  const invoices = invoicesResult?.data ?? [];
+  const invTotal = invoicesResult?.total ?? 0;
+  const invTotalPages = isSpecialInvTab ? 0 : Math.ceil(invTotal / INV_PAGE_SIZE);
 
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
@@ -3875,6 +3900,42 @@ export default function Invoices() {
               })}
             </TableBody>
           </Table>
+          {invTotalPages > 1 && (
+            <div
+              className="flex items-center justify-between px-4 py-3 border-t"
+              data-testid="invoices-pagination"
+            >
+              <p className="text-sm text-muted-foreground">
+                Showing {(invPage - 1) * INV_PAGE_SIZE + 1}–
+                {Math.min(invPage * INV_PAGE_SIZE, invTotal)} of {invTotal}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInvPage((p) => Math.max(1, p - 1))}
+                  disabled={invPage <= 1}
+                  data-testid="button-invoices-prev"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Prev
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {invPage} of {invTotalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInvPage((p) => Math.min(invTotalPages, p + 1))}
+                  disabled={invPage >= invTotalPages}
+                  data-testid="button-invoices-next"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <Card>

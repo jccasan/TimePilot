@@ -488,26 +488,44 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const filters: { status?: string; search?: string } = {};
       if (req.query.status) filters.status = req.query.status as string;
       if (req.query.search) filters.search = (req.query.search as string).replace(/\0/g, "");
-      const contactsList = await storage.getContacts(companyId, filters);
 
-      const activePlans = await storage.getServicePlans(companyId, { isActive: true });
+      const rawPage = parseInt(req.query.page as string);
+      const rawLimit = parseInt(req.query.limit as string);
+      const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0;
+      const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 0;
+
+      const [activePlans, contactsResult] = await Promise.all([
+        storage.getServicePlans(companyId, { isActive: true }),
+        page > 0 && limit > 0
+          ? storage.getContactsPage(companyId, filters, page, limit)
+          : storage.getContacts(companyId, filters).then((data) => ({
+              data,
+              total: data.length,
+            })),
+      ]);
+
+      const contactsList = contactsResult.data;
       const stopOnlyOnlyIds = getStopOnlyOnlyContactIds(activePlans);
 
-      const onboardingRows = await db.execute(sql`
-        SELECT DISTINCT ON (contact_id) contact_id,
-          onboarding_completed_at IS NULL AS pending,
-          onboarding_completed_at IS NOT NULL AS completed
-        FROM properties
-        WHERE company_id = ${companyId}
-        ORDER BY contact_id, onboarding_completed_at DESC NULLS LAST
-      `);
-      const onboardingMap = new Map<string, { pending: boolean; completed: boolean }>();
-      for (const row of onboardingRows.rows as {
-        contact_id: string;
-        pending: boolean;
-        completed: boolean;
-      }[]) {
-        onboardingMap.set(row.contact_id, { pending: !!row.pending, completed: !!row.completed });
+      const contactIds = contactsList.map((c) => c.id);
+      let onboardingMap = new Map<string, { pending: boolean; completed: boolean }>();
+      if (contactIds.length > 0) {
+        const onboardingRows = await db.execute(sql`
+          SELECT DISTINCT ON (contact_id) contact_id,
+            onboarding_completed_at IS NULL AS pending,
+            onboarding_completed_at IS NOT NULL AS completed
+          FROM properties
+          WHERE company_id = ${companyId}
+            AND contact_id = ANY(${contactIds}::text[])
+          ORDER BY contact_id, onboarding_completed_at DESC NULLS LAST
+        `);
+        for (const row of onboardingRows.rows as {
+          contact_id: string;
+          pending: boolean;
+          completed: boolean;
+        }[]) {
+          onboardingMap.set(row.contact_id, { pending: !!row.pending, completed: !!row.completed });
+        }
       }
 
       const enriched = contactsList.map((c) => ({
@@ -515,7 +533,17 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         isStopOnlyContact: stopOnlyOnlyIds.has(c.id),
         onboardingStatus: onboardingMap.get(c.id) || null,
       }));
-      res.json(enriched);
+
+      if (page > 0 && limit > 0) {
+        res.json({
+          contacts: enriched,
+          total: contactsResult.total,
+          page,
+          pageSize: limit,
+        });
+      } else {
+        res.json(enriched);
+      }
     } catch (err) {
       handleError(res, err);
     }

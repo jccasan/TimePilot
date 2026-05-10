@@ -291,6 +291,20 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] Demo account voice_plan_status ensured active");
 
+    // GIN trigram index for fast contact search (name, email, phone)
+    await client.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+    await client.query(
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_contacts_search_trgm
+         ON contacts
+         USING GIN ((
+           coalesce(first_name,'') || ' ' ||
+           coalesce(last_name,'')  || ' ' ||
+           coalesce(email,'')      || ' ' ||
+           coalesce(phone,'')
+         ) gin_trgm_ops)`
+    );
+    console.log("[Migration] contacts GIN trigram index ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

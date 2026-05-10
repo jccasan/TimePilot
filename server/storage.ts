@@ -267,6 +267,12 @@ export interface IStorage {
     companyId: string,
     filters?: { status?: string; search?: string }
   ): Promise<Contact[]>;
+  getContactsPage(
+    companyId: string,
+    filters?: { status?: string; search?: string },
+    page?: number,
+    limit?: number
+  ): Promise<{ data: Contact[]; total: number }>;
   createContact(data: InsertContact): Promise<Contact>;
   updateContact(id: string, companyId: string, data: Partial<InsertContact>): Promise<Contact>;
   deleteContact(id: string, companyId: string): Promise<void>;
@@ -401,6 +407,12 @@ export interface IStorage {
     companyId: string,
     filters?: { contactId?: string; status?: string }
   ): Promise<Invoice[]>;
+  getInvoicesPage(
+    companyId: string,
+    filters?: { contactId?: string; status?: string },
+    page?: number,
+    limit?: number
+  ): Promise<{ data: Invoice[]; total: number }>;
   createInvoice(data: InsertInvoice): Promise<Invoice>;
   updateInvoice(id: string, companyId: string, data: Partial<InsertInvoice>): Promise<Invoice>;
   getNextInvoiceNumber(companyId: string): Promise<string>;
@@ -1160,6 +1172,44 @@ export class DatabaseStorage implements IStorage {
       .from(contacts)
       .where(and(...conditions))
       .orderBy(asc(contacts.firstName), asc(contacts.lastName));
+  }
+
+  async getContactsPage(
+    companyId: string,
+    filters?: { status?: string; search?: string },
+    page: number = 1,
+    limit: number = 50
+  ): Promise<{ data: Contact[]; total: number }> {
+    const conditions = [eq(contacts.companyId, companyId)];
+    if (filters?.status)
+      conditions.push(
+        eq(contacts.status, filters.status as (typeof contacts.$inferSelect)["status"])
+      );
+    if (filters?.search) {
+      conditions.push(
+        or(
+          ilike(contacts.firstName, `%${filters.search}%`),
+          ilike(contacts.lastName, `%${filters.search}%`),
+          ilike(contacts.email, `%${filters.search}%`),
+          ilike(contacts.phone, `%${filters.search}%`)
+        )!
+      );
+    }
+    const offset = (page - 1) * limit;
+    const [data, countResult] = await Promise.all([
+      db
+        .select()
+        .from(contacts)
+        .where(and(...conditions))
+        .orderBy(asc(contacts.firstName), asc(contacts.lastName))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ total: sql<number>`COUNT(*)::int` })
+        .from(contacts)
+        .where(and(...conditions)),
+    ]);
+    return { data, total: countResult[0]?.total ?? 0 };
   }
 
   async createContact(data: InsertContact): Promise<Contact> {
@@ -2044,6 +2094,35 @@ export class DatabaseStorage implements IStorage {
       .from(invoices)
       .where(and(...conditions))
       .orderBy(desc(invoices.createdAt));
+  }
+
+  async getInvoicesPage(
+    companyId: string,
+    filters?: { contactId?: string; status?: string },
+    page: number = 1,
+    limit: number = 50
+  ): Promise<{ data: Invoice[]; total: number }> {
+    const conditions = [eq(invoices.companyId, companyId)];
+    if (filters?.contactId) conditions.push(eq(invoices.contactId, filters.contactId));
+    if (filters?.status)
+      conditions.push(
+        eq(invoices.status, filters.status as (typeof invoices.$inferSelect)["status"])
+      );
+    const offset = (page - 1) * limit;
+    const [data, countResult] = await Promise.all([
+      db
+        .select()
+        .from(invoices)
+        .where(and(...conditions))
+        .orderBy(desc(invoices.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db
+        .select({ total: sql<number>`COUNT(*)::int` })
+        .from(invoices)
+        .where(and(...conditions)),
+    ]);
+    return { data, total: countResult[0]?.total ?? 0 };
   }
 
   async createInvoice(data: InsertInvoice): Promise<Invoice> {

@@ -41,8 +41,19 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       const filters: { contactId?: string; status?: string } = {};
       if (req.query.contactId) filters.contactId = req.query.contactId as string;
       if (req.query.status) filters.status = req.query.status as string;
-      const invoicesList = await storage.getInvoices(companyId, filters);
-      res.json(invoicesList);
+
+      const rawPage = parseInt(req.query.page as string);
+      const rawLimit = parseInt(req.query.limit as string);
+      const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0;
+      const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 0;
+
+      if (page > 0 && limit > 0) {
+        const result = await storage.getInvoicesPage(companyId, filters, page, limit);
+        res.json({ invoices: result.data, total: result.total, page, pageSize: limit });
+      } else {
+        const invoicesList = await storage.getInvoices(companyId, filters);
+        res.json(invoicesList);
+      }
     } catch (err) {
       handleError(res, err);
     }

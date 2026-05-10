@@ -46,6 +46,8 @@ import {
   Send,
   SlidersHorizontal,
   CalendarClock,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { DialogFooter } from "@/components/ui/dialog";
 import { AddContactDialog } from "@/components/add-contact-dialog";
@@ -117,22 +119,39 @@ export default function Contacts() {
   const [bulkEditDayOfWeek, setBulkEditDayOfWeek] = useState("");
   const [bulkEditFrequency, setBulkEditFrequency] = useState("");
   const [bulkServicePlanOpen, setBulkServicePlanOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchInput), 350);
     return () => clearTimeout(timer);
   }, [searchInput]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, search]);
+
   const queryParams = new URLSearchParams();
   if (statusFilter !== "all") queryParams.set("status", statusFilter);
   if (search) queryParams.set("search", search);
+  queryParams.set("page", String(page));
+  queryParams.set("limit", String(PAGE_SIZE));
   const queryString = queryParams.toString();
 
-  const { data: contacts, isLoading } = useQuery<
-    (EnrichedContact & { isStopOnlyContact?: boolean })[]
-  >({
-    queryKey: ["/api/contacts" + (queryString ? `?${queryString}` : "")],
+  type ContactsPageResponse = {
+    contacts: (EnrichedContact & { isStopOnlyContact?: boolean })[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
+
+  const { data: contactsData, isLoading } = useQuery<ContactsPageResponse>({
+    queryKey: ["/api/contacts" + `?${queryString}`],
   });
+
+  const contacts = contactsData?.contacts ?? [];
+  const totalContacts = contactsData?.total ?? 0;
+  const totalPages = Math.ceil(totalContacts / PAGE_SIZE);
 
   const { data: tagsList = [] } = useQuery<Tag[]>({
     queryKey: ["/api/tags"],
@@ -494,6 +513,40 @@ export default function Contacts() {
             No contacts found. Add your first contact to get started.
           </CardContent>
         </Card>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2" data-testid="contacts-pagination">
+          <p className="text-sm text-muted-foreground">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalContacts)} of{" "}
+            {totalContacts}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              data-testid="button-contacts-prev"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Prev
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              data-testid="button-contacts-next"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       )}
 
       {selectedIds.size > 0 && (

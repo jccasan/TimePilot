@@ -48,50 +48,156 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         visitsList = visitsList.filter((v) => v.routeId && techRouteIds.has(v.routeId));
       }
 
-      const enriched = await Promise.all(
-        visitsList.map(async (v) => {
-          const plan = v.servicePlanId
-            ? await storage.getServicePlan(v.servicePlanId, companyId)
-            : null;
-          const addOns = plan ? await storage.getServicePlanAddOns(plan.id) : [];
-          const prop = await storage.getProperty(v.propertyId, companyId);
-          const contact = plan ? await storage.getContact(plan.contactId, companyId) : null;
-          const route = v.routeId ? routeMap.get(v.routeId) : null;
-          return {
-            ...v,
-            stopOrder: plan?.stopOrder ?? 999,
-            routeName: route?.name ?? null,
-            routeColor: route?.color ?? null,
-            servicePlanName:
-              plan?.serviceName || (plan?.frequency ? `${plan.frequency} service` : null),
-            addOns: addOns.filter((a) => a.isActive).map((a) => ({ name: a.name, price: a.price })),
-            property: prop
+      // Single JOIN query to replace the N+1 loop (3-5 queries per visit → 1 total)
+      const visitIds = visitsList.map((v) => v.id);
+      type JoinRow = {
+        visit_id: string;
+        stop_order: number | null;
+        sp_contact_id: string | null;
+        service_name: string | null;
+        frequency: string | null;
+        street_address: string | null;
+        city: string | null;
+        state: string | null;
+        gate_code: string | null;
+        special_instructions: string | null;
+        measured_yard_sqft: number | null;
+        lot_size: string | null;
+        number_of_dogs: number | null;
+        has_dangerous_dog: boolean | null;
+        dangerous_dog_notes: string | null;
+        latitude: string | null;
+        longitude: string | null;
+        contact_id_col: string | null;
+        first_name: string | null;
+        last_name: string | null;
+        phone: string | null;
+        addon_name: string | null;
+        addon_price: string | null;
+      };
+      const joinRows =
+        visitIds.length > 0
+          ? ((
+              await db.execute(sql`
+            SELECT
+              v.id                        AS visit_id,
+              sp.stop_order               AS stop_order,
+              sp.contact_id               AS sp_contact_id,
+              sp.service_name             AS service_name,
+              sp.frequency                AS frequency,
+              p.street_address            AS street_address,
+              p.city                      AS city,
+              p.state                     AS state,
+              p.gate_code                 AS gate_code,
+              p.special_instructions      AS special_instructions,
+              p.measured_yard_sqft        AS measured_yard_sqft,
+              p.lot_size                  AS lot_size,
+              p.number_of_dogs            AS number_of_dogs,
+              p.has_dangerous_dog         AS has_dangerous_dog,
+              p.dangerous_dog_notes       AS dangerous_dog_notes,
+              p.latitude                  AS latitude,
+              p.longitude                 AS longitude,
+              c.id                        AS contact_id_col,
+              c.first_name                AS first_name,
+              c.last_name                 AS last_name,
+              c.phone                     AS phone,
+              spa.name                    AS addon_name,
+              spa.price                   AS addon_price
+            FROM visits v
+            LEFT JOIN service_plans sp  ON sp.id = v.service_plan_id
+            LEFT JOIN properties p      ON p.id = v.property_id
+            LEFT JOIN contacts c        ON c.id = sp.contact_id
+            LEFT JOIN service_plan_add_ons spa
+                   ON spa.service_plan_id = v.service_plan_id AND spa.is_active = true
+            WHERE v.id = ANY(${visitIds}::text[])
+          `)
+            ).rows as JoinRow[])
+          : [];
+
+      // Aggregate join rows by visit id
+      type AggData = {
+        stopOrder: number | null;
+        contactId: string | null;
+        serviceName: string | null;
+        frequency: string | null;
+        property: {
+          streetAddress: string | null;
+          city: string | null;
+          state: string | null;
+          gateCode: string | null;
+          specialInstructions: string | null;
+          measuredYardSqft: number | null;
+          lotSize: string | null;
+          numberOfDogs: number | null;
+          hasDangerousDog: boolean | null;
+          dangerousDogNotes: string | null;
+          latitude: number | null;
+          longitude: number | null;
+        } | null;
+        contact: {
+          id: string;
+          firstName: string;
+          lastName: string;
+          phone: string | null;
+        } | null;
+        addOns: { name: string; price: string }[];
+      };
+      const visitDataMap = new Map<string, AggData>();
+      for (const row of joinRows) {
+        let entry = visitDataMap.get(row.visit_id);
+        if (!entry) {
+          entry = {
+            stopOrder: row.stop_order,
+            contactId: row.sp_contact_id,
+            serviceName: row.service_name,
+            frequency: row.frequency,
+            property: row.street_address
               ? {
-                  streetAddress: prop.streetAddress,
-                  city: prop.city,
-                  state: prop.state,
-                  gateCode: prop.gateCode,
-                  specialInstructions: prop.specialInstructions,
-                  measuredYardSqft: prop.measuredYardSqft,
-                  lotSize: prop.lotSize,
-                  numberOfDogs: prop.numberOfDogs,
-                  hasDangerousDog: prop.hasDangerousDog,
-                  dangerousDogNotes: prop.dangerousDogNotes,
-                  latitude: prop.latitude ? parseFloat(prop.latitude) : null,
-                  longitude: prop.longitude ? parseFloat(prop.longitude) : null,
+                  streetAddress: row.street_address,
+                  city: row.city,
+                  state: row.state,
+                  gateCode: row.gate_code,
+                  specialInstructions: row.special_instructions,
+                  measuredYardSqft: row.measured_yard_sqft,
+                  lotSize: row.lot_size,
+                  numberOfDogs: row.number_of_dogs,
+                  hasDangerousDog: row.has_dangerous_dog,
+                  dangerousDogNotes: row.dangerous_dog_notes,
+                  latitude: row.latitude ? parseFloat(row.latitude) : null,
+                  longitude: row.longitude ? parseFloat(row.longitude) : null,
                 }
               : null,
-            contact: contact
+            contact: row.contact_id_col
               ? {
-                  id: contact.id,
-                  firstName: contact.firstName,
-                  lastName: contact.lastName,
-                  phone: contact.phone,
+                  id: row.contact_id_col,
+                  firstName: row.first_name ?? "",
+                  lastName: row.last_name ?? "",
+                  phone: row.phone,
                 }
               : null,
+            addOns: [],
           };
-        })
-      );
+          visitDataMap.set(row.visit_id, entry);
+        }
+        if (row.addon_name) {
+          entry.addOns.push({ name: row.addon_name, price: row.addon_price ?? "0" });
+        }
+      }
+
+      const enriched = visitsList.map((v) => {
+        const d = visitDataMap.get(v.id);
+        const route = v.routeId ? routeMap.get(v.routeId) : null;
+        return {
+          ...v,
+          stopOrder: d?.stopOrder ?? 999,
+          routeName: route?.name ?? null,
+          routeColor: route?.color ?? null,
+          servicePlanName: d?.serviceName || (d?.frequency ? `${d.frequency} service` : null),
+          addOns: d?.addOns ?? [],
+          property: d?.property ?? null,
+          contact: d?.contact ?? null,
+        };
+      });
 
       enriched.sort((a, b) => {
         const routeA = a.routeName ?? "";
