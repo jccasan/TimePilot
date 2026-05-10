@@ -105,7 +105,9 @@ export function GenerateInvoiceDialog({
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const r = await fetch("/api/contacts?all=true", { credentials: "include", headers });
-      return r.ok ? r.json() : [];
+      if (!r.ok) return [];
+      const json = await r.json();
+      return Array.isArray(json) ? json : (json.contacts ?? []);
     },
     enabled: showContactPicker && open,
   });

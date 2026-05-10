@@ -157,13 +157,13 @@ function TierPreviewCards({
             </p>
           </div>
           <ul className="space-y-1">
-            {tier.features.slice(0, 4).map((f, i) => (
+            {(Array.isArray(tier.features) ? tier.features : []).slice(0, 4).map((f, i) => (
               <li key={i} className="text-xs text-muted-foreground flex items-start gap-1">
                 <CheckCircle2 className="h-3 w-3 text-green-600 shrink-0 mt-0.5" />
                 <span>{f}</span>
               </li>
             ))}
-            {tier.features.length > 4 && (
+            {Array.isArray(tier.features) && tier.features.length > 4 && (
               <li className="text-xs text-muted-foreground pl-4">
                 +{tier.features.length - 4} more
               </li>
@@ -851,9 +851,9 @@ function CreateEditQuoteDialog({
       const savedInitialClean = parseFloat(String(quote.initialCleanFee || 0));
       setOverrideInitialClean(savedInitialClean > 0 ? savedInitialClean.toFixed(2) : "");
       if (quote.essentialFeatures) {
-        setCustomEssentialFeatures(quote.essentialFeatures as string[]);
-        setCustomPremiumFeatures(quote.premiumFeatures as string[]);
-        setCustomDeluxeFeatures(quote.deluxeFeatures as string[]);
+        setCustomEssentialFeatures(Array.isArray(quote.essentialFeatures) ? (quote.essentialFeatures as string[]) : []);
+        setCustomPremiumFeatures(Array.isArray(quote.premiumFeatures) ? (quote.premiumFeatures as string[]) : []);
+        setCustomDeluxeFeatures(Array.isArray(quote.deluxeFeatures) ? (quote.deluxeFeatures as string[]) : []);
         setFeaturesCustomized(true);
       }
     } else {
@@ -939,9 +939,9 @@ function CreateEditQuoteDialog({
     if (calculatedPricing) {
       setLivePricing(calculatedPricing);
       if (!featuresCustomized) {
-        setCustomEssentialFeatures(calculatedPricing.essentialFeatures);
-        setCustomPremiumFeatures(calculatedPricing.premiumFeatures);
-        setCustomDeluxeFeatures(calculatedPricing.deluxeFeatures);
+        setCustomEssentialFeatures(Array.isArray(calculatedPricing.essentialFeatures) ? calculatedPricing.essentialFeatures : []);
+        setCustomPremiumFeatures(Array.isArray(calculatedPricing.premiumFeatures) ? calculatedPricing.premiumFeatures : []);
+        setCustomDeluxeFeatures(Array.isArray(calculatedPricing.deluxeFeatures) ? calculatedPricing.deluxeFeatures : []);
       }
     }
   }, [calculatedPricing, featuresCustomized]);
