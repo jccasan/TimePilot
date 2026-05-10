@@ -164,7 +164,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
       try {
         const { companyId, role } = await getCompanyContext(req);
         requireRole(role, ["owner", "admin"]);
-        const { step, data, resetWizard } = req.body;
+        const { step, data, resetWizard, goingBack } = req.body;
 
         if (resetWizard) {
           await db.execute(
@@ -175,6 +175,13 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
 
         if (typeof step !== "number" || step < 0 || step > 5) {
           return res.status(400).json({ error: "Invalid step number" });
+        }
+
+        if (goingBack) {
+          await db.execute(
+            sql`UPDATE companies SET business_onboarding_step = ${step} WHERE id = ${companyId}`
+          );
+          return res.json({ success: true, nextStep: step });
         }
 
         if (step === 0 && data) {

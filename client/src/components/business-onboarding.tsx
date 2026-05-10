@@ -415,12 +415,14 @@ function BusinessIntelligenceStep({
   onBack,
   onSkip,
   isPending,
+  isFetchingData,
 }: {
   companyData: BusinessOnboardingStatus["companyData"];
   onNext: (data: { businessDescription: string; serviceAreaDescription: string }) => void;
   onBack: () => void;
   onSkip: () => void;
   isPending: boolean;
+  isFetchingData?: boolean;
 }) {
   const { toast } = useToast();
   const [insights, setInsights] = useState<WebsiteInsights | null>(null);
@@ -473,7 +475,8 @@ function BusinessIntelligenceStep({
       </div>
 
       <div className="space-y-6">
-        {companyData.websiteUrl && (
+        {isFetchingData && <Skeleton className="h-32 w-full" />}
+        {!isFetchingData && companyData.websiteUrl && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -1083,7 +1086,9 @@ function PaymentProcessingStep({
 
   const onboardMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/stripe-connect/onboard");
+      const res = await apiRequest("POST", "/api/stripe-connect/onboard", {
+        context: "onboarding",
+      });
       return res.json();
     },
     onSuccess: (data: { url: string }) => {
@@ -1659,7 +1664,11 @@ export default function BusinessOnboarding({
   onDismiss?: () => void;
 }) {
   const { toast } = useToast();
-  const { data: status, isLoading } = useQuery<BusinessOnboardingStatus>({
+  const {
+    data: status,
+    isLoading,
+    isFetching,
+  } = useQuery<BusinessOnboardingStatus>({
     queryKey: ["/api/onboarding/business-status"],
   });
 
@@ -1712,13 +1721,25 @@ export default function BusinessOnboarding({
     },
   });
 
+  const backMutation = useMutation({
+    mutationFn: async (targetStep: number) => {
+      const res = await apiRequest("POST", "/api/onboarding/business-step", {
+        step: targetStep,
+        goingBack: true,
+      });
+      return res.json();
+    },
+  });
+
   const handleSkip = () => {
     stepMutation.mutate({ step: currentStep });
   };
 
   const handleBack = () => {
     if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
+      const prevStep = currentStep - 1;
+      setCurrentStep(prevStep);
+      backMutation.mutate(prevStep);
     }
   };
 
@@ -1781,6 +1802,7 @@ export default function BusinessOnboarding({
               onBack={handleBack}
               onSkip={handleSkip}
               isPending={stepMutation.isPending}
+              isFetchingData={isFetching}
             />
           )}
 

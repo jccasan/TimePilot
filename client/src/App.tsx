@@ -296,7 +296,9 @@ function AuthenticatedLayout() {
     enabled: setupState === "ready",
     retry: 2,
   });
-  const [businessOnboardingDone, setBusinessOnboardingDone] = useState(false);
+  const [businessOnboardingDone, setBusinessOnboardingDone] = useState(
+    () => sessionStorage.getItem("scoopilot_onboarding_dismissed") === "true"
+  );
   const [setupDismissed, setSetupDismissed] = useState(
     () => localStorage.getItem("scoopilot_setup_dismissed") === "true"
   );
@@ -437,10 +439,12 @@ function AuthenticatedLayout() {
     return (
       <BusinessOnboarding
         onComplete={() => {
+          sessionStorage.removeItem("scoopilot_onboarding_dismissed");
           setBusinessOnboardingDone(true);
           queryClient.invalidateQueries({ queryKey: ["/api/onboarding/business-status"] });
         }}
         onDismiss={() => {
+          sessionStorage.setItem("scoopilot_onboarding_dismissed", "true");
           setBusinessOnboardingDone(true);
         }}
       />

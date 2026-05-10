@@ -437,10 +437,15 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
 
       const protocol = req.get("host")?.includes("localhost") ? "http" : "https";
       const baseUrl = `${protocol}://${req.get("host")}`;
+      const context = req.body?.context;
+      const returnPath =
+        context === "onboarding" ? "/?stripe_connect=return" : "/settings?stripe_connect=return";
+      const refreshPath =
+        context === "onboarding" ? "/?stripe_connect=refresh" : "/settings?stripe_connect=refresh";
       const onboardingUrl = await createConnectAccountLink(
         accountId,
-        `${baseUrl}/settings?stripe_connect=refresh`,
-        `${baseUrl}/settings?stripe_connect=return`
+        `${baseUrl}${refreshPath}`,
+        `${baseUrl}${returnPath}`
       );
 
       res.json({ url: onboardingUrl, accountId });
