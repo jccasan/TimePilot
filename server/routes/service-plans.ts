@@ -468,7 +468,12 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
 
       let stopsAssigned = 0;
       let routesCreated = 0;
-      const routeSummary: { day: string; routeName: string; stopsPlaced: number }[] = [];
+      const routeSummary: {
+        day: string;
+        routeName: string;
+        stopsPlaced: number;
+        overDuration?: boolean;
+      }[] = [];
 
       if (autoAssign && createdPlans.length > 0) {
         const { assignNewStopsToRoutes } = await import("../services/weekly-optimizer");
@@ -522,6 +527,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
             };
           });
 
+        const co = company as Record<string, unknown>;
         const { assignments, newRoutes } = await assignNewStopsToRoutes(
           newStops,
           existingRouteInfos,
@@ -533,30 +539,50 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
             });
             return { id: created.id, name: created.name };
           },
-          company?.maxStopsPerRoute ?? undefined
+          company?.maxStopsPerRoute ?? undefined,
+          {
+            maxRouteDurationHours:
+              typeof co.maxRouteDurationHours === "number" && co.maxRouteDurationHours > 0
+                ? co.maxRouteDurationHours
+                : undefined,
+            avgMinutesPerStop:
+              typeof co.avgMinutesPerStop === "number" && co.avgMinutesPerStop > 0
+                ? co.avgMinutesPerStop
+                : 12,
+          }
         );
 
         routesCreated = newRoutes.length;
+
+        // Collect route IDs that exceed the configured duration budget.
+        const overDurationRouteIds = new Set<string>();
 
         for (const assignment of assignments) {
           await storage.updateServicePlan(assignment.planId, companyId, {
             routeId: assignment.routeId,
           });
           stopsAssigned++;
+          if (assignment.overDuration) {
+            overDurationRouteIds.add(assignment.routeId);
+          }
           const existing = routeSummary.find(
             (r) => r.day === assignment.day && r.routeName === assignment.routeName
           );
           if (existing) {
             existing.stopsPlaced++;
+            if (assignment.overDuration) existing.overDuration = true;
           } else {
             routeSummary.push({
               day: assignment.day,
               routeName: assignment.routeName,
               stopsPlaced: 1,
+              overDuration: assignment.overDuration ?? false,
             });
           }
         }
       }
+
+      const overDurationRoutes = routeSummary.filter((r) => r.overDuration);
 
       res.json({
         created: createdPlans.length,
@@ -565,6 +591,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         stopsAssigned,
         routesCreated,
         routeSummary,
+        overDurationRoutes,
       });
     } catch (err) {
       handleError(res, err);

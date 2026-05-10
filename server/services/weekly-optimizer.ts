@@ -40,6 +40,7 @@ export interface ProposedRoute {
   estimatedMiles: number;
   estimatedMinutes: number;
   stopCount: number;
+  warnings?: string[];
 }
 
 export interface DayProposal {
@@ -342,6 +343,9 @@ export async function analyzeWeeklySchedule(
     minStopsPerDay?: number;
     numTechs?: number;
     maxRouteDurationHours?: number;
+    routePlanningMode?: "stops" | "time";
+    avgMinutesPerStop?: number;
+    minRouteDurationHours?: number;
   } = {}
 ): Promise<WeeklyOptimizationResult> {
   const {
@@ -352,7 +356,19 @@ export async function analyzeWeeklySchedule(
     minStopsPerDay,
     numTechs,
     maxRouteDurationHours,
+    routePlanningMode = "stops",
+    avgMinutesPerStop = 12,
+    minRouteDurationHours,
   } = options;
+
+  // In time-based mode, derive effective max stops from the time budget.
+  const effectiveMaxStopsPerDay =
+    routePlanningMode === "time" &&
+    maxRouteDurationHours != null &&
+    maxRouteDurationHours > 0 &&
+    avgMinutesPerStop > 0
+      ? Math.max(1, Math.floor((maxRouteDurationHours * 60) / avgMinutesPerStop))
+      : maxStopsPerDay;
   const activeDays = includeSaturday ? ALL_DAYS : WORK_DAYS;
   const minRoutesPerDay = numTechs && numTechs > 1 ? numTechs : 1;
 
@@ -377,7 +393,7 @@ export async function analyzeWeeklySchedule(
       dayStops,
       day,
       startPoint,
-      maxStopsPerDay,
+      effectiveMaxStopsPerDay,
       minRoutesPerDay,
       maxRouteDurationHours
     );
@@ -409,7 +425,7 @@ export async function analyzeWeeklySchedule(
         dayStops,
         day,
         startPoint,
-        maxStopsPerDay,
+        effectiveMaxStopsPerDay,
         minRoutesPerDay,
         maxRouteDurationHours
       );
@@ -431,7 +447,7 @@ export async function analyzeWeeklySchedule(
       stops,
       activeDays,
       startPoint,
-      maxStopsPerDay,
+      effectiveMaxStopsPerDay,
       minStopsPerDay
     );
     for (const day of activeDays) {
@@ -464,7 +480,7 @@ export async function analyzeWeeklySchedule(
           dayClusters[ci],
           day,
           startPoint,
-          maxStopsPerDay,
+          effectiveMaxStopsPerDay,
           clusterMin[ci],
           maxRouteDurationHours
         );
@@ -508,6 +524,26 @@ export async function analyzeWeeklySchedule(
   }
 
   const totalRoutes = proposedDays.reduce((s, d) => s + d.routes.length, 0);
+
+  // Tag underutilized and over-duration proposed routes so the UI can surface
+  // actionable warnings bound to the server-computed flag, not client estimates.
+  for (const day of proposedDays) {
+    for (const route of day.routes) {
+      if (minRouteDurationHours != null && minRouteDurationHours > 0) {
+        if (route.estimatedMinutes < minRouteDurationHours * 60) {
+          route.warnings = [...(route.warnings ?? []), "route_underutilized"];
+        }
+      }
+      if (
+        routePlanningMode === "time" &&
+        maxRouteDurationHours != null &&
+        maxRouteDurationHours > 0 &&
+        route.estimatedMinutes > maxRouteDurationHours * 60
+      ) {
+        route.warnings = [...(route.warnings ?? []), "route_over_duration"];
+      }
+    }
+  }
 
   const milesSaved = Math.round((currentTotalMiles - proposedTotalMiles) * 10) / 10;
   const minutesSaved = Math.round(currentTotalMinutes - proposedTotalMinutes);
@@ -768,6 +804,7 @@ export interface RouteAssignment {
   routeName: string;
   day: string;
   isNewRoute: boolean;
+  overDuration?: boolean;
 }
 
 export interface AssignStopsResult {
@@ -781,8 +818,13 @@ export async function assignNewStopsToRoutes(
   newStops: NewStopInput[],
   existingRoutes: ExistingRouteInfo[],
   createRouteFn: (name: string, day: string) => Promise<{ id: string; name: string }>,
-  maxStops: number = MAX_STOPS_PER_ROUTE_ASSIGN
+  maxStops: number = MAX_STOPS_PER_ROUTE_ASSIGN,
+  options: {
+    maxRouteDurationHours?: number;
+    avgMinutesPerStop?: number;
+  } = {}
 ): Promise<AssignStopsResult> {
+  const { maxRouteDurationHours, avgMinutesPerStop = 12 } = options;
   const routeMap = new Map<string, ExistingRouteInfo & { mutable: true }>(
     existingRoutes.map((r) => [r.id, { ...r, mutable: true as const }])
   );
@@ -855,12 +897,19 @@ export async function assignNewStopsToRoutes(
         chosenRoute.stopCoords.push({ lat: stop.lat, lng: stop.lng });
       }
 
+      // Check if the route now exceeds the configured daily time budget.
+      const overDuration =
+        maxRouteDurationHours != null && maxRouteDurationHours > 0 && avgMinutesPerStop > 0
+          ? chosenRoute.stopCount * avgMinutesPerStop > maxRouteDurationHours * 60
+          : false;
+
       assignments.push({
         planId: stop.planId,
         routeId: bestRouteId,
         routeName: chosenRoute.name,
         day,
         isNewRoute: newRoutes.some((r) => r.id === bestRouteId),
+        overDuration,
       });
     }
   }

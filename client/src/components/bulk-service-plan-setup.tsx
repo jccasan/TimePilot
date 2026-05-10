@@ -56,7 +56,8 @@ interface BulkResult {
   visitsCreated: number;
   stopsAssigned: number;
   routesCreated: number;
-  routeSummary: { day: string; routeName: string; stopsPlaced: number }[];
+  routeSummary: { day: string; routeName: string; stopsPlaced: number; overDuration?: boolean }[];
+  overDurationRoutes?: { day: string; routeName: string; stopsPlaced: number }[];
 }
 
 interface Props {
@@ -250,6 +251,19 @@ export function BulkServicePlanSetup({
               </AlertDescription>
             </Alert>
 
+            {result.overDurationRoutes && result.overDurationRoutes.length > 0 && (
+              <Alert variant="destructive" data-testid="alert-over-duration">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Over-duration routes</AlertTitle>
+                <AlertDescription>
+                  {result.overDurationRoutes.length} route
+                  {result.overDurationRoutes.length !== 1 ? "s exceed" : " exceeds"} your configured
+                  daily time budget: {result.overDurationRoutes.map((r) => r.routeName).join(", ")}.
+                  Consider splitting these routes or raising the max duration setting.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {result.routeSummary.length > 0 && (
               <Card>
                 <CardHeader className="pb-2">
@@ -268,9 +282,19 @@ export function BulkServicePlanSetup({
                           <span className="font-medium">{r.routeName}</span>
                           <span className="text-muted-foreground capitalize">({r.day})</span>
                         </div>
-                        <Badge variant="secondary">
-                          {r.stopsPlaced} stop{r.stopsPlaced !== 1 ? "s" : ""}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          {r.overDuration && (
+                            <Badge
+                              variant="destructive"
+                              data-testid={`badge-over-duration-${r.day}`}
+                            >
+                              over limit
+                            </Badge>
+                          )}
+                          <Badge variant="secondary">
+                            {r.stopsPlaced} stop{r.stopsPlaced !== 1 ? "s" : ""}
+                          </Badge>
+                        </div>
                       </div>
                     ))}
                   </div>

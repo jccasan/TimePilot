@@ -1010,6 +1010,18 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           ? company.maxRouteDurationHours
           : undefined;
 
+      const co = company as Record<string, unknown>;
+      const routePlanningMode =
+        co.routePlanningMode === "time" ? ("time" as const) : ("stops" as const);
+      const avgMinutesPerStop =
+        typeof co.avgMinutesPerStop === "number" && co.avgMinutesPerStop > 0
+          ? co.avgMinutesPerStop
+          : 12;
+      const minRouteDurationHours =
+        typeof co.minRouteDurationHours === "number" && co.minRouteDurationHours > 0
+          ? co.minRouteDurationHours
+          : undefined;
+
       const result = await analyzeWeeklySchedule(weeklyStops, startPoint, {
         respectZones,
         zones,
@@ -1017,6 +1029,9 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         maxStopsPerDay,
         minStopsPerDay,
         maxRouteDurationHours,
+        routePlanningMode,
+        avgMinutesPerStop,
+        minRouteDurationHours,
       });
 
       const { calculateAllCustomerProfitability } =
@@ -1203,6 +1218,18 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         const minStopsPerDay =
           company.minStopsPerDay && company.minStopsPerDay > 0 ? company.minStopsPerDay : undefined;
 
+        const co2 = company as Record<string, unknown>;
+        const routePlanningMode =
+          co2.routePlanningMode === "time" ? ("time" as const) : ("stops" as const);
+        const avgMinutesPerStop =
+          typeof co2.avgMinutesPerStop === "number" && co2.avgMinutesPerStop > 0
+            ? co2.avgMinutesPerStop
+            : 12;
+        const minRouteDurationHours =
+          typeof co2.minRouteDurationHours === "number" && co2.minRouteDurationHours > 0
+            ? co2.minRouteDurationHours
+            : undefined;
+
         const ACTIVE_DAYS_SET = includeSaturday
           ? new Set(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"])
           : new Set(["monday", "tuesday", "wednesday", "thursday", "friday"]);
@@ -1350,6 +1377,9 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
               company.maxRouteDurationHours && company.maxRouteDurationHours > 0
                 ? company.maxRouteDurationHours
                 : undefined,
+            routePlanningMode,
+            avgMinutesPerStop,
+            minRouteDurationHours,
           });
 
           weekResults.push({
@@ -1778,6 +1808,25 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         });
       }
 
+      // Compute over-duration flag server-side so the UI has a reliable flag,
+      // not a client-side estimate.  Only applies in time-based planning mode.
+      const co2 = company as Record<string, unknown>;
+      const routePlanningMode2 = co2.routePlanningMode === "time" ? "time" : "stops";
+      const avgMinutesPerStop2 =
+        typeof co2.avgMinutesPerStop === "number" && co2.avgMinutesPerStop > 0
+          ? (co2.avgMinutesPerStop as number)
+          : 12;
+      const maxRouteDurationHours2 =
+        typeof company?.maxRouteDurationHours === "number" && company.maxRouteDurationHours > 0
+          ? company.maxRouteDurationHours
+          : null;
+      const estimatedTotalMinutes2 =
+        Math.round(metrics.totalDuration) + routePlans.length * avgMinutesPerStop2;
+      const overDuration =
+        routePlanningMode2 === "time" &&
+        maxRouteDurationHours2 != null &&
+        estimatedTotalMinutes2 > maxRouteDurationHours2 * 60;
+
       res.json({
         totalDistance: Math.round(metrics.totalDistance * 10) / 10,
         totalDuration: Math.round(metrics.totalDuration),
@@ -1789,6 +1838,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         })),
         stopCount: routePlans.length,
         missingCoords: missingCoords.length > 0 ? missingCoords : undefined,
+        overDuration,
       });
     } catch (err) {
       handleError(res, err);

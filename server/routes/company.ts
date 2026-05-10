@@ -366,6 +366,9 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "maxStopsPerRoute",
         "minStopsPerDay",
         "maxRouteDurationHours",
+        "routePlanningMode",
+        "avgMinutesPerStop",
+        "minRouteDurationHours",
         "country",
         "currency",
         "taxRatePercent",
@@ -507,6 +510,29 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
           return res.status(400).json({ error: "Venmo handle must be 50 characters or fewer" });
         }
         updates.venmoHandle = raw || null;
+      }
+      if (updates.routePlanningMode !== undefined) {
+        if (!["stops", "time"].includes(String(updates.routePlanningMode))) {
+          return res.status(400).json({ error: "routePlanningMode must be 'stops' or 'time'" });
+        }
+      }
+      if (updates.avgMinutesPerStop !== undefined && updates.avgMinutesPerStop !== null) {
+        const v = Number(updates.avgMinutesPerStop);
+        if (isNaN(v) || v < 5) {
+          return res.status(400).json({ error: "avgMinutesPerStop must be at least 5" });
+        }
+      }
+      if (updates.minRouteDurationHours !== undefined && updates.minRouteDurationHours !== null) {
+        const v = Number(updates.minRouteDurationHours);
+        if (isNaN(v) || v < 0.5) {
+          return res.status(400).json({ error: "minRouteDurationHours must be at least 0.5" });
+        }
+      }
+      if (updates.maxRouteDurationHours !== undefined && updates.maxRouteDurationHours !== null) {
+        const v = Number(updates.maxRouteDurationHours);
+        if (isNaN(v) || v < 1) {
+          return res.status(400).json({ error: "maxRouteDurationHours must be at least 1" });
+        }
       }
       const company = await storage.updateCompany(companyId, updates as Partial<InsertCompany>);
       // Mark the new logo as public so it can be served via /objects/ without auth.

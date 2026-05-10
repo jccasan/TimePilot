@@ -144,6 +144,41 @@ async function buildSettings(companyId: string): Promise<RoutePlannerSettings> {
   // this threshold are candidates for merging with nearby underutilized routes.
   const minStopsPerRoute = company.minStopsPerDay ?? 3;
 
+  const co = company as Record<string, unknown>;
+
+  // Route planning mode and time-budget settings.
+  const routePlanningMode =
+    (co.routePlanningMode as string | undefined) === "time" ? "time" : "stops";
+  const avgMinutesPerStop =
+    typeof co.avgMinutesPerStop === "number" && co.avgMinutesPerStop > 0
+      ? co.avgMinutesPerStop
+      : 12;
+
+  // minRouteDurationHours drives the minimumViableRouteMinutes threshold: routes
+  // shorter than this are flagged as underutilized (route_underutilized warning).
+  const minRouteDurationHours =
+    typeof co.minRouteDurationHours === "number" && co.minRouteDurationHours > 0
+      ? co.minRouteDurationHours
+      : undefined;
+  const maxRouteDurationHours =
+    typeof company.maxRouteDurationHours === "number" && company.maxRouteDurationHours > 0
+      ? company.maxRouteDurationHours
+      : undefined;
+
+  const minimumViableRouteMinutes =
+    minRouteDurationHours != null ? Math.round(minRouteDurationHours * 60) : 60;
+  const targetMaxRouteMinutes =
+    maxRouteDurationHours != null ? Math.round(maxRouteDurationHours * 60) : 420;
+  const hardMaxRouteMinutes =
+    maxRouteDurationHours != null ? Math.round(maxRouteDurationHours * 60) + 30 : 450;
+
+  // In time-based mode, derive the effective route stop capacity from the time budget.
+  // In stop-based mode, use the configured maxStopsPerRoute directly.
+  const effectiveWarnAtStopCount =
+    routePlanningMode === "time" && maxRouteDurationHours != null && maxRouteDurationHours > 0
+      ? Math.max(1, Math.floor((maxRouteDurationHours * 60) / avgMinutesPerStop))
+      : maxStopsPerRoute;
+
   const settings: RoutePlannerSettings = {
     planningWeeks: 4,
     planningStartMode: "next_monday",
@@ -153,20 +188,22 @@ async function buildSettings(companyId: string): Promise<RoutePlannerSettings> {
     includeOfficeToFirstStop: !!companyStartLocation,
     includeReturnToOffice: false,
 
-    defaultServiceMinutesPerStop: pricing.minimumServiceMinutesFloor ?? 10,
+    // In time-based mode, use the configured avg service time; otherwise use the pricing floor.
+    defaultServiceMinutesPerStop:
+      routePlanningMode === "time" ? avgMinutesPerStop : (pricing.minimumServiceMinutesFloor ?? 10),
     allowCustomerServiceTimeOverride: false,
     routeBufferMinutes: 30,
     perStopBufferMinutes: 1,
 
-    minimumViableRouteMinutes: 60,
+    minimumViableRouteMinutes,
     targetMinRouteMinutes: 300,
-    targetMaxRouteMinutes: 420,
-    hardMaxRouteMinutes: 450,
+    targetMaxRouteMinutes,
+    hardMaxRouteMinutes,
     allowTimeOverride: false,
 
     useStopCountAsHardConstraint: false,
-    warnAtStopCount: maxStopsPerRoute,
-    unusualStopCountThreshold: Math.ceil(maxStopsPerRoute * 1.2),
+    warnAtStopCount: effectiveWarnAtStopCount,
+    unusualStopCountThreshold: Math.ceil(effectiveWarnAtStopCount * 1.2),
 
     laborCostPerHour,
     averageGasPricePerGallon,

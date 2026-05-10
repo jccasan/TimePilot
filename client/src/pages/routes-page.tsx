@@ -99,6 +99,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
+  AlertTriangle,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { WeeklyOptimizerPanel } from "@/components/WeeklyOptimizerPanel";
@@ -246,6 +247,7 @@ type RouteMetrics = {
   stopCount: number;
   missingCoords?: string[];
   error?: string;
+  overDuration?: boolean;
 };
 
 function LegSeparator({ distance, duration }: { distance: number; duration: number }) {
@@ -674,6 +676,8 @@ function RouteCard({
   updatingVisitStatus?: string | null;
   metrics?: RouteMetrics | null;
   metricsLoading?: boolean;
+  maxRouteDurationHours?: number | null;
+  avgMinutesPerStop?: number | null;
   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
   onOnMyWay?: (visitId: string) => void;
   onMyWaySendingId?: string | null;
@@ -682,6 +686,7 @@ function RouteCard({
   highlightedStopIds?: Set<string>;
 }) {
   const { formatMoney } = useCurrency();
+  const [overDurationDismissed, setOverDurationDismissed] = useState(false);
   const tech = team.find((t) => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
   const totalRevenue = stops.reduce((sum, s) => sum + Number(s.pricePerVisit), 0);
@@ -697,6 +702,10 @@ function RouteCard({
   const creditsNeeded = stopCount <= 30 ? 1 : 2;
   const isOverLimit = stopCount > 30;
   const isOverMax = stopCount > 60;
+
+  // Use the server-returned overDuration flag (computed in the metrics endpoint,
+  // gated to time-based planning mode so stop-based companies are unaffected).
+  const isOverDuration = !overDurationDismissed && metrics?.overDuration === true;
   const isOptimized =
     route.isOptimizedCurrent ?? !!(route.lastOptimizedAt && route.optimizedStopHash);
   const optimizedDate =
@@ -709,6 +718,23 @@ function RouteCard({
 
   return (
     <Card className="flex flex-col" data-testid={`card-route-${route.id}`}>
+      {isOverDuration && (
+        <div
+          className="flex items-center gap-2 px-3 py-1.5 bg-destructive/10 border-b border-destructive/20 text-destructive text-xs rounded-t-lg"
+          data-testid={`alert-over-duration-${route.id}`}
+        >
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          <span className="flex-1">Route exceeds the configured time budget</span>
+          <button
+            onClick={() => setOverDurationDismissed(true)}
+            className="ml-auto shrink-0 opacity-70 hover:opacity-100"
+            aria-label="Dismiss"
+            data-testid={`btn-dismiss-over-duration-${route.id}`}
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
       <CardHeader className="p-3 pb-2 space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -1745,13 +1771,10 @@ export default function RoutesPage() {
     name: string;
     maxStopsPerRoute?: number | null;
     maxRouteDurationHours?: number | null;
+    avgMinutesPerStop?: number | null;
     startLatitude?: string | null;
     startLongitude?: string | null;
   }>({ queryKey: ["/api/company"] });
-  const [maxStopsInput, setMaxStopsInput] = useState<string>("");
-  const [maxDurationInput, setMaxDurationInput] = useState<string>("");
-  const [isSavingDuration, setIsSavingDuration] = useState(false);
-  const [isApplyingSplit, setIsApplyingSplit] = useState(false);
 
   const { data: mapboxTokenData } = useQuery<{ token: string }>({
     queryKey: ["/api/mapbox-token"],
@@ -1782,116 +1805,6 @@ export default function RoutesPage() {
 
     return () => clearTimeout(timer);
   }, [fixLat, fixLng]);
-
-  useEffect(() => {
-    if (company?.maxStopsPerRoute != null) {
-      setMaxStopsInput(String(company.maxStopsPerRoute));
-    }
-  }, [company?.maxStopsPerRoute]);
-
-  useEffect(() => {
-    if (company?.maxRouteDurationHours != null) {
-      setMaxDurationInput(String(company.maxRouteDurationHours));
-    }
-  }, [company?.maxRouteDurationHours]);
-
-  const handleSaveMaxDuration = async () => {
-    const val = maxDurationInput.trim();
-    const hours = val === "" ? null : parseInt(val, 10);
-    if (val !== "" && (isNaN(hours!) || hours! < 1 || hours! > 12)) {
-      toast({
-        title: "Invalid value",
-        description: "Max route duration must be a whole number between 1 and 12 hours.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setIsSavingDuration(true);
-    try {
-      await apiRequest("PATCH", "/api/company", { maxRouteDurationHours: hours });
-      await queryClient.invalidateQueries({ queryKey: ["/api/company"] });
-      toast({
-        title: hours == null ? "Duration cap cleared" : "Duration cap saved",
-        description:
-          hours == null
-            ? "Route optimization will no longer be time-capped."
-            : `Routific will cap each route at ${hours} hour${hours === 1 ? "" : "s"} when optimizing.`,
-      });
-    } catch (err: unknown) {
-      toast({
-        title: "Failed to save",
-        description: (err as Error)?.message || "Could not save duration setting.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSavingDuration(false);
-    }
-  };
-
-  const handleApplyMaxStops = async () => {
-    const val = maxStopsInput.trim();
-    const maxStops = val === "" ? null : parseInt(val, 10);
-
-    if (val !== "" && (isNaN(maxStops!) || maxStops! < 2)) {
-      toast({
-        title: "Invalid value",
-        description: "Max stops must be 2 or greater.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsApplyingSplit(true);
-    try {
-      const res = await apiRequest("POST", "/api/routes/apply-max-stops", {
-        maxStops: maxStops ?? null,
-      });
-      const data = await res.json();
-
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ["/api/routes"] }),
-        queryClient.refetchQueries({ queryKey: ["/api/service-plans?isActive=true"] }),
-        queryClient.refetchQueries({ queryKey: ["/api/company"] }),
-      ]);
-
-      if (data.cleared) {
-        toast({
-          title: "Stop limit cleared",
-          description: "Routes will no longer be checked against a max stops limit.",
-        });
-      } else if (data.routesSplit === 0 && (data.errors?.length || 0) === 0) {
-        toast({
-          title: `All routes within the ${maxStops}-stop limit`,
-          description: "No routes needed splitting.",
-        });
-      } else if ((data.errors?.length || 0) > 0 && data.routesSplit === 0) {
-        toast({
-          title: "Could not split routes",
-          description: `Failed: ${data.errors.join(", ")}`,
-          variant: "destructive",
-        });
-      } else if ((data.errors?.length || 0) > 0) {
-        toast({
-          title: `${data.routesSplit} route${data.routesSplit !== 1 ? "s" : ""} split into ${data.routesSplit + data.subRoutesCreated} sub-routes`,
-          description: `Some routes could not be split: ${data.errors.join(", ")}`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: `${data.routesSplit} route${data.routesSplit !== 1 ? "s" : ""} split into ${data.routesSplit + data.subRoutesCreated} sub-routes`,
-          description: "Each sub-route has been optimized and visits regenerated.",
-        });
-      }
-    } catch (err: any) {
-      toast({
-        title: "Failed to apply",
-        description: err?.message || "Could not save settings.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsApplyingSplit(false);
-    }
-  };
 
   const selectedDayDate = useMemo(() => {
     const now = new Date();
@@ -2843,77 +2756,6 @@ export default function RoutesPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <div
-              className="flex items-center gap-1.5"
-              title="Set a maximum stops per route and split all oversized routes at once"
-            >
-              <Label
-                htmlFor="max-stops-input"
-                className="text-xs text-muted-foreground whitespace-nowrap"
-              >
-                Max stops
-              </Label>
-              <Input
-                id="max-stops-input"
-                type="number"
-                min={2}
-                placeholder="50"
-                value={maxStopsInput}
-                onChange={(e) => setMaxStopsInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleApplyMaxStops();
-                }}
-                className="w-16 h-8 text-xs"
-                data-testid="input-max-stops"
-                disabled={isApplyingSplit}
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs px-2"
-                onClick={handleApplyMaxStops}
-                disabled={isApplyingSplit}
-                data-testid="button-apply-max-stops"
-              >
-                {isApplyingSplit ? <Loader2 className="h-3 w-3 animate-spin" /> : "Apply"}
-              </Button>
-            </div>
-            <div
-              className="flex items-center gap-1.5"
-              title="Cap the maximum route duration passed to the route optimizer (in hours, 1–12). Leave blank for no cap."
-            >
-              <Label
-                htmlFor="max-duration-input"
-                className="text-xs text-muted-foreground whitespace-nowrap"
-              >
-                Max hrs
-              </Label>
-              <Input
-                id="max-duration-input"
-                type="number"
-                min={1}
-                max={12}
-                placeholder="none"
-                value={maxDurationInput}
-                onChange={(e) => setMaxDurationInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSaveMaxDuration();
-                }}
-                className="w-16 h-8 text-xs"
-                data-testid="input-max-duration"
-                disabled={isSavingDuration}
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs px-2"
-                onClick={handleSaveMaxDuration}
-                disabled={isSavingDuration}
-                data-testid="button-save-max-duration"
-              >
-                {isSavingDuration ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
-              </Button>
-            </div>
             <Button
               variant={viewMode === "map" ? "default" : "outline"}
               size="sm"
@@ -3500,6 +3342,8 @@ export default function RoutesPage() {
                           updatingVisitStatus={updatingVisitStatus}
                           metrics={routeMetrics[route.id] || null}
                           metricsLoading={metricsLoadingRoutes.has(route.id)}
+                          maxRouteDurationHours={company?.maxRouteDurationHours}
+                          avgMinutesPerStop={company?.avgMinutesPerStop}
                           isUnassigning={unassigningRouteId === route.id}
                           onStopClick={handleStopClick}
                           onOnMyWay={handleOnMyWay}

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   Sparkles,
   Check,
@@ -30,7 +31,79 @@ import {
   AlertTriangle,
   TrendingUp,
   DollarSign,
+  Clock,
 } from "lucide-react";
+
+function SettingRow({
+  label,
+  description,
+  inputId,
+  placeholder,
+  min,
+  step,
+  value,
+  onChange,
+  onSave,
+  isPending,
+  testIdInput,
+  testIdButton,
+  muted = false,
+}: {
+  label: string;
+  description: string | React.ReactNode;
+  inputId: string;
+  placeholder: string;
+  min: number;
+  step?: number;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  isPending: boolean;
+  testIdInput: string;
+  testIdButton: string;
+  muted?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between p-4 border rounded-lg ${muted ? "opacity-50" : ""}`}
+    >
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={inputId} className="sr-only">
+          {label}
+        </Label>
+        <Input
+          id={inputId}
+          type="number"
+          min={min}
+          step={step}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSave();
+          }}
+          className="w-20 h-8 text-xs"
+          data-testid={testIdInput}
+          disabled={isPending}
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs px-2"
+          onClick={onSave}
+          disabled={isPending}
+          data-testid={testIdButton}
+        >
+          {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 const ROUTE_COLORS = [
   "#3b82f6",
@@ -234,39 +307,136 @@ export function WeeklyOptimizerPanel({
   } | null>(null);
 
   const [minStopsInput, setMinStopsInput] = useState<string>("");
+  const [maxStopsInput, setMaxStopsInput] = useState<string>("");
+  const [minDurationInput, setMinDurationInput] = useState<string>("");
+  const [maxDurationInput, setMaxDurationInput] = useState<string>("");
+  const [avgMinutesInput, setAvgMinutesInput] = useState<string>("");
+  const [isTimeBased, setIsTimeBased] = useState(false);
+  const [dismissedOverDuration, setDismissedOverDuration] = useState<Set<string>>(new Set());
 
-  const { data: company } = useQuery<{ minStopsPerDay?: number | null }>({
+  const { data: company } = useQuery<{
+    minStopsPerDay?: number | null;
+    maxStopsPerRoute?: number | null;
+    minRouteDurationHours?: number | null;
+    maxRouteDurationHours?: number | null;
+    avgMinutesPerStop?: number | null;
+    routePlanningMode?: string | null;
+  }>({
     queryKey: ["/api/company"],
   });
 
   useEffect(() => {
-    if (company?.minStopsPerDay != null) {
-      setMinStopsInput(String(company.minStopsPerDay));
-    }
-  }, [company?.minStopsPerDay]);
+    if (company?.minStopsPerDay != null) setMinStopsInput(String(company.minStopsPerDay));
+    if (company?.maxStopsPerRoute != null) setMaxStopsInput(String(company.maxStopsPerRoute));
+    if (company?.minRouteDurationHours != null)
+      setMinDurationInput(String(company.minRouteDurationHours));
+    if (company?.maxRouteDurationHours != null)
+      setMaxDurationInput(String(company.maxRouteDurationHours));
+    if (company?.avgMinutesPerStop != null) setAvgMinutesInput(String(company.avgMinutesPerStop));
+    if (company?.routePlanningMode != null) setIsTimeBased(company.routePlanningMode === "time");
+  }, [
+    company?.minStopsPerDay,
+    company?.maxStopsPerRoute,
+    company?.minRouteDurationHours,
+    company?.maxRouteDurationHours,
+    company?.avgMinutesPerStop,
+    company?.routePlanningMode,
+  ]);
 
-  const saveMinStopsMutation = useMutation({
-    mutationFn: async (value: number | null) => {
-      await apiRequest("PATCH", "/api/company", { minStopsPerDay: value });
+  const makeCompanyPatch = (field: string, successMsg: string) => ({
+    mutationFn: async (value: number | string | null) => {
+      await apiRequest("PATCH", "/api/company", { [field]: value });
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
     },
-    onSuccess: () => {
-      toast({ title: "Saved", description: "Minimum stops per day updated." });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Could not save setting.", variant: "destructive" });
-    },
+    onSuccess: () => toast({ title: "Saved", description: successMsg }),
+    onError: () =>
+      toast({ title: "Error", description: "Could not save setting.", variant: "destructive" }),
   });
 
-  const handleSaveMinStops = () => {
-    const val = minStopsInput.trim();
-    const num = val === "" ? null : parseInt(val, 10);
-    if (val !== "" && (isNaN(num!) || num! < 1)) {
-      toast({ title: "Invalid value", description: "Enter a number ≥ 1.", variant: "destructive" });
-      return;
-    }
-    saveMinStopsMutation.mutate(num);
+  const saveMinStopsMutation = useMutation(
+    makeCompanyPatch("minStopsPerDay", "Minimum stops per day updated.")
+  );
+  const saveMaxStopsMutation = useMutation(
+    makeCompanyPatch("maxStopsPerRoute", "Maximum stops per day updated.")
+  );
+  const saveMinDurationMutation = useMutation(
+    makeCompanyPatch("minRouteDurationHours", "Minimum route duration updated.")
+  );
+  const saveMaxDurationMutation = useMutation(
+    makeCompanyPatch("maxRouteDurationHours", "Maximum route duration updated.")
+  );
+  const saveAvgMinutesMutation = useMutation(
+    makeCompanyPatch("avgMinutesPerStop", "Average service time per stop updated.")
+  );
+  const saveModeMutation = useMutation(
+    makeCompanyPatch("routePlanningMode", "Planning mode updated.")
+  );
+
+  const handleToggleMode = (checked: boolean) => {
+    setIsTimeBased(checked);
+    saveModeMutation.mutate(checked ? "time" : "stops");
   };
+
+  const makeNumericSaveHandler =
+    (
+      input: string,
+      mutation: { mutate: (v: number | string | null) => void; isPending: boolean },
+      min: number,
+      label: string,
+      allowNull = true
+    ) =>
+    () => {
+      const val = input.trim();
+      const num = val === "" ? null : parseFloat(val);
+      if (val !== "" && (isNaN(num!) || num! < min)) {
+        toast({
+          title: "Invalid value",
+          description: `${label} must be ≥ ${min}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!allowNull && num == null) {
+        toast({
+          title: "Invalid value",
+          description: `${label} is required.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      mutation.mutate(num);
+    };
+
+  const handleSaveMinStops = makeNumericSaveHandler(
+    minStopsInput,
+    saveMinStopsMutation,
+    1,
+    "Min stops per day"
+  );
+  const handleSaveMaxStops = makeNumericSaveHandler(
+    maxStopsInput,
+    saveMaxStopsMutation,
+    1,
+    "Max stops per day"
+  );
+  const handleSaveMinDuration = makeNumericSaveHandler(
+    minDurationInput,
+    saveMinDurationMutation,
+    0.5,
+    "Min route duration"
+  );
+  const handleSaveMaxDuration = makeNumericSaveHandler(
+    maxDurationInput,
+    saveMaxDurationMutation,
+    1,
+    "Max route duration"
+  );
+  const handleSaveAvgMinutes = makeNumericSaveHandler(
+    avgMinutesInput,
+    saveAvgMinutesMutation,
+    5,
+    "Avg service time"
+  );
 
   function resetAll() {
     setPlanResult(null);
@@ -469,48 +639,127 @@ export function WeeklyOptimizerPanel({
           <div className="space-y-6 py-4">
             {!applyMutation.isPending && (
               <>
-                <div className="space-y-4">
+                <div className="space-y-3">
+                  {/* Planning mode toggle */}
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div>
-                      <p className="text-sm font-medium">Min stops per day</p>
+                      <p className="text-sm font-medium">Planning mode</p>
                       <p className="text-xs text-muted-foreground">
-                        Merge days with fewer than this many stops
+                        {isTimeBased
+                          ? "Time-based: routes sized by daily time budget"
+                          : "Stop-based: routes sized by stop count"}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <Label htmlFor="min-stops-input" className="sr-only">
-                        Min stops per day
-                      </Label>
-                      <Input
-                        id="min-stops-input"
-                        type="number"
-                        min={1}
-                        placeholder="3"
-                        value={minStopsInput}
-                        onChange={(e) => setMinStopsInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleSaveMinStops();
-                        }}
-                        className="w-16 h-8 text-xs"
-                        data-testid="input-min-stops-per-day"
-                        disabled={saveMinStopsMutation.isPending}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Stops</span>
+                      <Switch
+                        checked={isTimeBased}
+                        onCheckedChange={handleToggleMode}
+                        disabled={saveModeMutation.isPending}
+                        data-testid="switch-planning-mode"
                       />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs px-2"
-                        onClick={handleSaveMinStops}
-                        disabled={saveMinStopsMutation.isPending}
-                        data-testid="button-save-min-stops"
-                      >
-                        {saveMinStopsMutation.isPending ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                        ) : (
-                          "Save"
-                        )}
-                      </Button>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Time
+                      </span>
                     </div>
                   </div>
+
+                  {/* Stop count settings (active in stop-based mode; stored for both) */}
+                  <SettingRow
+                    label="Min stops per day"
+                    description={
+                      isTimeBased
+                        ? "Min stops threshold (not used in time-based mode)"
+                        : "Merge days with fewer than this many stops"
+                    }
+                    inputId="min-stops-input"
+                    placeholder="3"
+                    min={1}
+                    value={minStopsInput}
+                    onChange={setMinStopsInput}
+                    onSave={handleSaveMinStops}
+                    isPending={saveMinStopsMutation.isPending}
+                    testIdInput="input-min-stops-per-day"
+                    testIdButton="button-save-min-stops"
+                    muted={isTimeBased}
+                  />
+                  <SettingRow
+                    label="Max stops per day"
+                    description={
+                      isTimeBased
+                        ? "Max stops override (time budget is used instead in time-based mode)"
+                        : "Split routes that exceed this many stops"
+                    }
+                    inputId="max-stops-input"
+                    placeholder="50"
+                    min={1}
+                    value={maxStopsInput}
+                    onChange={setMaxStopsInput}
+                    onSave={handleSaveMaxStops}
+                    isPending={saveMaxStopsMutation.isPending}
+                    testIdInput="input-max-stops-per-day"
+                    testIdButton="button-save-max-stops"
+                    muted={isTimeBased}
+                  />
+
+                  {/* Time budget settings (active in time-based mode; stored for both) */}
+                  <SettingRow
+                    label="Min route duration (hrs)"
+                    description={
+                      isTimeBased
+                        ? "Routes below this threshold are flagged as underutilized"
+                        : "Min daily duration floor (used in time-based mode)"
+                    }
+                    inputId="min-duration-input"
+                    placeholder="1"
+                    min={0.5}
+                    step={0.5}
+                    value={minDurationInput}
+                    onChange={setMinDurationInput}
+                    onSave={handleSaveMinDuration}
+                    isPending={saveMinDurationMutation.isPending}
+                    testIdInput="input-min-route-duration"
+                    testIdButton="button-save-min-duration"
+                    muted={!isTimeBased}
+                  />
+                  <SettingRow
+                    label="Max route duration (hrs)"
+                    description={
+                      isTimeBased
+                        ? "Routes exceeding this limit are flagged with an over-duration warning"
+                        : "Max daily duration cap (used in time-based mode)"
+                    }
+                    inputId="max-duration-input"
+                    placeholder="8"
+                    min={1}
+                    step={0.5}
+                    value={maxDurationInput}
+                    onChange={setMaxDurationInput}
+                    onSave={handleSaveMaxDuration}
+                    isPending={saveMaxDurationMutation.isPending}
+                    testIdInput="input-max-route-duration"
+                    testIdButton="button-save-max-duration"
+                    muted={!isTimeBased}
+                  />
+                  <SettingRow
+                    label="Avg service time per stop (min)"
+                    description={
+                      isTimeBased
+                        ? "Used to compute how many stops fit in the daily time budget"
+                        : "Per-stop service time estimate (used in time-based mode)"
+                    }
+                    inputId="avg-minutes-input"
+                    placeholder="12"
+                    min={5}
+                    value={avgMinutesInput}
+                    onChange={setAvgMinutesInput}
+                    onSave={handleSaveAvgMinutes}
+                    isPending={saveAvgMinutesMutation.isPending}
+                    testIdInput="input-avg-minutes-per-stop"
+                    testIdButton="button-save-avg-minutes"
+                    muted={!isTimeBased}
+                  />
                 </div>
 
                 <Button
@@ -833,6 +1082,38 @@ export function WeeklyOptimizerPanel({
                                   stops
                                 </span>
                               </div>
+                              {route.warnings?.includes("route_over_duration") &&
+                                !dismissedOverDuration.has(
+                                  `${activeWeek.weekNumber}-${route.id}`
+                                ) && (
+                                  <div
+                                    className="flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 px-3 py-1.5"
+                                    data-testid={`warning-over-duration-${activeWeek.weekNumber}-${rIdx}`}
+                                  >
+                                    <div className="flex items-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-400">
+                                      <Clock className="h-3 w-3 shrink-0" />
+                                      <span>
+                                        Route exceeds the configured time budget (
+                                        {formatMinutes(route.totalRouteMinutes)})
+                                      </span>
+                                    </div>
+                                    <button
+                                      className="text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
+                                      onClick={() =>
+                                        setDismissedOverDuration(
+                                          (prev) =>
+                                            new Set([
+                                              ...prev,
+                                              `${activeWeek.weekNumber}-${route.id}`,
+                                            ])
+                                        )
+                                      }
+                                      data-testid={`dismiss-over-duration-${activeWeek.weekNumber}-${rIdx}`}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                )}
                               <div className="space-y-0.5">
                                 {route.assignedStops.map((stop, sIdx) => (
                                   <div
