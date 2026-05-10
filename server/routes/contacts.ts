@@ -494,7 +494,11 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const all = req.query.all === "true";
       // Default: page=1, limit=50 (paginated). Explicit ?all=true returns unbounded legacy array.
       const page = all ? 0 : Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
-      const limit = all ? 0 : Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+      const limit = all
+        ? 0
+        : Number.isFinite(rawLimit) && rawLimit > 0
+          ? Math.min(rawLimit, 200)
+          : 50;
 
       const [activePlans, contactsResult] = await Promise.all([
         storage.getServicePlans(companyId, { isActive: true }),

@@ -2570,7 +2570,10 @@ async function runTests() {
   await test("Null bytes in query params handled safely (no 500)", "Edge Cases", async () => {
     const r = await req("GET", "/api/contacts?search=%00%01%02");
     assert(r.status === 200, `Expected 200 for null-byte sanitized search, got ${r.status}`);
-    assert(Array.isArray(r.data.contacts), "Should return paginated contacts object after null byte sanitization");
+    assert(
+      Array.isArray(r.data.contacts),
+      "Should return paginated contacts object after null byte sanitization"
+    );
   });
 
   await test(
@@ -2900,7 +2903,10 @@ async function runTests() {
       assert(Array.isArray(r.data), "Expected array response");
       // All visits must belong to the same company — verify no cross-tenant mixing
       const companyIds = new Set(r.data.map((v: any) => v.companyId).filter(Boolean));
-      assert(companyIds.size <= 1, `Expected at most 1 companyId in today visits, got: ${[...companyIds].join(", ")}`);
+      assert(
+        companyIds.size <= 1,
+        `Expected at most 1 companyId in today visits, got: ${[...companyIds].join(", ")}`
+      );
     }
   );
 
