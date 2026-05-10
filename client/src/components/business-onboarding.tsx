@@ -114,6 +114,34 @@ const profileSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileSchema>;
 
+const DRAFT_KEYS = {
+  profile: "scoopilot_onboarding_draft_profile",
+  intelligence: "scoopilot_onboarding_draft_intelligence",
+  pricing: "scoopilot_onboarding_draft_pricing",
+  voice: "scoopilot_onboarding_draft_voice",
+} as const;
+
+function readDraft<T>(key: string): Partial<T> {
+  try {
+    const raw = sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as Partial<T>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveDraft<T>(key: string, data: T): void {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(data));
+  } catch {}
+}
+
+function clearDraft(key: string): void {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {}
+}
+
 function StepIndicator({
   currentStep,
   completedSteps,
@@ -216,17 +244,28 @@ function CompanyProfileStep({
     await uploadFile(file);
   };
 
+  const profileDraft = readDraft<ProfileFormValues>(DRAFT_KEYS.profile);
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      name: companyData.name || "",
-      email: companyData.email || "",
-      phone: companyData.phone || "",
-      address: companyData.address || "",
-      websiteUrl: companyData.websiteUrl || "",
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York",
+      name: profileDraft.name ?? companyData.name ?? "",
+      email: profileDraft.email ?? companyData.email ?? "",
+      phone: profileDraft.phone ?? companyData.phone ?? "",
+      address: profileDraft.address ?? companyData.address ?? "",
+      websiteUrl: profileDraft.websiteUrl ?? companyData.websiteUrl ?? "",
+      timezone:
+        profileDraft.timezone ??
+        Intl.DateTimeFormat().resolvedOptions().timeZone ??
+        "America/New_York",
     },
   });
+
+  useEffect(() => {
+    const { unsubscribe } = form.watch((values) => {
+      saveDraft(DRAFT_KEYS.profile, values);
+    });
+    return unsubscribe;
+  }, [form]);
 
   return (
     <div className="max-w-xl mx-auto">
@@ -276,9 +315,9 @@ function CompanyProfileStep({
 
       <Form {...form}>
         <form
-          onSubmit={form.handleSubmit((data) =>
-            onNext({ ...data, logoUrl: logoPreview || undefined })
-          )}
+          onSubmit={form.handleSubmit((data) => {
+            onNext({ ...data, logoUrl: logoPreview || undefined });
+          })}
           className="space-y-4"
         >
           <FormField
@@ -426,12 +465,31 @@ function BusinessIntelligenceStep({
 }) {
   const { toast } = useToast();
   const [insights, setInsights] = useState<WebsiteInsights | null>(null);
+  const intelligenceDraft = readDraft<{
+    businessDescription: string;
+    serviceArea: string;
+    serviceAreaMode: "zip" | "radius";
+    radiusMiles: number;
+  }>(DRAFT_KEYS.intelligence);
   const [businessDescription, setBusinessDescription] = useState(
-    companyData.businessDescription || ""
+    intelligenceDraft.businessDescription ?? companyData.businessDescription ?? ""
   );
-  const [serviceArea, setServiceArea] = useState(companyData.serviceAreaDescription || "");
-  const [serviceAreaMode, setServiceAreaMode] = useState<"zip" | "radius">("zip");
-  const [radiusMiles, setRadiusMiles] = useState(15);
+  const [serviceArea, setServiceArea] = useState(
+    intelligenceDraft.serviceArea ?? companyData.serviceAreaDescription ?? ""
+  );
+  const [serviceAreaMode, setServiceAreaMode] = useState<"zip" | "radius">(
+    intelligenceDraft.serviceAreaMode ?? "zip"
+  );
+  const [radiusMiles, setRadiusMiles] = useState(intelligenceDraft.radiusMiles ?? 15);
+
+  useEffect(() => {
+    saveDraft(DRAFT_KEYS.intelligence, {
+      businessDescription,
+      serviceArea,
+      serviceAreaMode,
+      radiusMiles,
+    });
+  }, [businessDescription, serviceArea, serviceAreaMode, radiusMiles]);
   const scrapeMutation = useMutation({
     mutationFn: async (url: string) => {
       const res = await apiRequest("POST", "/api/onboarding/scrape-website", { websiteUrl: url });
@@ -634,7 +692,9 @@ function BusinessIntelligenceStep({
             Skip
           </Button>
           <Button
-            onClick={() => onNext({ businessDescription, serviceAreaDescription: serviceArea })}
+            onClick={() => {
+              onNext({ businessDescription, serviceAreaDescription: serviceArea });
+            }}
             disabled={isPending}
             data-testid="button-next-step"
           >
@@ -728,22 +788,35 @@ function PricingSetupStep({
   const existingConfig = { ...DEFAULT_PRICING_CONFIG, ...(companyData.pricingConfig || {}) };
   const existingRules = existingConfig.pricingRules || DEFAULT_PRICING_RULES;
 
+  type PricingDraft = {
+    pricingMode: "aggressive" | "standard" | "premium";
+    qfBase: Record<FreqKey, string>;
+    surcharge: string;
+    increment: string;
+    grid: Record<FreqKey, Record<DogCol, string>>;
+  };
+  const pricingDraft = readDraft<PricingDraft>(DRAFT_KEYS.pricing);
+
   const [pricingMode, setPricingMode] = useState<"aggressive" | "standard" | "premium">(
-    existingConfig.pricingMode || "standard"
+    pricingDraft.pricingMode ?? existingConfig.pricingMode ?? "standard"
   );
 
-  const [qfBase, setQfBase] = useState<Record<FreqKey, string>>({
-    weekly: existingRules.basePrices.weekly ? String(existingRules.basePrices.weekly) : "",
-    biWeekly: existingRules.basePrices.biWeekly ? String(existingRules.basePrices.biWeekly) : "",
-    twiceWeekly: existingRules.basePrices.twiceWeekly
-      ? String(existingRules.basePrices.twiceWeekly)
-      : "",
-    monthly: existingRules.basePrices.monthly ? String(existingRules.basePrices.monthly) : "",
-  });
-  const [surcharge, setSurcharge] = useState(
-    String(existingRules.perDogRule.surchargeAmount || "5")
+  const [qfBase, setQfBase] = useState<Record<FreqKey, string>>(
+    pricingDraft.qfBase ?? {
+      weekly: existingRules.basePrices.weekly ? String(existingRules.basePrices.weekly) : "",
+      biWeekly: existingRules.basePrices.biWeekly ? String(existingRules.basePrices.biWeekly) : "",
+      twiceWeekly: existingRules.basePrices.twiceWeekly
+        ? String(existingRules.basePrices.twiceWeekly)
+        : "",
+      monthly: existingRules.basePrices.monthly ? String(existingRules.basePrices.monthly) : "",
+    }
   );
-  const [increment, setIncrement] = useState(String(existingRules.perDogRule.incrementDogs || "1"));
+  const [surcharge, setSurcharge] = useState(
+    pricingDraft.surcharge ?? String(existingRules.perDogRule.surchargeAmount || "5")
+  );
+  const [increment, setIncrement] = useState(
+    pricingDraft.increment ?? String(existingRules.perDogRule.incrementDogs || "1")
+  );
 
   const buildGrid = (bases: Record<FreqKey, string>, sur: string, inc: string) => {
     const grid: Record<FreqKey, Record<DogCol, string>> = {} as any;
@@ -761,9 +834,13 @@ function PricingSetupStep({
     return grid;
   };
 
-  const [grid, setGrid] = useState<Record<FreqKey, Record<DogCol, string>>>(() =>
-    buildGrid(qfBase, surcharge, increment)
+  const [grid, setGrid] = useState<Record<FreqKey, Record<DogCol, string>>>(
+    () => pricingDraft.grid ?? buildGrid(qfBase, surcharge, increment)
   );
+
+  useEffect(() => {
+    saveDraft(DRAFT_KEYS.pricing, { pricingMode, qfBase, surcharge, increment, grid });
+  }, [pricingMode, qfBase, surcharge, increment, grid]);
 
   const applyQuickFill = () => setGrid(buildGrid(qfBase, surcharge, increment));
 
@@ -1323,12 +1400,22 @@ function VoiceAgentSetupStep({
   const { toast } = useToast();
   // Prefill area code from saved preference or company phone
   const phoneAreaCode = companyData.phone?.replace(/\D/g, "").slice(0, 3) ?? "";
-  const [areaCode, setAreaCode] = useState(phoneAreaCode);
-  const [websiteUrl, setWebsiteUrl] = useState(companyData.websiteUrl || "");
-  const [greeting, setGreeting] = useState("");
-  const [pricingSummary, setPricingSummary] = useState("");
-  const [serviceArea, setServiceArea] = useState("");
-  const [policies, setPolicies] = useState("");
+  const voiceDraft = readDraft<{
+    areaCode: string;
+    websiteUrl: string;
+    greeting: string;
+    pricingSummary: string;
+    serviceArea: string;
+    policies: string;
+  }>(DRAFT_KEYS.voice);
+  const [areaCode, setAreaCode] = useState(voiceDraft.areaCode ?? phoneAreaCode);
+  const [websiteUrl, setWebsiteUrl] = useState(
+    voiceDraft.websiteUrl ?? companyData.websiteUrl ?? ""
+  );
+  const [greeting, setGreeting] = useState(voiceDraft.greeting ?? "");
+  const [pricingSummary, setPricingSummary] = useState(voiceDraft.pricingSummary ?? "");
+  const [serviceArea, setServiceArea] = useState(voiceDraft.serviceArea ?? "");
+  const [policies, setPolicies] = useState(voiceDraft.policies ?? "");
   const [isGenerating, setIsGenerating] = useState(false);
   const [docsGenerated, setDocsGenerated] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -1336,6 +1423,17 @@ function VoiceAgentSetupStep({
   const [uploadFileName, setUploadFileName] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const docUploadRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    saveDraft(DRAFT_KEYS.voice, {
+      areaCode,
+      websiteUrl,
+      greeting,
+      pricingSummary,
+      serviceArea,
+      policies,
+    });
+  }, [areaCode, websiteUrl, greeting, pricingSummary, serviceArea, policies]);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -1711,12 +1809,21 @@ export default function BusinessOnboarding({
     }
   }, [status, hasVoicePlan]);
 
+  const STEP_DRAFT_KEYS: Record<number, string> = {
+    0: DRAFT_KEYS.profile,
+    1: DRAFT_KEYS.intelligence,
+    2: DRAFT_KEYS.pricing,
+    [VOICE_STEP_IDX]: DRAFT_KEYS.voice,
+  };
+
   const stepMutation = useMutation({
     mutationFn: async ({ step, data }: { step: number; data?: Record<string, unknown> }) => {
       const res = await apiRequest("POST", "/api/onboarding/business-step", { step, data });
       return res.json();
     },
     onSuccess: (data) => {
+      const draftKey = STEP_DRAFT_KEYS[currentStep];
+      if (draftKey) clearDraft(draftKey);
       setCompletedSteps((prev) => [...new Set([...prev, currentStep])]);
       setCurrentStep(data.nextStep);
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding/business-status"] });
