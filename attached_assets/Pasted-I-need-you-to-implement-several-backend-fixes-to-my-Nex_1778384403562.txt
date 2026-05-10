@@ -1,0 +1,94 @@
+I need you to implement several backend fixes to my Next.js app. Here is what needs to be built:
+
+CONTEXT
+This is a multi-tenant SaaS app called ScooPilot (app.scooppilot.com). It uses Retell AI for voice and chat agents, Telnyx for SMS, Anthropic Claude API for SMS conversations, and Postgres for the database. We are adding SMS support and hardening the backend.
+
+ENVIRONMENT VARIABLES NEEDED (add to .env.local if not present)
+- TELNYX_API_KEY — existing
+- TELNYX_PUBLIC_KEY — Telnyx portal → API Keys (starts with phk_)
+- SLACK_ALERT_WEBHOOK — Slack incoming webhook URL
+- ALERT_ENV=production
+- CLEANUP_SECRET — any random string
+
+DATABASE MIGRATIONS (run these against Postgres in order)
+1. ALTER TABLE tenants ADD COLUMN IF NOT EXISTS telnyx_from_number TEXT;
+2. ALTER TABLE tenants ADD COLUMN IF NOT EXISTS business_name TEXT;
+3. CREATE TABLE IF NOT EXISTS sms_sessions (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL, from_number TEXT NOT NULL, to_number TEXT NOT NULL, messages JSONB NOT NULL DEFAULT '[]', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(), UNIQUE(from_number, to_number));
+4. CREATE INDEX IF NOT EXISTS idx_sms_sessions_updated_at ON sms_sessions (updated_at);
+5. CREATE TABLE IF NOT EXISTS fallback_log (id SERIAL PRIMARY KEY, tenant_id TEXT NOT NULL, channel TEXT NOT NULL, trigger_phrase TEXT NOT NULL, agent_response TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW());
+6. CREATE INDEX IF NOT EXISTS idx_fallback_log_tenant_id ON fallback_log (tenant_id);
+7. CREATE INDEX IF NOT EXISTS idx_fallback_log_created_at ON fallback_log (created_at);
+
+FILES TO CREATE
+
+1. /lib/telnyx-verify.ts
+Verifies Telnyx webhook signatures using Ed25519. Uses TELNYX_PUBLIC_KEY env var. Checks the telnyx-signature-ed25519 and telnyx-timestamp headers. Rejects webhooks older than 5 minutes. Returns a boolean.
+
+2. /lib/rate-limit.ts
+In-memory rate limiter. Limits per identifier (phone number). Max 20 requests per 10 minutes per identifier. Cleans up expired entries every 30 minutes. Exports checkRateLimit(identifier) returning { allowed, remaining, resetInMs }.
+
+3. /lib/sms-session.ts
+Session management for SMS conversations. Session expiry is 24 hours of inactivity. Exports: loadSession(fromNumber, toNumber) — returns messages array or null if not found or expired. createSession(tenantId, fromNumber, toNumber, messages). updateSession(fromNumber, toNumber, messages).
+
+4. /lib/sms.ts
+Telnyx SMS utility. Exports formatE164(phone) — converts 10 or 11 digit numbers to E.164 format, throws on invalid input. Exports sendSMS(to, from, message) — sends via Telnyx SDK using TELNYX_API_KEY.
+
+5. /lib/alert.ts
+Slack alerting utility. Only fires when ALERT_ENV=production. Uses SLACK_ALERT_WEBHOOK. Exports sendAlert(message, context). Never throws — catches its own errors. 
+
+6. /lib/validate-lead.ts
+Lead validation. Required fields: tenantId, firstName, lastName, phone. Recommended fields: email, streetAddress, zipcode. Exports validateLead(payload) returning { valid, missingRequired, missingRecommended }.
+
+7. /lib/fallback-log.ts
+Logs never-invent fallback triggers to the fallback_log table. Exports logFallback({ tenantId, channel, triggerPhrase, agentResponse }). Exports isFallbackResponse(response) — returns true if response contains "i'm not certain about that". Never throws.
+
+8. /app/api/sms/inbound/route.ts
+Handles inbound SMS from Telnyx webhooks. POST handler. Steps in order:
+- Read raw body as text
+- Verify Telnyx signature using telnyx-verify.ts — return 401 if invalid
+- Parse JSON
+- Ignore non message.received events
+- Extract fromNumber, toNumber, incomingText from payload
+- Check rate limit using fromNumber — return 429 if exceeded
+- Look up tenant from DB by telnyx_from_number matching toNumber — return 404 if not found
+- Load session using sms-session.ts — create new session if null
+- Append incoming message to messages array
+- Build system prompt with tenant data injected (businessName, serviceArea, services, pricing, policies, hours, booking_rules, addons, guarantees, escalationPath)
+- Call Anthropic API at https://api.anthropic.com/v1/messages using model claude-sonnet-4-20250514, max_tokens 300, with the messages array
+- If Claude response contains SUBMIT_LEAD:{...} on its own line, parse the JSON and POST it to /api/retell/create-lead with leadSource sms, then replace that line with a confirmation message
+- Check if response is a fallback using isFallbackResponse — if so call logFallback
+- Append agent reply to messages, update session
+- Send SMS reply via sendSMS
+- Return 200
+
+9. /app/api/retell/create-lead/route.ts
+POST handler. Steps in order:
+- Parse request body
+- Run validateLead — return 400 if required fields missing, also call sendAlert
+- Look up tenant from DB by tenantId to get business_name and telnyx_from_number
+- Insert lead into leads table with all fields
+- If phone and telnyx_from_number exist, format phone to E.164 and send confirmation SMS. One-time message: "Hi {firstName}, thanks for reaching out to {businessName}! We'll be in touch to confirm your cleanup appointment." Recurring message: "Hi {firstName}, thanks for reaching out to {businessName}! We'll be in touch to get your recurring schedule set up." Detect recurring by checking serviceFrequency is not one of: one-time, onetime, one time.
+- Wrap SMS in try/catch — never block lead creation if SMS fails
+- Return { success: true }
+
+10. /app/api/retell/tenant-profile/route.ts
+GET handler. Query param: to (the inbound phone number). Look up tenant by phone_number or telnyx_from_number. If not found, call sendAlert and return 404. If DB fails, call sendAlert with CRITICAL prefix and return 500. Return tenantConfig object with all tenant fields mapped correctly including telnyxFromNumber.
+
+11. /app/api/sms/cleanup/route.ts
+GET handler. Checks x-cleanup-secret header against CLEANUP_SECRET env var — return 401 if mismatch. Deletes sms_sessions rows where updated_at is older than 24 hours. Returns { deleted: count }.
+
+12. /app/api/retell/call-webhook/route.ts
+POST handler for Retell post-call webhooks. Parses transcript array from body. Walks through transcript looking for agent utterances that contain the fallback phrase. For each found, logs the preceding user utterance as the trigger phrase using logFallback. Returns 200.
+
+13. /app/api/admin/fallback-report/route.ts
+GET handler. Query params: tenantId (optional), days (default 30). Queries fallback_log table. Returns { logs: rows }. Limit 100 rows.
+
+14. vercel.json
+Add a cron job hitting /api/sms/cleanup daily at 3am UTC.
+
+GENERAL REQUIREMENTS
+- Use TypeScript throughout
+- Use the existing db import from @/lib/db for all Postgres queries
+- Never let secondary operations (SMS, logging, alerts) throw errors that affect the primary response
+- All new files go in the locations specified above
+- Install telnyx npm package if not already installed
