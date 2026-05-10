@@ -314,7 +314,9 @@ export async function runStartupMigrations(): Promise<void> {
         ADD COLUMN IF NOT EXISTS avg_minutes_per_stop INTEGER DEFAULT 12,
         ADD COLUMN IF NOT EXISTS min_route_duration_hours REAL DEFAULT 1
     `);
-    console.log("[Migration] route optimizer mode columns (route_planning_mode, avg_minutes_per_stop, min_route_duration_hours) verified");
+    console.log(
+      "[Migration] route optimizer mode columns (route_planning_mode, avg_minutes_per_stop, min_route_duration_hours) verified"
+    );
 
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
