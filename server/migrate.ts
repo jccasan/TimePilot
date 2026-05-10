@@ -244,10 +244,16 @@ export async function runStartupMigrations(): Promise<void> {
         created_at             TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_irs_batch ON import_rule_suggestions (batch_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_irs_row   ON import_rule_suggestions (row_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_irs_batch ON import_rule_suggestions (batch_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_irs_row   ON import_rule_suggestions (row_id)`
+    );
 
-    console.log("[Migration] Import staging tables ensured (import_batches, import_rows, import_mappings, import_rule_suggestions)");
+    console.log(
+      "[Migration] Import staging tables ensured (import_batches, import_rows, import_mappings, import_rule_suggestions)"
+    );
 
     // ── Routific usage log ───────────────────────────────────────────────────
     // company_id is stored as a UUID string (VARCHAR) even though the Drizzle
@@ -261,8 +267,12 @@ export async function runStartupMigrations(): Promise<void> {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_routific_usage_log_company    ON routific_usage_log (company_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_routific_usage_log_created_at ON routific_usage_log (created_at)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_routific_usage_log_company    ON routific_usage_log (company_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_routific_usage_log_created_at ON routific_usage_log (created_at)`
+    );
     console.log("[Migration] routific_usage_log table ensured");
 
     // Ensure the demo account always has voice_plan_status = 'active' so the

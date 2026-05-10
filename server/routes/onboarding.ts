@@ -40,8 +40,6 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
   app.get("/api/onboarding/status", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const demoId = await getDemoCompanyId();
-      const isDemo = !!(demoId && demoId === companyId);
       const contactsList = await storage.getContacts(companyId);
       const routesList = await storage.getRoutes(companyId);
       const plansList = await storage.getServicePlans(companyId);
