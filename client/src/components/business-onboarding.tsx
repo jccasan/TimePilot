@@ -1076,6 +1076,8 @@ function PaymentProcessingStep({
   isPending: boolean;
 }) {
   const { toast } = useToast();
+  const [justReturned, setJustReturned] = useState(false);
+  const connectedCardRef = useRef<HTMLDivElement>(null);
 
   const { data: connectStatus, isLoading: loadingStatus } = useQuery<{
     status: "not_started" | "pending" | "connected";
@@ -1106,13 +1108,26 @@ function PaymentProcessingStep({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const stripeConnect = params.get("stripe_connect");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("stripe_connect");
+    window.history.replaceState({}, "", url.toString());
     if (stripeConnect === "return") {
       queryClient.invalidateQueries({ queryKey: ["/api/stripe-connect/status"] });
-      const url = new URL(window.location.href);
-      url.searchParams.delete("stripe_connect");
-      window.history.replaceState({}, "", url.toString());
+      setJustReturned(true);
+      toast({
+        title: "Stripe connected",
+        description: "Returning to setup — your payment account is ready.",
+      });
     }
-  }, []);
+  }, [toast]);
+
+  useEffect(() => {
+    if (justReturned && !loadingStatus && connectStatus?.status === "connected") {
+      setTimeout(() => {
+        connectedCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 150);
+    }
+  }, [justReturned, loadingStatus, connectStatus?.status]);
 
   const status = connectStatus?.status || "not_started";
 
@@ -1132,7 +1147,11 @@ function PaymentProcessingStep({
           {loadingStatus ? (
             <Skeleton className="h-20 w-full" />
           ) : status === "connected" ? (
-            <div className="text-center py-4">
+            <div
+              ref={connectedCardRef}
+              className={`text-center py-4 rounded-md transition-all duration-700 ${justReturned ? "ring-2 ring-green-400 ring-offset-2 bg-green-50 dark:bg-green-950/20" : ""}`}
+              data-testid="stripe-connected-card"
+            >
               <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
               <h3 className="font-semibold text-lg">Stripe Connected</h3>
               <p className="text-muted-foreground text-sm mt-1">
