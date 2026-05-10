@@ -291,29 +291,43 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] Demo account voice_plan_status ensured active");
 
-    // Per-column GIN trigram indexes for fast ILIKE searches on individual columns
-    // These allow PostgreSQL to use a bitmap OR scan across all four predicates.
-    // Wrapped in its own try/catch — pg_trgm requires superuser on some hosts;
-    // failure here must not crash the server startup.
+    // Per-column GIN trigram indexes for fast ILIKE searches on individual columns.
+    // Each step is isolated in its own try/catch so a failure at any point
+    // cannot poison the client connection or crash server startup.
+    // Step 1: install extension (no-op if already present)
+    let trgmAvailable = false;
     try {
       await client.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+      // Step 2: confirm extension is actually present before using gin_trgm_ops
+      const extCheck = await client.query(
+        `SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'`
+      );
+      trgmAvailable = (extCheck.rowCount ?? 0) > 0;
+    } catch {
+      console.warn(
+        "[Migration] pg_trgm extension unavailable — GIN trigram indexes will be skipped"
+      );
+    }
+    if (trgmAvailable) {
       for (const [indexName, colName] of [
         ["idx_contacts_first_name_trgm", "first_name"],
         ["idx_contacts_last_name_trgm", "last_name"],
         ["idx_contacts_email_trgm", "email"],
         ["idx_contacts_phone_trgm", "phone"],
       ] as [string, string][]) {
-        await client.query(
-          `CREATE INDEX IF NOT EXISTS ${indexName}
-             ON contacts USING GIN (${colName} gin_trgm_ops)`
-        );
+        try {
+          await client.query(
+            `CREATE INDEX IF NOT EXISTS ${indexName}
+               ON contacts USING GIN (${colName} gin_trgm_ops)`
+          );
+        } catch (idxErr) {
+          console.warn(
+            `[Migration] GIN index ${indexName} skipped:`,
+            (idxErr as Error).message
+          );
+        }
       }
       console.log("[Migration] contacts per-column GIN trigram indexes ensured");
-    } catch (trgmErr) {
-      console.warn(
-        "[Migration] GIN trigram indexes skipped — pg_trgm unavailable or insufficient privileges:",
-        (trgmErr as Error).message
-      );
     }
 
     // Route optimizer time-based mode columns (Task #784)
