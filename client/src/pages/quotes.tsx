@@ -1039,7 +1039,20 @@ function CreateEditQuoteDialog({
 
   const handleMeasurementSave = useCallback(
     (polygon: number[][], areaSqft: number) => {
-      setMeasurements((prev) => [...prev, { polygon, sqft: areaSqft }]);
+      setMeasurements((prev) => {
+        const updated = [...prev, { polygon, sqft: areaSqft }];
+        if (quoteType === "residential") {
+          const totalSqft = updated.reduce((sum, m) => sum + m.sqft, 0);
+          const ACRE = 43560;
+          let tier: string;
+          if (totalSqft < ACRE * 0.25) tier = "small";
+          else if (totalSqft < ACRE * 0.5) tier = "medium";
+          else if (totalSqft < ACRE) tier = "large";
+          else tier = "estate";
+          setYardSize(tier);
+        }
+        return updated;
+      });
       if (quoteType === "commercial") {
         setSiteSqft((prev) => Number(prev || 0) + Math.round(areaSqft));
       }
@@ -1048,7 +1061,7 @@ function CreateEditQuoteDialog({
         handleGenerateYardImage(polygon, areaSqft, addressCoords.lat, addressCoords.lng);
       }
     },
-    [addressCoords, handleGenerateYardImage, quoteType]
+    [addressCoords, handleGenerateYardImage, quoteType, setYardSize]
   );
 
   const removeImage = (idx: number) => {
