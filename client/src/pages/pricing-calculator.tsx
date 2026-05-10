@@ -1439,6 +1439,13 @@ function ContactSelectorDialog({
 
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
+    queryFn: async () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const r = await fetch("/api/contacts?all=true", { credentials: "include", headers });
+      return r.ok ? r.json() : [];
+    },
     enabled: open,
   });
 

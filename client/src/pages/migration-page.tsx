@@ -739,6 +739,13 @@ function DocumentsTab() {
 
   const { data: contacts } = useQuery<ContactOption[]>({
     queryKey: ["/api/contacts"],
+    queryFn: async () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const r = await fetch("/api/contacts?all=true", { credentials: "include", headers });
+      return r.ok ? r.json() : [];
+    },
     select: (data: ContactOption[]) =>
       data.map((c) => ({
         id: c.id,

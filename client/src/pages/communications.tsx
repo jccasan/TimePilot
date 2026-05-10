@@ -910,6 +910,13 @@ function UnifiedInbox({ channelFilter }: { channelFilter?: string }) {
 
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
+    queryFn: async () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const r = await fetch("/api/contacts?all=true", { credentials: "include", headers });
+      return r.ok ? r.json() : [];
+    },
   });
 
   useEffect(() => {
@@ -1055,6 +1062,13 @@ export default function Communications() {
 
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
+    queryFn: async () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const r = await fetch("/api/contacts?all=true", { credentials: "include", headers });
+      return r.ok ? r.json() : [];
+    },
   });
 
   const { data: config } = useQuery<{

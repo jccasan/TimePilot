@@ -484,10 +484,11 @@ async function runTests() {
     "No input validation"
   );
 
-  await test("Get contacts returns array", "Contacts", async () => {
+  await test("Get contacts returns paginated object", "Contacts", async () => {
     const r = await req("GET", "/api/contacts");
     assert(r.status === 200, `Expected 200, got ${r.status}`);
-    assert(Array.isArray(r.data), "Expected array");
+    assert(Array.isArray(r.data.contacts), "Expected contacts array in paginated response");
+    assert(typeof r.data.total === "number", "Expected numeric total");
   });
 
   await test("Get single contact by ID", "Contacts", async () => {
@@ -601,10 +602,11 @@ async function runTests() {
   // 7. INVOICE TESTS
   // ==========================================
 
-  await test("Get invoices returns array", "Invoices", async () => {
+  await test("Get invoices returns paginated object", "Invoices", async () => {
     const r = await req("GET", "/api/invoices");
     assert(r.status === 200, `Expected 200, got ${r.status}`);
-    assert(Array.isArray(r.data), "Expected array");
+    assert(Array.isArray(r.data.invoices), "Expected invoices array in paginated response");
+    assert(typeof r.data.total === "number", "Expected numeric total");
   });
 
   await test(
@@ -2490,7 +2492,7 @@ async function runTests() {
   await test("SQL injection in contact search is parameterized (safe)", "Edge Cases", async () => {
     const r = await req("GET", "/api/contacts?search=' OR 1=1 --");
     assert(r.status === 200, `Expected 200 (parameterized), got ${r.status}`);
-    assert(Array.isArray(r.data), "Should return array, not error");
+    assert(Array.isArray(r.data.contacts), "Should return paginated contacts object, not error");
   });
 
   await test(
@@ -2568,7 +2570,7 @@ async function runTests() {
   await test("Null bytes in query params handled safely (no 500)", "Edge Cases", async () => {
     const r = await req("GET", "/api/contacts?search=%00%01%02");
     assert(r.status === 200, `Expected 200 for null-byte sanitized search, got ${r.status}`);
-    assert(Array.isArray(r.data), "Should return array after null byte sanitization");
+    assert(Array.isArray(r.data.contacts), "Should return paginated contacts object after null byte sanitization");
   });
 
   await test(
@@ -2816,6 +2818,91 @@ async function runTests() {
   if (testApiKeyId) {
     await req("DELETE", `/api/api-keys/${testApiKeyId}`);
   }
+
+  // ==========================================
+  // 23. PAGINATION REGRESSION TESTS
+  // ==========================================
+
+  await test(
+    "GET /api/contacts (no params) returns paginated object with page/pageSize/total",
+    "Pagination Regression",
+    async () => {
+      const r = await req("GET", "/api/contacts");
+      assert(r.status === 200, `Expected 200, got ${r.status}`);
+      assert(!Array.isArray(r.data), "Default response must NOT be a bare array");
+      assert(Array.isArray(r.data.contacts), "Must have contacts array");
+      assert(typeof r.data.total === "number", "Must have numeric total");
+      assert(r.data.page === 1, `Expected page=1, got ${r.data.page}`);
+      assert(r.data.pageSize === 50, `Expected pageSize=50, got ${r.data.pageSize}`);
+    }
+  );
+
+  await test(
+    "GET /api/contacts?all=true returns legacy flat array (not paginated object)",
+    "Pagination Regression",
+    async () => {
+      const r = await req("GET", "/api/contacts?all=true");
+      assert(r.status === 200, `Expected 200, got ${r.status}`);
+      assert(Array.isArray(r.data), "?all=true must return a flat array for backward compat");
+    }
+  );
+
+  await test(
+    "GET /api/invoices (no params) returns paginated object with page/pageSize/total",
+    "Pagination Regression",
+    async () => {
+      const r = await req("GET", "/api/invoices");
+      assert(r.status === 200, `Expected 200, got ${r.status}`);
+      assert(!Array.isArray(r.data), "Default response must NOT be a bare array");
+      assert(Array.isArray(r.data.invoices), "Must have invoices array");
+      assert(typeof r.data.total === "number", "Must have numeric total");
+      assert(r.data.page === 1, `Expected page=1, got ${r.data.page}`);
+      assert(r.data.pageSize === 50, `Expected pageSize=50, got ${r.data.pageSize}`);
+    }
+  );
+
+  await test(
+    "GET /api/invoices?all=true returns legacy flat array (not paginated object)",
+    "Pagination Regression",
+    async () => {
+      const r = await req("GET", "/api/invoices?all=true");
+      assert(r.status === 200, `Expected 200, got ${r.status}`);
+      assert(Array.isArray(r.data), "?all=true must return a flat array for backward compat");
+    }
+  );
+
+  await test(
+    "GET /api/invoices?contactId=X bypasses pagination (returns flat array)",
+    "Pagination Regression",
+    async () => {
+      // Create a throwaway contact to provide a valid contactId
+      const c = await req("POST", "/api/contacts", {
+        firstName: "InvBypass",
+        lastName: "Test",
+        email: null,
+        status: "lead",
+      });
+      if (c.status !== 200 && c.status !== 201) return;
+      const contactId = c.data.id;
+      const r = await req("GET", `/api/invoices?contactId=${contactId}`);
+      assert(r.status === 200, `Expected 200, got ${r.status}`);
+      assert(Array.isArray(r.data), "contactId filter must return flat array (bypass pagination)");
+      await req("DELETE", `/api/contacts/${contactId}`);
+    }
+  );
+
+  await test(
+    "GET /api/visits/today returns only current tenant visits (tenant isolation)",
+    "Pagination Regression",
+    async () => {
+      const r = await req("GET", "/api/visits/today");
+      assert(r.status === 200, `Expected 200, got ${r.status}`);
+      assert(Array.isArray(r.data), "Expected array response");
+      // All visits must belong to the same company — verify no cross-tenant mixing
+      const companyIds = new Set(r.data.map((v: any) => v.companyId).filter(Boolean));
+      assert(companyIds.size <= 1, `Expected at most 1 companyId in today visits, got: ${[...companyIds].join(", ")}`);
+    }
+  );
 
   // ==========================================
   // REPORT

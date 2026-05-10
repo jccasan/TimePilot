@@ -136,9 +136,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
             spa.name                         AS addon_name,
             spa.price                        AS addon_price
           FROM visits v
-          LEFT JOIN service_plans sp  ON sp.id = v.service_plan_id
-          LEFT JOIN properties p      ON p.id = v.property_id
-          LEFT JOIN contacts c        ON c.id = sp.contact_id
+          LEFT JOIN service_plans sp  ON sp.id = v.service_plan_id AND sp.company_id = v.company_id
+          LEFT JOIN properties p      ON p.id = v.property_id AND p.company_id = v.company_id
+          LEFT JOIN contacts c        ON c.id = sp.contact_id AND c.company_id = v.company_id
           LEFT JOIN service_plan_add_ons spa
                  ON spa.service_plan_id = v.service_plan_id AND spa.is_active = true
           WHERE v.company_id = ${companyId} AND v.scheduled_date = ${targetDate}

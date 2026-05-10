@@ -1154,6 +1154,13 @@ export default function Invoices() {
 
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
+    queryFn: async () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const r = await fetch("/api/contacts?all=true", { credentials: "include", headers });
+      return r.ok ? r.json() : [];
+    },
   });
 
   const { data: pricing } = useQuery<ServicePricingItem[]>({
@@ -1178,7 +1185,7 @@ export default function Invoices() {
       const token = localStorage.getItem("sessionToken");
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const r = await fetch("/api/invoices", { credentials: "include", headers });
+      const r = await fetch("/api/invoices?all=true", { credentials: "include", headers });
       if (!r.ok) return [];
       return r.json();
     },

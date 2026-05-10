@@ -491,17 +491,19 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
 
       const rawPage = parseInt(req.query.page as string);
       const rawLimit = parseInt(req.query.limit as string);
-      const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0;
-      const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 0;
+      const all = req.query.all === "true";
+      // Default: page=1, limit=50 (paginated). Explicit ?all=true returns unbounded legacy array.
+      const page = all ? 0 : Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+      const limit = all ? 0 : Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
 
       const [activePlans, contactsResult] = await Promise.all([
         storage.getServicePlans(companyId, { isActive: true }),
-        page > 0 && limit > 0
-          ? storage.getContactsPage(companyId, filters, page, limit)
-          : storage.getContacts(companyId, filters).then((data) => ({
+        all
+          ? storage.getContacts(companyId, filters).then((data) => ({
               data,
               total: data.length,
-            })),
+            }))
+          : storage.getContactsPage(companyId, filters, page, limit),
       ]);
 
       const contactsList = contactsResult.data;
@@ -532,15 +534,16 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         onboardingStatus: onboardingMap.get(c.id) || null,
       }));
 
-      if (page > 0 && limit > 0) {
+      if (all) {
+        // Legacy unbounded array for callers that need all records (dropdowns, etc.)
+        res.json(enriched);
+      } else {
         res.json({
           contacts: enriched,
           total: contactsResult.total,
           page,
           pageSize: limit,
         });
-      } else {
-        res.json(enriched);
       }
     } catch (err) {
       handleError(res, err);

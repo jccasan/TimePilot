@@ -930,7 +930,16 @@ export default function Scheduling() {
     queryKey: [`/api/visits/range?start=${startStr}&end=${endStr}`],
   });
 
-  const { data: contacts } = useQuery<Contact[]>({ queryKey: ["/api/contacts"] });
+  const { data: contacts } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+    queryFn: async () => {
+      const token = localStorage.getItem("sessionToken");
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const r = await fetch("/api/contacts?all=true", { credentials: "include", headers });
+      return r.ok ? r.json() : [];
+    },
+  });
   const { data: properties } = useQuery<Property[]>({ queryKey: ["/api/properties"] });
   const { data: routes } = useQuery<Route[]>({ queryKey: ["/api/routes"] });
   const { data: servicePlans } = useQuery<ServicePlan[]>({ queryKey: ["/api/service-plans"] });

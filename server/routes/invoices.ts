@@ -44,11 +44,14 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
 
       const rawPage = parseInt(req.query.page as string);
       const rawLimit = parseInt(req.query.limit as string);
-      const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 0;
-      const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 0;
+      const all = req.query.all === "true";
 
-      // When a contactId is present, always return all invoices for that contact (no pagination)
-      const usePagination = page > 0 && limit > 0 && !filters.contactId;
+      // Default: page=1, limit=50 (paginated). ?all=true or contactId returns unbounded legacy array.
+      const page = all || filters.contactId ? 0 : Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+      const limit =
+        all || filters.contactId ? 0 : Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+
+      const usePagination = page > 0 && limit > 0;
 
       if (usePagination) {
         // For the "all" tab (no specific status), exclude voided server-side so the total
