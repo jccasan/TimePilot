@@ -851,9 +851,15 @@ function CreateEditQuoteDialog({
       const savedInitialClean = parseFloat(String(quote.initialCleanFee || 0));
       setOverrideInitialClean(savedInitialClean > 0 ? savedInitialClean.toFixed(2) : "");
       if (quote.essentialFeatures) {
-        setCustomEssentialFeatures(Array.isArray(quote.essentialFeatures) ? (quote.essentialFeatures as string[]) : []);
-        setCustomPremiumFeatures(Array.isArray(quote.premiumFeatures) ? (quote.premiumFeatures as string[]) : []);
-        setCustomDeluxeFeatures(Array.isArray(quote.deluxeFeatures) ? (quote.deluxeFeatures as string[]) : []);
+        setCustomEssentialFeatures(
+          Array.isArray(quote.essentialFeatures) ? (quote.essentialFeatures as string[]) : []
+        );
+        setCustomPremiumFeatures(
+          Array.isArray(quote.premiumFeatures) ? (quote.premiumFeatures as string[]) : []
+        );
+        setCustomDeluxeFeatures(
+          Array.isArray(quote.deluxeFeatures) ? (quote.deluxeFeatures as string[]) : []
+        );
         setFeaturesCustomized(true);
       }
     } else {
@@ -939,9 +945,17 @@ function CreateEditQuoteDialog({
     if (calculatedPricing) {
       setLivePricing(calculatedPricing);
       if (!featuresCustomized) {
-        setCustomEssentialFeatures(Array.isArray(calculatedPricing.essentialFeatures) ? calculatedPricing.essentialFeatures : []);
-        setCustomPremiumFeatures(Array.isArray(calculatedPricing.premiumFeatures) ? calculatedPricing.premiumFeatures : []);
-        setCustomDeluxeFeatures(Array.isArray(calculatedPricing.deluxeFeatures) ? calculatedPricing.deluxeFeatures : []);
+        setCustomEssentialFeatures(
+          Array.isArray(calculatedPricing.essentialFeatures)
+            ? calculatedPricing.essentialFeatures
+            : []
+        );
+        setCustomPremiumFeatures(
+          Array.isArray(calculatedPricing.premiumFeatures) ? calculatedPricing.premiumFeatures : []
+        );
+        setCustomDeluxeFeatures(
+          Array.isArray(calculatedPricing.deluxeFeatures) ? calculatedPricing.deluxeFeatures : []
+        );
       }
     }
   }, [calculatedPricing, featuresCustomized]);
