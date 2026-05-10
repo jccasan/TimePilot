@@ -302,6 +302,13 @@ export async function runStartupMigrations(): Promise<void> {
       "[Migration] route optimizer mode columns (route_planning_mode, avg_minutes_per_stop, min_route_duration_hours) verified"
     );
 
+    // quotes.line_items jsonb column (Task #795 — residential line-item picker)
+    await client.query(`
+      ALTER TABLE quotes
+        ADD COLUMN IF NOT EXISTS line_items JSONB
+    `);
+    console.log("[Migration] quotes line_items column verified");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

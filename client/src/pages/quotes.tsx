@@ -57,7 +57,9 @@ import {
   X,
   Ruler,
   Download,
+  ChevronDown,
 } from "lucide-react";
+import type { ServicePricingItem } from "@shared/schema";
 import { YardMeasureTool } from "@/components/yard-measure-tool";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
@@ -171,6 +173,182 @@ function TierPreviewCards({
           </ul>
         </div>
       ))}
+    </div>
+  );
+}
+
+interface ResidentialLineItem {
+  id: string;
+  pricingItemId: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+}
+
+function ResidentialLineItemPicker({
+  lineItems,
+  onChange,
+}: {
+  lineItems: ResidentialLineItem[];
+  onChange: (items: ResidentialLineItem[]) => void;
+}) {
+  const { formatMoney } = useCurrency();
+  const [selectedPricingId, setSelectedPricingId] = useState("");
+
+  const { data: pricingItems = [] } = useQuery<ServicePricingItem[]>({
+    queryKey: ["/api/pricing"],
+  });
+
+  const activeItems = pricingItems.filter((p) => p.isActive);
+  const sortedItems = [...activeItems].sort((a, b) => {
+    const catCmp = (a.category || "").localeCompare(b.category || "");
+    if (catCmp !== 0) return catCmp;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
+  const handleAddItem = (pricingId: string) => {
+    const pricingItem = pricingItems.find((p) => p.id === pricingId);
+    if (!pricingItem) return;
+    const newItem: ResidentialLineItem = {
+      id: `${Date.now()}-${Math.random()}`,
+      pricingItemId: pricingItem.id,
+      name: pricingItem.name,
+      unitPrice: parseFloat(pricingItem.basePrice || "0"),
+      quantity: 1,
+    };
+    onChange([...lineItems, newItem]);
+    setSelectedPricingId("");
+  };
+
+  const handleUpdateItem = (id: string, field: "unitPrice" | "quantity", value: number) => {
+    onChange(lineItems.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
+  };
+
+  const handleRemoveItem = (id: string) => {
+    onChange(lineItems.filter((item) => item.id !== id));
+  };
+
+  const subtotal = lineItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+
+  return (
+    <div className="space-y-3" data-testid="residential-line-item-picker">
+      <div className="flex gap-2 items-center">
+        <div className="flex-1">
+          <Select
+            value={selectedPricingId}
+            onValueChange={(val) => {
+              setSelectedPricingId(val);
+              handleAddItem(val);
+            }}
+          >
+            <SelectTrigger data-testid="select-add-service">
+              <SelectValue placeholder="Select a service to add..." />
+              <ChevronDown className="h-4 w-4 opacity-50" />
+            </SelectTrigger>
+            <SelectContent>
+              {sortedItems.length === 0 ? (
+                <SelectItem value="_empty" disabled>
+                  No active services found
+                </SelectItem>
+              ) : (
+                sortedItems.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    <span>{item.name}</span>
+                    <span className="ml-2 text-muted-foreground text-xs">
+                      {formatMoney(parseFloat(item.basePrice || "0"))}
+                    </span>
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {lineItems.length > 0 && (
+        <div className="border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Service</th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground w-28">
+                  Unit Price
+                </th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground w-20">Qty</th>
+                <th className="text-right px-3 py-2 font-medium text-muted-foreground w-24">
+                  Total
+                </th>
+                <th className="w-8" />
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {lineItems.map((item) => (
+                <tr key={item.id} data-testid={`line-item-row-${item.id}`}>
+                  <td className="px-3 py-2 font-medium">{item.name}</td>
+                  <td className="px-3 py-2">
+                    <Input
+                      data-testid={`input-unit-price-${item.id}`}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="h-7 text-right text-sm w-24 ml-auto"
+                      value={item.unitPrice}
+                      onChange={(e) =>
+                        handleUpdateItem(item.id, "unitPrice", parseFloat(e.target.value) || 0)
+                      }
+                    />
+                  </td>
+                  <td className="px-3 py-2">
+                    <Input
+                      data-testid={`input-quantity-${item.id}`}
+                      type="number"
+                      step="1"
+                      min="1"
+                      className="h-7 text-right text-sm w-16 ml-auto"
+                      value={item.quantity}
+                      onChange={(e) =>
+                        handleUpdateItem(item.id, "quantity", parseInt(e.target.value) || 1)
+                      }
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-right font-medium">
+                    <span data-testid={`text-line-total-${item.id}`}>
+                      {formatMoney(item.unitPrice * item.quantity)}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2">
+                    <button
+                      type="button"
+                      data-testid={`button-remove-line-item-${item.id}`}
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => handleRemoveItem(item.id)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t bg-muted/30">
+              <tr>
+                <td colSpan={3} className="px-3 py-2 text-sm font-semibold text-right">
+                  Subtotal
+                </td>
+                <td className="px-3 py-2 text-right font-bold text-green-700 dark:text-green-400">
+                  <span data-testid="text-line-items-subtotal">{formatMoney(subtotal)}</span>
+                </td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
+      {lineItems.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg border-dashed">
+          No services added yet. Select a service above to build this quote.
+        </p>
+      )}
     </div>
   );
 }
@@ -805,6 +983,7 @@ function CreateEditQuoteDialog({
   const [featuresCustomized, setFeaturesCustomized] = useState(false);
   const [suppressNotifications, setSuppressNotifications] = useState(false);
   const [editingFeatures, setEditingFeatures] = useState(false);
+  const [resLineItems, setResLineItems] = useState<ResidentialLineItem[]>([]);
 
   useEffect(() => {
     if (!open) setSuppressNotifications(false);
@@ -848,6 +1027,17 @@ function CreateEditQuoteDialog({
       setQuoteImages(
         (quote.images as { url: string; caption: string; sqft?: number | null }[]) || []
       );
+      const savedLineItems = quote.lineItems;
+      if (savedLineItems && Array.isArray(savedLineItems)) {
+        setResLineItems(
+          savedLineItems.map((item, idx) => ({
+            id: `loaded-${idx}-${Math.random()}`,
+            ...item,
+          }))
+        );
+      } else {
+        setResLineItems([]);
+      }
       const savedInitialClean = parseFloat(String(quote.initialCleanFee || 0));
       setOverrideInitialClean(savedInitialClean > 0 ? savedInitialClean.toFixed(2) : "");
       if (quote.essentialFeatures) {
@@ -894,6 +1084,7 @@ function CreateEditQuoteDialog({
       setFeaturesCustomized(false);
       setEditingFeatures(false);
       setOverrideInitialClean("");
+      setResLineItems([]);
     }
   }, [quote, open]);
 
@@ -937,7 +1128,7 @@ function CreateEditQuoteDialog({
       }
       return res.json();
     },
-    enabled: open,
+    enabled: open && quoteType === "commercial",
     retry: 1,
   });
 
@@ -1142,13 +1333,7 @@ function CreateEditQuoteDialog({
   });
 
   const handleSubmit = () => {
-    const p = livePricing;
-    const usingManualOnly = !p && manualOverride;
-
-    if (!p && !usingManualOnly) return;
-    if (usingManualOnly && (!overrideEssential || !overridePremium || !overrideDeluxe)) return;
-
-    const data: Record<string, unknown> = {
+    const commonFields: Record<string, unknown> = {
       type: quoteType,
       quoteNumber: quoteNumber || null,
       contactId: contactId || null,
@@ -1163,6 +1348,49 @@ function CreateEditQuoteDialog({
       notes: notes || null,
       internalNotes: internalNotes || null,
       isFirstTime,
+      images: quoteImages.length > 0 ? quoteImages : null,
+      expiresAt: expiresAt || null,
+    };
+
+    if (quoteType === "residential") {
+      const subtotal = resLineItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+      const subtotalStr = subtotal.toFixed(2);
+      const data: Record<string, unknown> = {
+        ...commonFields,
+        dogCount: Number(dogCount) || 1,
+        yardSize,
+        essentialPrice: subtotalStr,
+        premiumPrice: subtotalStr,
+        deluxePrice: subtotalStr,
+        initialCleanFee: overrideInitialClean || "0.00",
+        essentialFeatures: [],
+        premiumFeatures: [],
+        deluxeFeatures: [],
+        pricingBreakdown: null,
+        lineItems:
+          resLineItems.length > 0
+            ? resLineItems.map(({ pricingItemId, name, unitPrice, quantity }) => ({
+                pricingItemId,
+                name,
+                unitPrice,
+                quantity,
+              }))
+            : null,
+      };
+      if (!isEdit) data.suppressNotifications = suppressNotifications;
+      createMutation.mutate(data);
+      return;
+    }
+
+    // Commercial: existing tier pricing logic
+    const p = livePricing;
+    const usingManualOnly = !p && manualOverride;
+
+    if (!p && !usingManualOnly) return;
+    if (usingManualOnly && (!overrideEssential || !overridePremium || !overrideDeluxe)) return;
+
+    const data: Record<string, unknown> = {
+      ...commonFields,
       essentialPrice: usingManualOnly
         ? overrideEssential
         : manualOverride && overrideEssential
@@ -1186,22 +1414,15 @@ function CreateEditQuoteDialog({
       deluxeFeatures:
         customDeluxeFeatures.length > 0 ? customDeluxeFeatures : p ? p.deluxeFeatures : [],
       pricingBreakdown: p ? p.breakdown : null,
-      images: quoteImages.length > 0 ? quoteImages : null,
-      expiresAt: expiresAt || null,
+      lineItems: null,
+      stationCount: Number(stationCount) || 0,
+      commonAreaMinutes: Number(commonAreaMinutes) || 0,
+      timePerStation: Number(timePerStation) || 10,
+      mileageDistance: (Number(mileageDistance) || 0).toFixed(2),
+      dumpFee: (Number(dumpFee) || 0).toFixed(2),
+      crewSize: Number(crewSize) || 1,
+      siteSqft: Number(siteSqft) || 0,
     };
-
-    if (quoteType === "residential") {
-      data.dogCount = Number(dogCount) || 1;
-      data.yardSize = yardSize;
-    } else {
-      data.stationCount = Number(stationCount) || 0;
-      data.commonAreaMinutes = Number(commonAreaMinutes) || 0;
-      data.timePerStation = Number(timePerStation) || 10;
-      data.mileageDistance = (Number(mileageDistance) || 0).toFixed(2);
-      data.dumpFee = (Number(dumpFee) || 0).toFixed(2);
-      data.crewSize = Number(crewSize) || 1;
-      data.siteSqft = Number(siteSqft) || 0;
-    }
 
     if (!isEdit) data.suppressNotifications = suppressNotifications;
     createMutation.mutate(data);
@@ -1734,7 +1955,34 @@ function CreateEditQuoteDialog({
             </div>
           )}
 
-          {isPricingError && !livePricing && (
+          {quoteType === "residential" && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Services</Label>
+                <ResidentialLineItemPicker lineItems={resLineItems} onChange={setResLineItems} />
+              </div>
+
+              {isFirstTime && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between dark:bg-amber-950/30 dark:border-amber-800">
+                  <span className="text-sm text-amber-800 dark:text-amber-300 font-semibold">
+                    Initial Clean Fee (one-time)
+                  </span>
+                  <Input
+                    data-testid="input-override-initial-clean-preview"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="w-28 h-7 text-sm text-right"
+                    placeholder="0.00"
+                    value={overrideInitialClean}
+                    onChange={(e) => setOverrideInitialClean(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {quoteType === "commercial" && isPricingError && !livePricing && (
             <div
               data-testid="alert-pricing-error"
               className="rounded-lg border border-amber-200 bg-amber-50 p-3 flex items-start justify-between gap-3"
@@ -1759,7 +2007,7 @@ function CreateEditQuoteDialog({
             </div>
           )}
 
-          {(livePricing || (isPricingError && !livePricing)) && (
+          {quoteType === "commercial" && (livePricing || (isPricingError && !livePricing)) && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-sm">Tier Pricing Preview</h3>
@@ -2102,7 +2350,8 @@ function CreateEditQuoteDialog({
               data-testid="button-save-quote"
               onClick={handleSubmit}
               disabled={
-                (!livePricing &&
+                (quoteType === "commercial" &&
+                  !livePricing &&
                   !(manualOverride && overrideEssential && overridePremium && overrideDeluxe)) ||
                 !contactName ||
                 createMutation.isPending

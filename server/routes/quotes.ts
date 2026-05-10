@@ -449,6 +449,17 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       )
       .nullable()
       .optional(),
+    lineItems: z
+      .array(
+        z.object({
+          pricingItemId: z.string(),
+          name: z.string(),
+          unitPrice: z.number(),
+          quantity: z.number(),
+        })
+      )
+      .nullable()
+      .optional(),
     notes: z.string().max(5000).nullable().optional(),
     internalNotes: z.string().max(5000).nullable().optional(),
     expiresAt: z.string().nullable().optional(),

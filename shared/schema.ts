@@ -2856,6 +2856,10 @@ export const quotes = pgTable(
     deluxeFeatures: jsonb("deluxe_features").$type<string[]>(),
     pricingBreakdown: jsonb("pricing_breakdown").$type<Record<string, unknown>>(),
     images: jsonb("images").$type<{ url: string; caption: string; sqft?: number }[]>(),
+    lineItems:
+      jsonb("line_items").$type<
+        { pricingItemId: string; name: string; unitPrice: number; quantity: number }[]
+      >(),
     notes: text("notes"),
     internalNotes: text("internal_notes"),
     expiresAt: timestamp("expires_at"),
