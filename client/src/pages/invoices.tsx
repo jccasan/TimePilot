@@ -588,7 +588,8 @@ function BillingHealthPanel({ onSwitchToFailed }: { onSwitchToFailed: () => void
   const retryAllMutation = useMutation({
     mutationFn: async () => {
       const r = await apiRequest("GET", "/api/invoices?status=failed");
-      const failed: Array<{ id: string }> = await r.json();
+      const json = await r.json();
+      const failed: Array<{ id: string }> = Array.isArray(json) ? json : (json.invoices ?? []);
       for (const inv of failed) {
         await apiRequest("POST", `/api/invoices/${inv.id}/charge`, {}).catch(() => {});
       }
