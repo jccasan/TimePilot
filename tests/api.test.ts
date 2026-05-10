@@ -1130,7 +1130,7 @@ async function runTests() {
       "POST",
       "/api/portal/login",
       {
-        email: "fake@portal.com",
+        email: `fake-${Date.now()}@portal.com`,
         password: "wrong",
       },
       { Authorization: "" }

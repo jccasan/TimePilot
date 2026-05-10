@@ -3005,6 +3005,31 @@ Respond with exactly one category from the list above and nothing else.`;
     res.json({ token: `${header}.${payload}.${sig}`, baseUrl: "/api/horseman-proxy" });
   });
 
+  // ================ Fallback Report ================
+  app.get("/api/admin/fallback-report", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { fallbackLog } = await import("@shared/schema");
+      const { and, gte, eq: eqOp, desc: descOp } = await import("drizzle-orm");
+      const tenantId = req.query.tenantId as string | undefined;
+      const days = parseInt((req.query.days as string) || "30", 10);
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const conditions = [gte(fallbackLog.createdAt, cutoff)];
+      if (tenantId) conditions.push(eqOp(fallbackLog.companyId, tenantId));
+
+      const rows = await db
+        .select()
+        .from(fallbackLog)
+        .where(and(...conditions))
+        .orderBy(descOp(fallbackLog.createdAt))
+        .limit(100);
+
+      res.json({ logs: rows });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // ================ Demo Account Management ================
   app.post("/api/admin/demo/reset", isAdmin, async (_req: Request, res: Response) => {
     try {

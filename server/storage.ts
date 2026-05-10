@@ -246,6 +246,7 @@ export interface IStorage {
   getCompany(id: string): Promise<Company | undefined>;
   listCompanies(): Promise<Company[]>;
   getCompanyByPhone(phone: string): Promise<Company | undefined>;
+  getCompanyByTelnyxNumber(telnyxNumber: string): Promise<Company | undefined>;
   getCompanyBySlug(slug: string): Promise<Company | undefined>;
   getCompanyByStripeConnectAccountId(accountId: string): Promise<Company | undefined>;
   createCompany(data: InsertCompany): Promise<Company>;
@@ -1019,6 +1020,16 @@ export class DatabaseStorage implements IStorage {
       const cDigits = c.phone.replace(/\D/g, "");
       return cDigits.length >= 10 && digits.length >= 10 && digits.endsWith(cDigits.slice(-10));
     });
+  }
+
+  async getCompanyByTelnyxNumber(telnyxNumber: string): Promise<Company | undefined> {
+    const normalized = telnyxNumber.replace(/\s/g, "");
+    const [company] = await db
+      .select()
+      .from(companies)
+      .where(and(eq(companies.telnyxPhoneNumber, normalized), isNull(companies.deletedAt)))
+      .limit(1);
+    return company;
   }
 
   async getCompanyBySlug(slug: string): Promise<Company | undefined> {

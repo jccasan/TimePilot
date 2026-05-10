@@ -3284,3 +3284,51 @@ export const routificUsageLog = pgTable(
 );
 
 export type RoutificUsageLog = typeof routificUsageLog.$inferSelect;
+
+export const smsSessions = pgTable(
+  "sms_sessions",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    companyId: varchar("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    fromNumber: varchar("from_number", { length: 30 }).notNull(),
+    toNumber: varchar("to_number", { length: 30 }).notNull(),
+    messages: jsonb("messages").$type<{ role: string; content: string }[]>().notNull().default([]),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique().on(table.fromNumber, table.toNumber),
+    index("idx_sms_sessions_updated_at").on(table.updatedAt),
+    index("idx_sms_sessions_company").on(table.companyId),
+  ]
+);
+
+export type SmsSession = typeof smsSessions.$inferSelect;
+export type InsertSmsSession = typeof smsSessions.$inferInsert;
+
+export const fallbackLog = pgTable(
+  "fallback_log",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    companyId: varchar("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    channel: varchar("channel", { length: 20 }).notNull().default("sms"),
+    triggerPhrase: text("trigger_phrase"),
+    agentResponse: text("agent_response"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_fallback_log_company").on(table.companyId),
+    index("idx_fallback_log_created_at").on(table.createdAt),
+  ]
+);
+
+export type FallbackLog = typeof fallbackLog.$inferSelect;
+export type InsertFallbackLog = typeof fallbackLog.$inferInsert;

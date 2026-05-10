@@ -3,6 +3,10 @@ import crypto from "crypto";
 import { storage } from "../storage";
 import { registerRetellWebhook, getRetellAgentWebhookUrl, getAppBaseUrl } from "../services/retell";
 import { insertWebhookSchema, type Contact } from "@shared/schema";
+import { sendAlert } from "../lib/alert";
+import { validateLead } from "../lib/validate-lead";
+import { logFallback, isFallbackResponse } from "../lib/fallback-log";
+import { sendTelnyxSms } from "../services/telnyx-sms";
 
 import {
   isAuthenticated,
@@ -43,6 +47,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       const company = await storage.getCompanyByPhone(to);
       if (!company) {
+        await sendAlert("Retell tenant-profile: tenant not found", { toNumber: to });
         return res.status(404).json({ error: "Tenant not found for this phone number" });
       }
 
@@ -96,6 +101,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           `Thank you for calling ${company.name}! How can I help you today?`,
       });
     } catch (err) {
+      await sendAlert("Retell tenant-profile: DB error", {
+        error: err instanceof Error ? err.message : String(err),
+      });
       handleError(res, err);
     }
   });
@@ -115,9 +123,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         zipCode,
         notes,
         numberOfDogs,
+        serviceFrequency,
       } = req.body;
-      if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
-      if (!firstName) return res.status(400).json({ error: "firstName is required" });
+
+      const validation = validateLead({ tenantId, firstName, lastName, phone });
+      if (!validation.valid) {
+        await sendAlert("Retell create-lead: missing required fields", {
+          missingRequired: validation.missingRequired,
+          body: req.body,
+        });
+        return res
+          .status(400)
+          .json({ error: "Missing required fields", missingRequired: validation.missingRequired });
+      }
 
       const company = await storage.getCompany(tenantId);
       if (!company) return res.status(404).json({ error: "Tenant not found" });
@@ -153,11 +171,82 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         `/contacts/${contact.id}`
       );
 
+      if (
+        company.telnyxPhoneNumber &&
+        company.telnyxApiKey &&
+        company.telnyxMessagingProfileId &&
+        phone
+      ) {
+        try {
+          const digits = phone.replace(/\D/g, "");
+          const e164Phone =
+            digits.length === 10
+              ? `+1${digits}`
+              : digits.length === 11 && digits.startsWith("1")
+                ? `+${digits}`
+                : `+${digits}`;
+
+          const oneTimeVariants = ["one-time", "onetime", "one time"];
+          const isRecurring = serviceFrequency
+            ? !oneTimeVariants.includes(String(serviceFrequency).toLowerCase().trim())
+            : true;
+
+          const confirmMsg = isRecurring
+            ? `Hi ${firstName}! Thanks for signing up for recurring pet waste removal service with ${company.name}. We'll be in touch shortly to confirm your schedule.`
+            : `Hi ${firstName}! Thanks for requesting a one-time cleanup with ${company.name}. We'll follow up to confirm the appointment.`;
+
+          await sendTelnyxSms({
+            to: e164Phone,
+            body: confirmMsg,
+            from: company.telnyxPhoneNumber,
+            apiKey: company.telnyxApiKey,
+            messagingProfileId: company.telnyxMessagingProfileId,
+            companyId: tenantId,
+            contactId: contact.id,
+          });
+        } catch {}
+      }
+
       res.status(201).json({
         success: true,
         contactId: contact.id,
         message: `Lead created: ${firstName} ${lastName || ""}`.trim(),
       });
+    } catch (err) {
+      await sendAlert("Retell create-lead: DB error", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/retell/call-webhook", async (req: Request, res: Response) => {
+    if (!verifyRetellApiKey(req, res)) return;
+    try {
+      const { tenantId, transcript } = req.body;
+      if (!tenantId) return res.status(400).json({ error: "tenantId is required" });
+
+      const utterances: { role: string; content: string }[] = Array.isArray(transcript)
+        ? transcript
+        : [];
+
+      for (let i = 0; i < utterances.length; i++) {
+        const utt = utterances[i];
+        if (utt.role === "agent" && isFallbackResponse(utt.content)) {
+          const precedingUser = utterances
+            .slice(0, i)
+            .reverse()
+            .find((u) => u.role === "user");
+          await logFallback({
+            companyId: tenantId,
+            channel: "voice",
+            triggerPhrase: precedingUser?.content,
+            agentResponse: utt.content,
+          });
+        }
+      }
+
+      res.json({ success: true });
     } catch (err) {
       handleError(res, err);
     }
