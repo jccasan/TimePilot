@@ -109,7 +109,7 @@ function HorsemanCRMWidget() {
   const { data, isLoading, isError } = useQuery<{ token: string; baseUrl: string }>({
     queryKey: ["/api/admin/horseman-token"],
     queryFn: adminFetchFn("/api/admin/horseman-token"),
-    staleTime: 4 * 60 * 1000,
+    staleTime: 3 * 60 * 1000,
   });
 
   if (isLoading) {

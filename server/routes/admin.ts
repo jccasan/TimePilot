@@ -2934,6 +2934,12 @@ Respond with exactly one category from the list above and nothing else.`;
     if (req.headers["content-type"]) {
       forwardHeaders["content-type"] = req.headers["content-type"] as string;
     }
+    if (req.headers["authorization"]) {
+      forwardHeaders["authorization"] = req.headers["authorization"] as string;
+    }
+    if (req.headers["x-horseman-token"]) {
+      forwardHeaders["x-horseman-token"] = req.headers["x-horseman-token"] as string;
+    }
     // Forward all cookies except the ScooPilot session cookie — Horseman won't
     // understand it and it should never be sent to a third-party service.
     const rawCookie = req.headers.cookie ?? "";
