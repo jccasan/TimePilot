@@ -138,6 +138,133 @@ export async function runStartupMigrations(): Promise<void> {
       "[Migration] voice_area_code_preference and voice_number_porting_status columns ensured"
     );
 
+    // ── Import staging tables ────────────────────────────────────────────────
+    // These tables are defined in shared/schema.ts but were never pushed to the
+    // database, causing every /api/import/* endpoint to 500 with
+    // "relation does not exist".  Create them idempotently here so the import
+    // wizard works in both dev and production without a manual drizzle-kit push.
+
+    // Enum types must exist before the tables that reference them.
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE import_batch_status AS ENUM (
+          'pending','processing','staged','committed','failed'
+        );
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE import_batch_source AS ENUM (
+          'csv_contacts','competitor_contacts'
+        );
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE import_row_status AS ENUM (
+          'needs_review','ready','ignored','imported'
+        );
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS import_batches (
+        id                VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        company_id        VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        source_type       import_batch_source NOT NULL DEFAULT 'csv_contacts',
+        file_name         VARCHAR(500),
+        status            import_batch_status NOT NULL DEFAULT 'pending',
+        total_rows        INTEGER NOT NULL DEFAULT 0,
+        staged_rows       INTEGER NOT NULL DEFAULT 0,
+        ready_rows        INTEGER NOT NULL DEFAULT 0,
+        needs_review_rows INTEGER NOT NULL DEFAULT 0,
+        ignored_rows      INTEGER NOT NULL DEFAULT 0,
+        imported_rows     INTEGER NOT NULL DEFAULT 0,
+        created_by        VARCHAR REFERENCES users(id) ON DELETE SET NULL,
+        import_run_id     VARCHAR REFERENCES import_runs(id) ON DELETE SET NULL,
+        created_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+        completed_at      TIMESTAMP
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ib_company ON import_batches (company_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ib_status  ON import_batches (status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_ib_created ON import_batches (created_at)`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS import_rows (
+        id                  VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        batch_id            VARCHAR NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+        company_id          VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        row_index           INTEGER NOT NULL,
+        raw_json            JSONB,
+        mapped_contact_json JSONB,
+        mapped_service_json JSONB,
+        confidence_json     JSONB,
+        missing_fields      TEXT[],
+        validation_errors   JSONB,
+        status              import_row_status NOT NULL DEFAULT 'needs_review',
+        created_contact_id  VARCHAR REFERENCES contacts(id) ON DELETE SET NULL,
+        needs_service_setup BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at          TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_irow_batch   ON import_rows (batch_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_irow_company ON import_rows (company_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_irow_status  ON import_rows (status)`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS import_mappings (
+        id               VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        batch_id         VARCHAR NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+        source_column    VARCHAR(255) NOT NULL,
+        target_field     VARCHAR(100) NOT NULL,
+        confidence       INTEGER NOT NULL DEFAULT 0,
+        is_user_override BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at       TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_imap_batch ON import_mappings (batch_id)`);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS import_rule_suggestions (
+        id                     VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        batch_id               VARCHAR NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+        row_id                 VARCHAR NOT NULL REFERENCES import_rows(id) ON DELETE CASCADE,
+        suggested_frequency    VARCHAR(50),
+        suggested_service_day  VARCHAR(50),
+        suggested_next_date    VARCHAR(20),
+        suggested_price_cents  INTEGER,
+        suggested_billing_rule VARCHAR(100),
+        confidence_score       INTEGER NOT NULL DEFAULT 0,
+        reason                 TEXT,
+        is_accepted            BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at             TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_irs_batch ON import_rule_suggestions (batch_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_irs_row   ON import_rule_suggestions (row_id)`);
+
+    console.log("[Migration] Import staging tables ensured (import_batches, import_rows, import_mappings, import_rule_suggestions)");
+
+    // ── Routific usage log ───────────────────────────────────────────────────
+    // company_id is stored as a UUID string (VARCHAR) even though the Drizzle
+    // schema incorrectly declares it integer — use VARCHAR to match actual queries.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS routific_usage_log (
+        id         VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        company_id VARCHAR,
+        stop_count INTEGER NOT NULL,
+        success    BOOLEAN NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_routific_usage_log_company    ON routific_usage_log (company_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_routific_usage_log_created_at ON routific_usage_log (created_at)`);
+    console.log("[Migration] routific_usage_log table ensured");
+
     // Ensure the demo account always has voice_plan_status = 'active' so the
     // Voice Agent step is visible in the business onboarding wizard.
     await client.query(`
