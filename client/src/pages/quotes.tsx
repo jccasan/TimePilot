@@ -1600,44 +1600,45 @@ function CreateEditQuoteDialog({
 
   const handleMeasurementSave = useCallback(
     (polygon: number[][], areaSqft: number) => {
-      setMeasurements((prev) => {
-        const updated = [...prev, { polygon, sqft: areaSqft }];
-        if (quoteType === "residential") {
-          const totalSqft = updated.reduce((sum, m) => sum + m.sqft, 0);
-          const SQFT_PER_ACRE = 43560;
-          let tierName = defaultTierName;
-          if (yardSizeTiers && yardSizeTiers.length > 0) {
-            // Sort ascending by boundary (nulls = unbounded = last)
-            const sorted = [...yardSizeTiers].sort((a, b) => {
-              if (a.upToAcres === null) return 1;
-              if (b.upToAcres === null) return -1;
-              return a.upToAcres - b.upToAcres;
-            });
-            for (const t of sorted) {
-              if (t.upToAcres === null || totalSqft <= t.upToAcres * SQFT_PER_ACRE) {
-                tierName = t.name ?? tierName;
-                break;
-              }
+      // Compute total sqft from current measurements + new area BEFORE updating state
+      // so we can call setYardSize and apiRequest outside the state updater
+      // (calling state setters or side-effects inside a state updater is an anti-pattern
+      // that React batching will silently drop)
+      const totalSqft = measurements.reduce((sum, m) => sum + m.sqft, 0) + areaSqft;
+
+      if (quoteType === "residential") {
+        const SQFT_PER_ACRE = 43560;
+        let tierName = defaultTierName;
+        if (yardSizeTiers && yardSizeTiers.length > 0) {
+          // Sort ascending by boundary (nulls = unbounded = last)
+          const sorted = [...yardSizeTiers].sort((a, b) => {
+            if (a.upToAcres === null) return 1;
+            if (b.upToAcres === null) return -1;
+            return a.upToAcres - b.upToAcres;
+          });
+          for (const t of sorted) {
+            if (t.upToAcres === null || totalSqft <= t.upToAcres * SQFT_PER_ACRE) {
+              tierName = t.name ?? tierName;
+              break;
             }
-          } else {
-            if (totalSqft < SQFT_PER_ACRE * 0.25) tierName = "Standard";
-            else if (totalSqft < SQFT_PER_ACRE * 0.5) tierName = "Large";
-            else tierName = "Very Large";
           }
-          setYardSize(tierName);
-          if (contactId) {
-            apiRequest("PATCH", `/api/contacts/${contactId}`, {
-              yardSize: tierName,
-            }).catch(() => {});
-          }
-          if (propertyId) {
-            apiRequest("PATCH", `/api/properties/${propertyId}`, {
-              yardSize: tierName,
-            }).catch(() => {});
-          }
+        } else {
+          if (totalSqft < SQFT_PER_ACRE * 0.25) tierName = "Standard";
+          else if (totalSqft < SQFT_PER_ACRE * 0.5) tierName = "Large";
+          else tierName = "Very Large";
         }
-        return updated;
-      });
+        setYardSize(tierName);
+        if (contactId) {
+          apiRequest("PATCH", `/api/contacts/${contactId}`, { yardSize: tierName }).catch(() => {});
+        }
+        if (propertyId) {
+          apiRequest("PATCH", `/api/properties/${propertyId}`, {
+            yardSize: tierName,
+          }).catch(() => {});
+        }
+      }
+
+      setMeasurements((prev) => [...prev, { polygon, sqft: areaSqft }]);
       if (quoteType === "commercial") {
         setSiteSqft((prev) => Number(prev || 0) + Math.round(areaSqft));
       }
@@ -1651,6 +1652,7 @@ function CreateEditQuoteDialog({
       contactId,
       defaultTierName,
       handleGenerateYardImage,
+      measurements,
       propertyId,
       quoteType,
       setYardSize,
@@ -2084,13 +2086,24 @@ function CreateEditQuoteDialog({
                       yardSizeTiers.map((tier, i) => {
                         const tierName = tier.name ?? `Tier ${i + 1}`;
                         const prevTier = i > 0 ? yardSizeTiers[i - 1] : null;
-                        const lowerBound = prevTier?.upToAcres ?? 0;
+                        const lowerAcres = prevTier?.upToAcres ?? 0;
+                        const toFrac = (ac: number) => {
+                          if (Math.abs(ac - 0.25) < 0.001) return "¼";
+                          if (Math.abs(ac - 0.5) < 0.001) return "½";
+                          if (Math.abs(ac - 0.75) < 0.001) return "¾";
+                          if (Math.abs(ac - 1) < 0.001) return "1";
+                          return `${ac}`;
+                        };
+                        const sqft = (ac: number) =>
+                          `${Math.round(ac * 43560).toLocaleString()} sq ft`;
                         const hint =
                           tier.upToAcres === null
-                            ? `${lowerBound > 0 ? `${lowerBound}+` : "any"} acre`
+                            ? lowerAcres > 0
+                              ? `> ${toFrac(lowerAcres)} ac (${sqft(lowerAcres)}+)`
+                              : "any size"
                             : i === 0
-                              ? `< ${tier.upToAcres} acre`
-                              : `${lowerBound}–${tier.upToAcres} acre`;
+                              ? `< ${toFrac(tier.upToAcres)} ac (${sqft(tier.upToAcres)})`
+                              : `${toFrac(lowerAcres)}–${toFrac(tier.upToAcres)} ac`;
                         return (
                           <SelectItem key={tierName} value={tierName}>
                             {tierName} ({hint})
@@ -2101,8 +2114,7 @@ function CreateEditQuoteDialog({
                       <>
                         <SelectItem value="Standard">Standard (&lt; ¼ acre)</SelectItem>
                         <SelectItem value="Large">Large (¼–½ acre)</SelectItem>
-                        <SelectItem value="Very Large">Very Large (½–¾ acre)</SelectItem>
-                        <SelectItem value="Estate">Estate (¾+ acre)</SelectItem>
+                        <SelectItem value="Very Large">Very Large (&gt; ½ acre)</SelectItem>
                       </>
                     )}
                   </SelectContent>
