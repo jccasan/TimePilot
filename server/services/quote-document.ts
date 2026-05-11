@@ -22,6 +22,13 @@ interface QuoteImage {
   sqft?: number;
 }
 
+interface LineItem {
+  pricingItemId: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+}
+
 interface QuoteDocData {
   companyName: string;
   companyEmail?: string;
@@ -43,6 +50,7 @@ interface QuoteDocData {
   breakdown: Record<string, any>;
   images?: QuoteImage[];
   baseUrl?: string;
+  lineItems?: LineItem[];
 }
 
 const GREEN = "#1a7a4c";
@@ -222,70 +230,169 @@ export async function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
       y += 10;
     }
 
-    const tiers = [
-      {
-        name: "Essential",
-        price: data.essentialPrice,
-        features: filterFeatures(data.essentialFeatures),
-      },
-      {
-        name: "Property Care",
-        price: data.premiumPrice,
-        features: filterFeatures(data.premiumFeatures),
-      },
-      { name: "Deluxe", price: data.deluxePrice, features: filterFeatures(data.deluxeFeatures) },
-    ];
+    const hasLineItems =
+      data.type === "residential" && Array.isArray(data.lineItems) && data.lineItems.length > 0;
 
-    const maxFeatures = tiers.reduce((max, t) => Math.max(max, t.features.length), 0);
-    const tierBlockHeight = 60 + maxFeatures * 14;
-    checkPage(tierBlockHeight + 30);
+    if (hasLineItems) {
+      checkPage(30);
+      doc.fillColor(DARK).fontSize(14).font("Helvetica-Bold").text("Services Included", 50, y);
+      y += 20;
+      doc.font("Helvetica");
 
-    doc
-      .fillColor(DARK)
-      .fontSize(14)
-      .font("Helvetica-Bold")
-      .text("Service Packages", 50, y, { align: "center" });
-    y += 24;
-    doc.font("Helvetica");
-
-    const colW = (doc.page.width - 120) / 3;
-    const startX = 50;
-
-    for (let i = 0; i < tiers.length; i++) {
-      const tier = tiers[i];
-      const x = startX + i * (colW + 10);
-      const boxTop = y;
+      const colWidths = [
+        contentWidth * 0.5,
+        contentWidth * 0.15,
+        contentWidth * 0.175,
+        contentWidth * 0.175,
+      ];
+      const colX = [
+        50,
+        50 + colWidths[0],
+        50 + colWidths[0] + colWidths[1],
+        50 + colWidths[0] + colWidths[1] + colWidths[2],
+      ];
 
       doc.save();
-      doc.roundedRect(x, boxTop, colW, 20, 4).fill(i === 1 ? GREEN : "#f1f5f9");
-      doc
-        .fillColor(i === 1 ? "white" : DARK)
-        .fontSize(10)
-        .font("Helvetica-Bold")
-        .text(tier.name, x, boxTop + 5, { width: colW, align: "center" });
-
-      const priceY = boxTop + 26;
-      doc
-        .fillColor(GREEN)
-        .fontSize(18)
-        .font("Helvetica-Bold")
-        .text(`$${tier.price.toFixed(2)}`, x, priceY, { width: colW, align: "center" });
-      doc
-        .fillColor(MUTED)
-        .fontSize(8)
-        .font("Helvetica")
-        .text("/visit", x, priceY + 20, { width: colW, align: "center" });
-
-      let fy = priceY + 36;
-      doc.font("Helvetica").fontSize(8).fillColor("#475569");
-      for (const f of tier.features) {
-        doc.text(`✓ ${f}`, x + 8, fy, { width: colW - 16 });
-        fy += doc.heightOfString(`✓ ${f}`, { width: colW - 16 }) + 3;
+      doc.rect(50, y, contentWidth, 18).fill("#f1f5f9");
+      const headers = ["Service", "Qty", "Unit Price", "Subtotal"];
+      const headerAligns: ("left" | "center" | "right")[] = ["left", "center", "right", "right"];
+      for (let i = 0; i < headers.length; i++) {
+        doc
+          .fillColor(MUTED)
+          .fontSize(8)
+          .font("Helvetica-Bold")
+          .text(headers[i].toUpperCase(), colX[i] + 4, y + 5, {
+            width: colWidths[i] - 8,
+            align: headerAligns[i],
+          });
       }
       doc.restore();
-    }
+      y += 20;
 
-    y += 50 + maxFeatures * 14;
+      let grandTotal = 0;
+      for (const li of data.lineItems!) {
+        const subtotal = li.unitPrice * li.quantity;
+        grandTotal += subtotal;
+        const rowHeight = Math.max(
+          doc.heightOfString(li.name, { width: colWidths[0] - 8 }) + 10,
+          18
+        );
+        checkPage(rowHeight + 4);
+
+        doc.save();
+        doc
+          .moveTo(50, y + rowHeight)
+          .lineTo(50 + contentWidth, y + rowHeight)
+          .strokeColor("#e2e8f0")
+          .lineWidth(0.5)
+          .stroke();
+        doc
+          .fillColor(DARK)
+          .fontSize(9)
+          .font("Helvetica")
+          .text(li.name, colX[0] + 4, y + 5, { width: colWidths[0] - 8 });
+        doc.fillColor("#475569").text(String(li.quantity), colX[1] + 4, y + 5, {
+          width: colWidths[1] - 8,
+          align: "center",
+        });
+        doc.text(`$${li.unitPrice.toFixed(2)}`, colX[2] + 4, y + 5, {
+          width: colWidths[2] - 8,
+          align: "right",
+        });
+        doc
+          .fillColor(DARK)
+          .font("Helvetica-Bold")
+          .text(`$${subtotal.toFixed(2)}`, colX[3] + 4, y + 5, {
+            width: colWidths[3] - 8,
+            align: "right",
+          });
+        doc.restore();
+        y += rowHeight;
+      }
+
+      checkPage(22);
+      doc.save();
+      doc.rect(50, y, contentWidth, 22).fill("#f1f5f9");
+      doc
+        .fillColor(DARK)
+        .fontSize(10)
+        .font("Helvetica-Bold")
+        .text("Total per visit", colX[0] + 4, y + 6, {
+          width: colWidths[0] + colWidths[1] + colWidths[2] - 8,
+          align: "right",
+        });
+      doc.fillColor(GREEN).text(`$${grandTotal.toFixed(2)}`, colX[3] + 4, y + 6, {
+        width: colWidths[3] - 8,
+        align: "right",
+      });
+      doc.restore();
+      y += 30;
+    } else {
+      const tiers = [
+        {
+          name: "Essential",
+          price: data.essentialPrice,
+          features: filterFeatures(data.essentialFeatures),
+        },
+        {
+          name: "Property Care",
+          price: data.premiumPrice,
+          features: filterFeatures(data.premiumFeatures),
+        },
+        { name: "Deluxe", price: data.deluxePrice, features: filterFeatures(data.deluxeFeatures) },
+      ];
+
+      const maxFeatures = tiers.reduce((max, t) => Math.max(max, t.features.length), 0);
+      const tierBlockHeight = 60 + maxFeatures * 14;
+      checkPage(tierBlockHeight + 30);
+
+      doc
+        .fillColor(DARK)
+        .fontSize(14)
+        .font("Helvetica-Bold")
+        .text("Service Packages", 50, y, { align: "center" });
+      y += 24;
+      doc.font("Helvetica");
+
+      const colW = (doc.page.width - 120) / 3;
+      const startX = 50;
+
+      for (let i = 0; i < tiers.length; i++) {
+        const tier = tiers[i];
+        const x = startX + i * (colW + 10);
+        const boxTop = y;
+
+        doc.save();
+        doc.roundedRect(x, boxTop, colW, 20, 4).fill(i === 1 ? GREEN : "#f1f5f9");
+        doc
+          .fillColor(i === 1 ? "white" : DARK)
+          .fontSize(10)
+          .font("Helvetica-Bold")
+          .text(tier.name, x, boxTop + 5, { width: colW, align: "center" });
+
+        const priceY = boxTop + 26;
+        doc
+          .fillColor(GREEN)
+          .fontSize(18)
+          .font("Helvetica-Bold")
+          .text(`$${tier.price.toFixed(2)}`, x, priceY, { width: colW, align: "center" });
+        doc
+          .fillColor(MUTED)
+          .fontSize(8)
+          .font("Helvetica")
+          .text("/visit", x, priceY + 20, { width: colW, align: "center" });
+
+        let fy = priceY + 36;
+        doc.font("Helvetica").fontSize(8).fillColor("#475569");
+        for (const f of tier.features) {
+          doc.text(`✓ ${f}`, x + 8, fy, { width: colW - 16 });
+          fy += doc.heightOfString(`✓ ${f}`, { width: colW - 16 }) + 3;
+        }
+        doc.restore();
+      }
+
+      y += 50 + maxFeatures * 14;
+    }
 
     if (data.initialCleanFee > 0) {
       checkPage(40);
@@ -402,80 +509,210 @@ export async function generateQuoteDocx(data: QuoteDocData): Promise<Buffer> {
     })
   );
 
-  const tiers = [
-    {
-      name: "Essential",
-      price: data.essentialPrice,
-      features: filterFeatures(data.essentialFeatures),
-    },
-    {
-      name: "Property Care",
-      price: data.premiumPrice,
-      features: filterFeatures(data.premiumFeatures),
-    },
-    { name: "Deluxe", price: data.deluxePrice, features: filterFeatures(data.deluxeFeatures) },
-  ];
+  const hasLineItemsDocx =
+    data.type === "residential" && Array.isArray(data.lineItems) && data.lineItems.length > 0;
 
-  const tierTable = new Table({
-    rows: [
-      new TableRow({
-        children: tiers.map(
-          (t) =>
+  let pricingTable: Table;
+
+  if (hasLineItemsDocx) {
+    const grandTotal = data.lineItems!.reduce((sum, li) => sum + li.unitPrice * li.quantity, 0);
+
+    const headerRow = new TableRow({
+      children: ["Service", "Qty", "Unit Price", "Subtotal"].map(
+        (h, i) =>
+          new TableCell({
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: h, bold: true, color: "64748b", size: 18 })],
+                alignment:
+                  i === 0
+                    ? AlignmentType.LEFT
+                    : i === 1
+                      ? AlignmentType.CENTER
+                      : AlignmentType.RIGHT,
+              }),
+            ],
+            shading: { type: ShadingType.SOLID, color: "f1f5f9" },
+            width: {
+              size: i === 0 ? 50 : i === 1 ? 15 : 17,
+              type: WidthType.PERCENTAGE,
+            },
+          })
+      ),
+    });
+
+    const itemRows = data.lineItems!.map(
+      (li) =>
+        new TableRow({
+          children: [
             new TableCell({
               children: [
                 new Paragraph({
-                  children: [new TextRun({ text: t.name, bold: true, color: "ffffff", size: 22 })],
+                  children: [new TextRun({ text: li.name, color: "1e293b", size: 20 })],
+                }),
+              ],
+              width: { size: 50, type: WidthType.PERCENTAGE },
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: String(li.quantity), color: "475569", size: 20 })],
                   alignment: AlignmentType.CENTER,
                 }),
               ],
-              shading: { type: ShadingType.SOLID, color: "1a7a4c" },
-              width: { size: 33, type: WidthType.PERCENTAGE },
-            })
-        ),
-      }),
-      new TableRow({
-        children: tiers.map(
-          (t) =>
+              width: { size: 15, type: WidthType.PERCENTAGE },
+            }),
             new TableCell({
               children: [
                 new Paragraph({
                   children: [
                     new TextRun({
-                      text: `$${t.price.toFixed(2)}/visit`,
-                      bold: true,
-                      color: "1a7a4c",
-                      size: 28,
+                      text: `$${li.unitPrice.toFixed(2)}`,
+                      color: "475569",
+                      size: 20,
                     }),
                   ],
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 100, after: 100 },
+                  alignment: AlignmentType.RIGHT,
                 }),
               ],
-              width: { size: 33, type: WidthType.PERCENTAGE },
-            })
-        ),
-      }),
-      new TableRow({
-        children: tiers.map(
-          (t) =>
+              width: { size: 17, type: WidthType.PERCENTAGE },
+            }),
             new TableCell({
-              children:
-                t.features.length > 0
-                  ? t.features.map(
-                      (f) =>
-                        new Paragraph({
-                          children: [new TextRun({ text: `✓ ${f}`, color: "475569", size: 18 })],
-                          spacing: { after: 40 },
-                        })
-                    )
-                  : [new Paragraph({ children: [] })],
-              width: { size: 33, type: WidthType.PERCENTAGE },
-            })
-        ),
-      }),
-    ],
-    width: { size: 100, type: WidthType.PERCENTAGE },
-  });
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: `$${(li.unitPrice * li.quantity).toFixed(2)}`,
+                      bold: true,
+                      color: "1e293b",
+                      size: 20,
+                    }),
+                  ],
+                  alignment: AlignmentType.RIGHT,
+                }),
+              ],
+              width: { size: 17, type: WidthType.PERCENTAGE },
+            }),
+          ],
+        })
+    );
+
+    const totalRow = new TableRow({
+      children: [
+        new TableCell({
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Total per visit", bold: true, color: "1e293b", size: 20 }),
+              ],
+              alignment: AlignmentType.RIGHT,
+            }),
+          ],
+          columnSpan: 3,
+          shading: { type: ShadingType.SOLID, color: "f1f5f9" },
+        }),
+        new TableCell({
+          children: [
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `$${grandTotal.toFixed(2)}`,
+                  bold: true,
+                  color: "1a7a4c",
+                  size: 20,
+                }),
+              ],
+              alignment: AlignmentType.RIGHT,
+            }),
+          ],
+          shading: { type: ShadingType.SOLID, color: "f1f5f9" },
+          width: { size: 17, type: WidthType.PERCENTAGE },
+        }),
+      ],
+    });
+
+    pricingTable = new Table({
+      rows: [headerRow, ...itemRows, totalRow],
+      width: { size: 100, type: WidthType.PERCENTAGE },
+    });
+  } else {
+    const tiers = [
+      {
+        name: "Essential",
+        price: data.essentialPrice,
+        features: filterFeatures(data.essentialFeatures),
+      },
+      {
+        name: "Property Care",
+        price: data.premiumPrice,
+        features: filterFeatures(data.premiumFeatures),
+      },
+      { name: "Deluxe", price: data.deluxePrice, features: filterFeatures(data.deluxeFeatures) },
+    ];
+
+    pricingTable = new Table({
+      rows: [
+        new TableRow({
+          children: tiers.map(
+            (t) =>
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: t.name, bold: true, color: "ffffff", size: 22 }),
+                    ],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                ],
+                shading: { type: ShadingType.SOLID, color: "1a7a4c" },
+                width: { size: 33, type: WidthType.PERCENTAGE },
+              })
+          ),
+        }),
+        new TableRow({
+          children: tiers.map(
+            (t) =>
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: `$${t.price.toFixed(2)}/visit`,
+                        bold: true,
+                        color: "1a7a4c",
+                        size: 28,
+                      }),
+                    ],
+                    alignment: AlignmentType.CENTER,
+                    spacing: { before: 100, after: 100 },
+                  }),
+                ],
+                width: { size: 33, type: WidthType.PERCENTAGE },
+              })
+          ),
+        }),
+        new TableRow({
+          children: tiers.map(
+            (t) =>
+              new TableCell({
+                children:
+                  t.features.length > 0
+                    ? t.features.map(
+                        (f) =>
+                          new Paragraph({
+                            children: [new TextRun({ text: `✓ ${f}`, color: "475569", size: 18 })],
+                            spacing: { after: 40 },
+                          })
+                      )
+                    : [new Paragraph({ children: [] })],
+                width: { size: 33, type: WidthType.PERCENTAGE },
+              })
+          ),
+        }),
+      ],
+      width: { size: 100, type: WidthType.PERCENTAGE },
+    });
+  }
 
   const scopeParagraphs: Paragraph[] = [];
   if (data.type === "commercial" && data.breakdown) {
@@ -654,11 +891,11 @@ export async function generateQuoteDocx(data: QuoteDocData): Promise<Buffer> {
           ...headerRows,
           ...scopeParagraphs,
           new Paragraph({
-            text: "Service Packages",
+            text: hasLineItemsDocx ? "Services Included" : "Service Packages",
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 300, after: 200 },
           }),
-          tierTable,
+          pricingTable,
           ...initialCleanParagraphs,
           ...imageParagraphs,
           ...notesParagraphs,

@@ -705,6 +705,13 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         acceptUrl,
         images: (quote.images as { url: string; caption: string; sqft?: number }[]) || undefined,
         baseUrl: getBaseUrl(req),
+        lineItems:
+          (quote.lineItems as {
+            pricingItemId: string;
+            name: string;
+            unitPrice: number;
+            quantity: number;
+          }[]) || undefined,
       };
 
       const html =
@@ -811,6 +818,13 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         notes: quote.notes || undefined,
         images: (quote.images as { url: string; caption: string; sqft?: number }[]) || undefined,
         baseUrl: getBaseUrl(req),
+        lineItems:
+          (quote.lineItems as {
+            pricingItemId: string;
+            name: string;
+            unitPrice: number;
+            quantity: number;
+          }[]) || undefined,
       };
 
       const html =
@@ -870,6 +884,13 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           breakdown: pricing.breakdown,
           images: (quote.images as { url: string; caption: string; sqft?: number }[]) || undefined,
           baseUrl: getBaseUrl(req),
+          lineItems:
+            (quote.lineItems as {
+              pricingItemId: string;
+              name: string;
+              unitPrice: number;
+              quantity: number;
+            }[]) || undefined,
         };
 
         const safeName = `Quote-${quote.quoteNumber}`.replace(/[^a-zA-Z0-9-_]/g, "_");

@@ -334,6 +334,7 @@ export function renderResidentialProposalHtml(data: {
   acceptUrl?: string;
   images?: { url: string; caption: string; sqft?: number }[];
   baseUrl?: string;
+  lineItems?: { pricingItemId: string; name: string; unitPrice: number; quantity: number }[];
 }): string {
   const { pricing } = data;
   const e = {
@@ -387,20 +388,48 @@ export function renderResidentialProposalHtml(data: {
     </div>`
       : "";
 
-  return `
-    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 700px; margin: 0 auto; background-color: #ffffff;">
-      <div style="background-color: #1a7a4c; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
-        ${e.companyLogo ? `<img src="${e.companyLogo}" alt="${e.companyName}" style="max-height: 50px; margin-bottom: 8px;" />` : ""}
-        <h1 style="color: white; margin: 0; font-size: 22px;">${e.companyName}</h1>
-        <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 14px;">Service Quote #${e.quoteNumber}</p>
-      </div>
+  const hasLineItems = Array.isArray(data.lineItems) && data.lineItems.length > 0;
 
-      <div style="padding: 24px; border: 1px solid #e2e8f0; border-top: none;">
-        <p style="margin: 0 0 4px; font-size: 14px; color: #64748b;">Prepared for</p>
-        <p style="margin: 0 0 16px; font-size: 18px; font-weight: 600; color: #1e293b;">${e.contactName}</p>
-        ${e.propertyAddress ? `<p style="margin: 0 0 16px; font-size: 14px; color: #475569;">📍 ${e.propertyAddress}</p>` : ""}
-        <p style="margin: 0 0 24px; font-size: 14px; color: #475569;">Service Frequency: <strong>${frequencyLabel}</strong></p>
+  function renderLineItemsTable(): string {
+    const items = data.lineItems!;
+    const grandTotal = items.reduce((sum, li) => sum + li.unitPrice * li.quantity, 0);
+    const rows = items
+      .map(
+        (li) => `
+        <tr>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #1e293b;">${escapeHtml(li.name)}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #475569; text-align: center;">${li.quantity}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #475569; text-align: right;">$${Number(li.unitPrice).toFixed(2)}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: 600; color: #1e293b; text-align: right;">$${(li.unitPrice * li.quantity).toFixed(2)}</td>
+        </tr>`
+      )
+      .join("");
+    return `
+      <div style="background-color: #f8fafc; border-radius: 8px; padding: 0; margin-bottom: 20px; overflow: hidden; border: 1px solid #e2e8f0;">
+        <p style="margin: 0; padding: 12px 14px 10px; font-size: 13px; font-weight: 600; color: #334155; border-bottom: 1px solid #e2e8f0;">Services Included</p>
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background-color: #f1f5f9;">
+              <th style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: left; text-transform: uppercase; letter-spacing: 0.05em;">Service</th>
+              <th style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: center; text-transform: uppercase; letter-spacing: 0.05em;">Qty</th>
+              <th style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.05em;">Unit Price</th>
+              <th style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.05em;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr style="background-color: #f1f5f9;">
+              <td colspan="3" style="padding: 10px 10px; font-size: 14px; font-weight: 700; color: #1e293b; text-align: right;">Total per visit</td>
+              <td style="padding: 10px 10px; font-size: 14px; font-weight: 700; color: #1a7a4c; text-align: right;">$${grandTotal.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>`;
+  }
 
+  const pricingSection = hasLineItems
+    ? renderLineItemsTable()
+    : `
         <div style="background-color: #f8fafc; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
           <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #334155;">Pricing Breakdown</p>
           <table style="width: 100%; font-size: 13px; color: #475569;">
@@ -417,7 +446,23 @@ export function renderResidentialProposalHtml(data: {
           ${tierCard("Essential", pricing.essential, pricing.essentialFeatures, "#64748b")}
           ${tierCard("Property Care", pricing.premium, pricing.premiumFeatures, "#1a7a4c", true)}
           ${tierCard("Deluxe", pricing.deluxe, pricing.deluxeFeatures, "#7c3aed")}
-        </div>
+        </div>`;
+
+  return `
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 700px; margin: 0 auto; background-color: #ffffff;">
+      <div style="background-color: #1a7a4c; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
+        ${e.companyLogo ? `<img src="${e.companyLogo}" alt="${e.companyName}" style="max-height: 50px; margin-bottom: 8px;" />` : ""}
+        <h1 style="color: white; margin: 0; font-size: 22px;">${e.companyName}</h1>
+        <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 14px;">Service Quote #${e.quoteNumber}</p>
+      </div>
+
+      <div style="padding: 24px; border: 1px solid #e2e8f0; border-top: none;">
+        <p style="margin: 0 0 4px; font-size: 14px; color: #64748b;">Prepared for</p>
+        <p style="margin: 0 0 16px; font-size: 18px; font-weight: 600; color: #1e293b;">${e.contactName}</p>
+        ${e.propertyAddress ? `<p style="margin: 0 0 16px; font-size: 14px; color: #475569;">📍 ${e.propertyAddress}</p>` : ""}
+        <p style="margin: 0 0 24px; font-size: 14px; color: #475569;">Service Frequency: <strong>${frequencyLabel}</strong></p>
+
+        ${pricingSection}
 
         ${initialCleanSection}
 
