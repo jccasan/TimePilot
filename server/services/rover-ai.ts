@@ -76,7 +76,7 @@ KEY WORKFLOWS:
 CLIENT PORTAL API:
 The portal API lets clients (or custom client-facing apps built by the business) manage their account programmatically. It uses Bearer token auth — call POST /api/portal/login with email + password to receive a token (valid 7 days), then pass it as "Authorization: Bearer <token>" on all subsequent calls. Tokens are scoped to a single contact and cannot access staff or admin endpoints.
 
-Auth endpoints (no Bearer needed): POST /api/portal/login (returns token + contactId), POST /api/portal/logout, POST /api/portal/forgot-password (sends reset email; rate-limited to 3/hour), POST /api/portal/reset-password (set new password via emailed token, min 10 chars), GET /api/portal/verify-email (confirm email change via ?token= query param).
+Auth endpoints: POST /api/portal/login (no Bearer — authenticates with email + password, returns token + contactId), POST /api/portal/logout (Bearer required — invalidates the current token), POST /api/portal/forgot-password (no Bearer — sends reset email; rate-limited to 3/hour), POST /api/portal/reset-password (no Bearer — set new password via emailed token, min 10 chars), GET /api/portal/verify-email (no Bearer — confirm email change via ?token= query param).
 
 Account & Profile (Bearer): GET /api/portal/me (returns name, email, phone, address, company name, currency, pendingEmail), PATCH /api/portal/profile (update any profile field; changing email triggers a verification flow — change is pending until the client clicks the link; can also update gate codes and special instructions for specific properties via the properties array), GET /api/portal/properties (returns all service addresses for this contact including gate codes, GPS, yard size).
 
