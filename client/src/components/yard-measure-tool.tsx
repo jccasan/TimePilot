@@ -10,6 +10,7 @@ interface YardMeasureToolProps {
   propertyId?: string;
   existingPolygon?: number[][] | null;
   existingArea?: number | null;
+  customTiers?: Array<{ name?: string; upToAcres: number | null; surcharge: number }>;
   onSave: (polygon: number[][], areaSqft: number) => void;
   onCancel?: () => void;
 }
@@ -218,7 +219,7 @@ function StaticMapMeasure({
   const areaSqft = points.length >= 3 ? calculatePolygonArea(points) : 0;
   const category = areaSqft > 0 ? getYardCategory(areaSqft) : null;
 
-  const handleClick = (e: React.MouseEvent<SVGSVGElement>) => {
+  const handleClick = (e: React.MouseEvent<SVGElement>) => {
     if (closed) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const px = e.clientX - rect.left;
@@ -405,6 +406,7 @@ export function YardMeasureTool({
   propertyId: _propertyId,
   existingPolygon,
   existingArea: _existingArea,
+  customTiers,
   onSave,
   onCancel,
 }: YardMeasureToolProps) {
@@ -679,7 +681,7 @@ export function YardMeasureTool({
     }
   };
 
-  const category = areaSqft > 0 ? getYardCategory(areaSqft) : null;
+  const category = areaSqft > 0 ? getYardCategory(areaSqft, customTiers) : null;
 
   if (mapError) {
     return (

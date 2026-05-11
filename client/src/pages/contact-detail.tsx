@@ -202,6 +202,15 @@ export default function ContactDetail() {
     queryKey: ["/api/routes"],
   });
 
+  const { data: pricingConfig } = useQuery<{
+    pricingRules?: {
+      yardSizeTiers?: Array<{ name?: string; upToAcres: number | null; surcharge: number }>;
+    };
+  }>({
+    queryKey: ["/api/pricing-config"],
+  });
+  const yardSizeTiers = pricingConfig?.pricingRules?.yardSizeTiers;
+
   const [editForm, setEditForm] = useState<Partial<Contact>>({});
 
   const updateMutation = useMutation({
@@ -705,11 +714,39 @@ export default function ContactDetail() {
                     <SelectValue placeholder="Yard Size" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="0.25_or_less">0.25 Acre or Less</SelectItem>
-                    <SelectItem value="0.26_0.5">.26-.5 Acre</SelectItem>
-                    <SelectItem value="0.51_0.75">.51-.75 Acre</SelectItem>
-                    <SelectItem value="0.75_1">.75-1 Acre</SelectItem>
-                    <SelectItem value="over_1">Over 1 Acre</SelectItem>
+                    {yardSizeTiers && yardSizeTiers.length > 0 ? (
+                      yardSizeTiers.map((tier, i) => {
+                        const tierName = tier.name ?? `Tier ${i + 1}`;
+                        const prevTier = i > 0 ? yardSizeTiers[i - 1] : null;
+                        const lowerAcres = prevTier?.upToAcres ?? 0;
+                        const toFrac = (ac: number) => {
+                          if (Math.abs(ac - 0.25) < 0.001) return "¼";
+                          if (Math.abs(ac - 0.5) < 0.001) return "½";
+                          if (Math.abs(ac - 0.75) < 0.001) return "¾";
+                          if (Math.abs(ac - 1) < 0.001) return "1";
+                          return `${ac}`;
+                        };
+                        const hint =
+                          tier.upToAcres === null
+                            ? lowerAcres > 0
+                              ? `> ${toFrac(lowerAcres)} ac`
+                              : "any size"
+                            : i === 0
+                              ? `< ${toFrac(tier.upToAcres)} ac`
+                              : `${toFrac(lowerAcres)}–${toFrac(tier.upToAcres)} ac`;
+                        return (
+                          <SelectItem key={tierName} value={tierName}>
+                            {tierName} ({hint})
+                          </SelectItem>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <SelectItem value="Standard">Standard (&lt; ¼ acre)</SelectItem>
+                        <SelectItem value="Large">Large (¼–½ acre)</SelectItem>
+                        <SelectItem value="Very Large">Very Large (&gt; ½ acre)</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
                 <Input
@@ -811,13 +848,35 @@ export default function ContactDetail() {
               {contact.yardSize && (
                 <p data-testid="text-contact-yard-size">
                   Yard Size:{" "}
-                  {{
-                    "0.25_or_less": "0.25 Acre or Less",
-                    "0.26_0.5": ".26-.5 Acre",
-                    "0.51_0.75": ".51-.75 Acre",
-                    "0.75_1": ".75-1 Acre",
-                    over_1: "Over 1 Acre",
-                  }[contact.yardSize] || contact.yardSize}
+                  {(() => {
+                    if (yardSizeTiers && yardSizeTiers.length > 0) {
+                      const idx = yardSizeTiers.findIndex(
+                        (t) => (t.name ?? "") === contact.yardSize
+                      );
+                      if (idx !== -1) {
+                        const tier = yardSizeTiers[idx];
+                        const prevTier = idx > 0 ? yardSizeTiers[idx - 1] : null;
+                        const lowerAcres = prevTier?.upToAcres ?? 0;
+                        const toFrac = (ac: number) => {
+                          if (Math.abs(ac - 0.25) < 0.001) return "¼";
+                          if (Math.abs(ac - 0.5) < 0.001) return "½";
+                          if (Math.abs(ac - 0.75) < 0.001) return "¾";
+                          if (Math.abs(ac - 1) < 0.001) return "1";
+                          return `${ac}`;
+                        };
+                        const hint =
+                          tier.upToAcres === null
+                            ? lowerAcres > 0
+                              ? `> ${toFrac(lowerAcres)} ac`
+                              : "any size"
+                            : idx === 0
+                              ? `< ${toFrac(tier.upToAcres)} ac`
+                              : `${toFrac(lowerAcres)}–${toFrac(tier.upToAcres)} ac`;
+                        return `${contact.yardSize} (${hint})`;
+                      }
+                    }
+                    return contact.yardSize;
+                  })()}
                 </p>
               )}
               {contact.numberOfDogs != null && (

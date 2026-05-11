@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearch } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -1206,6 +1206,11 @@ function CreateEditQuoteDialog({
   const yardSizeTiers = pricingConfig?.pricingRules?.yardSizeTiers;
   const defaultTierName = yardSizeTiers?.[0]?.name ?? "Standard";
 
+  const yardSizeTiersRef = useRef(yardSizeTiers);
+  useEffect(() => {
+    yardSizeTiersRef.current = yardSizeTiers;
+  }, [yardSizeTiers]);
+
   const [quoteType, setQuoteType] = useState<"residential" | "commercial">(
     quote?.type || "residential"
   );
@@ -1621,10 +1626,13 @@ function CreateEditQuoteDialog({
 
       if (quoteType === "residential") {
         const SQFT_PER_ACRE = 43560;
-        let tierName = defaultTierName;
-        if (yardSizeTiers && yardSizeTiers.length > 0) {
+        // Read from ref so we always get the latest value regardless of when
+        // the /api/pricing-config query resolves relative to the user's save action.
+        const tiers = yardSizeTiersRef.current;
+        let tierName = tiers?.[0]?.name ?? "Standard";
+        if (tiers && tiers.length > 0) {
           // Sort ascending by boundary (nulls = unbounded = last)
-          const sorted = [...yardSizeTiers].sort((a, b) => {
+          const sorted = [...tiers].sort((a, b) => {
             if (a.upToAcres === null) return 1;
             if (b.upToAcres === null) return -1;
             return a.upToAcres - b.upToAcres;
@@ -1663,13 +1671,11 @@ function CreateEditQuoteDialog({
     [
       addressCoords,
       contactId,
-      defaultTierName,
       handleGenerateYardImage,
       measurements,
       propertyId,
       quoteType,
       setYardSize,
-      yardSizeTiers,
     ]
   );
 
@@ -2720,6 +2726,7 @@ function CreateEditQuoteDialog({
                   lng={addressCoords.lng}
                   existingPolygon={null}
                   existingArea={null}
+                  customTiers={yardSizeTiers}
                   onSave={handleMeasurementSave}
                   onCancel={() => setShowMeasureTool(false)}
                 />
