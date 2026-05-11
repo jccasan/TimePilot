@@ -72,6 +72,29 @@ KEY WORKFLOWS:
 - Batch invoicing: On the Invoices page, select multiple invoices with checkboxes and use Send All, Charge All, or Mark Paid to process them at once.
 - Completing a visit with no gate: On the Routes page, click Complete on a stop. In the dialog, check "No gate" — the proof photo becomes optional and the customer message is adjusted. Works for past dates too (no SMS will be sent for past visits).
 - Importing contacts: Go to Data Migration under Settings. Upload a CSV and map columns to contact fields using AI-assisted matching.
+
+CLIENT PORTAL API:
+The portal API lets clients (or custom client-facing apps built by the business) manage their account programmatically. It uses Bearer token auth — call POST /api/portal/login with email + password to receive a token (valid 7 days), then pass it as "Authorization: Bearer <token>" on all subsequent calls. Tokens are scoped to a single contact and cannot access staff or admin endpoints.
+
+Auth endpoints: POST /api/portal/login (returns token + contactId), POST /api/portal/logout, POST /api/portal/forgot-password (sends reset email), POST /api/portal/reset-password (set new password via emailed token, min 10 chars), GET /api/portal/verify-email (confirm email change via token).
+
+Account & Profile: GET /api/portal/me (returns name, email, phone, address, company name, currency), PATCH /api/portal/profile (update any profile field; changing email triggers a verification flow — change is pending until the client clicks the link), GET /api/portal/properties (returns all service addresses for this contact).
+
+Schedule & Visits: GET /api/portal/schedule (returns active service plans + upcoming visits for next 60 days), GET /api/portal/visits/history (paginated past visits for last 365 days — completed, skipped, cancelled — includes proof-of-service photo URLs).
+
+Service Control: POST /api/portal/pause (marks contact paused, deactivates all active plans, cancels all future visits, notifies staff), POST /api/portal/resume (reactivates paused plans, auto-generates visits for next 14 days, notifies staff), POST /api/portal/request-cleanup (sends a one-time cleanup request notification to the company — staff must schedule and price it manually; body: preferredDate, notes).
+
+Billing & Payments: GET /api/portal/invoices (returns all sent/pending/paid/failed invoices — not drafts), POST /api/portal/invoices/:id/pay (creates a Stripe Checkout session; body: tipAmount; returns a checkout URL), GET /api/portal/payment-methods (saved cards + autoPayEnabled status), POST /api/portal/setup-intent (creates Stripe Checkout in setup mode to add a new card without charging), DELETE /api/portal/payment-methods/:id (remove a saved card), PATCH /api/portal/auto-pay (enable/disable autopay; body: { enabled: true/false }).
+
+Estimates & Quotes: GET /api/portal/estimates (all quotes sent by staff), POST /api/portal/estimates/:id/approve (approve a pending quote; if a property is linked, a draft job is auto-created on the Scheduling page for staff to review; body: note), POST /api/portal/estimates/:id/decline (body: reason).
+
+Messaging: GET /api/portal/messages (full message thread between client and company — SMS and email), POST /api/portal/contact-us (send a message to the company; body: subject, message; logged in the thread and notifies staff).
+
+Referrals: GET /api/portal/referral (returns referral code + count), POST /api/portal/referral/generate (creates a referral code if the client doesn't have one).
+
+Known limitations: Clients cannot permanently cancel their service via the portal API (they can only pause; cancellation requires staff action). Clients cannot create a new service plan from scratch — a staff member must send a quote, and then the client approves it via the estimates endpoint.
+
+The portal API is documented in the Settings page under the "Client Portal API" widget (add it from the widget picker if it's not visible). The full reference is also in docs/portal-api-reference.md.
 `;
 
 interface UserContext {

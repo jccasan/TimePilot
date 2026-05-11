@@ -221,6 +221,7 @@ const SETTINGS_BLOCK_DEFS: {
   { id: "venmo", label: "Venmo", defaultW: 6, defaultH: 3, minW: 4, minH: 2 },
   { id: "quickbooks", label: "QuickBooks", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "voice_api_docs", label: "Voice API Docs", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "portal_api_docs", label: "Client Portal API", defaultW: 6, defaultH: 5, minW: 4, minH: 3 },
   { id: "signup_widget", label: "Signup Widget", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "webhook_lead", label: "Webhook Lead", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   {
@@ -1602,6 +1603,376 @@ function VoiceApiDocsSection() {
                 </div>
               </CollapsibleContent>
             </Collapsible>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PortalApiDocsSection() {
+  const [copiedItem, setCopiedItem] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedItem(label);
+    setTimeout(() => setCopiedItem(null), 2000);
+  };
+
+  const baseUrl = window.location.origin;
+
+  const groups: {
+    label: string;
+    endpoints: { method: string; path: string; description: string }[];
+  }[] = [
+    {
+      label: "Authentication",
+      endpoints: [
+        {
+          method: "POST",
+          path: "/api/portal/login",
+          description:
+            'Authenticate with email + password. Returns { token, contactId }. Pass the token as "Authorization: Bearer <token>" on all subsequent requests. Tokens are valid for 7 days.',
+        },
+        {
+          method: "POST",
+          path: "/api/portal/logout",
+          description: "Invalidate the current session token.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/forgot-password",
+          description:
+            "Send a password reset email. Rate-limited to 3 requests per hour. Always returns success regardless of whether the email matched.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/reset-password",
+          description:
+            "Set a new password using the reset token from the email link. Body: { token, password }. Minimum 10 characters.",
+        },
+        {
+          method: "GET",
+          path: "/api/portal/verify-email",
+          description:
+            "Confirm a pending email address change. Query param: ?token=<verificationToken>.",
+        },
+      ],
+    },
+    {
+      label: "Account & Profile",
+      endpoints: [
+        {
+          method: "GET",
+          path: "/api/portal/me",
+          description:
+            "Returns the authenticated client's profile: name, email, phone, address, company name, currency, and any pending email change.",
+        },
+        {
+          method: "PATCH",
+          path: "/api/portal/profile",
+          description:
+            "Update profile fields (name, phone, address, email, numberOfDogs). Changing email triggers a verification email — the change is held pending until the client clicks the link. Can also update gate codes and special instructions for specific properties via the properties array.",
+        },
+        {
+          method: "GET",
+          path: "/api/portal/properties",
+          description:
+            "Returns all service properties linked to this contact, including addresses, gate codes, GPS coordinates, and special instructions.",
+        },
+      ],
+    },
+    {
+      label: "Schedule & Visits",
+      endpoints: [
+        {
+          method: "GET",
+          path: "/api/portal/schedule",
+          description:
+            "Returns active service plans and upcoming visits for the next 60 days. Each visit includes scheduled date, status, and property address.",
+        },
+        {
+          method: "GET",
+          path: "/api/portal/visits/history",
+          description:
+            "Paginated visit history for the past 365 days. Includes completed, skipped, and cancelled visits with proof-of-service photo URLs. Query params: ?page=1&limit=20.",
+        },
+      ],
+    },
+    {
+      label: "Service Control",
+      endpoints: [
+        {
+          method: "POST",
+          path: "/api/portal/pause",
+          description:
+            "Pause service. Marks contact paused, deactivates all active service plans, and cancels all future visits from today forward. Notifies staff.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/resume",
+          description:
+            "Resume paused service. Reactivates plans that were paused and auto-generates visits for the next 14 days. Notifies staff.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/request-cleanup",
+          description:
+            "Send a one-time cleanup request to the company. Staff must schedule and price the work. Body: { preferredDate, notes }.",
+        },
+      ],
+    },
+    {
+      label: "Invoices & Payments",
+      endpoints: [
+        {
+          method: "GET",
+          path: "/api/portal/invoices",
+          description:
+            "Returns all sent, pending, paid, and failed invoices. Draft and voided invoices are excluded.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/invoices/:id/pay",
+          description:
+            "Create a Stripe Checkout session to pay an invoice. Optional tip via body: { tipAmount }. Returns { url } — redirect the client there to complete payment.",
+        },
+        {
+          method: "GET",
+          path: "/api/portal/payment-methods",
+          description:
+            "Returns saved payment methods (card brand, last 4, expiry) and whether autopay is enabled.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/setup-intent",
+          description:
+            "Creates a Stripe Checkout session in setup mode so the client can add a card without a charge. Returns { url }.",
+        },
+        {
+          method: "DELETE",
+          path: "/api/portal/payment-methods/:id",
+          description: "Remove a saved card. The client must own the payment method.",
+        },
+        {
+          method: "PATCH",
+          path: "/api/portal/auto-pay",
+          description:
+            "Enable or disable automatic payment when invoices are generated. Body: { enabled: true | false }.",
+        },
+      ],
+    },
+    {
+      label: "Estimates & Quotes",
+      endpoints: [
+        {
+          method: "GET",
+          path: "/api/portal/estimates",
+          description:
+            "Returns all quotes/estimates sent by staff. Statuses: pending, approved, declined.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/estimates/:id/approve",
+          description:
+            "Approve a pending estimate. If a property is linked, a draft job is auto-created on the Scheduling page for staff to activate. Body: { note }.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/estimates/:id/decline",
+          description: "Decline a pending estimate. Body: { reason }.",
+        },
+      ],
+    },
+    {
+      label: "Messaging",
+      endpoints: [
+        {
+          method: "GET",
+          path: "/api/portal/messages",
+          description:
+            "Returns the full message thread between the client and the company (SMS and email), with direction, channel, subject, body, and timestamp.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/contact-us",
+          description:
+            "Send a message to the company. Logged in the conversation thread and triggers an in-app notification to staff. Body: { subject, message }.",
+        },
+      ],
+    },
+    {
+      label: "Referrals",
+      endpoints: [
+        {
+          method: "GET",
+          path: "/api/portal/referral",
+          description:
+            "Returns the client's referral code and the number of successful referrals.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/referral/generate",
+          description:
+            "Generate a unique referral code for the client (idempotent — returns the existing code if one already exists).",
+        },
+      ],
+    },
+  ];
+
+  const methodColor = (method: string) => {
+    if (method === "GET") return "secondary";
+    if (method === "DELETE") return "destructive";
+    return "default";
+  };
+
+  const loginExample = `curl -X POST ${baseUrl}/api/portal/login \\
+  -H "Content-Type: application/json" \\
+  -d '{"email":"client@example.com","password":"mypassword123"}'`;
+
+  const authExample = `# Use the token from login in all subsequent requests
+curl ${baseUrl}/api/portal/me \\
+  -H "Authorization: Bearer <your-token>"`;
+
+  return (
+    <Card data-testid="card-portal-api-docs">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Globe className="h-5 w-5" />
+          Client Portal API
+        </CardTitle>
+        <CardDescription>
+          Build custom client-facing apps on top of ScooPilot. All portal endpoints use Bearer token
+          authentication — no staff API key required.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="bg-muted/50 rounded-lg p-4 border space-y-3">
+          <div className="flex items-start gap-3">
+            <Info className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+            <div className="space-y-2 w-full">
+              <p className="text-sm font-medium">Authentication</p>
+              <p className="text-sm text-muted-foreground">
+                Call{" "}
+                <code className="bg-muted px-1 py-0.5 rounded text-xs">
+                  POST /api/portal/login
+                </code>{" "}
+                to receive a Bearer token (valid 7 days). Pass it on every subsequent request.
+                Tokens are scoped to a single client — they cannot access staff or admin endpoints.
+              </p>
+              <div className="space-y-1.5 pt-1">
+                {[
+                  { label: "Login", code: loginExample },
+                  { label: "Authenticated call", code: authExample },
+                ].map((ex) => (
+                  <div key={ex.label}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-muted-foreground uppercase">
+                        {ex.label}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs"
+                        onClick={() => copyToClipboard(ex.code, ex.label)}
+                        data-testid={`button-copy-portal-${ex.label.toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        {copiedItem === ex.label ? (
+                          <>
+                            <Check className="h-3 w-3 mr-1" /> Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3 w-3 mr-1" /> Copy
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <pre className="bg-muted rounded-md p-2.5 text-xs overflow-x-auto whitespace-pre-wrap break-all font-mono">
+                      {ex.code}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+          <p className="text-sm text-amber-800 dark:text-amber-300 font-medium mb-1">
+            Limitations
+          </p>
+          <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-1 list-disc list-inside">
+            <li>
+              Clients can pause service but cannot permanently cancel — cancellation requires staff
+              action.
+            </li>
+            <li>
+              Clients cannot create a new service plan from scratch. A staff member must send an
+              estimate; the client approves it via the Estimates endpoint.
+            </li>
+          </ul>
+        </div>
+
+        <div className="space-y-4">
+          {groups.map((group) => (
+            <div key={group.label}>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                {group.label}
+              </p>
+              <div className="space-y-1.5">
+                {group.endpoints.map((ep) => (
+                  <Collapsible key={ep.path + ep.method}>
+                    <CollapsibleTrigger
+                      className="flex items-center justify-between w-full p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                      data-testid={`trigger-portal-ep-${ep.path.replace(/\//g, "-").replace(/:/g, "")}`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Badge
+                          variant={methodColor(ep.method)}
+                          className="font-mono text-xs shrink-0"
+                        >
+                          {ep.method}
+                        </Badge>
+                        <code className="text-xs font-mono text-left truncate">{ep.path}</code>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pt-2 pb-1 px-3">
+                      <p className="text-sm text-muted-foreground mb-2">{ep.description}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground uppercase">
+                          endpoint
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs"
+                          onClick={() =>
+                            copyToClipboard(`${baseUrl}${ep.path}`, ep.path + "-path")
+                          }
+                          data-testid={`button-copy-portal-path-${ep.path.replace(/\//g, "-")}`}
+                        >
+                          {copiedItem === ep.path + "-path" ? (
+                            <>
+                              <Check className="h-3 w-3 mr-1" /> Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3 w-3 mr-1" /> Copy URL
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <pre className="bg-muted rounded-md p-2.5 text-xs overflow-x-auto whitespace-pre-wrap break-all font-mono mt-1">
+                        {ep.method} {baseUrl}
+                        {ep.path}
+                      </pre>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </CardContent>
@@ -6693,6 +7064,12 @@ export default function Settings() {
             ) : (
               <UpgradeWall type="voice" featureName="Voice API Docs" />
             )}
+          </div>
+        );
+      case "portal_api_docs":
+        return (
+          <div className="h-full overflow-auto">
+            <PortalApiDocsSection />
           </div>
         );
       case "call_tracking":
