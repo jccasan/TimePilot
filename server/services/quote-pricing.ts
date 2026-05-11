@@ -404,7 +404,7 @@ export function renderResidentialProposalHtml(data: {
     recommended?: boolean
   ) {
     return `
-      <div style="flex: 1; min-width: 200px; border: 2px solid ${recommended ? color : "#e2e8f0"}; border-radius: 12px; overflow: hidden; ${recommended ? "box-shadow: 0 4px 12px rgba(0,0,0,0.1);" : ""}">
+      <div class="tier-card" style="flex: 1; min-width: 200px; border: 2px solid ${recommended ? color : "#e2e8f0"}; border-radius: 12px; overflow: hidden; ${recommended ? "box-shadow: 0 4px 12px rgba(0,0,0,0.1);" : ""}">
         ${recommended ? `<div style="background-color: ${color}; color: white; text-align: center; padding: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Most Popular</div>` : ""}
         <div style="padding: 20px; text-align: center;">
           <h3 style="margin: 0 0 4px; font-size: 18px; color: #1e293b;">${escapeHtml(name)}</h3>
@@ -435,10 +435,10 @@ export function renderResidentialProposalHtml(data: {
       .map(
         (li) => `
         <tr>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #1e293b;">${escapeHtml(li.name)}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #475569; text-align: center;">${li.quantity}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #475569; text-align: right;">$${Number(li.unitPrice).toFixed(2)}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: 600; color: #1e293b; text-align: right;">$${(li.unitPrice * li.quantity).toFixed(2)}</td>
+          <td class="li-cell" style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #1e293b;">${escapeHtml(li.name)}</td>
+          <td class="li-cell" style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #475569; text-align: center;">${li.quantity}</td>
+          <td class="li-cell li-unitprice" style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #475569; text-align: right;">$${Number(li.unitPrice).toFixed(2)}</td>
+          <td class="li-cell" style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: 600; color: #1e293b; text-align: right;">$${(li.unitPrice * li.quantity).toFixed(2)}</td>
         </tr>`
       )
       .join("");
@@ -448,17 +448,17 @@ export function renderResidentialProposalHtml(data: {
         <table style="width: 100%; border-collapse: collapse;">
           <thead>
             <tr style="background-color: #f1f5f9;">
-              <th style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: left; text-transform: uppercase; letter-spacing: 0.05em;">Service</th>
-              <th style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: center; text-transform: uppercase; letter-spacing: 0.05em;">Qty</th>
-              <th style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.05em;">Unit Price</th>
-              <th style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.05em;">Subtotal</th>
+              <th class="li-header" style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: left; text-transform: uppercase; letter-spacing: 0.05em;">Service</th>
+              <th class="li-header" style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: center; text-transform: uppercase; letter-spacing: 0.05em;">Qty</th>
+              <th class="li-header li-unitprice" style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.05em;">Unit Price</th>
+              <th class="li-header" style="padding: 8px 10px; font-size: 12px; font-weight: 600; color: #64748b; text-align: right; text-transform: uppercase; letter-spacing: 0.05em;">Subtotal</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
           <tfoot>
             <tr style="background-color: #f1f5f9;">
-              <td colspan="3" style="padding: 10px 10px; font-size: 14px; font-weight: 700; color: #1e293b; text-align: right;">Total per visit</td>
-              <td style="padding: 10px 10px; font-size: 14px; font-weight: 700; color: #1a7a4c; text-align: right;">$${grandTotal.toFixed(2)}</td>
+              <td class="li-cell li-tfoot-label" colspan="3" style="padding: 10px 10px; font-size: 14px; font-weight: 700; color: #1e293b; text-align: right;">Total per visit</td>
+              <td class="li-cell li-tfoot-total" style="padding: 10px 10px; font-size: 14px; font-weight: 700; color: #1a7a4c; text-align: right;">$${grandTotal.toFixed(2)}</td>
             </tr>
           </tfoot>
         </table>
@@ -480,13 +480,29 @@ export function renderResidentialProposalHtml(data: {
 
         <h2 style="margin: 0 0 16px; font-size: 18px; color: #1e293b; text-align: center;">Choose Your Service Level</h2>
 
-        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <div class="tier-cards" style="display: flex; gap: 16px; flex-wrap: wrap;">
           ${tierCard("Essential", pricing.essential, pricing.essentialFeatures, "#64748b")}
           ${tierCard("Property Care", pricing.premium, pricing.premiumFeatures, "#1a7a4c", true)}
           ${tierCard("Deluxe", pricing.deluxe, pricing.deluxeFeatures, "#7c3aed")}
         </div>`;
 
   return `
+    <style>
+      @media only screen and (max-width: 480px) {
+        .quote-body { padding: 16px !important; }
+        .tier-cards { display: block !important; }
+        .tier-card { display: block !important; min-width: 0 !important; width: 100% !important; margin-bottom: 12px !important; box-sizing: border-box !important; }
+        .cta-wrap { padding-left: 0 !important; padding-right: 0 !important; }
+        .cta-link { display: block !important; width: 100% !important; box-sizing: border-box !important; padding: 14px 16px !important; text-align: center !important; }
+        .img-flex { display: block !important; }
+        .img-item { display: block !important; min-width: 0 !important; max-width: 100% !important; width: 100% !important; margin-bottom: 12px !important; box-sizing: border-box !important; }
+        .li-unitprice { display: none !important; }
+        .li-cell { padding: 6px 6px !important; font-size: 12px !important; }
+        .li-header { padding: 6px 6px !important; font-size: 11px !important; }
+        .li-tfoot-label { display: none !important; }
+        .li-tfoot-total { text-align: left !important; }
+      }
+    </style>
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 700px; margin: 0 auto; background-color: #ffffff;">
       <div style="background-color: #1a7a4c; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
         ${e.companyLogo ? `<img src="${e.companyLogo}" alt="${e.companyName}" style="max-height: 50px; margin-bottom: 8px;" />` : ""}
@@ -494,7 +510,7 @@ export function renderResidentialProposalHtml(data: {
         <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 14px;">Service Quote #${e.quoteNumber}</p>
       </div>
 
-      <div style="padding: 24px; border: 1px solid #e2e8f0; border-top: none;">
+      <div class="quote-body" style="padding: 24px; border: 1px solid #e2e8f0; border-top: none;">
         <p style="margin: 0 0 4px; font-size: 14px; color: #64748b;">Prepared for</p>
         <p style="margin: 0 0 16px; font-size: 18px; font-weight: 600; color: #1e293b;">${e.contactName}</p>
         ${e.propertyAddress ? `<p style="margin: 0 0 16px; font-size: 14px; color: #475569;">📍 ${e.propertyAddress}</p>` : ""}
@@ -509,11 +525,11 @@ export function renderResidentialProposalHtml(data: {
             ? `
           <div style="margin-top: 24px;">
             <h3 style="margin: 0 0 12px; font-size: 15px; color: #1e293b;">Property Measurement</h3>
-            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div class="img-flex" style="display: flex; gap: 12px; flex-wrap: wrap;">
               ${data.images
                 .map((img) => {
                   const imgSrc = resolveImageUrl(img.url, data.baseUrl);
-                  return `<div style="flex: 1; min-width: 240px; max-width: 380px;">
+                  return `<div class="img-item" style="flex: 1; min-width: 240px; max-width: 380px;">
                   <img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(img.caption)}" style="width: 100%; border-radius: 8px; border: 1px solid #e2e8f0;" />
                   <p style="margin: 6px 0 0; font-size: 12px; color: #64748b; text-align: center;">${escapeHtml(img.caption)}</p>
                 </div>`;
@@ -529,8 +545,8 @@ export function renderResidentialProposalHtml(data: {
         ${
           e.acceptUrl
             ? `
-          <div style="text-align: center; margin: 28px 0 20px;">
-            <a href="${e.acceptUrl}" style="display: inline-block; background-color: #1a7a4c; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600;">View & Accept Quote</a>
+          <div class="cta-wrap" style="text-align: center; margin: 28px 0 20px;">
+            <a href="${e.acceptUrl}" class="cta-link" style="display: inline-block; background-color: #1a7a4c; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600;">View & Accept Quote</a>
           </div>`
             : ""
         }
@@ -591,6 +607,16 @@ export function renderCommercialProposalHtml(data: {
   }
 
   return `
+    <style>
+      @media only screen and (max-width: 480px) {
+        .comm-body { padding: 16px !important; }
+        .comm-scope-cell { padding: 6px 8px !important; font-size: 13px !important; }
+        .cta-wrap { padding-left: 0 !important; padding-right: 0 !important; }
+        .cta-link { display: block !important; width: 100% !important; box-sizing: border-box !important; padding: 14px 16px !important; text-align: center !important; }
+        .img-flex { display: block !important; }
+        .img-item { display: block !important; min-width: 0 !important; max-width: 100% !important; width: 100% !important; margin-bottom: 12px !important; box-sizing: border-box !important; }
+      }
+    </style>
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 750px; margin: 0 auto; background-color: #ffffff;">
       <div style="background-color: #0f172a; padding: 32px; text-align: center; border-radius: 8px 8px 0 0;">
         ${e.companyLogo ? `<img src="${e.companyLogo}" alt="${e.companyName}" style="max-height: 50px; margin-bottom: 12px;" />` : ""}
@@ -599,7 +625,7 @@ export function renderCommercialProposalHtml(data: {
         <p style="color: rgba(255,255,255,0.5); margin: 4px 0 0; font-size: 13px;">Quote #${e.quoteNumber}</p>
       </div>
 
-      <div style="padding: 32px; border: 1px solid #e2e8f0; border-top: none;">
+      <div class="comm-body" style="padding: 32px; border: 1px solid #e2e8f0; border-top: none;">
         <h2 style="margin: 0 0 12px; font-size: 18px; color: #0f172a; border-bottom: 2px solid #1a7a4c; padding-bottom: 8px;">Executive Summary</h2>
         <p style="margin: 0 0 8px; font-size: 14px; color: #475569;">Prepared for: <strong>${e.contactName}</strong></p>
         ${e.propertyAddress ? `<p style="margin: 0 0 8px; font-size: 14px; color: #475569;">Property: <strong>${e.propertyAddress}</strong></p>` : ""}
@@ -614,76 +640,76 @@ export function renderCommercialProposalHtml(data: {
         <h2 style="margin: 24px 0 12px; font-size: 18px; color: #0f172a; border-bottom: 2px solid #1a7a4c; padding-bottom: 8px;">Scope of Work</h2>
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 14px;">
           <tr style="background-color: #f8fafc;">
-            <td style="padding: 8px 12px; font-weight: 600;">Service Frequency</td>
-            <td style="padding: 8px 12px;">${breakdown.frequencyLabel || data.frequency} (${breakdown.visitsPerMonth || 0} visits/month)</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Service Frequency</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px;">${breakdown.frequencyLabel || data.frequency} (${breakdown.visitsPerMonth || 0} visits/month)</td>
           </tr>
           <tr>
-            <td style="padding: 8px 12px; font-weight: 600;">Waste Stations</td>
-            <td style="padding: 8px 12px;">${(breakdown.stationCount || 0) > 0 ? `${breakdown.stationCount} station${breakdown.stationCount !== 1 ? "s" : ""} maintained per visit` : "No waste stations"}</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Waste Stations</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px;">${(breakdown.stationCount || 0) > 0 ? `${breakdown.stationCount} station${breakdown.stationCount !== 1 ? "s" : ""} maintained per visit` : "No waste stations"}</td>
           </tr>
           ${
             (breakdown.stationCount || 0) > 0
               ? `<tr style="background-color: #f8fafc;">
-            <td style="padding: 8px 12px; font-weight: 600;">Time Per Station</td>
-            <td style="padding: 8px 12px;">${breakdown.timePerStation || 0} min × ${breakdown.stationCount || 0} stations = ${breakdown.totalStationMinutes || 0} min</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Time Per Station</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px;">${breakdown.timePerStation || 0} min × ${breakdown.stationCount || 0} stations = ${breakdown.totalStationMinutes || 0} min</td>
           </tr>`
               : ""
           }
           <tr>
-            <td style="padding: 8px 12px; font-weight: 600;">Common Area Service</td>
-            <td style="padding: 8px 12px;">${breakdown.commonAreaMinutes || 0} minutes</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Common Area Service</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px;">${breakdown.commonAreaMinutes || 0} minutes</td>
           </tr>
           <tr style="background-color: #f8fafc;">
-            <td style="padding: 8px 12px; font-weight: 600;">On-Site Labor</td>
-            <td style="padding: 8px 12px;">${breakdown.totalLaborHours || 0} hrs with ${breakdown.crewSize || 1}-person crew</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">On-Site Labor</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px;">${breakdown.totalLaborHours || 0} hrs with ${breakdown.crewSize || 1}-person crew</td>
           </tr>
           ${
             (breakdown.mileageDistance || 0) > 0
               ? `<tr>
-            <td style="padding: 8px 12px; font-weight: 600;">Travel</td>
-            <td style="padding: 8px 12px;">Included (${breakdown.mileageDistance} mi round-trip)</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Travel</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px;">Included (${breakdown.mileageDistance} mi round-trip)</td>
           </tr>`
               : ""
           }
           ${
             (breakdown.dumpFee || 0) > 0
               ? `<tr style="background-color: #f8fafc;">
-            <td style="padding: 8px 12px; font-weight: 600;">Waste Disposal</td>
-            <td style="padding: 8px 12px;">Included</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Waste Disposal</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px;">Included</td>
           </tr>`
               : ""
           }
           ${
             (breakdown.siteSqft || 0) > 0
               ? `<tr>
-            <td style="padding: 8px 12px; font-weight: 600;">Site Area</td>
-            <td style="padding: 8px 12px;">${(breakdown.siteSqft || 0).toLocaleString()} sq ft</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Site Area</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px;">${(breakdown.siteSqft || 0).toLocaleString()} sq ft</td>
           </tr>`
               : ""
           }
           ${
             breakdown.densityDiscount
               ? `<tr>
-            <td style="padding: 8px 12px; font-weight: 600;">Multi-Visit Discount</td>
-            <td style="padding: 8px 12px; color: #1a7a4c; font-weight: 600;">${breakdown.densityDiscount} off additional visits</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Multi-Visit Discount</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; color: #1a7a4c; font-weight: 600;">${breakdown.densityDiscount} off additional visits</td>
           </tr>`
               : ""
           }
           <tr style="background-color: #f1f5f9;">
-            <td style="padding: 8px 12px; font-weight: 600;">Per-Visit Total</td>
-            <td style="padding: 8px 12px; font-weight: 700; color: #1a7a4c;">$${pricing.essential.toFixed(2)}</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Per-Visit Total</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 700; color: #1a7a4c;">$${pricing.essential.toFixed(2)}</td>
           </tr>
           ${
             (pricing.initialCleanFee || 0) > 0
               ? `<tr style="background-color: #fef3c7;">
-            <td style="padding: 8px 12px; font-weight: 600;">Initial Deep Clean (one-time)</td>
-            <td style="padding: 8px 12px; font-weight: 600;">$${pricing.initialCleanFee.toFixed(2)}</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Initial Deep Clean (one-time)</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">$${pricing.initialCleanFee.toFixed(2)}</td>
           </tr>`
               : ""
           }
           <tr style="background-color: #f1f5f9;">
-            <td style="padding: 8px 12px; font-weight: 600;">Est. Monthly Investment</td>
-            <td style="padding: 8px 12px; font-weight: 700; color: #1a7a4c;">$${(breakdown.monthlyEstimate || 0).toFixed(2)}</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 600;">Est. Monthly Investment</td>
+            <td class="comm-scope-cell" style="padding: 8px 12px; font-weight: 700; color: #1a7a4c;">$${(breakdown.monthlyEstimate || 0).toFixed(2)}</td>
           </tr>
         </table>
 
@@ -720,11 +746,11 @@ export function renderCommercialProposalHtml(data: {
             ? `
           <div style="margin-top: 24px;">
             <h3 style="margin: 0 0 12px; font-size: 15px; color: #1e293b;">Site Overview</h3>
-            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div class="img-flex" style="display: flex; gap: 12px; flex-wrap: wrap;">
               ${data.images
                 .map((img) => {
                   const imgSrc = resolveImageUrl(img.url, data.baseUrl);
-                  return `<div style="flex: 1; min-width: 240px; max-width: 380px;">
+                  return `<div class="img-item" style="flex: 1; min-width: 240px; max-width: 380px;">
                   <img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(img.caption)}" style="width: 100%; border-radius: 8px; border: 1px solid #e2e8f0;" />
                   <p style="margin: 6px 0 0; font-size: 12px; color: #64748b; text-align: center;">${escapeHtml(img.caption)}</p>
                 </div>`;
@@ -740,8 +766,8 @@ export function renderCommercialProposalHtml(data: {
         ${
           e.acceptUrl
             ? `
-          <div style="text-align: center; margin: 28px 0 20px;">
-            <a href="${e.acceptUrl}" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600;">Review & Accept Proposal</a>
+          <div class="cta-wrap" style="text-align: center; margin: 28px 0 20px;">
+            <a href="${e.acceptUrl}" class="cta-link" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600;">Review & Accept Proposal</a>
           </div>`
             : ""
         }
