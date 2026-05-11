@@ -807,7 +807,12 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       }
       const acceptUrl = `${req.protocol}://${req.get("host")}/portal/${slug}/quotes/${quote.id}?token=${encodeURIComponent(quoteToken)}`;
 
-      const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : undefined;
+      const rawLogoUrlSend = company?.logoUrl ?? null;
+      const logoUrl = rawLogoUrlSend
+        ? /^https?:\/\//i.test(rawLogoUrlSend)
+          ? rawLogoUrlSend
+          : `${getBaseUrl(req)}${rawLogoUrlSend}`
+        : undefined;
 
       const renderData = {
         companyName: company.name,
@@ -926,7 +931,12 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         breakdown: (quote.pricingBreakdown as Record<string, unknown>) || {},
       };
 
-      const logoUrl = company?.logoUrl ? `${getBaseUrl(req)}${company.logoUrl}` : undefined;
+      const rawLogoUrlPreview = company?.logoUrl ?? null;
+      const logoUrl = rawLogoUrlPreview
+        ? /^https?:\/\//i.test(rawLogoUrlPreview)
+          ? rawLogoUrlPreview
+          : `${getBaseUrl(req)}${rawLogoUrlPreview}`
+        : undefined;
 
       const renderData = {
         companyName: company.name,
