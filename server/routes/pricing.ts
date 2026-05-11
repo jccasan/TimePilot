@@ -178,7 +178,8 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           }),
           yardSizeTiers: z.array(
             z.object({
-              upToAcres: z.number().min(0),
+              name: z.string().optional(),
+              upToAcres: z.number().min(0).nullable(),
               surcharge: z.number().min(0),
             })
           ),
@@ -319,8 +320,11 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         const generatedYardAcres = new Set<number>();
         let yardSort = 100;
         for (const tier of rules.yardSizeTiers) {
-          const tierLabel = tier.name || (tier.upToAcres != null ? `Lot Size up to ${tier.upToAcres} Acre` : "Lot Size (Large)");
-          const tierName = tier.upToAcres != null ? `Lot Size up to ${tier.upToAcres} Acre` : tierLabel;
+          const tierLabel =
+            tier.name ||
+            (tier.upToAcres != null ? `Lot Size up to ${tier.upToAcres} Acre` : "Lot Size (Large)");
+          const tierName =
+            tier.upToAcres != null ? `Lot Size up to ${tier.upToAcres} Acre` : tierLabel;
           if (tier.upToAcres != null) {
             generatedYardAcres.add(tier.upToAcres);
           }
@@ -342,7 +346,8 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
               });
             }
           } else {
-            const acresLabel = tier.upToAcres != null ? `up to ${tier.upToAcres} acre` : "unlimited";
+            const acresLabel =
+              tier.upToAcres != null ? `up to ${tier.upToAcres} acre` : "unlimited";
             await storage.createServicePricingItem({
               companyId,
               category: "add_on",
@@ -539,7 +544,8 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       }),
       yardSizeTiers: z.array(
         z.object({
-          upToAcres: z.number().min(0),
+          name: z.string().optional(),
+          upToAcres: z.number().min(0).nullable(),
           surcharge: z.number().min(0),
         })
       ),

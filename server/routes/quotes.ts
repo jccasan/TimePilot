@@ -322,7 +322,11 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       }
       const companyQuoteDefaults = company.quoteDefaults ?? null;
       const companyPricingConfig = company.pricingConfig as
-        | { pricingRules?: { yardSizeTiers?: { name?: string; upToAcres: number | null; surcharge: number }[] } }
+        | {
+            pricingRules?: {
+              yardSizeTiers?: { name?: string; upToAcres: number | null; surcharge: number }[];
+            };
+          }
         | null
         | undefined;
       const companyYardSizeTiers = companyPricingConfig?.pricingRules?.yardSizeTiers ?? null;

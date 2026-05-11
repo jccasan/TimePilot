@@ -1557,6 +1557,11 @@ function CreateEditQuoteDialog({
             else tierName = "Estate";
           }
           setYardSize(tierName);
+          if (contactId) {
+            apiRequest("PATCH", `/api/contacts/${contactId}`, {
+              yardSize: tierName,
+            }).catch(() => {});
+          }
         }
         return updated;
       });
@@ -1568,7 +1573,15 @@ function CreateEditQuoteDialog({
         handleGenerateYardImage(polygon, areaSqft, addressCoords.lat, addressCoords.lng);
       }
     },
-    [addressCoords, defaultTierName, handleGenerateYardImage, quoteType, setYardSize, yardSizeTiers]
+    [
+      addressCoords,
+      contactId,
+      defaultTierName,
+      handleGenerateYardImage,
+      quoteType,
+      setYardSize,
+      yardSizeTiers,
+    ]
   );
 
   const removeImage = (idx: number) => {
