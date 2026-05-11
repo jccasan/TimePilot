@@ -6,11 +6,11 @@ The Client Portal API gives authenticated portal clients programmatic access to 
 
 ## Authentication
 
-The portal uses **Bearer token** authentication (not the staff API key system).
+### Authenticated portal endpoints (most routes)
 
-**Login flow:**
+The portal uses **Bearer token** authentication.
 
-1. `POST /api/portal/login` with `email` + `password` — returns a `token` and `contactId`.
+1. `POST /api/portal/login` with `email` + `password` — returns `{ token, contactId }`.
 2. Pass the token in every subsequent request:
    ```
    Authorization: Bearer <token>
@@ -19,12 +19,16 @@ The portal uses **Bearer token** authentication (not the staff API key system).
 
 Portal tokens are scoped to a single contact. They cannot access other contacts' data or any staff/admin endpoints.
 
+### Public quote endpoints (token-based, no session required)
+
+`GET /api/portal/quotes/:id`, `POST /api/portal/quotes/:id/accept`, and `POST /api/portal/quotes/:id/decline` use a **one-time quote token** passed as a query parameter (`?token=<quoteToken>`), not a Bearer token. This token is included in the quote link sent to the client by email or SMS. These endpoints are intentionally unauthenticated so prospects can review and accept quotes before creating a portal account.
+
 ---
 
 ## Known Limitations
 
 - **No direct service cancellation.** Clients can pause service but not permanently cancel their account via the API. Staff must action cancellation requests.
-- **No new service plan creation.** Clients cannot start a new service from scratch via the portal API. A staff member must send a quote/estimate; the client can then approve it via `POST /api/portal/estimates/:id/approve`.
+- **No new service plan creation from scratch.** Clients cannot start a new service plan without a quote from staff. The flow is: staff sends a quote → client accepts it via `POST /api/portal/quotes/:id/accept` (which creates a service plan automatically) or approves an estimate via `POST /api/portal/estimates/:id/approve`.
 
 ---
 
@@ -32,23 +36,24 @@ Portal tokens are scoped to a single contact. They cannot access other contacts'
 
 ### Auth
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/portal/login` | Authenticate with email + password. Returns `{ token, contactId }`. Rate-limited to 5 failed attempts per 15 minutes. |
-| POST | `/api/portal/logout` | Invalidate the current session token. |
-| POST | `/api/portal/forgot-password` | Send a password reset email. Rate-limited to 3 requests per hour. Always returns `{ success: true }` regardless of whether the email was found. |
-| POST | `/api/portal/reset-password` | Set a new password using the reset token from email. Body: `{ token, password }`. Password must be at least 10 characters. |
-| GET | `/api/portal/verify-email` | Confirm a pending email change. Query param: `token`. |
+| Method | Path                          | Auth   | Description                                                                                                           |
+| ------ | ----------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/portal/login`           | None   | Authenticate with email + password. Returns `{ token, contactId }`. Rate-limited to 5 failed attempts per 15 minutes. |
+| POST   | `/api/portal/logout`          | Bearer | Invalidate the current session token.                                                                                 |
+| POST   | `/api/portal/forgot-password` | None   | Send a password reset email. Rate-limited to 3 requests per hour. Always returns `{ success: true }`.                 |
+| POST   | `/api/portal/reset-password`  | None   | Set a new password using the reset token from email. Body: `{ token, password }`. Min 10 characters.                  |
+| GET    | `/api/portal/verify-email`    | None   | Confirm a pending email change. Query param: `?token=<verificationToken>`.                                            |
 
 ---
 
 ### Account & Profile
 
-#### `GET /api/portal/me`
+#### `GET /api/portal/me` — Bearer
 
 Returns the authenticated client's profile.
 
 **Response:**
+
 ```json
 {
   "id": "contact_abc",
@@ -66,11 +71,12 @@ Returns the authenticated client's profile.
 }
 ```
 
-#### `PATCH /api/portal/profile`
+#### `PATCH /api/portal/profile` — Bearer
 
-Update profile fields. All fields are optional. Changing `email` triggers a verification email to the new address — the change is not applied until the link is clicked.
+Update profile fields. All fields are optional. Changing `email` triggers a verification email — change is pending until the link is clicked. The `properties` array updates gate codes and special instructions for existing service properties.
 
 **Body fields (all optional):**
+
 ```json
 {
   "firstName": "Jane",
@@ -82,45 +88,24 @@ Update profile fields. All fields are optional. Changing `email` triggers a veri
   "state": "VA",
   "zipCode": "23220",
   "numberOfDogs": 2,
-  "properties": [
-    {
-      "id": "prop_xyz",
-      "gateCode": "1234",
-      "specialInstructions": "Dog is friendly"
-    }
-  ]
+  "properties": [{ "id": "prop_xyz", "gateCode": "1234", "specialInstructions": "Friendly dog" }]
 }
 ```
 
-**Response:**
-```json
-{
-  "success": true,
-  "emailVerificationSent": false,
-  "pendingEmail": null,
-  "profile": { ... }
-}
-```
+#### `GET /api/portal/properties` — Bearer
 
----
-
-### Properties
-
-#### `GET /api/portal/properties`
-
-Returns all service properties linked to the authenticated contact.
-
-**Response:** Array of property objects including address, gate code, GPS coordinates, yard size, and special instructions.
+Returns all service properties linked to the contact, including addresses, gate codes, GPS coordinates, yard size, and special instructions.
 
 ---
 
 ### Schedule & Visits
 
-#### `GET /api/portal/schedule`
+#### `GET /api/portal/schedule` — Bearer
 
-Returns the client's active service plans and upcoming visits (next 60 days).
+Returns active service plans and upcoming visits for the next 60 days.
 
 **Response:**
+
 ```json
 {
   "servicePlans": [
@@ -143,253 +128,239 @@ Returns the client's active service plans and upcoming visits (next 60 days).
 }
 ```
 
-#### `GET /api/portal/visits/history`
+#### `GET /api/portal/visits/history` — Bearer
 
-Returns paginated past visits (last 365 days). Includes completed, skipped, and cancelled visits.
+Paginated visit history for the past 365 days (completed, skipped, cancelled). Includes proof-of-service photo URLs.
 
-**Query params:** `page` (default 1), `limit` (default 20)
-
-**Response:**
-```json
-{
-  "visits": [
-    {
-      "id": "visit_abc",
-      "scheduledDate": "2026-05-06",
-      "status": "completed",
-      "propertyAddress": "123 Main St",
-      "completedAt": "2026-05-06T14:32:00Z",
-      "proofOfServicePhoto": "https://...",
-      "proofOfServicePhotoBefore": null
-    }
-  ],
-  "total": 47,
-  "page": 1,
-  "totalPages": 3
-}
-```
+**Query params:** `?page=1&limit=20`
 
 ---
 
 ### Service Control
 
-#### `POST /api/portal/pause`
+#### `POST /api/portal/pause` — Bearer
 
-Pauses the client's service. Marks the contact as paused, deactivates all active service plans, and cancels all future visits from today onward. Sends an in-app notification to the company.
+Pauses the client's service. Marks contact paused, deactivates all active service plans, cancels all future visits, and notifies staff.
 
-**Body:** none required
+**Response:** `{ "success": true, "status": "paused" }`
 
-**Response:**
-```json
-{ "success": true, "status": "paused" }
-```
+#### `POST /api/portal/resume` — Bearer
 
-#### `POST /api/portal/resume`
+Resumes paused service. Reactivates plans that were paused, auto-generates visits for the next 14 days, and notifies staff.
 
-Resumes paused service. Reactivates all plans that were paused (those with a `pausedAt` timestamp). Automatically generates visits for the next 14 days.
+**Response:** `{ "success": true, "status": "active" }`
 
-**Body:** none required
+#### `POST /api/portal/request-cleanup` — Bearer
 
-**Response:**
-```json
-{ "success": true, "status": "active" }
-```
+Sends a one-time cleanup request notification to the company. Staff must schedule and price the work.
 
-#### `POST /api/portal/request-cleanup`
+**Body:** `{ "preferredDate": "2026-05-20", "notes": "Extra dirty after the holiday" }`
 
-Sends a one-time cleanup request notification to the company. Does not create a visit or job — staff must follow up to schedule and price the work.
+#### `POST /api/portal/service-change` — Bearer
+
+Submit a formal service change request (e.g., frequency change, day change) that staff reviews and acts on. Does not change the service plan directly.
 
 **Body:**
+
 ```json
 {
-  "preferredDate": "2026-05-20",
-  "notes": "Backyard extra dirty after the holiday weekend"
+  "servicePlanId": "plan_abc",
+  "requestType": "frequency_change",
+  "requestedValue": "biweekly",
+  "note": "Switching to every other week"
 }
 ```
 
-**Response:**
-```json
-{ "success": true }
-```
+Common `requestType` values: `frequency_change`, `day_change`, `cancel_request`, `other`.
+
+**Response:** `{ "success": true, "id": "scr_abc" }`
+
+#### `GET /api/portal/service-changes` — Bearer
+
+Returns the client's history of service change requests and their status (`pending`, `approved`, `declined`).
 
 ---
 
 ### Invoices & Payments
 
-#### `GET /api/portal/invoices`
+#### `GET /api/portal/invoices` — Bearer
 
-Returns all non-draft, non-voided invoices for the authenticated client. Statuses returned: `sent`, `pending`, `paid`, `failed`.
+Returns all non-draft, non-voided invoices. Statuses: `sent`, `pending`, `paid`, `failed`.
 
-**Response:** Array of invoice summaries:
-```json
-[
-  {
-    "id": "inv_abc",
-    "invoiceNumber": "INV-0042",
-    "dueDate": "2026-05-15",
-    "total": "35.00",
-    "tipAmount": "0",
-    "status": "sent",
-    "createdAt": "2026-05-08T10:00:00Z"
-  }
-]
-```
+**Response:** Array of `{ id, invoiceNumber, dueDate, total, tipAmount, status, createdAt }`.
 
-#### `POST /api/portal/invoices/:id/pay`
+#### `POST /api/portal/invoices/:id/pay` — Bearer
 
-Initiates payment for an invoice via Stripe Checkout. Optionally includes a tip.
+Creates a Stripe Checkout session to pay an invoice. Optional tip.
 
-**Body:**
-```json
-{ "tipAmount": "5.00" }
-```
+**Body:** `{ "tipAmount": "5.00" }`
 
-**Response:**
-```json
-{ "url": "https://checkout.stripe.com/pay/cs_..." }
-```
-Redirect the client to `url` to complete payment.
+**Response:** `{ "url": "https://checkout.stripe.com/..." }` — redirect client to this URL.
 
-#### `GET /api/portal/payment-methods`
+#### `GET /api/portal/invoices/:id/pdf` — Bearer
 
-Returns the client's saved payment methods and autopay status.
+Streams a PDF of the invoice as a downloadable file (`Content-Disposition: attachment`). The PDF includes company info, billing address, line items, totals, discount, and tax.
 
-**Response:**
-```json
-{
-  "methods": [
-    {
-      "id": "pm_abc",
-      "brand": "visa",
-      "last4": "4242",
-      "expMonth": 12,
-      "expYear": 2028
-    }
-  ],
-  "autoPayEnabled": true
-}
-```
+#### `GET /api/portal/billing-statement` — Bearer
 
-#### `POST /api/portal/setup-intent`
+Generates and streams a PDF billing statement for a date range, listing all non-voided invoices with amounts, statuses, and a grand total / outstanding balance summary.
 
-Creates a Stripe Checkout session in "setup" mode so the client can add a new card without a charge.
+**Query params:** `?startDate=2026-01-01&endDate=2026-05-31` (defaults to past 365 days to today)
 
-**Response:**
-```json
-{ "url": "https://checkout.stripe.com/pay/cs_..." }
-```
+#### `GET /api/portal/payment-methods` — Bearer
 
-#### `DELETE /api/portal/payment-methods/:id`
+Returns saved payment methods (card brand, last 4, expiry) and autopay status.
 
-Removes a saved card. The client must own the payment method.
+#### `POST /api/portal/setup-intent` — Bearer
 
-**Response:**
-```json
-{ "success": true }
-```
+Creates a Stripe Checkout session in setup mode to add a new card without charging. Returns `{ "url": "..." }`.
 
-#### `PATCH /api/portal/auto-pay`
+#### `DELETE /api/portal/payment-methods/:id` — Bearer
 
-Enable or disable automatic payment when invoices are generated.
+Remove a saved card. The client must own the payment method.
 
-**Body:**
-```json
-{ "enabled": true }
-```
+#### `PATCH /api/portal/auto-pay` — Bearer
 
-**Response:**
-```json
-{ "success": true, "autoPayEnabled": true }
-```
+Enable or disable automatic payment. Body: `{ "enabled": true }`.
 
 ---
 
-### Estimates & Quotes
+### Quotes (Public — token-based)
 
-Estimates are service proposals sent by staff. Clients can approve or decline them.
+These three endpoints use a one-time **quote token** (`?token=<quoteToken>`) from the link sent by email/SMS. They do not require a portal session Bearer token and are accessible to prospects who don't yet have a portal account.
 
-#### `GET /api/portal/estimates`
+#### `GET /api/portal/quotes/:id?token=<quoteToken>`
 
-Returns all estimates (quotes) for the authenticated client, including status (`pending`, `approved`, `declined`).
-
-**Response:** Array of estimate objects with `id`, `description`, `items`, `totalCents`, `status`, `sentAt`, `respondedAt`, `responseNote`, `createdAt`.
-
-#### `POST /api/portal/estimates/:id/approve`
-
-Approves a pending estimate. If a property is linked, a draft job is automatically created on the Scheduling page for staff to review and activate.
-
-**Body:**
-```json
-{ "note": "Looks good, please start next Tuesday" }
-```
+View a proposal. Returns quote details (pricing tiers, property, frequency), company info, and logo URL.
 
 **Response:**
+
 ```json
-{ "success": true }
+{
+  "quote": {
+    "id": "q_abc",
+    "quoteNumber": "Q-0042",
+    "type": "residential",
+    "status": "sent",
+    "contactName": "Jane Doe",
+    "propertyAddress": "123 Main St",
+    "frequency": "weekly",
+    "essentialPrice": "25.00",
+    "premiumPrice": "35.00",
+    "deluxePrice": "45.00",
+    "selectedTier": null,
+    "expiresAt": "2026-06-01T00:00:00Z"
+  },
+  "companyName": "Green Paws Scooping",
+  "companyCurrency": "usd",
+  "companyLogoUrl": "https://..."
+}
 ```
 
-#### `POST /api/portal/estimates/:id/decline`
+#### `POST /api/portal/quotes/:id/accept?token=<quoteToken>`
 
-Declines a pending estimate.
+Accept a quote and select a pricing tier. Creates a service plan automatically. If the contact was a lead, their status is upgraded to active.
 
-**Body:**
-```json
-{ "reason": "Going with another provider" }
-```
+**Body:** `{ "tier": "essential" | "premium" | "deluxe" }`
+
+**Response:** `{ "success": true, "tier": "premium", "price": "35.00" }`
+
+#### `POST /api/portal/quotes/:id/decline?token=<quoteToken>`
+
+Decline a quote.
+
+**Body:** `{ "reason": "Going with another provider" }` (optional)
+
+**Response:** `{ "success": true }`
+
+---
+
+### Estimates & Quotes (Authenticated)
+
+Estimates are service proposals sent via the portal to authenticated clients. They differ from quotes (above) in that they require a portal session and are used for upsells, add-ons, or custom work.
+
+#### `GET /api/portal/estimates` — Bearer
+
+Returns all estimates sent by staff with statuses: `pending`, `approved`, `declined`.
+
+#### `POST /api/portal/estimates/:id/approve` — Bearer
+
+Approve a pending estimate. If a property is linked, a draft job is auto-created on the Scheduling page for staff review.
+
+**Body:** `{ "note": "Please start next Tuesday" }`
+
+#### `POST /api/portal/estimates/:id/decline` — Bearer
+
+Decline a pending estimate. **Body:** `{ "reason": "..." }`
+
+---
+
+### Notification Preferences
+
+#### `GET /api/portal/notifications` — Bearer
+
+Returns the client's notification preferences.
 
 **Response:**
+
 ```json
-{ "success": true }
+{
+  "email": true,
+  "sms": false,
+  "serviceReminder": true,
+  "serviceCompleted": true,
+  "invoiceReady": true,
+  "invoiceDueReminder": true,
+  "paymentConfirmation": true,
+  "reminderOptOut": false,
+  "preferredChannel": "email",
+  "preferredTiming": "24h_before"
+}
 ```
+
+#### `PATCH /api/portal/notifications` — Bearer
+
+Update notification preferences. All fields are optional.
+
+Valid `preferredChannel` values: `sms`, `email`, `both`
+
+Valid `preferredTiming` values: `24h_before`, `2h_before`, `morning_of`
+
+---
+
+### Photo Gallery
+
+#### `GET /api/portal/photos` — Bearer
+
+Returns the last 50 visits with proof-of-service photos from the past 180 days. Each entry includes before and after photo URLs and the property address.
+
+**Response:** Array of `{ id, scheduledDate, propertyAddress, proofOfServicePhoto, proofOfServicePhotoBefore }`.
 
 ---
 
 ### Messaging
 
-#### `GET /api/portal/messages`
+#### `GET /api/portal/messages` — Bearer
 
-Returns the full message thread between the client and the company (SMS and email).
+Returns the full message thread between the client and the company (SMS and email), with direction, channel, subject, body, status, and timestamp.
 
-**Response:** Array of message objects with `id`, `direction` (`inbound`/`outbound`), `channel` (`sms`/`email`), `subject`, `body`, `status`, `createdAt`.
+#### `POST /api/portal/contact-us` — Bearer
 
-#### `POST /api/portal/contact-us`
+Send a message to the company. Logged in the conversation thread and notifies staff.
 
-Sends a message to the company via email and logs it in the conversation thread. Triggers an in-app notification to staff.
-
-**Body:**
-```json
-{
-  "subject": "Question about my service",
-  "message": "Hi, I wanted to ask about next week's schedule."
-}
-```
-
-**Response:**
-```json
-{ "success": true, "message": "Your message has been sent." }
-```
+**Body:** `{ "subject": "Question about my service", "message": "Hi, I wanted to ask..." }`
 
 ---
 
 ### Referrals
 
-#### `GET /api/portal/referral`
+#### `GET /api/portal/referral` — Bearer
 
-Returns the client's referral code and how many successful referrals they've made.
+Returns the client's referral code and referral count.
 
-**Response:**
-```json
-{ "referralCode": "REF-A1B2C3D4", "referralCount": 2 }
-```
+#### `POST /api/portal/referral/generate` — Bearer
 
-#### `POST /api/portal/referral/generate`
-
-Generates a unique referral code for the client (if they don't already have one).
-
-**Response:**
-```json
-{ "referralCode": "REF-A1B2C3D4" }
-```
+Generates a unique referral code (idempotent — returns existing code if already generated).
 
 ---
 
@@ -402,15 +373,16 @@ All endpoints return standard JSON error responses:
 ```
 
 Common status codes:
+
 - `400` — Bad request (missing required fields, invalid state)
 - `401` — Not authenticated or session expired
-- `403` — Forbidden (trying to access another client's resource)
+- `403` — Forbidden (trying to access another client's resource, or invalid quote token)
 - `404` — Resource not found
 - `429` — Rate limit exceeded
 
 ---
 
-## Example: Full Authentication + Pause Flow
+## Example: Full Authentication + Service Flow
 
 ```bash
 # 1. Login
@@ -423,7 +395,30 @@ TOKEN=$(curl -s -X POST https://yourapp.com/api/portal/login \
 curl -H "Authorization: Bearer $TOKEN" \
   https://yourapp.com/api/portal/schedule
 
-# 3. Pause service
+# 3. Submit a service change request
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"requestType":"day_change","requestedValue":"friday","note":"New work schedule"}' \
+  https://yourapp.com/api/portal/service-change
+
+# 4. Pause service temporarily
 curl -X POST -H "Authorization: Bearer $TOKEN" \
   https://yourapp.com/api/portal/pause
+```
+
+## Example: Quote acceptance flow (no portal account needed)
+
+```bash
+# The token comes from the link in the email/SMS sent by the company
+QUOTE_TOKEN="abc123..."
+QUOTE_ID="q_xyz"
+
+# View the quote
+curl "https://yourapp.com/api/portal/quotes/${QUOTE_ID}?token=${QUOTE_TOKEN}"
+
+# Accept the premium tier
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"tier":"premium"}' \
+  "https://yourapp.com/api/portal/quotes/${QUOTE_ID}/accept?token=${QUOTE_TOKEN}"
 ```

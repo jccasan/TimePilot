@@ -1623,6 +1623,7 @@ function PortalApiDocsSection() {
 
   const groups: {
     label: string;
+    note?: string;
     endpoints: { method: string; path: string; description: string }[];
   }[] = [
     {
@@ -1720,6 +1721,18 @@ function PortalApiDocsSection() {
           description:
             "Send a one-time cleanup request to the company. Staff must schedule and price the work. Body: { preferredDate, notes }.",
         },
+        {
+          method: "POST",
+          path: "/api/portal/service-change",
+          description:
+            "Submit a formal service change request that staff reviews. Does not change the plan directly. Body: { servicePlanId, requestType, requestedValue, note }. Common requestType values: frequency_change, day_change, cancel_request, other.",
+        },
+        {
+          method: "GET",
+          path: "/api/portal/service-changes",
+          description:
+            "Returns the client's history of service change requests and their status (pending, approved, declined) along with any admin response notes.",
+        },
       ],
     },
     {
@@ -1736,6 +1749,18 @@ function PortalApiDocsSection() {
           path: "/api/portal/invoices/:id/pay",
           description:
             "Create a Stripe Checkout session to pay an invoice. Optional tip via body: { tipAmount }. Returns { url } — redirect the client there to complete payment.",
+        },
+        {
+          method: "GET",
+          path: "/api/portal/invoices/:id/pdf",
+          description:
+            "Streams a PDF download of a single invoice with line items, tax, discount, and totals.",
+        },
+        {
+          method: "GET",
+          path: "/api/portal/billing-statement",
+          description:
+            "Streams a PDF billing statement for a date range listing all invoices with a grand total and outstanding balance. Query params: ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD.",
         },
         {
           method: "GET",
@@ -1763,13 +1788,38 @@ function PortalApiDocsSection() {
       ],
     },
     {
-      label: "Estimates & Quotes",
+      label: "Quotes (Public)",
+      note: "These use a one-time quote token (?token=...) from the link sent by email/SMS — not a Bearer token. Accessible to prospects without a portal account.",
+      endpoints: [
+        {
+          method: "GET",
+          path: "/api/portal/quotes/:id",
+          description:
+            "View a proposal using the quote token from the emailed link. Returns pricing tiers, property info, expiry date, company name, and logo. Auth: ?token=<quoteToken> query param.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/quotes/:id/accept",
+          description:
+            "Accept a quote and select a tier (essential, premium, or deluxe). Creates a service plan automatically. If the contact was a lead, they're upgraded to active. Body: { tier }. Auth: ?token=<quoteToken>.",
+        },
+        {
+          method: "POST",
+          path: "/api/portal/quotes/:id/decline",
+          description:
+            "Decline a quote. Body: { reason } (optional). Auth: ?token=<quoteToken> query param.",
+        },
+      ],
+    },
+    {
+      label: "Estimates (Authenticated)",
+      note: "Estimates are upsell/add-on proposals sent to authenticated clients via the portal — separate from the public quote flow above.",
       endpoints: [
         {
           method: "GET",
           path: "/api/portal/estimates",
           description:
-            "Returns all quotes/estimates sent by staff. Statuses: pending, approved, declined.",
+            "Returns all estimates sent by staff. Statuses: pending, approved, declined.",
         },
         {
           method: "POST",
@@ -1781,6 +1831,34 @@ function PortalApiDocsSection() {
           method: "POST",
           path: "/api/portal/estimates/:id/decline",
           description: "Decline a pending estimate. Body: { reason }.",
+        },
+      ],
+    },
+    {
+      label: "Notification Preferences",
+      endpoints: [
+        {
+          method: "GET",
+          path: "/api/portal/notifications",
+          description:
+            "Returns the client's notification preferences including channels (email/sms/both), event toggles (serviceReminder, serviceCompleted, invoiceReady, invoiceDueReminder, paymentConfirmation, reminderOptOut), and timing preference.",
+        },
+        {
+          method: "PATCH",
+          path: "/api/portal/notifications",
+          description:
+            "Update any subset of notification preferences. Valid preferredChannel: sms, email, both. Valid preferredTiming: 24h_before, 2h_before, morning_of.",
+        },
+      ],
+    },
+    {
+      label: "Photo Gallery",
+      endpoints: [
+        {
+          method: "GET",
+          path: "/api/portal/photos",
+          description:
+            "Returns the last 50 completed visits with proof-of-service photos from the past 180 days. Each entry includes before and after photo URLs and the property address.",
         },
       ],
     },
@@ -1807,8 +1885,7 @@ function PortalApiDocsSection() {
         {
           method: "GET",
           path: "/api/portal/referral",
-          description:
-            "Returns the client's referral code and the number of successful referrals.",
+          description: "Returns the client's referral code and the number of successful referrals.",
         },
         {
           method: "POST",
@@ -1854,9 +1931,7 @@ curl ${baseUrl}/api/portal/me \\
               <p className="text-sm font-medium">Authentication</p>
               <p className="text-sm text-muted-foreground">
                 Call{" "}
-                <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                  POST /api/portal/login
-                </code>{" "}
+                <code className="bg-muted px-1 py-0.5 rounded text-xs">POST /api/portal/login</code>{" "}
                 to receive a Bearer token (valid 7 days). Pass it on every subsequent request.
                 Tokens are scoped to a single client — they cannot access staff or admin endpoints.
               </p>
@@ -1899,9 +1974,7 @@ curl ${baseUrl}/api/portal/me \\
         </div>
 
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-          <p className="text-sm text-amber-800 dark:text-amber-300 font-medium mb-1">
-            Limitations
-          </p>
+          <p className="text-sm text-amber-800 dark:text-amber-300 font-medium mb-1">Limitations</p>
           <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-1 list-disc list-inside">
             <li>
               Clients can pause service but cannot permanently cancel — cancellation requires staff
@@ -1917,9 +1990,12 @@ curl ${baseUrl}/api/portal/me \\
         <div className="space-y-4">
           {groups.map((group) => (
             <div key={group.label}>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
                 {group.label}
               </p>
+              {group.note && (
+                <p className="text-xs text-muted-foreground italic mb-2">{group.note}</p>
+              )}
               <div className="space-y-1.5">
                 {group.endpoints.map((ep) => (
                   <Collapsible key={ep.path + ep.method}>
@@ -1948,9 +2024,7 @@ curl ${baseUrl}/api/portal/me \\
                           variant="ghost"
                           size="sm"
                           className="h-6 text-xs"
-                          onClick={() =>
-                            copyToClipboard(`${baseUrl}${ep.path}`, ep.path + "-path")
-                          }
+                          onClick={() => copyToClipboard(`${baseUrl}${ep.path}`, ep.path + "-path")}
                           data-testid={`button-copy-portal-path-${ep.path.replace(/\//g, "-")}`}
                         >
                           {copiedItem === ep.path + "-path" ? (
