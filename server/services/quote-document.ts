@@ -33,6 +33,7 @@ interface QuoteDocData {
   companyName: string;
   companyEmail?: string;
   companyPhone?: string;
+  logoUrl?: string;
   contactName: string;
   quoteNumber: string;
   propertyAddress?: string;
@@ -144,6 +145,23 @@ export async function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
   const fetchedImages =
     data.images && data.images.length > 0 ? await fetchImageBuffers(data.images, data.baseUrl) : [];
 
+  let logoBuffer: Buffer | null = null;
+  let logoDims: { width: number; height: number } | null = null;
+  if (data.logoUrl) {
+    try {
+      const logoRes = await fetch(data.logoUrl);
+      if (logoRes.ok) {
+        const arrBuf = await logoRes.arrayBuffer();
+        logoBuffer = Buffer.from(arrBuf);
+        if (logoBuffer.length > 24) {
+          logoDims = getImageDimensions(logoBuffer);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch logo for PDF:", err);
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "LETTER", margin: 50 });
     const chunks: Buffer[] = [];
@@ -162,14 +180,48 @@ export async function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
       }
     }
 
-    doc.rect(0, 0, doc.page.width, 90).fill(GREEN);
-    doc.fontSize(20).fillColor("white").text(data.companyName, 50, 25, { align: "center" });
-    doc
-      .fontSize(11)
-      .fillColor("rgba(255,255,255,0.8)")
-      .text(`Service Quote #${data.quoteNumber}`, 50, 52, { align: "center" });
+    const headerHeight = logoBuffer ? 130 : 100;
+    doc.rect(0, 0, doc.page.width, headerHeight).fill(DARK);
 
-    y = 110;
+    let headerTextY = 18;
+
+    if (logoBuffer) {
+      const maxLogoW = 120;
+      const maxLogoH = 42;
+      let renderLogoW = maxLogoW;
+      let renderLogoH = maxLogoH;
+      if (logoDims && logoDims.width > 0 && logoDims.height > 0) {
+        const scale = Math.min(maxLogoW / logoDims.width, maxLogoH / logoDims.height, 1);
+        renderLogoW = logoDims.width * scale;
+        renderLogoH = logoDims.height * scale;
+      }
+      const logoX = (doc.page.width - renderLogoW) / 2;
+      try {
+        doc.image(logoBuffer, logoX, 10, { width: renderLogoW, height: renderLogoH });
+      } catch (logoImgErr) {
+        console.error("Failed to embed logo image in PDF header:", logoImgErr);
+      }
+      headerTextY = 10 + renderLogoH + 6;
+    }
+
+    doc
+      .fontSize(18)
+      .fillColor("white")
+      .font("Helvetica-Bold")
+      .text(data.companyName, 50, headerTextY, { align: "center" });
+
+    doc
+      .fontSize(9)
+      .fillColor("rgba(255,255,255,0.7)")
+      .font("Helvetica")
+      .text("Environmental Maintenance Proposal", 50, headerTextY + 22, { align: "center" });
+
+    doc
+      .fontSize(9)
+      .fillColor("rgba(255,255,255,0.6)")
+      .text(`Quote #${data.quoteNumber}`, 50, headerTextY + 36, { align: "center" });
+
+    y = headerHeight + 20;
     doc.fillColor(MUTED).fontSize(10).text("Prepared for", 50, y);
     y += 14;
     doc.fillColor(DARK).fontSize(14).font("Helvetica-Bold").text(data.contactName, 50, y);
@@ -385,8 +437,8 @@ export async function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
         let fy = priceY + 36;
         doc.font("Helvetica").fontSize(8).fillColor("#475569");
         for (const f of tier.features) {
-          doc.text(`✓ ${f}`, x + 8, fy, { width: colW - 16 });
-          fy += doc.heightOfString(`✓ ${f}`, { width: colW - 16 }) + 3;
+          doc.text(`- ${f}`, x + 8, fy, { width: colW - 16 });
+          fy += doc.heightOfString(`- ${f}`, { width: colW - 16 }) + 3;
         }
         doc.restore();
       }

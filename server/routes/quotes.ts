@@ -982,11 +982,19 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           breakdown: (quote.pricingBreakdown as Record<string, unknown>) || {},
         };
 
+        const rawLogoUrl = company?.logoUrl ?? null;
+        const logoUrl = rawLogoUrl
+          ? /^https?:\/\//i.test(rawLogoUrl)
+            ? rawLogoUrl
+            : `${getBaseUrl(req)}${rawLogoUrl}`
+          : undefined;
+
         const docData = {
           companyName: company.name,
           companyEmail:
             ((company as Record<string, unknown>).email as string | undefined) || undefined,
           companyPhone: company.phone || undefined,
+          logoUrl,
           contactName: quote.contactName || "Customer",
           quoteNumber: quote.quoteNumber,
           propertyAddress: quote.propertyAddress || undefined,
