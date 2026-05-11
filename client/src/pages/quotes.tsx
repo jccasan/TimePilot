@@ -1434,11 +1434,28 @@ function CreateEditQuoteDialog({
     enabled: open && quoteType === "residential",
   });
 
-  // Auto-replace lot-size surcharge line item when yard size changes in residential quotes
+  // Persist yardSize to contact and property when changed manually in the dropdown
+  const handleYardSizeChange = (tierName: string) => {
+    setYardSize(tierName);
+    if (contactId) {
+      apiRequest("PATCH", `/api/contacts/${contactId}`, { yardSize: tierName }).catch(() => {});
+    }
+    if (propertyId) {
+      apiRequest("PATCH", `/api/properties/${propertyId}`, { yardSize: tierName }).catch(() => {});
+    }
+  };
+
+  // Auto-replace lot-size surcharge line item when yard size changes in residential quotes.
+  // Uses a matching add-on pricing item if it exists; otherwise creates a synthetic line item
+  // from the tier's configured surcharge so repricing works even without a catalog entry.
   useEffect(() => {
     if (quoteType !== "residential" || !yardSizeTiers || yardSizeTiers.length === 0) return;
     const tierNames = new Set(yardSizeTiers.map((t) => (t.name ?? "").toLowerCase()));
     const isLotSizeItem = (name: string) => tierNames.has(name.toLowerCase());
+    const currentTier = yardSizeTiers.find(
+      (t) => (t.name ?? "").toLowerCase() === yardSize.toLowerCase()
+    );
+    const tierSurcharge = currentTier?.surcharge ?? 0;
     const matched = allPricingItems.find(
       (item) =>
         item.isActive &&
@@ -1447,25 +1464,22 @@ function CreateEditQuoteDialog({
         item.name.toLowerCase() === yardSize.toLowerCase()
     );
     setResLineItems((prev) => {
-      const withoutLotSize = prev.filter(
-        (li) => !isLotSizeItem(li.name) || li.name.toLowerCase() === yardSize.toLowerCase()
-      );
-      const alreadyHas = withoutLotSize.some(
-        (li) => li.name.toLowerCase() === yardSize.toLowerCase() && isLotSizeItem(li.name)
-      );
-      if (matched && parseFloat(matched.basePrice || "0") > 0 && !alreadyHas) {
-        return [
-          ...withoutLotSize,
-          {
-            id: `yard-${Date.now()}`,
-            pricingItemId: matched.id,
-            name: matched.name,
-            unitPrice: parseFloat(matched.basePrice || "0"),
-            quantity: 1,
-          },
-        ];
-      }
-      return withoutLotSize;
+      // Remove any existing lot-size line item (from any tier)
+      const withoutLotSize = prev.filter((li) => !isLotSizeItem(li.name));
+      // Only add a surcharge item if the selected tier actually has a surcharge
+      if (tierSurcharge <= 0) return withoutLotSize;
+      const unitPrice = matched ? parseFloat(matched.basePrice || "0") : tierSurcharge;
+      if (unitPrice <= 0) return withoutLotSize;
+      return [
+        ...withoutLotSize,
+        {
+          id: `yard-${Date.now()}`,
+          pricingItemId: matched?.id ?? "",
+          name: yardSize,
+          unitPrice,
+          quantity: 1,
+        },
+      ];
     });
   }, [yardSize, quoteType, yardSizeTiers, allPricingItems]);
 
@@ -1584,7 +1598,13 @@ function CreateEditQuoteDialog({
           const SQFT_PER_ACRE = 43560;
           let tierName = defaultTierName;
           if (yardSizeTiers && yardSizeTiers.length > 0) {
-            for (const t of yardSizeTiers) {
+            // Sort ascending by boundary (nulls = unbounded = last)
+            const sorted = [...yardSizeTiers].sort((a, b) => {
+              if (a.upToAcres === null) return 1;
+              if (b.upToAcres === null) return -1;
+              return a.upToAcres - b.upToAcres;
+            });
+            for (const t of sorted) {
               if (t.upToAcres === null || totalSqft <= t.upToAcres * SQFT_PER_ACRE) {
                 tierName = t.name ?? tierName;
                 break;
@@ -1593,8 +1613,7 @@ function CreateEditQuoteDialog({
           } else {
             if (totalSqft < SQFT_PER_ACRE * 0.25) tierName = "Standard";
             else if (totalSqft < SQFT_PER_ACRE * 0.5) tierName = "Large";
-            else if (totalSqft < SQFT_PER_ACRE) tierName = "Very Large";
-            else tierName = "Estate";
+            else tierName = "Very Large";
           }
           setYardSize(tierName);
           if (contactId) {
@@ -2006,7 +2025,7 @@ function CreateEditQuoteDialog({
               </div>
               <div>
                 <Label>Yard Size</Label>
-                <Select value={yardSize} onValueChange={setYardSize}>
+                <Select value={yardSize} onValueChange={handleYardSizeChange}>
                   <SelectTrigger data-testid="select-yard-size">
                     <SelectValue />
                   </SelectTrigger>

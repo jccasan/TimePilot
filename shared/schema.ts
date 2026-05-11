@@ -144,8 +144,7 @@ export const DEFAULT_PRICING_RULES: PricingRulesConfig = {
   yardSizeTiers: [
     { name: "Standard", upToAcres: 0.25, surcharge: 0 },
     { name: "Large", upToAcres: 0.5, surcharge: 7.0 },
-    { name: "Very Large", upToAcres: 0.75, surcharge: 14.0 },
-    { name: "Estate", upToAcres: null, surcharge: 21.0 },
+    { name: "Very Large", upToAcres: null, surcharge: 14.0 },
   ],
 };
 

@@ -1,5 +1,13 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
 import type { PricingRulesConfig } from "@shared/schema";
 
@@ -11,64 +19,147 @@ interface YardSizeTierEditorProps {
   maxTiers?: number;
 }
 
-const COMMON_FRACTIONS: [number, string][] = [
-  [1 / 8, "1/8"],
-  [1 / 4, "1/4"],
-  [1 / 3, "1/3"],
-  [3 / 8, "3/8"],
-  [1 / 2, "1/2"],
-  [5 / 8, "5/8"],
-  [2 / 3, "2/3"],
-  [3 / 4, "3/4"],
-  [7 / 8, "7/8"],
-  [1, "1"],
-  [1.25, "1.25"],
-  [1.5, "1.5"],
-  [2, "2"],
+const COMMON_ACRE_OPTIONS = [
+  { label: "1/8 ac (5,445 sq ft)", value: 0.125 },
+  { label: "1/4 ac (10,890 sq ft)", value: 0.25 },
+  { label: "3/8 ac (16,335 sq ft)", value: 0.375 },
+  { label: "1/2 ac (21,780 sq ft)", value: 0.5 },
+  { label: "5/8 ac (27,225 sq ft)", value: 0.625 },
+  { label: "3/4 ac (32,670 sq ft)", value: 0.75 },
+  { label: "1 ac (43,560 sq ft)", value: 1.0 },
+  { label: "1.5 ac (65,340 sq ft)", value: 1.5 },
+  { label: "2 ac (87,120 sq ft)", value: 2.0 },
 ];
 
 function acresToLabel(acres: number): string {
-  const sqft = Math.round(acres * 43560);
-  const closest = COMMON_FRACTIONS.reduce<[number, string]>(
-    (best, candidate) =>
-      Math.abs(candidate[0] - acres) < Math.abs(best[0] - acres) ? candidate : best,
-    COMMON_FRACTIONS[0]
+  const opt = COMMON_ACRE_OPTIONS.find((o) => Math.abs(o.value - acres) < 0.001);
+  if (opt) return opt.label;
+  return `${acres} ac (${Math.round(acres * 43560).toLocaleString()} sq ft)`;
+}
+
+function BoundarySelect({
+  value,
+  onChange,
+  minAcres,
+  index,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  minAcres: number;
+  index: number;
+}) {
+  const [showCustom, setShowCustom] = useState(false);
+  const [customVal, setCustomVal] = useState(String(value));
+  const isCommon = COMMON_ACRE_OPTIONS.some((o) => Math.abs(o.value - value) < 0.001);
+
+  if (showCustom) {
+    return (
+      <div className="flex items-center gap-1 w-full">
+        <Input
+          type="number"
+          step="0.01"
+          min={minAcres + 0.01}
+          value={customVal}
+          className="h-8 text-sm"
+          data-testid={`input-yard-acres-custom-${index}`}
+          onChange={(e) => setCustomVal(e.target.value)}
+          onBlur={() => {
+            const n = parseFloat(customVal);
+            if (!isNaN(n) && n > minAcres) {
+              onChange(n);
+              setShowCustom(false);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const n = parseFloat(customVal);
+              if (!isNaN(n) && n > minAcres) {
+                onChange(n);
+                setShowCustom(false);
+              }
+            } else if (e.key === "Escape") {
+              setShowCustom(false);
+            }
+          }}
+          autoFocus
+        />
+        <span className="text-xs text-muted-foreground shrink-0">ac</span>
+      </div>
+    );
+  }
+
+  return (
+    <Select
+      value={isCommon ? String(value) : "custom"}
+      onValueChange={(v) => {
+        if (v === "custom") {
+          setCustomVal(String(value));
+          setShowCustom(true);
+        } else {
+          onChange(parseFloat(v));
+        }
+      }}
+    >
+      <SelectTrigger className="h-8 text-sm" data-testid={`select-yard-acres-${index}`}>
+        <SelectValue>{isCommon ? acresToLabel(value) : acresToLabel(value)}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {COMMON_ACRE_OPTIONS.filter((o) => o.value > minAcres).map((o) => (
+          <SelectItem key={o.value} value={String(o.value)}>
+            {o.label}
+          </SelectItem>
+        ))}
+        <SelectItem value="custom">Custom...</SelectItem>
+      </SelectContent>
+    </Select>
   );
-  const fracStr = Math.abs(closest[0] - acres) < 0.02 ? `${closest[1]} ac` : `${acres} ac`;
-  return `${fracStr} (${sqft.toLocaleString()} sq ft)`;
 }
 
 export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTierEditorProps) {
-  const updateTier = (index: number, key: "name" | "upToAcres" | "surcharge", value: string) => {
+  const updateName = (index: number, name: string) => {
+    const next = tiers.map((t, i) => (i === index ? { ...t, name } : t));
+    onChange(next);
+  };
+
+  const updateBoundary = (index: number, acres: number) => {
     const next = [...tiers];
-    if (key === "name") {
-      next[index] = { ...next[index], name: value };
-    } else {
-      const isLast = index === next.length - 1;
-      if (key === "upToAcres" && isLast) {
-        next[index] = { ...next[index], upToAcres: null };
-      } else {
-        const num = value === "" ? 0 : parseFloat(value);
-        if (!isNaN(num)) {
-          next[index] = { ...next[index], [key]: Math.max(0, num) };
-        }
+    next[index] = { ...next[index], upToAcres: acres };
+    // Enforce monotonic ascending: push subsequent bounded tiers up if needed
+    for (let i = index + 1; i < next.length - 1; i++) {
+      const prev = next[i - 1].upToAcres ?? 0;
+      if (next[i].upToAcres !== null && (next[i].upToAcres as number) <= prev) {
+        next[i] = { ...next[i], upToAcres: Math.round((prev + 0.125) * 1000) / 1000 };
       }
     }
     onChange(next);
   };
 
+  const updateSurcharge = (index: number, raw: string) => {
+    const num = parseFloat(raw);
+    if (!isNaN(num)) {
+      onChange(tiers.map((t, i) => (i === index ? { ...t, surcharge: Math.max(0, num) } : t)));
+    }
+  };
+
   const addTier = () => {
     if (tiers.length >= maxTiers) return;
-    const withBound = tiers.map((t) =>
-      t.upToAcres === null ? { ...t, upToAcres: tiers.length * 0.25 } : t
+    const lastBounded = tiers.slice(0, -1);
+    const lastBoundary =
+      lastBounded.length > 0 ? (lastBounded[lastBounded.length - 1].upToAcres ?? 0) : 0;
+    const candidates = COMMON_ACRE_OPTIONS.filter((o) => o.value > lastBoundary);
+    const newBoundary =
+      candidates.length > 0 ? candidates[0].value : Math.round((lastBoundary + 0.25) * 100) / 100;
+    const prevLast = tiers[tiers.length - 1];
+    // Give old last tier a boundary, then append new unbounded tier
+    const withBound = tiers.map((t, i) =>
+      i === tiers.length - 1 ? { ...t, upToAcres: newBoundary } : t
     );
-    const lastTier = withBound[withBound.length - 1];
     onChange([
       ...withBound,
       {
         name: `Tier ${withBound.length + 1}`,
         upToAcres: null,
-        surcharge: (lastTier?.surcharge || 0) + 7,
+        surcharge: (prevLast?.surcharge || 0) + 7,
       },
     ]);
   };
@@ -76,7 +167,7 @@ export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTi
   const removeTier = (index: number) => {
     if (tiers.length <= 1) return;
     const next = tiers.filter((_, i) => i !== index);
-    // Ensure the last remaining tier is always unlimited (upToAcres: null)
+    // Ensure last tier is always unbounded
     if (next.length > 0 && next[next.length - 1].upToAcres !== null) {
       next[next.length - 1] = { ...next[next.length - 1], upToAcres: null };
     }
@@ -104,50 +195,37 @@ export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTi
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center text-xs font-medium text-muted-foreground px-1">
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center text-xs font-medium text-muted-foreground px-1">
             <span>Tier Name</span>
-            <span className="w-36 text-center">Upper Bound</span>
-            <span className="w-28 text-center">Size</span>
+            <span className="w-48 text-center">Upper Bound</span>
             <span className="w-28 text-center">Surcharge ($)</span>
             <span />
           </div>
           {tiers.map((tier, index) => {
             const isLast = index === tiers.length - 1;
-            const sizeHint = tier.upToAcres != null ? acresToLabel(tier.upToAcres) : "unlimited";
+            const prevBoundary = index > 0 ? (tiers[index - 1].upToAcres ?? 0) : 0;
             return (
-              <div
-                key={index}
-                className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center"
-              >
+              <div key={index} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
                 <Input
                   value={tier.name || ""}
-                  onChange={(e) => updateTier(index, "name", e.target.value)}
+                  onChange={(e) => updateName(index, e.target.value)}
                   placeholder={`Tier ${index + 1}`}
                   className="h-8 text-sm"
                   data-testid={`input-yard-name-${index}`}
                 />
-                <div className="w-36">
+                <div className="w-48">
                   {isLast ? (
-                    <div className="h-8 flex items-center justify-center text-sm text-muted-foreground border rounded-md bg-muted/30 px-2">
-                      unlimited
+                    <div className="h-8 flex items-center justify-center text-sm text-muted-foreground border rounded-md bg-muted/30 px-2 whitespace-nowrap">
+                      Larger than previous
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
-                        step="0.05"
-                        min={0}
-                        value={tier.upToAcres ?? ""}
-                        onChange={(e) => updateTier(index, "upToAcres", e.target.value)}
-                        className="h-8 text-sm"
-                        data-testid={`input-yard-acres-${index}`}
-                      />
-                      <span className="text-xs text-muted-foreground shrink-0">ac</span>
-                    </div>
+                    <BoundarySelect
+                      value={tier.upToAcres ?? 0.25}
+                      onChange={(v) => updateBoundary(index, v)}
+                      minAcres={prevBoundary}
+                      index={index}
+                    />
                   )}
-                </div>
-                <div className="w-28 text-xs text-muted-foreground text-center whitespace-nowrap">
-                  {sizeHint}
                 </div>
                 <div className="w-28 flex items-center gap-1">
                   <span className="text-muted-foreground text-sm">$</span>
@@ -156,7 +234,7 @@ export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTi
                     step="0.01"
                     min={0}
                     value={tier.surcharge}
-                    onChange={(e) => updateTier(index, "surcharge", e.target.value)}
+                    onChange={(e) => updateSurcharge(index, e.target.value)}
                     className="h-8 text-sm"
                     data-testid={`input-yard-surcharge-${index}`}
                   />
