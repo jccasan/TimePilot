@@ -59,43 +59,46 @@ function getAcreageSurcharge(
   yardSizeTiers?: YardSizeTier[] | null
 ): number {
   if (yardSizeTiers && yardSizeTiers.length > 0) {
-    // 1. Exact name match (case-insensitive)
-    const nameLower = yardSize.toLowerCase().trim();
-    const nameMatch = yardSizeTiers.find(
-      (t) => t.name && t.name.toLowerCase().trim() === nameLower
+    // Always sort by upToAcres ascending (nulls = unbounded = last).
+    // Boundary-sorted order is the primary resolution model so that lookup
+    // results are consistent regardless of the order tiers are stored.
+    const sorted = [...yardSizeTiers].sort(
+      (a, b) => (a.upToAcres ?? Infinity) - (b.upToAcres ?? Infinity)
     );
+
+    const nameLower = yardSize.toLowerCase().trim();
+
+    // 1. Primary: name match within boundary-sorted tiers
+    const nameMatch = sorted.find((t) => t.name && t.name.toLowerCase().trim() === nameLower);
     if (nameMatch) return nameMatch.surcharge;
 
-    // 2. Legacy single-word map (small/medium/large/estate → position index)
-    const legacyMap: Record<string, number> = { small: 0, medium: 1, large: 2, estate: 3 };
-    const legacyIdx = legacyMap[nameLower];
-    if (legacyIdx !== undefined && yardSizeTiers[legacyIdx]) {
-      return yardSizeTiers[legacyIdx].surcharge;
-    }
-
-    // 3. "Tier N" pattern → position N-1
-    const tierMatch = nameLower.match(/^tier\s+(\d+)$/);
-    if (tierMatch) {
-      const idx = parseInt(tierMatch[1]) - 1;
-      if (idx >= 0 && yardSizeTiers[idx]) return yardSizeTiers[idx].surcharge;
-    }
-
-    // 4. Sorted boundary fallback: find tier whose upToAcres bounds yardSize (treating
-    //    it as an acreage decimal if parseable) — last resort for unnamed tiers
+    // 2. Boundary-based: yardSize value is numeric acreage — find first tier
+    //    whose upper bound contains it (primary model for acreage inputs)
     const acresNum = parseFloat(yardSize);
     if (!isNaN(acresNum)) {
-      const sorted = [...yardSizeTiers].sort(
-        (a, b) => (a.upToAcres ?? Infinity) - (b.upToAcres ?? Infinity)
-      );
       for (const t of sorted) {
         if (t.upToAcres === null || acresNum <= t.upToAcres) return t.surcharge;
       }
     }
 
-    // 5. First-tier surcharge as final fallback (base tier is typically free)
-    return yardSizeTiers[0].surcharge;
+    // 3. Compatibility: legacy single-word names (small/medium/large/estate → position)
+    const legacyMap: Record<string, number> = { small: 0, medium: 1, large: 2, estate: 3 };
+    const legacyIdx = legacyMap[nameLower];
+    if (legacyIdx !== undefined && sorted[legacyIdx]) {
+      return sorted[legacyIdx].surcharge;
+    }
+
+    // 4. Compatibility: "Tier N" positional reference
+    const tierMatch = nameLower.match(/^tier\s+(\d+)$/);
+    if (tierMatch) {
+      const idx = parseInt(tierMatch[1]) - 1;
+      if (idx >= 0 && sorted[idx]) return sorted[idx].surcharge;
+    }
+
+    // 5. Final fallback: first (smallest) tier surcharge
+    return sorted[0].surcharge;
   }
-  // Fallback to QuoteDefaults-based lookup for legacy/unconfigured companies
+  // No configured tiers — fall back to QuoteDefaults-based lookup for legacy companies
   switch (yardSize.toLowerCase()) {
     case "small":
       return 0;

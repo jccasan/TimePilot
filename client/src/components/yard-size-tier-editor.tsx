@@ -19,19 +19,28 @@ interface YardSizeTierEditorProps {
   maxTiers?: number;
 }
 
-const COMMON_ACRE_OPTIONS = [
-  { label: "0.10 ac (4,356 sq ft)", value: 0.1 },
-  { label: "0.15 ac (6,534 sq ft)", value: 0.15 },
-  { label: "0.25 ac (10,890 sq ft)", value: 0.25 },
-  { label: "0.50 ac (21,780 sq ft)", value: 0.5 },
-  { label: "0.75 ac (32,670 sq ft)", value: 0.75 },
-  { label: "1.0 ac (43,560 sq ft)", value: 1.0 },
+// Common boundary presets — task spec: 0.10, 0.15, 0.25, 0.50, 0.75, 1.0
+const COMMON_ACRE_OPTIONS: { label: string; frac: string; value: number }[] = [
+  { label: "0.10 ac", frac: "1/10", value: 0.1 },
+  { label: "0.15 ac", frac: "3/20", value: 0.15 },
+  { label: "\u00bc acre", frac: "\u00bc", value: 0.25 },
+  { label: "\u00bd acre", frac: "\u00bd", value: 0.5 },
+  { label: "\u00be acre", frac: "\u00be", value: 0.75 },
+  { label: "1 acre", frac: "1", value: 1.0 },
 ];
 
-function acresToLabel(acres: number): string {
+/** Return a short human label with fraction + sq ft for a given acreage. */
+function acreFracLabel(acres: number): string {
+  const sqft = Math.round(acres * 43560);
   const opt = COMMON_ACRE_OPTIONS.find((o) => Math.abs(o.value - acres) < 0.001);
-  if (opt) return opt.label;
-  return `${acres} ac (${Math.round(acres * 43560).toLocaleString()} sq ft)`;
+  const acreStr = opt ? opt.label : `${acres} ac`;
+  return `${acreStr} / ${sqft.toLocaleString()} sq ft`;
+}
+
+/** Short label for the select trigger (just the fraction/ac part, no sq ft). */
+function acreShortLabel(acres: number): string {
+  const opt = COMMON_ACRE_OPTIONS.find((o) => Math.abs(o.value - acres) < 0.001);
+  return opt ? opt.label : `${acres} ac`;
 }
 
 function BoundarySelect({
@@ -98,12 +107,12 @@ function BoundarySelect({
       }}
     >
       <SelectTrigger className="h-8 text-sm" data-testid={`select-yard-acres-${index}`}>
-        <SelectValue>{isCommon ? acresToLabel(value) : acresToLabel(value)}</SelectValue>
+        <SelectValue>{acreShortLabel(value)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {COMMON_ACRE_OPTIONS.filter((o) => o.value > minAcres).map((o) => (
           <SelectItem key={o.value} value={String(o.value)}>
-            {o.label}
+            {o.label} / {Math.round(o.value * 43560).toLocaleString()} sq ft
           </SelectItem>
         ))}
         <SelectItem value="custom">Custom...</SelectItem>
@@ -114,8 +123,7 @@ function BoundarySelect({
 
 export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTierEditorProps) {
   const updateName = (index: number, name: string) => {
-    const next = tiers.map((t, i) => (i === index ? { ...t, name } : t));
-    onChange(next);
+    onChange(tiers.map((t, i) => (i === index ? { ...t, name } : t)));
   };
 
   const updateBoundary = (index: number, acres: number) => {
@@ -125,7 +133,7 @@ export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTi
     for (let i = index + 1; i < next.length - 1; i++) {
       const prev = next[i - 1].upToAcres ?? 0;
       if (next[i].upToAcres !== null && (next[i].upToAcres as number) <= prev) {
-        next[i] = { ...next[i], upToAcres: Math.round((prev + 0.125) * 1000) / 1000 };
+        next[i] = { ...next[i], upToAcres: Math.round((prev + 0.1) * 100) / 100 };
       }
     }
     onChange(next);
@@ -147,7 +155,6 @@ export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTi
     const newBoundary =
       candidates.length > 0 ? candidates[0].value : Math.round((lastBoundary + 0.25) * 100) / 100;
     const prevLast = tiers[tiers.length - 1];
-    // Give old last tier a boundary, then append new unbounded tier
     const withBound = tiers.map((t, i) =>
       i === tiers.length - 1 ? { ...t, upToAcres: newBoundary } : t
     );
@@ -156,7 +163,7 @@ export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTi
       {
         name: `Tier ${withBound.length + 1}`,
         upToAcres: null,
-        surcharge: (prevLast?.surcharge || 0) + 7,
+        surcharge: (prevLast?.surcharge || 0) + 10,
       },
     ]);
   };
@@ -164,7 +171,6 @@ export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTi
   const removeTier = (index: number) => {
     if (tiers.length <= 1) return;
     const next = tiers.filter((_, i) => i !== index);
-    // Ensure last tier is always unbounded
     if (next.length > 0 && next[next.length - 1].upToAcres !== null) {
       next[next.length - 1] = { ...next[next.length - 1], upToAcres: null };
     }
@@ -201,6 +207,7 @@ export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTi
           {tiers.map((tier, index) => {
             const isLast = index === tiers.length - 1;
             const prevBoundary = index > 0 ? (tiers[index - 1].upToAcres ?? 0) : 0;
+            const prevLabel = prevBoundary > 0 ? acreFracLabel(prevBoundary) : null;
             return (
               <div key={index} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
                 <Input
@@ -212,8 +219,8 @@ export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTi
                 />
                 <div className="w-48">
                   {isLast ? (
-                    <div className="h-8 flex items-center justify-center text-sm text-muted-foreground border rounded-md bg-muted/30 px-2 whitespace-nowrap">
-                      Larger than previous
+                    <div className="h-8 flex items-center justify-center text-sm text-muted-foreground border rounded-md bg-muted/30 px-2 whitespace-nowrap overflow-hidden">
+                      {prevLabel ? `Larger Than ${prevLabel}` : "Unlimited (no bound)"}
                     </div>
                   ) : (
                     <BoundarySelect
@@ -252,8 +259,8 @@ export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTi
             );
           })}
           <p className="text-xs text-muted-foreground">
-            The last tier has no upper bound and applies to any yard larger than the previous tier.
-            1–{maxTiers} tiers supported.
+            The last tier is unbounded and applies to any yard larger than the previous boundary.
+            1&ndash;{maxTiers} tiers supported.
           </p>
         </>
       )}
