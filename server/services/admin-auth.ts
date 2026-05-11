@@ -43,9 +43,17 @@ export function validatePasswordPolicy(password: string): string | null {
 }
 
 export async function seedAdminUser(email: string, password: string) {
-  const existing = await db.select().from(adminUsers).where(eq(adminUsers.email, email));
-  if (existing.length > 0) return;
   const hashed = await hashPassword(password);
+  const existing = await db.select().from(adminUsers).where(eq(adminUsers.email, email));
+  if (existing.length > 0) {
+    // Always sync the password to the current ADMIN_INITIAL_PASSWORD secret so that
+    // updating the secret and redeploying resets the admin password.
+    await db
+      .update(adminUsers)
+      .set({ passwordHash: hashed, passwordChangedAt: new Date() })
+      .where(eq(adminUsers.email, email));
+    return;
+  }
   await db.insert(adminUsers).values({ email, passwordHash: hashed });
 }
 
