@@ -7,7 +7,13 @@ import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
-import { DEFAULT_PRICING_CONFIG, DEFAULT_PRICING_RULES, type PricingConfig } from "@shared/schema";
+import {
+  DEFAULT_PRICING_CONFIG,
+  DEFAULT_PRICING_RULES,
+  type PricingConfig,
+  type PricingRulesConfig,
+} from "@shared/schema";
+import { YardSizeTierEditor } from "@/components/yard-size-tier-editor";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { ZipMapSelector, RadiusMapSelector } from "@/components/zip-map-selector";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -838,6 +844,12 @@ function PricingSetupStep({
     () => pricingDraft.grid ?? buildGrid(qfBase, surcharge, increment)
   );
 
+  const [localYardTiers, setLocalYardTiers] = useState<PricingRulesConfig["yardSizeTiers"]>(
+    existingRules.yardSizeTiers.length > 0
+      ? existingRules.yardSizeTiers
+      : DEFAULT_PRICING_RULES.yardSizeTiers
+  );
+
   useEffect(() => {
     saveDraft(DRAFT_KEYS.pricing, { pricingMode, qfBase, surcharge, increment, grid });
   }, [pricingMode, qfBase, surcharge, increment, grid]);
@@ -863,10 +875,7 @@ function PricingSetupStep({
           surchargeAmount: parseFloat(surcharge) || 5,
           maxDogs: 6,
         },
-        yardSizeTiers:
-          existingRules.yardSizeTiers.length > 0
-            ? existingRules.yardSizeTiers
-            : DEFAULT_PRICING_RULES.yardSizeTiers,
+        yardSizeTiers: localYardTiers,
       },
     };
     onNext({ pricingConfig: config });
@@ -1119,6 +1128,19 @@ function PricingSetupStep({
             Use Quick Fill to calculate prices automatically, or enter them directly in any cell.
           </p>
         </div>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Yard Size Tiers</CardTitle>
+            <CardDescription>
+              Configure up to 5 yard size tiers and the surcharge added for each. The last tier
+              applies to any yard larger than all the others.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <YardSizeTierEditor tiers={localYardTiers} onChange={setLocalYardTiers} maxTiers={5} />
+          </CardContent>
+        </Card>
       </div>
 
       <div className="flex items-center justify-between pt-6">
