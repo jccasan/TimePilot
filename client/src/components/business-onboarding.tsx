@@ -863,7 +863,10 @@ function PricingSetupStep({
           surchargeAmount: parseFloat(surcharge) || 5,
           maxDogs: 6,
         },
-        yardSizeTiers: DEFAULT_PRICING_RULES.yardSizeTiers,
+        yardSizeTiers:
+          existingRules.yardSizeTiers.length > 0
+            ? existingRules.yardSizeTiers
+            : DEFAULT_PRICING_RULES.yardSizeTiers,
       },
     };
     onNext({ pricingConfig: config });

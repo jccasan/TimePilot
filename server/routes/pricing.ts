@@ -319,10 +319,15 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         const generatedYardAcres = new Set<number>();
         let yardSort = 100;
         for (const tier of rules.yardSizeTiers) {
-          const tierName = `Lot Size up to ${tier.upToAcres} Acre`;
-          generatedYardAcres.add(tier.upToAcres);
+          const tierLabel = tier.name || (tier.upToAcres != null ? `Lot Size up to ${tier.upToAcres} Acre` : "Lot Size (Large)");
+          const tierName = tier.upToAcres != null ? `Lot Size up to ${tier.upToAcres} Acre` : tierLabel;
+          if (tier.upToAcres != null) {
+            generatedYardAcres.add(tier.upToAcres);
+          }
           const existingAddon =
-            existingLotByAcres.get(tier.upToAcres) || existingAddOnsByName.get(tierName);
+            (tier.upToAcres != null ? existingLotByAcres.get(tier.upToAcres) : undefined) ||
+            existingAddOnsByName.get(tierName) ||
+            existingAddOnsByName.get(tierLabel);
           if (existingAddon) {
             const isOverridden =
               (existingAddon.metadata as Record<string, unknown>)?.manualOverride === true;
@@ -337,14 +342,15 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
               });
             }
           } else {
+            const acresLabel = tier.upToAcres != null ? `up to ${tier.upToAcres} acre` : "unlimited";
             await storage.createServicePricingItem({
               companyId,
               category: "add_on",
-              name: tierName,
+              name: tierLabel,
               description:
                 tier.surcharge === 0
-                  ? `No additional charge for lots up to ${tier.upToAcres} acre`
-                  : `Additional charge for lots up to ${tier.upToAcres} acre`,
+                  ? `No additional charge for lots ${acresLabel}`
+                  : `Additional charge for lots ${acresLabel}`,
               basePrice: tier.surcharge.toFixed(2),
               unit: "per_visit",
               sortOrder: yardSort,

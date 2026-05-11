@@ -321,19 +321,24 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         return res.status(404).json({ error: "Company not found" });
       }
       const companyQuoteDefaults = company.quoteDefaults ?? null;
+      const companyPricingConfig = company.pricingConfig as
+        | { pricingRules?: { yardSizeTiers?: { name?: string; upToAcres: number | null; surcharge: number }[] } }
+        | null
+        | undefined;
+      const companyYardSizeTiers = companyPricingConfig?.pricingRules?.yardSizeTiers ?? null;
 
       const type = req.query.type as string;
       if (type === "residential") {
-        const yardSize = (req.query.yardSize as string) || "small";
+        const yardSize = (req.query.yardSize as string) || "Standard";
         const frequency = (req.query.frequency as string) || "weekly";
         const input: ResidentialQuoteInput = {
           type: "residential",
           dogCount: parseInt(req.query.dogCount as string) || 1,
-          yardSize: yardSize as ResidentialQuoteInput["yardSize"],
+          yardSize,
           frequency: frequency as ResidentialQuoteInput["frequency"],
           isFirstTime: req.query.isFirstTime === "true",
         };
-        const pricing = calculateQuotePricing(input, companyQuoteDefaults);
+        const pricing = calculateQuotePricing(input, companyQuoteDefaults, companyYardSizeTiers);
         res.json(pricing);
       } else if (type === "commercial") {
         const frequency = (req.query.frequency as string) || "1x_weekly";

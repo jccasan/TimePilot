@@ -30,24 +30,52 @@ function calculatePolygonArea(coords: number[][]): number {
   return Math.round(area * 10.7639);
 }
 
-function getYardCategory(sqft: number): { label: string; color: string } {
+const TIER_COLORS = [
+  "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+];
+
+function getYardCategory(
+  sqft: number,
+  customTiers?: Array<{ name?: string; upToAcres: number | null; surcharge: number }>
+): { label: string; color: string } {
+  const SQFT_PER_ACRE = 43560;
+  if (customTiers && customTiers.length > 0) {
+    for (let i = 0; i < customTiers.length; i++) {
+      const tier = customTiers[i];
+      if (tier.upToAcres === null || sqft <= tier.upToAcres * SQFT_PER_ACRE) {
+        return {
+          label: tier.name || `Tier ${i + 1}`,
+          color: TIER_COLORS[i % TIER_COLORS.length],
+        };
+      }
+    }
+    const last = customTiers[customTiers.length - 1];
+    return {
+      label: last.name || `Tier ${customTiers.length}`,
+      color: TIER_COLORS[(customTiers.length - 1) % TIER_COLORS.length],
+    };
+  }
   if (sqft < 6500)
     return {
-      label: "Small",
+      label: "Standard",
       color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
     };
   if (sqft <= 10890)
     return {
-      label: "Standard",
+      label: "Large",
       color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
     };
   if (sqft <= 21780)
     return {
-      label: "Large",
+      label: "Very Large",
       color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
     };
   return {
-    label: "Extra Large",
+    label: "Estate",
     color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
   };
 }

@@ -19,7 +19,7 @@ function escapeHtml(str: string): string {
 export interface ResidentialQuoteInput {
   type: "residential";
   dogCount: number;
-  yardSize: "small" | "medium" | "large" | "estate";
+  yardSize: string;
   frequency: "weekly" | "biweekly" | "monthly" | "onetime";
   isFirstTime: boolean;
 }
@@ -51,8 +51,26 @@ export interface TierPricing {
   breakdown: Record<string, any>;
 }
 
-function getAcreageSurcharge(yardSize: string, defaults: QuoteDefaults): number {
-  switch (yardSize) {
+type YardSizeTier = { name?: string; upToAcres: number | null; surcharge: number };
+
+function getAcreageSurcharge(
+  yardSize: string,
+  defaults: QuoteDefaults,
+  yardSizeTiers?: YardSizeTier[] | null
+): number {
+  if (yardSizeTiers && yardSizeTiers.length > 0) {
+    const matched = yardSizeTiers.find(
+      (t) => t.name && t.name.toLowerCase() === yardSize.toLowerCase()
+    );
+    if (matched) return matched.surcharge;
+    // Legacy index-based fallback for old values (small/medium/large/estate)
+    const legacyMap: Record<string, number> = { small: 0, medium: 1, large: 2, estate: 3 };
+    const idx = legacyMap[yardSize.toLowerCase()];
+    if (idx !== undefined && yardSizeTiers[idx]) return yardSizeTiers[idx].surcharge;
+    return 0;
+  }
+  // Fallback to QuoteDefaults-based lookup for legacy/unconfigured companies
+  switch (yardSize.toLowerCase()) {
     case "small":
       return 0;
     case "medium":
@@ -67,23 +85,13 @@ function getAcreageSurcharge(yardSize: string, defaults: QuoteDefaults): number 
 }
 
 function getYardSizeLabel(size: string): string {
-  switch (size) {
-    case "small":
-      return "Small (< 0.25 acre)";
-    case "medium":
-      return "Medium (0.25–0.50 acre)";
-    case "large":
-      return "Large (0.51–1.0 acre)";
-    case "estate":
-      return "Estate (1.0+ acre)";
-    default:
-      return size;
-  }
+  return size;
 }
 
 export function calculateResidentialPricing(
   input: ResidentialQuoteInput,
-  config?: Partial<QuoteDefaults> | null
+  config?: Partial<QuoteDefaults> | null,
+  yardSizeTiers?: YardSizeTier[] | null
 ): TierPricing {
   const d = { ...DEFAULT_QUOTE_DEFAULTS, ...(config || {}) };
 
@@ -92,7 +100,7 @@ export function calculateResidentialPricing(
   const dogSurcharge = additionalDogs * d.perDogSurcharge;
   basePerVisit += dogSurcharge;
 
-  const acreageSurcharge = getAcreageSurcharge(input.yardSize, d);
+  const acreageSurcharge = getAcreageSurcharge(input.yardSize, d, yardSizeTiers);
   basePerVisit += acreageSurcharge;
 
   if (input.dogCount > 4) {
@@ -311,10 +319,11 @@ export function calculateCommercialPricing(
 
 export function calculateQuotePricing(
   input: QuoteInput,
-  config?: Partial<QuoteDefaults> | null
+  config?: Partial<QuoteDefaults> | null,
+  yardSizeTiers?: YardSizeTier[] | null
 ): TierPricing {
   if (input.type === "residential") {
-    return calculateResidentialPricing(input, config);
+    return calculateResidentialPricing(input, config, yardSizeTiers);
   }
   return calculateCommercialPricing(input, config);
 }

@@ -219,26 +219,44 @@ function PricingRulesPanel({
     }
   };
 
-  const updateYardTier = (index: number, key: "upToAcres" | "surcharge", value: string) => {
-    const num = value === "" ? 0 : parseFloat(value);
-    if (!isNaN(num)) {
-      setLocalRules((prev) => {
-        const tiers = [...prev.yardSizeTiers];
-        tiers[index] = { ...tiers[index], [key]: Math.max(0, num) };
-        return { ...prev, yardSizeTiers: tiers };
-      });
-    }
+  const updateYardTier = (
+    index: number,
+    key: "name" | "upToAcres" | "surcharge",
+    value: string
+  ) => {
+    setLocalRules((prev) => {
+      const tiers = [...prev.yardSizeTiers];
+      if (key === "name") {
+        tiers[index] = { ...tiers[index], name: value };
+      } else {
+        const isLast = index === tiers.length - 1;
+        if (key === "upToAcres" && isLast) {
+          tiers[index] = { ...tiers[index], upToAcres: null };
+        } else {
+          const num = value === "" ? 0 : parseFloat(value);
+          if (!isNaN(num)) {
+            tiers[index] = { ...tiers[index], [key]: Math.max(0, num) };
+          }
+        }
+      }
+      return { ...prev, yardSizeTiers: tiers };
+    });
   };
 
   const addYardTier = () => {
     setLocalRules((prev) => {
-      const lastTier = prev.yardSizeTiers[prev.yardSizeTiers.length - 1];
+      if (prev.yardSizeTiers.length >= 5) return prev;
+      const tiers = prev.yardSizeTiers.map((t) =>
+        t.upToAcres === null ? { ...t, upToAcres: (prev.yardSizeTiers.length) * 0.25 } : t
+      );
+      const lastTier = tiers[tiers.length - 1];
       return {
         ...prev,
         yardSizeTiers: [
-          ...prev.yardSizeTiers,
+          ...tiers,
           {
-            upToAcres: (lastTier?.upToAcres || 0) + 0.25,
+            name: `Tier ${tiers.length + 1}`,
+            upToAcres: null,
             surcharge: (lastTier?.surcharge || 0) + 7,
           },
         ],
@@ -378,64 +396,99 @@ function PricingRulesPanel({
           <CardHeader className="pb-3 flex flex-row items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
               <Settings2 className="h-4 w-4" />
-              Yard Size Adjustments
+              Yard Size Tiers
             </CardTitle>
             <Button
               variant="outline"
               size="sm"
               onClick={addYardTier}
+              disabled={localRules.yardSizeTiers.length >= 5}
               data-testid="button-add-yard-tier"
             >
               <Plus className="h-3 w-3 mr-1" /> Add Tier
             </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {localRules.yardSizeTiers.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-2">
                 No yard size tiers defined.
               </p>
             ) : (
-              <div className="space-y-2">
-                {localRules.yardSizeTiers.map((tier, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground whitespace-nowrap">Up to</span>
-                    <Input
-                      type="number"
-                      step="0.05"
-                      min={0}
-                      value={tier.upToAcres}
-                      onChange={(e) => updateYardTier(index, "upToAcres", e.target.value)}
-                      className="w-24"
-                      data-testid={`input-yard-acres-${index}`}
-                    />
-                    <span className="text-sm text-muted-foreground whitespace-nowrap">acre =</span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-muted-foreground">$</span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        value={tier.surcharge}
-                        onChange={(e) => updateYardTier(index, "surcharge", e.target.value)}
-                        className="w-24"
-                        data-testid={`input-yard-surcharge-${index}`}
-                      />
-                    </div>
-                    <span className="text-sm text-muted-foreground whitespace-nowrap">
-                      surcharge
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0"
-                      onClick={() => removeYardTier(index)}
-                      data-testid={`button-remove-yard-tier-${index}`}
+              <>
+                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center text-xs font-medium text-muted-foreground px-1">
+                  <span>Tier Name</span>
+                  <span className="w-32 text-center">Upper Bound (acres)</span>
+                  <span className="w-20 text-center">Sq ft</span>
+                  <span className="w-28 text-center">Surcharge ($)</span>
+                  <span />
+                </div>
+                {localRules.yardSizeTiers.map((tier, index) => {
+                  const isLast = index === localRules.yardSizeTiers.length - 1;
+                  const sqftHint =
+                    tier.upToAcres != null
+                      ? `${Math.round(tier.upToAcres * 43560).toLocaleString()} sq ft`
+                      : "unlimited";
+                  return (
+                    <div
+                      key={index}
+                      className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-2 items-center"
                     >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
+                      <Input
+                        value={tier.name || ""}
+                        onChange={(e) => updateYardTier(index, "name", e.target.value)}
+                        placeholder={`Tier ${index + 1}`}
+                        className="h-8 text-sm"
+                        data-testid={`input-yard-name-${index}`}
+                      />
+                      <div className="w-32">
+                        {isLast ? (
+                          <div className="h-8 flex items-center justify-center text-sm text-muted-foreground border rounded-md bg-muted/30 px-2">
+                            unlimited
+                          </div>
+                        ) : (
+                          <Input
+                            type="number"
+                            step="0.05"
+                            min={0}
+                            value={tier.upToAcres ?? ""}
+                            onChange={(e) => updateYardTier(index, "upToAcres", e.target.value)}
+                            className="h-8 text-sm"
+                            data-testid={`input-yard-acres-${index}`}
+                          />
+                        )}
+                      </div>
+                      <div className="w-20 text-xs text-muted-foreground text-center whitespace-nowrap">
+                        {sqftHint}
+                      </div>
+                      <div className="w-28 flex items-center gap-1">
+                        <span className="text-muted-foreground text-sm">$</span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min={0}
+                          value={tier.surcharge}
+                          onChange={(e) => updateYardTier(index, "surcharge", e.target.value)}
+                          className="h-8 text-sm"
+                          data-testid={`input-yard-surcharge-${index}`}
+                        />
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => removeYardTier(index)}
+                        data-testid={`button-remove-yard-tier-${index}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  );
+                })}
+                <p className="text-xs text-muted-foreground">
+                  The last tier has no upper bound and applies to any yard larger than the previous
+                  tier. Up to 5 tiers supported.
+                </p>
+              </>
             )}
           </CardContent>
         </Card>

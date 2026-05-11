@@ -1182,6 +1182,17 @@ function CreateEditQuoteDialog({
   const { formatMoney } = useCurrency();
   const isEdit = !!quote;
 
+  const { data: pricingConfig } = useQuery<{
+    pricingRules?: {
+      yardSizeTiers?: Array<{ name?: string; upToAcres: number | null; surcharge: number }>;
+    };
+  }>({
+    queryKey: ["/api/pricing-config"],
+    enabled: open,
+  });
+  const yardSizeTiers = pricingConfig?.pricingRules?.yardSizeTiers;
+  const defaultTierName = yardSizeTiers?.[0]?.name ?? "Standard";
+
   const [quoteType, setQuoteType] = useState<"residential" | "commercial">(
     quote?.type || "residential"
   );
@@ -1199,7 +1210,7 @@ function CreateEditQuoteDialog({
     quote?.expiresAt ? toLocalDateString(new Date(quote.expiresAt), tz) : ""
   );
   const [dogCount, setDogCount] = useState<number | string>(quote?.dogCount || 2);
-  const [yardSize, setYardSize] = useState(quote?.yardSize || "small");
+  const [yardSize, setYardSize] = useState(quote?.yardSize || defaultTierName);
   const [stationCount, setStationCount] = useState<number | string>(quote?.stationCount ?? 4);
   const [commonAreaMinutes, setCommonAreaMinutes] = useState<number | string>(
     quote?.commonAreaMinutes || 30
@@ -1262,7 +1273,7 @@ function CreateEditQuoteDialog({
       setPropertyZip(stateZip.slice(1).join(" ") || addrParts[3] || "");
       setExpiresAt(quote.expiresAt ? toLocalDateString(new Date(quote.expiresAt), tz) : "");
       setDogCount(quote.dogCount || 2);
-      setYardSize(quote.yardSize || "small");
+      setYardSize(quote.yardSize || defaultTierName);
       setStationCount(quote.stationCount ?? 4);
       setCommonAreaMinutes(quote.commonAreaMinutes || 30);
       setTimePerStation(quote.timePerStation || 10);
@@ -1315,7 +1326,7 @@ function CreateEditQuoteDialog({
       setPropertyZip("");
       setExpiresAt("");
       setDogCount(2);
-      setYardSize("small");
+      setYardSize(defaultTierName);
       setStationCount(4);
       setCommonAreaMinutes(30);
       setFrequency("weekly");
@@ -1530,13 +1541,22 @@ function CreateEditQuoteDialog({
         const updated = [...prev, { polygon, sqft: areaSqft }];
         if (quoteType === "residential") {
           const totalSqft = updated.reduce((sum, m) => sum + m.sqft, 0);
-          const ACRE = 43560;
-          let tier: string;
-          if (totalSqft < ACRE * 0.25) tier = "small";
-          else if (totalSqft < ACRE * 0.5) tier = "medium";
-          else if (totalSqft < ACRE) tier = "large";
-          else tier = "estate";
-          setYardSize(tier);
+          const SQFT_PER_ACRE = 43560;
+          let tierName = defaultTierName;
+          if (yardSizeTiers && yardSizeTiers.length > 0) {
+            for (const t of yardSizeTiers) {
+              if (t.upToAcres === null || totalSqft <= t.upToAcres * SQFT_PER_ACRE) {
+                tierName = t.name ?? tierName;
+                break;
+              }
+            }
+          } else {
+            if (totalSqft < SQFT_PER_ACRE * 0.25) tierName = "Standard";
+            else if (totalSqft < SQFT_PER_ACRE * 0.5) tierName = "Large";
+            else if (totalSqft < SQFT_PER_ACRE) tierName = "Very Large";
+            else tierName = "Estate";
+          }
+          setYardSize(tierName);
         }
         return updated;
       });
@@ -1548,7 +1568,7 @@ function CreateEditQuoteDialog({
         handleGenerateYardImage(polygon, areaSqft, addressCoords.lat, addressCoords.lng);
       }
     },
-    [addressCoords, handleGenerateYardImage, quoteType, setYardSize]
+    [addressCoords, defaultTierName, handleGenerateYardImage, quoteType, setYardSize, yardSizeTiers]
   );
 
   const removeImage = (idx: number) => {
@@ -1932,10 +1952,31 @@ function CreateEditQuoteDialog({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="small">Small (&lt; ¼ acre)</SelectItem>
-                    <SelectItem value="medium">Medium (¼–½ acre)</SelectItem>
-                    <SelectItem value="large">Large (½–1 acre)</SelectItem>
-                    <SelectItem value="estate">Estate (1+ acre)</SelectItem>
+                    {yardSizeTiers && yardSizeTiers.length > 0 ? (
+                      yardSizeTiers.map((tier, i) => {
+                        const tierName = tier.name ?? `Tier ${i + 1}`;
+                        const prevTier = i > 0 ? yardSizeTiers[i - 1] : null;
+                        const lowerBound = prevTier?.upToAcres ?? 0;
+                        const hint =
+                          tier.upToAcres === null
+                            ? `${lowerBound > 0 ? `${lowerBound}+` : "any"} acre`
+                            : i === 0
+                              ? `< ${tier.upToAcres} acre`
+                              : `${lowerBound}–${tier.upToAcres} acre`;
+                        return (
+                          <SelectItem key={tierName} value={tierName}>
+                            {tierName} ({hint})
+                          </SelectItem>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <SelectItem value="Standard">Standard (&lt; ¼ acre)</SelectItem>
+                        <SelectItem value="Large">Large (¼–½ acre)</SelectItem>
+                        <SelectItem value="Very Large">Very Large (½–¾ acre)</SelectItem>
+                        <SelectItem value="Estate">Estate (¾+ acre)</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

@@ -124,7 +124,8 @@ export interface PricingRulesConfig {
     maxDogs: number;
   };
   yardSizeTiers: Array<{
-    upToAcres: number;
+    name?: string;
+    upToAcres: number | null;
     surcharge: number;
   }>;
 }
@@ -141,10 +142,10 @@ export const DEFAULT_PRICING_RULES: PricingRulesConfig = {
     maxDogs: 6,
   },
   yardSizeTiers: [
-    { upToAcres: 0.25, surcharge: 0 },
-    { upToAcres: 0.5, surcharge: 7.0 },
-    { upToAcres: 0.75, surcharge: 14.0 },
-    { upToAcres: 1.0, surcharge: 21.0 },
+    { name: "Standard", upToAcres: 0.25, surcharge: 0 },
+    { name: "Large", upToAcres: 0.5, surcharge: 7.0 },
+    { name: "Very Large", upToAcres: 0.75, surcharge: 14.0 },
+    { name: "Estate", upToAcres: null, surcharge: 21.0 },
   ],
 };
 
