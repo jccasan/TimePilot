@@ -1453,6 +1453,22 @@ function CreateEditQuoteDialog({
       if (lat && lng) {
         setAddressCoords({ lat, lng });
       }
+      if (prop.yardPolygon && lat && lng) {
+        setGeneratingImage(true);
+        apiRequest("POST", "/api/quotes/generate-yard-image", { propertyId: id })
+          .then((r) => r.json())
+          .then((data: { url: string; caption: string; sqft?: number }) => {
+            setQuoteImages((prev) => [
+              ...prev,
+              { url: data.url, caption: data.caption, sqft: data.sqft },
+            ]);
+            toast({ title: "Yard measurement image attached" });
+          })
+          .catch(() => {
+            // Silently fail — user can still measure manually
+          })
+          .finally(() => setGeneratingImage(false));
+      }
     }
   };
 
