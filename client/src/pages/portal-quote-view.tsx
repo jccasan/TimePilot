@@ -16,6 +16,13 @@ import {
   Loader2,
 } from "lucide-react";
 
+interface LineItem {
+  pricingItemId: string;
+  name: string;
+  unitPrice: number;
+  quantity: number;
+}
+
 interface PortalQuote {
   id: string;
   quoteNumber: string;
@@ -37,6 +44,7 @@ interface PortalQuote {
   expiresAt?: string;
   sentAt?: string;
   acceptedAt?: string;
+  lineItems?: LineItem[] | null;
 }
 
 export default function PortalQuoteView({ quoteId, token }: { quoteId: string; token: string }) {
@@ -46,6 +54,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     quote: PortalQuote;
     companyName: string;
     companyCurrency: string;
+    companyLogoUrl?: string;
   }>({
     queryKey: ["/api/portal/quotes", quoteId, token],
     queryFn: async () => {
@@ -141,7 +150,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     );
   }
 
-  const { quote, companyName } = data;
+  const { quote, companyName, companyLogoUrl } = data;
 
   if (quote.status === "accepted") {
     return (
@@ -196,11 +205,19 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     );
   }
 
+  const essentialPrice = parseFloat(quote.essentialPrice || "0");
+  const premiumPrice = parseFloat(quote.premiumPrice || "0");
+  const deluxePrice = parseFloat(quote.deluxePrice || "0");
+  const hasLineItems = Array.isArray(quote.lineItems) && quote.lineItems.length > 0;
+  // Only suppress tier cards for residential quotes — commercial tier pricing is intentionally distinct
+  const allPricesIdentical =
+    quote.type === "residential" && essentialPrice === premiumPrice && premiumPrice === deluxePrice;
+
   const tiers = [
     {
       key: "essential",
       name: "Essential",
-      price: parseFloat(quote.essentialPrice || "0"),
+      price: essentialPrice,
       features: quote.essentialFeatures || [],
       borderColor: "border-slate-400",
       bgColor: "bg-slate-50",
@@ -209,7 +226,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     {
       key: "premium",
       name: "Property Care",
-      price: parseFloat(quote.premiumPrice || "0"),
+      price: premiumPrice,
       features: quote.premiumFeatures || [],
       borderColor: "border-green-500",
       bgColor: "bg-green-50",
@@ -219,7 +236,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     {
       key: "deluxe",
       name: "Deluxe",
-      price: parseFloat(quote.deluxePrice || "0"),
+      price: deluxePrice,
       features: quote.deluxeFeatures || [],
       borderColor: "border-violet-500",
       bgColor: "bg-violet-50",
@@ -246,6 +263,14 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
       <div className="max-w-4xl mx-auto p-4 md:p-8">
         <div className="text-center mb-8">
+          {companyLogoUrl && (
+            <img
+              src={companyLogoUrl}
+              alt={companyName}
+              className="mx-auto mb-3 max-h-16 max-w-48 object-contain"
+              data-testid="img-company-logo"
+            />
+          )}
           <h1
             className="text-2xl md:text-3xl font-bold text-gray-900 mb-1"
             data-testid="text-company-name"
@@ -294,50 +319,120 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
           </CardContent>
         </Card>
 
-        <h2 className="text-lg font-semibold text-center mb-4">Choose Your Service Level</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {tiers.map((tier) => (
-            <div
-              key={tier.key}
-              data-testid={`portal-tier-${tier.key}`}
-              className={`relative border-2 rounded-xl cursor-pointer transition-all ${
-                selectedTier === tier.key
-                  ? `${tier.borderColor} ${tier.bgColor} ring-2 ring-offset-2 scale-[1.02]`
-                  : "border-gray-200 hover:border-gray-300 hover:shadow-md"
-              }`}
-              onClick={() => setSelectedTier(tier.key)}
-            >
-              {tier.recommended && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-green-600 text-white">Most Popular</Badge>
-                </div>
-              )}
-              <div className="p-6 text-center">
-                <p className="text-sm font-medium text-muted-foreground mb-1">{tier.name}</p>
-                <p className={`text-3xl font-bold ${tier.textColor} mb-4`}>
-                  {formatMoney(tier.price)}
-                  <span className="text-sm font-normal text-muted-foreground">/visit</span>
-                </p>
-                <ul className="space-y-2 text-left">
-                  {tier.features.map((f, i) => (
-                    <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
-                      <span>{f}</span>
-                    </li>
+        {hasLineItems ? (
+          <Card className="mb-6" data-testid="card-line-items">
+            <CardContent className="p-0">
+              <p className="px-6 py-4 text-sm font-semibold text-gray-700 border-b">
+                Services Included
+              </p>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-6 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Service
+                    </th>
+                    <th className="text-center px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Qty
+                    </th>
+                    <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Unit Price
+                    </th>
+                    <th className="text-right px-6 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                      Subtotal
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(quote.lineItems ?? []).map((item, i) => (
+                    <tr key={i} className="border-t">
+                      <td className="px-6 py-3 text-gray-800">{item.name}</td>
+                      <td className="px-4 py-3 text-center text-gray-600">{item.quantity}</td>
+                      <td className="px-4 py-3 text-right text-gray-600">
+                        {formatMoney(item.unitPrice)}
+                      </td>
+                      <td className="px-6 py-3 text-right font-semibold text-gray-800">
+                        {formatMoney(item.unitPrice * item.quantity)}
+                      </td>
+                    </tr>
                   ))}
-                </ul>
-              </div>
-              {selectedTier === tier.key && (
+                </tbody>
+                <tfoot className="bg-gray-50 border-t">
+                  <tr>
+                    <td colSpan={3} className="px-6 py-3 text-right font-bold text-gray-800">
+                      Total per visit
+                    </td>
+                    <td className="px-6 py-3 text-right font-bold text-green-700">
+                      {formatMoney(
+                        (quote.lineItems ?? []).reduce(
+                          (sum, li) => sum + li.unitPrice * li.quantity,
+                          0
+                        )
+                      )}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </CardContent>
+          </Card>
+        ) : allPricesIdentical ? (
+          <Card className="mb-6" data-testid="card-single-price">
+            <CardContent className="p-8 text-center">
+              <p className="text-sm text-muted-foreground mb-2">Service Price</p>
+              <p className="text-4xl font-bold text-green-700 mb-1">
+                {formatMoney(essentialPrice)}
+                <span className="text-base font-normal text-muted-foreground">/visit</span>
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">{frequencyLabel} service</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <h2 className="text-lg font-semibold text-center mb-4">Choose Your Service Level</h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              {tiers.map((tier) => (
                 <div
-                  className={`px-4 py-2 ${tier.bgColor} border-t ${tier.borderColor} text-center`}
+                  key={tier.key}
+                  data-testid={`portal-tier-${tier.key}`}
+                  className={`relative border-2 rounded-xl cursor-pointer transition-all ${
+                    selectedTier === tier.key
+                      ? `${tier.borderColor} ${tier.bgColor} ring-2 ring-offset-2 scale-[1.02]`
+                      : "border-gray-200 hover:border-gray-300 hover:shadow-md"
+                  }`}
+                  onClick={() => setSelectedTier(tier.key)}
                 >
-                  <p className={`text-sm font-semibold ${tier.textColor}`}>Selected ✓</p>
+                  {tier.recommended && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <Badge className="bg-green-600 text-white">Most Popular</Badge>
+                    </div>
+                  )}
+                  <div className="p-6 text-center">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">{tier.name}</p>
+                    <p className={`text-3xl font-bold ${tier.textColor} mb-4`}>
+                      {formatMoney(tier.price)}
+                      <span className="text-sm font-normal text-muted-foreground">/visit</span>
+                    </p>
+                    <ul className="space-y-2 text-left">
+                      {tier.features.map((f, i) => (
+                        <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  {selectedTier === tier.key && (
+                    <div
+                      className={`px-4 py-2 ${tier.bgColor} border-t ${tier.borderColor} text-center`}
+                    >
+                      <p className={`text-sm font-semibold ${tier.textColor}`}>Selected ✓</p>
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
 
         {parseFloat(quote.initialCleanFee || "0") > 0 && (
           <Card className="mb-6 border-amber-200 bg-amber-50">
@@ -364,17 +459,27 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
             data-testid="button-accept-quote"
             size="lg"
             className="bg-green-600 hover:bg-green-700"
-            disabled={!selectedTier || acceptMutation.isPending}
-            onClick={() => selectedTier && acceptMutation.mutate(selectedTier)}
+            disabled={
+              acceptMutation.isPending || (!hasLineItems && !allPricesIdentical && !selectedTier)
+            }
+            onClick={() => {
+              if (hasLineItems || allPricesIdentical) {
+                acceptMutation.mutate("essential");
+              } else if (selectedTier) {
+                acceptMutation.mutate(selectedTier);
+              }
+            }}
           >
             {acceptMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
               <CheckCircle2 className="h-4 w-4 mr-2" />
             )}
-            {selectedTier
-              ? `Accept ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
-              : "Select a plan to accept"}
+            {hasLineItems || allPricesIdentical
+              ? "Accept Quote"
+              : selectedTier
+                ? `Accept ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
+                : "Select a plan to accept"}
           </Button>
           <Button
             data-testid="button-decline-quote"

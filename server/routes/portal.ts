@@ -1173,13 +1173,30 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         sentAt: quoteRow.sent_at,
         acceptedAt: quoteRow.accepted_at,
         companyId: quoteRow.company_id,
+        lineItems: quoteRow.line_items || null,
       };
 
       const company = await storage.getCompany(quoteRow.company_id as string);
+      const companyName = company?.name || "Service Provider";
+      if (!company) {
+        console.warn(
+          `[portal/quotes] Company not found for quote ${quoteId}, company_id=${quoteRow.company_id}`
+        );
+      } else if (!company.name || company.name === "User's Company") {
+        console.warn(
+          `[portal/quotes] Company ${company.id} has placeholder name "${company.name}" — owner should update it in Settings`
+        );
+      }
+      const logoUrl = company?.logoUrl
+        ? company.logoUrl.startsWith("http")
+          ? company.logoUrl
+          : `${getBaseUrl(req)}${company.logoUrl}`
+        : undefined;
       res.json({
         quote: safeQuote,
-        companyName: company?.name || "Service Provider",
+        companyName,
         companyCurrency: company?.currency || "usd",
+        companyLogoUrl: logoUrl,
       });
     } catch (err: unknown) {
       console.error("Error fetching portal quote:", err);

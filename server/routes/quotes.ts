@@ -909,6 +909,11 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       if (!quote) return res.status(404).json({ error: "Quote not found" });
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!company.name || company.name === "User's Company") {
+        console.warn(
+          `[quotes/preview] Company ${companyId} has placeholder name "${company.name}" — owner should update it in Settings`
+        );
+      }
 
       const pricing = {
         essential: parseFloat(quote.essentialPrice || "0"),

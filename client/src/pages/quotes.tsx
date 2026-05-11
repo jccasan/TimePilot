@@ -1398,7 +1398,7 @@ function CreateEditQuoteDialog({
       }
       return res.json();
     },
-    enabled: open && quoteType === "commercial",
+    enabled: open,
     retry: 1,
   });
 
@@ -1726,29 +1726,70 @@ function CreateEditQuoteDialog({
     };
 
     if (quoteType === "residential") {
-      const subtotal = resLineItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-      const subtotalStr = subtotal.toFixed(2);
+      const hasResLineItems = resLineItems.length > 0;
+      let essentialPrice: string;
+      let premiumPrice: string;
+      let deluxePrice: string;
+      let essentialFeatures: string[];
+      let premiumFeatures: string[];
+      let deluxeFeatures: string[];
+      let pricingBreakdown: Record<string, unknown> | null;
+
+      if (hasResLineItems) {
+        // Line-items path: store subtotal as single price; portal renders line-items table
+        const subtotal = resLineItems.reduce(
+          (sum, item) => sum + item.unitPrice * item.quantity,
+          0
+        );
+        essentialPrice = subtotal.toFixed(2);
+        premiumPrice = subtotal.toFixed(2);
+        deluxePrice = subtotal.toFixed(2);
+        essentialFeatures = [];
+        premiumFeatures = [];
+        deluxeFeatures = [];
+        pricingBreakdown = null;
+      } else if (livePricing) {
+        // No line items but residential tier pricing is available: store distinct tier prices
+        essentialPrice = livePricing.essential.toFixed(2);
+        premiumPrice = livePricing.premium.toFixed(2);
+        deluxePrice = livePricing.deluxe.toFixed(2);
+        essentialFeatures = livePricing.essentialFeatures;
+        premiumFeatures = livePricing.premiumFeatures;
+        deluxeFeatures = livePricing.deluxeFeatures;
+        pricingBreakdown = livePricing.breakdown;
+      } else {
+        // No line items and no pricing available: cannot submit
+        toast({
+          title: "Pricing not available",
+          description:
+            "Add at least one service line item or wait for pricing to load before saving.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const data: Record<string, unknown> = {
         ...commonFields,
         dogCount: Number(dogCount) || 1,
         yardSize,
-        essentialPrice: subtotalStr,
-        premiumPrice: subtotalStr,
-        deluxePrice: subtotalStr,
-        initialCleanFee: overrideInitialClean || "0.00",
-        essentialFeatures: [],
-        premiumFeatures: [],
-        deluxeFeatures: [],
-        pricingBreakdown: null,
-        lineItems:
-          resLineItems.length > 0
-            ? resLineItems.map(({ pricingItemId, name, unitPrice, quantity }) => ({
-                pricingItemId,
-                name,
-                unitPrice,
-                quantity,
-              }))
-            : null,
+        essentialPrice,
+        premiumPrice,
+        deluxePrice,
+        initialCleanFee: hasResLineItems
+          ? overrideInitialClean || "0.00"
+          : overrideInitialClean || (livePricing ? livePricing.initialCleanFee.toFixed(2) : "0.00"),
+        essentialFeatures,
+        premiumFeatures,
+        deluxeFeatures,
+        pricingBreakdown,
+        lineItems: hasResLineItems
+          ? resLineItems.map(({ pricingItemId, name, unitPrice, quantity }) => ({
+              pricingItemId,
+              name,
+              unitPrice,
+              quantity,
+            }))
+          : null,
       };
       if (!isEdit) data.suppressNotifications = suppressNotifications;
       createMutation.mutate(data);
