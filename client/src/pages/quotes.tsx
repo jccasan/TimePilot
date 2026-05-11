@@ -1349,6 +1349,15 @@ function CreateEditQuoteDialog({
     }
   }, [quote, open]);
 
+  // Re-sync default yard size tier when pricing config loads asynchronously
+  // for new (non-edit) quotes only; does not overwrite user edits because
+  // defaultTierName only changes on initial config load.
+  useEffect(() => {
+    if (open && !quote) {
+      setYardSize(defaultTierName);
+    }
+  }, [defaultTierName, open, quote]);
+
   const pricingParams = useMemo(() => {
     if (quoteType === "residential") {
       return `type=residential&dogCount=${dogCount}&yardSize=${yardSize}&frequency=${frequency}&isFirstTime=${isFirstTime}`;

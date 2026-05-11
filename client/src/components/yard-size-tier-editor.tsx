@@ -20,15 +20,12 @@ interface YardSizeTierEditorProps {
 }
 
 const COMMON_ACRE_OPTIONS = [
-  { label: "1/8 ac (5,445 sq ft)", value: 0.125 },
-  { label: "1/4 ac (10,890 sq ft)", value: 0.25 },
-  { label: "3/8 ac (16,335 sq ft)", value: 0.375 },
-  { label: "1/2 ac (21,780 sq ft)", value: 0.5 },
-  { label: "5/8 ac (27,225 sq ft)", value: 0.625 },
-  { label: "3/4 ac (32,670 sq ft)", value: 0.75 },
-  { label: "1 ac (43,560 sq ft)", value: 1.0 },
-  { label: "1.5 ac (65,340 sq ft)", value: 1.5 },
-  { label: "2 ac (87,120 sq ft)", value: 2.0 },
+  { label: "0.10 ac (4,356 sq ft)", value: 0.1 },
+  { label: "0.15 ac (6,534 sq ft)", value: 0.15 },
+  { label: "0.25 ac (10,890 sq ft)", value: 0.25 },
+  { label: "0.50 ac (21,780 sq ft)", value: 0.5 },
+  { label: "0.75 ac (32,670 sq ft)", value: 0.75 },
+  { label: "1.0 ac (43,560 sq ft)", value: 1.0 },
 ];
 
 function acresToLabel(acres: number): string {
