@@ -61,7 +61,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import type { ServicePricingItem } from "@shared/schema";
-import { YardMeasureTool } from "@/components/yard-measure-tool";
+import { YardMeasureTool, formatArea } from "@/components/yard-measure-tool";
 import { toFrac } from "@/lib/yard-size";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
@@ -2687,7 +2687,7 @@ function CreateEditQuoteDialog({
                     data-testid={`measurement-${idx}`}
                   >
                     <Ruler className="h-3 w-3 text-muted-foreground" />
-                    <span className="font-medium">{m.sqft.toLocaleString()} sq ft</span>
+                    <span className="font-medium">{formatArea(m.sqft)}</span>
                     <button
                       type="button"
                       className="ml-0.5 text-muted-foreground hover:text-destructive"
@@ -2702,7 +2702,7 @@ function CreateEditQuoteDialog({
                   </div>
                 ))}
                 <span className="text-xs text-muted-foreground self-center">
-                  Total: {measurements.reduce((sum, m) => sum + m.sqft, 0).toLocaleString()} sq ft
+                  Total: {formatArea(measurements.reduce((sum, m) => sum + m.sqft, 0))}
                 </span>
               </div>
             )}

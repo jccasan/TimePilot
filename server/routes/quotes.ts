@@ -296,7 +296,12 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           });
 
         const autoCaption =
-          caption || `Yard measurement${sqft ? ` — ${Number(sqft).toLocaleString()} sqft` : ""}`;
+          caption ||
+          `Yard measurement${
+            sqft
+              ? ` — ${Number(sqft).toLocaleString()} sq ft / ${(Number(sqft) / 43560).toFixed(2)} ${Number(sqft) / 43560 >= 2 ? "acres" : "acre"}`
+              : ""
+          }`;
 
         res.json({
           url: objectPath,
