@@ -292,6 +292,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "call_tracking",
   "client_notifications",
   "voice_agent",
+  "portal_api_docs",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
