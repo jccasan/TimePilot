@@ -1429,6 +1429,46 @@ function CreateEditQuoteDialog({
     enabled: !!contactId && open,
   });
 
+  const { data: allPricingItems = [] } = useQuery<ServicePricingItem[]>({
+    queryKey: ["/api/pricing"],
+    enabled: open && quoteType === "residential",
+  });
+
+  // Auto-replace lot-size surcharge line item when yard size changes in residential quotes
+  useEffect(() => {
+    if (quoteType !== "residential" || !yardSizeTiers || yardSizeTiers.length === 0) return;
+    const tierNames = new Set(yardSizeTiers.map((t) => (t.name ?? "").toLowerCase()));
+    const isLotSizeItem = (name: string) => tierNames.has(name.toLowerCase());
+    const matched = allPricingItems.find(
+      (item) =>
+        item.isActive &&
+        item.category === "add_on" &&
+        isLotSizeItem(item.name) &&
+        item.name.toLowerCase() === yardSize.toLowerCase()
+    );
+    setResLineItems((prev) => {
+      const withoutLotSize = prev.filter(
+        (li) => !isLotSizeItem(li.name) || li.name.toLowerCase() === yardSize.toLowerCase()
+      );
+      const alreadyHas = withoutLotSize.some(
+        (li) => li.name.toLowerCase() === yardSize.toLowerCase() && isLotSizeItem(li.name)
+      );
+      if (matched && parseFloat(matched.basePrice || "0") > 0 && !alreadyHas) {
+        return [
+          ...withoutLotSize,
+          {
+            id: `yard-${Date.now()}`,
+            pricingItemId: matched.id,
+            name: matched.name,
+            unitPrice: parseFloat(matched.basePrice || "0"),
+            quantity: 1,
+          },
+        ];
+      }
+      return withoutLotSize;
+    });
+  }, [yardSize, quoteType, yardSizeTiers, allPricingItems]);
+
   const handleContactSelect = (id: string) => {
     setContactId(id);
     setPropertyId("");
@@ -1562,6 +1602,11 @@ function CreateEditQuoteDialog({
               yardSize: tierName,
             }).catch(() => {});
           }
+          if (propertyId) {
+            apiRequest("PATCH", `/api/properties/${propertyId}`, {
+              yardSize: tierName,
+            }).catch(() => {});
+          }
         }
         return updated;
       });
@@ -1578,6 +1623,7 @@ function CreateEditQuoteDialog({
       contactId,
       defaultTierName,
       handleGenerateYardImage,
+      propertyId,
       quoteType,
       setYardSize,
       yardSizeTiers,

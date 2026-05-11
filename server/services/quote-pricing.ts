@@ -59,15 +59,41 @@ function getAcreageSurcharge(
   yardSizeTiers?: YardSizeTier[] | null
 ): number {
   if (yardSizeTiers && yardSizeTiers.length > 0) {
-    const matched = yardSizeTiers.find(
-      (t) => t.name && t.name.toLowerCase() === yardSize.toLowerCase()
+    // 1. Exact name match (case-insensitive)
+    const nameLower = yardSize.toLowerCase().trim();
+    const nameMatch = yardSizeTiers.find(
+      (t) => t.name && t.name.toLowerCase().trim() === nameLower
     );
-    if (matched) return matched.surcharge;
-    // Legacy index-based fallback for old values (small/medium/large/estate)
+    if (nameMatch) return nameMatch.surcharge;
+
+    // 2. Legacy single-word map (small/medium/large/estate → position index)
     const legacyMap: Record<string, number> = { small: 0, medium: 1, large: 2, estate: 3 };
-    const idx = legacyMap[yardSize.toLowerCase()];
-    if (idx !== undefined && yardSizeTiers[idx]) return yardSizeTiers[idx].surcharge;
-    return 0;
+    const legacyIdx = legacyMap[nameLower];
+    if (legacyIdx !== undefined && yardSizeTiers[legacyIdx]) {
+      return yardSizeTiers[legacyIdx].surcharge;
+    }
+
+    // 3. "Tier N" pattern → position N-1
+    const tierMatch = nameLower.match(/^tier\s+(\d+)$/);
+    if (tierMatch) {
+      const idx = parseInt(tierMatch[1]) - 1;
+      if (idx >= 0 && yardSizeTiers[idx]) return yardSizeTiers[idx].surcharge;
+    }
+
+    // 4. Sorted boundary fallback: find tier whose upToAcres bounds yardSize (treating
+    //    it as an acreage decimal if parseable) — last resort for unnamed tiers
+    const acresNum = parseFloat(yardSize);
+    if (!isNaN(acresNum)) {
+      const sorted = [...yardSizeTiers].sort(
+        (a, b) => (a.upToAcres ?? Infinity) - (b.upToAcres ?? Infinity)
+      );
+      for (const t of sorted) {
+        if (t.upToAcres === null || acresNum <= t.upToAcres) return t.surcharge;
+      }
+    }
+
+    // 5. First-tier surcharge as final fallback (base tier is typically free)
+    return yardSizeTiers[0].surcharge;
   }
   // Fallback to QuoteDefaults-based lookup for legacy/unconfigured companies
   switch (yardSize.toLowerCase()) {
