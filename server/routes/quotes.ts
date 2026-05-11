@@ -187,7 +187,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
     isAuthenticated,
     async (req: Request, res: Response) => {
       try {
-        const { companyId } = await getCompanyContext(req);
+        const { companyId, userId } = await getCompanyContext(req);
         const {
           propertyId,
           caption,
@@ -288,6 +288,12 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         if (!putResponse.ok) {
           throw new Error(`Storage upload failed: ${putResponse.status}`);
         }
+
+        await objStorage
+          .trySetObjectEntityAclPolicy(uploadURL, { owner: userId, visibility: "public" })
+          .catch(() => {
+            /* non-fatal — image will still be accessible to authenticated staff */
+          });
 
         const autoCaption =
           caption || `Yard measurement${sqft ? ` — ${Number(sqft).toLocaleString()} sqft` : ""}`;
