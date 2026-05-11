@@ -1630,17 +1630,20 @@ function CreateEditQuoteDialog({
         // Read from ref so we always get the latest value regardless of when
         // the /api/pricing-config query resolves relative to the user's save action.
         const tiers = yardSizeTiersRef.current;
-        let tierName = tiers?.[0]?.name ?? "Standard";
+        // Use same Tier N fallback as the dropdown so saved value always matches a Select option
+        let tierName = tiers?.[0]?.name ?? (tiers && tiers.length > 0 ? "Tier 1" : "Standard");
         if (tiers && tiers.length > 0) {
-          // Sort ascending by boundary (nulls = unbounded = last)
-          const sorted = [...tiers].sort((a, b) => {
-            if (a.upToAcres === null) return 1;
-            if (b.upToAcres === null) return -1;
-            return a.upToAcres - b.upToAcres;
-          });
+          // Sort ascending by boundary (nulls = unbounded = last), preserving original index
+          const sorted = tiers
+            .map((t, origIdx) => ({ ...t, origIdx }))
+            .sort((a, b) => {
+              if (a.upToAcres === null) return 1;
+              if (b.upToAcres === null) return -1;
+              return a.upToAcres - b.upToAcres;
+            });
           for (const t of sorted) {
             if (t.upToAcres === null || totalSqft <= t.upToAcres * SQFT_PER_ACRE) {
-              tierName = t.name ?? tierName;
+              tierName = t.name ?? `Tier ${t.origIdx + 1}`;
               break;
             }
           }
