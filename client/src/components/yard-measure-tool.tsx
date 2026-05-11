@@ -146,12 +146,14 @@ function StaticMapMeasure({
   existingPolygon,
   onSave,
   onCancel,
+  customTiers,
 }: {
   lat: number;
   lng: number;
   existingPolygon?: number[][] | null;
   onSave: (polygon: number[][], areaSqft: number) => void;
   onCancel?: () => void;
+  customTiers?: Array<{ name?: string; upToAcres: number | null; surcharge: number }>;
 }) {
   const [zoom, setZoom] = useState(19);
   const [points, setPoints] = useState<number[][]>(existingPolygon || []);
@@ -217,7 +219,7 @@ function StaticMapMeasure({
   }, [lat, lng, zoom, imgW, imgH]);
 
   const areaSqft = points.length >= 3 ? calculatePolygonArea(points) : 0;
-  const category = areaSqft > 0 ? getYardCategory(areaSqft) : null;
+  const category = areaSqft > 0 ? getYardCategory(areaSqft, customTiers) : null;
 
   const handleClick = (e: React.MouseEvent<SVGElement>) => {
     if (closed) return;
@@ -691,6 +693,7 @@ export function YardMeasureTool({
         existingPolygon={existingPolygon}
         onSave={onSave}
         onCancel={onCancel}
+        customTiers={customTiers}
       />
     );
   }

@@ -127,6 +127,7 @@ import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
 import { YardMeasureTool, getYardCategory, formatArea } from "@/components/yard-measure-tool";
+import { yardSizeHint, yardSizeLabel } from "@/lib/yard-size";
 import { PriceCalculatorCard } from "@/components/price-calculator-card";
 
 const statusColors: Record<string, string> = {
@@ -717,23 +718,7 @@ export default function ContactDetail() {
                     {yardSizeTiers && yardSizeTiers.length > 0 ? (
                       yardSizeTiers.map((tier, i) => {
                         const tierName = tier.name ?? `Tier ${i + 1}`;
-                        const prevTier = i > 0 ? yardSizeTiers[i - 1] : null;
-                        const lowerAcres = prevTier?.upToAcres ?? 0;
-                        const toFrac = (ac: number) => {
-                          if (Math.abs(ac - 0.25) < 0.001) return "¼";
-                          if (Math.abs(ac - 0.5) < 0.001) return "½";
-                          if (Math.abs(ac - 0.75) < 0.001) return "¾";
-                          if (Math.abs(ac - 1) < 0.001) return "1";
-                          return `${ac}`;
-                        };
-                        const hint =
-                          tier.upToAcres === null
-                            ? lowerAcres > 0
-                              ? `> ${toFrac(lowerAcres)} ac`
-                              : "any size"
-                            : i === 0
-                              ? `< ${toFrac(tier.upToAcres)} ac`
-                              : `${toFrac(lowerAcres)}–${toFrac(tier.upToAcres)} ac`;
+                        const hint = yardSizeHint(tier, i, yardSizeTiers);
                         return (
                           <SelectItem key={tierName} value={tierName}>
                             {tierName} ({hint})
@@ -847,36 +832,7 @@ export default function ContactDetail() {
               )}
               {contact.yardSize && (
                 <p data-testid="text-contact-yard-size">
-                  Yard Size:{" "}
-                  {(() => {
-                    if (yardSizeTiers && yardSizeTiers.length > 0) {
-                      const idx = yardSizeTiers.findIndex(
-                        (t) => (t.name ?? "") === contact.yardSize
-                      );
-                      if (idx !== -1) {
-                        const tier = yardSizeTiers[idx];
-                        const prevTier = idx > 0 ? yardSizeTiers[idx - 1] : null;
-                        const lowerAcres = prevTier?.upToAcres ?? 0;
-                        const toFrac = (ac: number) => {
-                          if (Math.abs(ac - 0.25) < 0.001) return "¼";
-                          if (Math.abs(ac - 0.5) < 0.001) return "½";
-                          if (Math.abs(ac - 0.75) < 0.001) return "¾";
-                          if (Math.abs(ac - 1) < 0.001) return "1";
-                          return `${ac}`;
-                        };
-                        const hint =
-                          tier.upToAcres === null
-                            ? lowerAcres > 0
-                              ? `> ${toFrac(lowerAcres)} ac`
-                              : "any size"
-                            : idx === 0
-                              ? `< ${toFrac(tier.upToAcres)} ac`
-                              : `${toFrac(lowerAcres)}–${toFrac(tier.upToAcres)} ac`;
-                        return `${contact.yardSize} (${hint})`;
-                      }
-                    }
-                    return contact.yardSize;
-                  })()}
+                  Yard Size: {yardSizeLabel(contact.yardSize, yardSizeTiers)}
                 </p>
               )}
               {contact.numberOfDogs != null && (
