@@ -58,6 +58,7 @@ import {
   Ruler,
   Download,
   ChevronDown,
+  ExternalLink,
 } from "lucide-react";
 import type { ServicePricingItem } from "@shared/schema";
 import { YardMeasureTool } from "@/components/yard-measure-tool";
@@ -883,6 +884,18 @@ export default function Quotes() {
                 <SelectItem value="both">Email & SMS</SelectItem>
               </SelectContent>
             </Select>
+            {(sendVia === "email" || sendVia === "both") && sendQuoteId && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                data-testid="button-preview-email"
+                onClick={() => window.open(`/api/quotes/${sendQuoteId}/preview`, "_blank")}
+              >
+                <ExternalLink className="h-3.5 w-3.5 mr-2" />
+                Preview Email
+              </Button>
+            )}
             <Button
               data-testid="button-confirm-send"
               className="w-full"
@@ -904,7 +917,7 @@ export default function Quotes() {
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-auto">
           <DialogHeader>
             <div className="flex items-center justify-between">
-              <DialogTitle>Quote Preview</DialogTitle>
+              <DialogTitle>Email Preview</DialogTitle>
               {previewQuoteId && (
                 <div className="flex gap-2 mr-6">
                   <Button
