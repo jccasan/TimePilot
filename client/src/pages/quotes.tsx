@@ -72,6 +72,7 @@ const statusConfig: Record<
   accepted: { label: "Accepted", variant: "default" },
   declined: { label: "Declined", variant: "destructive" },
   expired: { label: "Expired", variant: "outline" },
+  converted: { label: "Converted", variant: "outline" },
 };
 
 const frequencyLabels: Record<string, string> = {
@@ -382,6 +383,7 @@ export default function Quotes() {
   const [previewQuoteId, setPreviewQuoteId] = useState<string | null>(null);
   const [downloadMenuId, setDownloadMenuId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [convertDialogQuote, setConvertDialogQuote] = useState<Quote | null>(null);
 
   const { data: allQuotes = [], isLoading } = useQuery<Quote[]>({
     queryKey: ["/api/quotes"],
@@ -596,6 +598,9 @@ export default function Quotes() {
             <TabsTrigger value="expired" data-testid="tab-expired">
               Expired
             </TabsTrigger>
+            <TabsTrigger value="converted" data-testid="tab-converted">
+              Converted
+            </TabsTrigger>
           </TabsList>
         </Tabs>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -783,6 +788,20 @@ export default function Quotes() {
                               </Button>
                             </>
                           )}
+                          {quote.status === "accepted" &&
+                            quote.type === "residential" &&
+                            !quote.convertedServicePlanId && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs text-green-700 border-green-300 hover:bg-green-50 dark:text-green-400 dark:border-green-700 dark:hover:bg-green-950"
+                                data-testid={`button-convert-to-plan-${quote.id}`}
+                                onClick={() => setConvertDialogQuote(quote)}
+                              >
+                                <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
+                                Accept &amp; Create Service Plan
+                              </Button>
+                            )}
                           {quote.status !== "accepted" &&
                             (deleteConfirmId === quote.id ? (
                               <div className="flex items-center gap-1">
@@ -837,6 +856,14 @@ export default function Quotes() {
         quote={editingQuote}
         contacts={contacts}
         prefilledContactId={prefilledContactId}
+      />
+
+      <ConvertToPlanDialog
+        quote={convertDialogQuote}
+        open={!!convertDialogQuote}
+        onOpenChange={(open) => {
+          if (!open) setConvertDialogQuote(null);
+        }}
       />
 
       <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
@@ -911,6 +938,229 @@ export default function Quotes() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ConvertToPlanDialog({
+  quote,
+  open,
+  onOpenChange,
+}: {
+  quote: Quote | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const { formatMoney } = useCurrency();
+
+  const lineItemsSubtotal =
+    quote?.lineItems && Array.isArray(quote.lineItems)
+      ? (quote.lineItems as { unitPrice: number; quantity: number }[]).reduce(
+          (sum, item) => sum + item.unitPrice * item.quantity,
+          0
+        )
+      : null;
+
+  const defaultPrice = lineItemsSubtotal
+    ? lineItemsSubtotal.toFixed(2)
+    : quote?.selectedPrice
+      ? parseFloat(quote.selectedPrice).toFixed(2)
+      : quote?.premiumPrice
+        ? parseFloat(quote.premiumPrice).toFixed(2)
+        : "";
+
+  const normalizeFreq = (
+    freq: string | null | undefined
+  ): "weekly" | "biweekly" | "monthly" | "onetime" => {
+    switch (freq) {
+      case "weekly":
+      case "1x_weekly":
+      case "2x_weekly":
+      case "3x_weekly":
+        return "weekly";
+      case "biweekly":
+        return "biweekly";
+      case "monthly":
+        return "monthly";
+      case "onetime":
+        return "onetime";
+      default:
+        return "weekly";
+    }
+  };
+
+  const [frequency, setFrequency] = useState<"weekly" | "biweekly" | "monthly" | "onetime">(
+    "weekly"
+  );
+  const [pricePerVisit, setPricePerVisit] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [dayOfWeek, setDayOfWeek] = useState("tbd");
+  const [serviceName, setServiceName] = useState("");
+
+  useEffect(() => {
+    if (open && quote) {
+      setFrequency(normalizeFreq(quote.frequency));
+      setPricePerVisit(defaultPrice);
+      const today = new Date().toISOString().split("T")[0];
+      setStartDate(today);
+      setDayOfWeek("tbd");
+      setServiceName(`Service Plan (Quote #${quote.quoteNumber})`);
+    }
+  }, [open, quote]);
+
+  const convertMutation = useMutation({
+    mutationFn: async () => {
+      if (!quote) throw new Error("No quote selected");
+      const priceNum = parseFloat(pricePerVisit);
+      if (isNaN(priceNum) || priceNum <= 0) throw new Error("Enter a valid price per visit");
+      if (!startDate) throw new Error("Enter a start date");
+
+      const priceStr = priceNum.toFixed(2);
+      const res = await apiRequest("POST", `/api/quotes/${quote.id}/convert-to-plan`, {
+        frequency,
+        pricePerVisit: priceStr,
+        startDate,
+        dayOfWeek: dayOfWeek || null,
+        serviceName: serviceName || null,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Conversion failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      onOpenChange(false);
+      toast({
+        title: "Service plan created",
+        description: "The quote has been converted to an active service plan.",
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Conversion failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md" data-testid="dialog-convert-to-plan">
+        <DialogHeader>
+          <DialogTitle>Create Service Plan from Quote</DialogTitle>
+          <DialogDescription>
+            Review the details below and confirm to create an active service plan for this quote.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          {lineItemsSubtotal !== null && (
+            <div className="rounded-lg border bg-green-50 dark:bg-green-950/30 p-3 flex items-center justify-between">
+              <span className="text-sm text-green-800 dark:text-green-300 font-medium">
+                Line-item subtotal
+              </span>
+              <span
+                className="text-sm font-bold text-green-700 dark:text-green-400"
+                data-testid="text-line-items-subtotal-summary"
+              >
+                {formatMoney(lineItemsSubtotal)}/visit
+              </span>
+            </div>
+          )}
+
+          <div>
+            <Label className="text-sm">Service Plan Name</Label>
+            <Input
+              data-testid="input-convert-service-name"
+              value={serviceName}
+              onChange={(e) => setServiceName(e.target.value)}
+              placeholder="Service Plan Name"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-sm">Frequency</Label>
+              <Select value={frequency} onValueChange={(v) => setFrequency(v as typeof frequency)}>
+                <SelectTrigger data-testid="select-convert-frequency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="onetime">One-time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm">Price per Visit ($)</Label>
+              <Input
+                data-testid="input-convert-price"
+                type="number"
+                step="0.01"
+                min="0"
+                value={pricePerVisit}
+                onChange={(e) => setPricePerVisit(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-sm">Start Date</Label>
+              <Input
+                data-testid="input-convert-start-date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="text-sm">Service Day</Label>
+              <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
+                <SelectTrigger data-testid="select-convert-day-of-week">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tbd">TBD</SelectItem>
+                  <SelectItem value="monday">Monday</SelectItem>
+                  <SelectItem value="tuesday">Tuesday</SelectItem>
+                  <SelectItem value="wednesday">Wednesday</SelectItem>
+                  <SelectItem value="thursday">Thursday</SelectItem>
+                  <SelectItem value="friday">Friday</SelectItem>
+                  <SelectItem value="saturday">Saturday</SelectItem>
+                  <SelectItem value="sunday">Sunday</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              data-testid="button-convert-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              data-testid="button-convert-confirm"
+              onClick={() => convertMutation.mutate()}
+              disabled={convertMutation.isPending || !pricePerVisit || !startDate}
+              className="bg-green-700 hover:bg-green-800 text-white"
+            >
+              {convertMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+              )}
+              Accept &amp; Create Service Plan
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

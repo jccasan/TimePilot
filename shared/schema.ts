@@ -2761,6 +2761,7 @@ export const quoteStatusEnum = pgEnum("quote_status", [
   "accepted",
   "declined",
   "expired",
+  "converted",
 ]);
 export const quoteTierEnum = pgEnum("quote_tier", ["essential", "premium", "deluxe"]);
 
@@ -2867,6 +2868,9 @@ export const quotes = pgTable(
     acceptedAt: timestamp("accepted_at"),
     declinedAt: timestamp("declined_at"),
     quoteToken: varchar("quote_token", { length: 36 }).unique(),
+    convertedServicePlanId: varchar("converted_service_plan_id").references(() => servicePlans.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

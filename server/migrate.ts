@@ -309,6 +309,22 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] quotes line_items column verified");
 
+    // quote_status enum: add 'converted' value (Task #797 — convert quote to service plan)
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TYPE quote_status ADD VALUE IF NOT EXISTS 'converted';
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$
+    `);
+    // quotes.converted_service_plan_id FK column (Task #797)
+    await client.query(`
+      ALTER TABLE quotes
+        ADD COLUMN IF NOT EXISTS converted_service_plan_id VARCHAR REFERENCES service_plans(id) ON DELETE SET NULL
+    `);
+    console.log(
+      "[Migration] quotes converted_service_plan_id column and converted status verified"
+    );
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

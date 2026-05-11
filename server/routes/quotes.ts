@@ -641,6 +641,11 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
             jobStatus: "active",
             stopOrder: 0,
           });
+          if (servicePlan) {
+            await storage.updateQuote(p(req.params.id), companyId, {
+              convertedServicePlanId: servicePlan.id,
+            } as Partial<InsertQuote>);
+          }
         } catch (spErr) {
           console.error("Failed to create service plan from accepted quote:", spErr);
         }
@@ -652,6 +657,106 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
+
+  app.post(
+    "/api/quotes/:id/convert-to-plan",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const quote = await storage.getQuote(p(req.params.id), companyId);
+        if (!quote) return res.status(404).json({ error: "Quote not found" });
+
+        if (quote.type !== "residential") {
+          return res
+            .status(400)
+            .json({ error: "Only residential quotes can be converted to a service plan" });
+        }
+        if (quote.status !== "accepted") {
+          return res
+            .status(400)
+            .json({ error: "Only accepted quotes can be converted to a service plan" });
+        }
+        if (!quote.contactId || !quote.propertyId) {
+          return res.status(400).json({ error: "Quote must be linked to a contact and property" });
+        }
+        if (quote.convertedServicePlanId) {
+          return res
+            .status(409)
+            .json({ error: "This quote has already been converted to a service plan" });
+        }
+
+        const bodySchema = z.object({
+          frequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]),
+          pricePerVisit: z.string().regex(/^\d+(\.\d{1,2})?$/),
+          startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          dayOfWeek: z
+            .enum([
+              "monday",
+              "tuesday",
+              "wednesday",
+              "thursday",
+              "friday",
+              "saturday",
+              "sunday",
+              "tbd",
+            ])
+            .nullable()
+            .optional(),
+          serviceName: z.string().max(255).nullable().optional(),
+        });
+
+        const parsed = bodySchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "Invalid data", details: parsed.error.flatten() });
+        }
+
+        const svcName = parsed.data.serviceName || `Service Plan (Quote #${quote.quoteNumber})`;
+
+        const servicePlan = await storage.createServicePlan({
+          companyId,
+          contactId: quote.contactId,
+          propertyId: quote.propertyId,
+          frequency: parsed.data.frequency,
+          pricePerVisit: parsed.data.pricePerVisit,
+          startDate: parsed.data.startDate,
+          dayOfWeek: parsed.data.dayOfWeek || null,
+          isActive: true,
+          serviceName: svcName,
+          jobType: "recurring",
+          jobStatus: "active",
+          stopOrder: 0,
+        });
+
+        const updatedQuote = await storage.updateQuote(p(req.params.id), companyId, {
+          status: "converted",
+          convertedServicePlanId: servicePlan.id,
+        } as Partial<InsertQuote>);
+
+        try {
+          const { generateVisitsForPlans } = await import("../jobs/auto-visits");
+          const today = new Date();
+          const planStart = new Date(parsed.data.startDate + "T00:00:00");
+          const anchor = planStart > today ? planStart : today;
+          const sixMonthsOut = new Date(anchor);
+          sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+          await generateVisitsForPlans(
+            companyId,
+            [servicePlan.id],
+            planStart.toISOString().split("T")[0],
+            sixMonthsOut.toISOString().split("T")[0]
+          );
+        } catch (genErr) {
+          console.error("[convert-to-plan] Failed to auto-generate visits:", genErr);
+        }
+
+        res.json({ quote: updatedQuote, servicePlan });
+      } catch (err: unknown) {
+        console.error("Error converting quote to service plan:", err);
+        res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  );
 
   app.post("/api/quotes/:id/send", isAuthenticated, async (req: Request, res: Response) => {
     try {
