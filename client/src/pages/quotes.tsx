@@ -62,6 +62,7 @@ import {
 } from "lucide-react";
 import type { ServicePricingItem } from "@shared/schema";
 import { YardMeasureTool } from "@/components/yard-measure-tool";
+import { toFrac } from "@/lib/yard-size";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 const statusConfig: Record<
@@ -2106,13 +2107,6 @@ function CreateEditQuoteDialog({
                         const tierName = tier.name ?? `Tier ${i + 1}`;
                         const prevTier = i > 0 ? yardSizeTiers[i - 1] : null;
                         const lowerAcres = prevTier?.upToAcres ?? 0;
-                        const toFrac = (ac: number) => {
-                          if (Math.abs(ac - 0.25) < 0.001) return "¼";
-                          if (Math.abs(ac - 0.5) < 0.001) return "½";
-                          if (Math.abs(ac - 0.75) < 0.001) return "¾";
-                          if (Math.abs(ac - 1) < 0.001) return "1";
-                          return `${ac}`;
-                        };
                         const sqft = (ac: number) =>
                           `${Math.round(ac * 43560).toLocaleString()} sq ft`;
                         const hint =
