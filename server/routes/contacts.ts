@@ -53,13 +53,52 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
   app.get("/api/contacts/export/csv", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const contactsList = await storage.getContacts(companyId);
+
+      const rows = await db.execute(sql`
+        SELECT
+          c.first_name        AS "firstName",
+          c.last_name         AS "lastName",
+          c.email             AS "email",
+          c.phone             AS "phone",
+          c.street_address    AS "streetAddress",
+          c.address2          AS "address2",
+          COALESCE(NULLIF(c.city,''),  p.city)          AS "city",
+          COALESCE(NULLIF(c.state,''), p.state)         AS "state",
+          COALESCE(NULLIF(c.zip_code,''), p.zip_code)   AS "zipCode",
+          COALESCE(c.number_of_dogs, p.number_of_dogs)  AS "numberOfDogs",
+          COALESCE(NULLIF(c.yard_size,''), p.yard_size) AS "yardSize",
+          COALESCE(NULLIF(c.service_frequency,''), sp.frequency)  AS "serviceFrequency",
+          COALESCE(c.service_day, sp.day_of_week)                 AS "serviceDay",
+          c.lead_source       AS "leadSource",
+          c.referral_source   AS "referralSource",
+          c.status            AS "status",
+          c.notes             AS "notes"
+        FROM contacts c
+        LEFT JOIN LATERAL (
+          SELECT city, state, zip_code, number_of_dogs, yard_size
+          FROM properties
+          WHERE contact_id = c.id AND company_id = ${companyId}
+          ORDER BY created_at ASC
+          LIMIT 1
+        ) p ON true
+        LEFT JOIN LATERAL (
+          SELECT frequency, day_of_week
+          FROM service_plans
+          WHERE contact_id = c.id AND company_id = ${companyId}
+            AND is_active = true AND job_status = 'active'
+          ORDER BY created_at ASC
+          LIMIT 1
+        ) sp ON true
+        WHERE c.company_id = ${companyId}
+        ORDER BY c.first_name ASC, c.last_name ASC
+      `);
+
       const csvRows = [csvContactHeaders.join(",")];
-      for (const c of contactsList) {
+      for (const row of rows.rows) {
         csvRows.push(
           csvContactHeaders
             .map((h) => {
-              const val = (c as Record<string, unknown>)[h] ?? "";
+              const val = (row as Record<string, unknown>)[h] ?? "";
               return `"${String(val).replace(/"/g, '""')}"`;
             })
             .join(",")
