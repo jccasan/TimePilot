@@ -425,63 +425,46 @@ async function mergeUploadedFiles(files: File[]): Promise<{
     });
   });
 
-  // Attempt row joining on primary file (first) against secondary files
-  const primaryRows = fileRows[0];
-  const primaryMap = fileMaps[0];
-  const pFirstIdx = findColIdx(primaryMap, nameFirstAliases);
-  const pLastIdx = findColIdx(primaryMap, nameLastAliases);
-  const pStreetIdx = findColIdx(primaryMap, streetAliases);
+  // Build a global position map keyed by name+address across all files.
+  // Requires at least one name component so street-only keys don't produce
+  // false merges for shared addresses (e.g. HOA units). File-order independent:
+  // whichever file contributes a key first owns the merged row; subsequent
+  // files with the same key merge their columns in, filling blank cells only.
+  const merged: string[][] = [];
+  const mergedPosMap = new Map<string, number>(); // join-key → index in merged[]
 
-  // Build merge-key → row index map for primary
-  const primaryKeyMap = new Map<string, number>();
-  for (let i = 0; i < primaryRows.length; i++) {
-    const raw = parsed[0].rows[i];
-    const firstName = pFirstIdx >= 0 ? (raw[pFirstIdx] ?? "") : "";
-    const lastName = pLastIdx >= 0 ? (raw[pLastIdx] ?? "") : "";
-    const street = pStreetIdx >= 0 ? (raw[pStreetIdx] ?? "") : "";
-    const key = normalizeKey(firstName, lastName, street);
-    if (key && key !== "||") primaryKeyMap.set(key, i);
-  }
+  for (let fi = 0; fi < parsed.length; fi++) {
+    const fileMap = fileMaps[fi];
+    const fFirstIdx = findColIdx(fileMap, nameFirstAliases);
+    const fLastIdx = findColIdx(fileMap, nameLastAliases);
+    const fStreetIdx = findColIdx(fileMap, streetAliases);
 
-  // Merged result starts with a copy of primary rows (as full-header arrays)
-  const merged = primaryRows.map((row) => [...row]);
-  const usedSecondaryRows = new Map<number, Set<number>>(); // fileIndex -> set of used row indices
+    for (let ri = 0; ri < parsed[fi].rows.length; ri++) {
+      const raw = parsed[fi].rows[ri];
+      const firstName = fFirstIdx >= 0 ? (raw[fFirstIdx] ?? "") : "";
+      const lastName = fLastIdx >= 0 ? (raw[fLastIdx] ?? "") : "";
+      const street = fStreetIdx >= 0 ? (raw[fStreetIdx] ?? "") : "";
 
-  for (let fi = 1; fi < parsed.length; fi++) {
-    const secMap = fileMaps[fi];
-    const secFirstIdx = findColIdx(secMap, nameFirstAliases);
-    const secLastIdx = findColIdx(secMap, nameLastAliases);
-    const secStreetIdx = findColIdx(secMap, streetAliases);
-    const usedInThisFile = new Set<number>();
+      // Require at least one name component to prevent street-only false merges
+      const hasName = firstName.trim() !== "" || lastName.trim() !== "";
+      const key = hasName ? normalizeKey(firstName, lastName, street) : "";
+      const validKey = key && key !== "||";
 
-    for (let si = 0; si < parsed[fi].rows.length; si++) {
-      const secRaw = parsed[fi].rows[si];
-      const firstName = secFirstIdx >= 0 ? (secRaw[secFirstIdx] ?? "") : "";
-      const lastName = secLastIdx >= 0 ? (secRaw[secLastIdx] ?? "") : "";
-      const street = secStreetIdx >= 0 ? (secRaw[secStreetIdx] ?? "") : "";
-      const key = normalizeKey(firstName, lastName, street);
+      const fullRow = fileRows[fi][ri];
 
-      if (key && key !== "||" && primaryKeyMap.has(key)) {
-        // Merge into existing primary row — fill blank columns only
-        const pi = primaryKeyMap.get(key)!;
-        const secFullRow = fileRows[fi][si];
+      if (validKey && mergedPosMap.has(key)) {
+        // Merge into existing row — fill blank columns only
+        const pos = mergedPosMap.get(key)!;
         for (let ci = 0; ci < allHeaders.length; ci++) {
-          if (!merged[pi][ci] && secFullRow[ci]) {
-            merged[pi][ci] = secFullRow[ci];
+          if (!merged[pos][ci] && fullRow[ci]) {
+            merged[pos][ci] = fullRow[ci];
           }
         }
-        usedInThisFile.add(si);
-      }
-    }
-    usedSecondaryRows.set(fi, usedInThisFile);
-  }
-
-  // Append unmatched secondary rows
-  for (let fi = 1; fi < parsed.length; fi++) {
-    const used = usedSecondaryRows.get(fi) ?? new Set();
-    for (let si = 0; si < fileRows[fi].length; si++) {
-      if (!used.has(si)) {
-        merged.push([...fileRows[fi][si]]);
+      } else {
+        // New row — add to merged list and index by key if valid
+        const pos = merged.length;
+        merged.push([...fullRow]);
+        if (validKey) mergedPosMap.set(key, pos);
       }
     }
   }
