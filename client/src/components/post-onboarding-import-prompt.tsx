@@ -10,37 +10,47 @@ import { Button } from "@/components/ui/button";
 import { Upload, Users } from "lucide-react";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface PostOnboardingImportPromptProps {
   open: boolean;
   onDismiss: () => void;
 }
 
-export function PostOnboardingImportPrompt({
-  open,
-  onDismiss,
-}: PostOnboardingImportPromptProps) {
+export function PostOnboardingImportPrompt({ open, onDismiss }: PostOnboardingImportPromptProps) {
   const [, navigate] = useLocation();
   const [isPending, setIsPending] = useState(false);
+  const { toast } = useToast();
 
   async function handleImport() {
     setIsPending(true);
     try {
-      await Promise.allSettled([
+      await Promise.all([
         apiRequest("PATCH", "/api/auth/import-mode", { enabled: true }),
         apiRequest("PATCH", "/api/company", { clientNotificationsSuppressed: true }),
       ]);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
-    } finally {
-      setIsPending(false);
       onDismiss();
       navigate("/migration");
+    } catch {
+      toast({
+        title: "Something went wrong",
+        description: "Could not enable import mode. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPending(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onDismiss(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onDismiss();
+      }}
+    >
       <DialogContent className="sm:max-w-md" data-testid="dialog-post-onboarding-import">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -49,8 +59,8 @@ export function PostOnboardingImportPrompt({
           </DialogTitle>
           <DialogDescription>
             If you are switching from another system, we can pull in your client list, service
-            plans, pricing, and dog info automatically. Client notifications will stay off until
-            you are ready to send them.
+            plans, pricing, and dog info automatically. Client notifications will stay off until you
+            are ready to send them.
           </DialogDescription>
         </DialogHeader>
 
