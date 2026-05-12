@@ -131,11 +131,29 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
         const row = rows[0];
         const step = (row.business_onboarding_step as number) ?? 0;
         const completedSteps: number[] = Array.from({ length: step }, (_, i) => i);
+
+        let hasCompletedContactImport = false;
+        try {
+          const importCheck = await db.execute(
+            sql`SELECT EXISTS(
+              SELECT 1 FROM import_runs
+              WHERE company_id = ${companyId}
+                AND status = 'completed'
+                AND type IN ('sweepandgo_contacts', 'csv_contacts')
+            ) AS has_completed_import`
+          );
+          hasCompletedContactImport =
+            (importCheck.rows[0] as Record<string, unknown>)?.has_completed_import === true;
+        } catch {
+          hasCompletedContactImport = false;
+        }
+
         res.json({
           currentStep: step,
           isComplete: isDemo ? false : ((row.business_onboarding_complete as boolean) ?? false),
           isDemo: !!isDemo,
           completedSteps,
+          hasCompletedContactImport,
           companyData: {
             name: row.name,
             email: row.email,

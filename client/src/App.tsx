@@ -37,6 +37,7 @@ import RoverChatbot, { type RoverChatbotHandle } from "@/components/rover-chatbo
 import BusinessOnboarding from "@/components/business-onboarding";
 import { ImportModePopup } from "@/components/import-mode-popup";
 import { ImportModeBanner } from "@/components/import-mode-banner";
+import { PostOnboardingImportPrompt } from "@/components/post-onboarding-import-prompt";
 import { SubscriptionGate } from "@/components/subscription-gate";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -291,7 +292,7 @@ function AuthenticatedLayout() {
     data: businessOnboarding,
     isLoading: businessOnboardingLoading,
     isError: businessOnboardingError,
-  } = useQuery<{ isComplete: boolean; isDemo?: boolean }>({
+  } = useQuery<{ isComplete: boolean; isDemo?: boolean; hasCompletedContactImport: boolean }>({
     queryKey: ["/api/onboarding/business-status"],
     enabled: setupState === "ready",
     retry: 2,
@@ -299,6 +300,7 @@ function AuthenticatedLayout() {
   const [businessOnboardingDone, setBusinessOnboardingDone] = useState(
     () => sessionStorage.getItem("scoopilot_onboarding_dismissed") === "true"
   );
+  const [showImportPrompt, setShowImportPrompt] = useState(false);
   const [setupDismissed, setSetupDismissed] = useState(
     () => localStorage.getItem("scoopilot_setup_dismissed") === "true"
   );
@@ -309,6 +311,11 @@ function AuthenticatedLayout() {
       setBusinessOnboardingDone(false);
     }
   }, [businessOnboarding?.isDemo]);
+  useEffect(() => {
+    if (businessOnboarding?.hasCompletedContactImport) {
+      setShowImportPrompt(false);
+    }
+  }, [businessOnboarding?.hasCompletedContactImport]);
   useEffect(() => {
     const handler = () => setSetupDismissed(true);
     window.addEventListener("scoopilot:setup-dismissed", handler);
@@ -442,6 +449,9 @@ function AuthenticatedLayout() {
           sessionStorage.removeItem("scoopilot_onboarding_dismissed");
           setBusinessOnboardingDone(true);
           queryClient.invalidateQueries({ queryKey: ["/api/onboarding/business-status"] });
+          if (!businessOnboarding?.hasCompletedContactImport) {
+            setShowImportPrompt(true);
+          }
         }}
         onDismiss={() => {
           sessionStorage.setItem("scoopilot_onboarding_dismissed", "true");
@@ -505,6 +515,10 @@ function AuthenticatedLayout() {
       </SidebarProvider>
       <RoverChatbot ref={roverRef} />
       <ImportModePopup open={importModePopupOpen} onClose={() => setImportModePopupOpen(false)} />
+      <PostOnboardingImportPrompt
+        open={showImportPrompt && !businessOnboarding?.hasCompletedContactImport}
+        onDismiss={() => setShowImportPrompt(false)}
+      />
     </TutorialProvider>
   );
 }
