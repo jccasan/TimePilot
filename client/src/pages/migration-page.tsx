@@ -329,11 +329,17 @@ function normalizeKey(firstName: string, lastName: string, street: string): stri
   return `${clean(firstName)}|${clean(lastName)}|${clean(street)}`;
 }
 
+interface FileStat {
+  name: string;
+  rawRows: number;
+}
+
 async function mergeUploadedFiles(files: File[]): Promise<{
   mergedHeaders: string[];
   mergedRows: string[][];
   detectedPlatform: TransferPlatform;
   fileName: string;
+  fileStats: FileStat[];
 }> {
   const parsed: Array<{ headers: string[]; rows: string[][] }> = [];
 
@@ -347,8 +353,19 @@ async function mergeUploadedFiles(files: File[]): Promise<{
     parsed.push(parseCSVSimple(text));
   }
 
+  const fileStats: FileStat[] = files.map((f, i) => ({
+    name: f.name,
+    rawRows: parsed[i]?.rows.length ?? 0,
+  }));
+
   if (parsed.length === 0)
-    return { mergedHeaders: [], mergedRows: [], detectedPlatform: "generic", fileName: "" };
+    return {
+      mergedHeaders: [],
+      mergedRows: [],
+      detectedPlatform: "generic",
+      fileName: "",
+      fileStats: [],
+    };
   if (parsed.length === 1) {
     const { headers, rows } = parsed[0];
     return {
@@ -356,6 +373,7 @@ async function mergeUploadedFiles(files: File[]): Promise<{
       mergedRows: rows,
       detectedPlatform: detectPlatformFromHeaders(headers),
       fileName: files[0].name,
+      fileStats,
     };
   }
 
@@ -475,6 +493,7 @@ async function mergeUploadedFiles(files: File[]): Promise<{
     mergedRows: merged,
     detectedPlatform: detectPlatformFromHeaders(allHeaders),
     fileName,
+    fileStats,
   };
 }
 
@@ -604,19 +623,176 @@ function ExportInstructionsAccordion() {
   );
 }
 
+// ── Merge summary types ───────────────────────────────────────────────────────
+
+interface PendingMerge {
+  mergedHeaders: string[];
+  mergedRows: string[][];
+  detectedPlatform: TransferPlatform;
+  fileName: string;
+  fileStats: FileStat[];
+}
+
+const PLATFORM_LABELS: Record<TransferPlatform, string> = {
+  sweepandgo: "Sweep & Go",
+  jobber: "Jobber",
+  housecallpro: "HouseCall Pro",
+  generic: "Generic CSV",
+};
+
+const PLATFORM_BADGE_COLORS: Record<TransferPlatform, string> = {
+  sweepandgo: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
+  jobber: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  housecallpro: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300",
+  generic: "bg-muted text-muted-foreground",
+};
+
+// ── MergeSummaryCard ──────────────────────────────────────────────────────────
+
+interface MergeSummaryCardProps {
+  pending: PendingMerge;
+  analyzing: boolean;
+  analyzeError: string | null;
+  onConfirm: () => void;
+  onReset: () => void;
+}
+
+function MergeSummaryCard({
+  pending,
+  analyzing,
+  analyzeError,
+  onConfirm,
+  onReset,
+}: MergeSummaryCardProps) {
+  const totalRaw = pending.fileStats.reduce((s, f) => s + f.rawRows, 0);
+  const mergedCount = pending.mergedRows.length;
+  const deduped = pending.fileStats.length > 1 ? totalRaw - mergedCount : 0;
+
+  return (
+    <div className="space-y-4" data-testid="merge-summary-card">
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold">Files ready for analysis</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Review the summary below, then run AI column mapping.
+            </p>
+          </div>
+          <span
+            className={`text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${PLATFORM_BADGE_COLORS[pending.detectedPlatform]}`}
+            data-testid="text-detected-platform"
+          >
+            {PLATFORM_LABELS[pending.detectedPlatform]}
+          </span>
+        </div>
+
+        {/* Per-file breakdown */}
+        <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+          {pending.fileStats.map((fs, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between px-3 py-2.5 bg-muted/20"
+              data-testid={`row-file-stat-${i}`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                <span className="text-xs font-medium truncate">{fs.name}</span>
+              </div>
+              <span className="text-xs text-muted-foreground flex-shrink-0 ml-3">
+                {fs.rawRows.toLocaleString()} rows
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Merge stats */}
+        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5" />
+            <span data-testid="text-merged-row-count">
+              <span className="font-semibold text-foreground">{mergedCount.toLocaleString()}</span>{" "}
+              {mergedCount === 1 ? "row" : "rows"} to import
+            </span>
+          </div>
+          {deduped > 0 && (
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+              <span data-testid="text-deduped-count">
+                <span className="font-semibold text-foreground">{deduped.toLocaleString()}</span>{" "}
+                matched across files
+              </span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            <span>
+              <span className="font-semibold text-foreground">
+                {pending.mergedHeaders.length}
+              </span>{" "}
+              columns
+            </span>
+          </div>
+        </div>
+
+        {/* Error */}
+        {analyzeError && (
+          <Alert variant="destructive" data-testid="alert-analyze-error">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Analysis failed</AlertTitle>
+            <AlertDescription>{analyzeError}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-3 pt-1">
+          <Button
+            onClick={onConfirm}
+            disabled={analyzing}
+            className="flex-1 sm:flex-none"
+            data-testid="button-analyze-with-ai"
+          >
+            {analyzing ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Mapping columns...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Analyze with AI
+              </>
+            )}
+          </Button>
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={analyzing}
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors disabled:opacity-50"
+            data-testid="button-remove-files"
+          >
+            Remove files and start over
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── TransferTab ───────────────────────────────────────────────────────────────
 
 function TransferTab() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [merging, setMerging] = useState(false);
+  const [pendingMerge, setPendingMerge] = useState<PendingMerge | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [preloaded, setPreloaded] = useState<PreloadedMappings | null>(null);
   const [wizardPlatform, setWizardPlatform] = useState<TransferPlatform>("generic");
   const [wizardStarted, setWizardStarted] = useState(false);
 
+  // Phase 1: merge files client-side and show summary
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {
       const csvFiles = Array.from(files).filter(
@@ -630,54 +806,70 @@ function TransferTab() {
         });
         return;
       }
-      setSelectedFiles(csvFiles);
       setAnalyzeError(null);
-      setAnalyzing(true);
+      setPendingMerge(null);
+      setMerging(true);
 
       try {
-        const { mergedHeaders, mergedRows, detectedPlatform, fileName } =
-          await mergeUploadedFiles(csvFiles);
-
-        const sampleRows = mergedRows.slice(0, 25);
-
-        const res = await apiRequest("POST", "/api/imports/ai-map", {
-          headers: mergedHeaders,
-          sampleRows,
-          targetSchema: "contacts",
-        });
-
-        if (!res.ok) {
-          const body = await res.text();
-          throw new Error(body || "AI mapping failed");
-        }
-
-        const mappingResult: MappingResult = await res.json();
-
-        const initialMappings: Record<string, string> = {};
-        for (const m of mappingResult.mappings) {
-          initialMappings[m.internalField] = m.csvColumn;
-        }
-
-        setPreloaded({
-          headers: mergedHeaders,
-          rows: mergedRows,
-          fileName,
-          mappingResult,
-          initialMappings,
-          transformations: mappingResult.transformations,
-        });
-        setWizardPlatform(detectedPlatform);
-        setWizardStarted(true);
+        const result = await mergeUploadedFiles(csvFiles);
+        setPendingMerge(result);
       } catch (err) {
         setAnalyzeError(
-          err instanceof Error ? err.message : "Something went wrong analyzing your files."
+          err instanceof Error ? err.message : "Something went wrong reading your files."
         );
       } finally {
-        setAnalyzing(false);
+        setMerging(false);
       }
     },
     [toast]
   );
+
+  // Phase 2: run AI mapping after user confirms the summary
+  const handleAnalyze = useCallback(async () => {
+    if (!pendingMerge) return;
+    setAnalyzeError(null);
+    setAnalyzing(true);
+
+    try {
+      const { mergedHeaders, mergedRows, detectedPlatform, fileName } = pendingMerge;
+      const sampleRows = mergedRows.slice(0, 25);
+
+      const res = await apiRequest("POST", "/api/imports/ai-map", {
+        headers: mergedHeaders,
+        sampleRows,
+        targetSchema: "contacts",
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || "AI mapping failed");
+      }
+
+      const mappingResult: MappingResult = await res.json();
+
+      const initialMappings: Record<string, string> = {};
+      for (const m of mappingResult.mappings) {
+        initialMappings[m.internalField] = m.csvColumn;
+      }
+
+      setPreloaded({
+        headers: mergedHeaders,
+        rows: mergedRows,
+        fileName,
+        mappingResult,
+        initialMappings,
+        transformations: mappingResult.transformations,
+      });
+      setWizardPlatform(detectedPlatform);
+      setWizardStarted(true);
+    } catch (err) {
+      setAnalyzeError(
+        err instanceof Error ? err.message : "Something went wrong analyzing your files."
+      );
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [pendingMerge]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -696,8 +888,8 @@ function TransferTab() {
   );
 
   const reset = useCallback(() => {
-    setSelectedFiles([]);
     setAnalyzeError(null);
+    setPendingMerge(null);
     setPreloaded(null);
     setWizardStarted(false);
     setWizardPlatform("generic");
@@ -723,6 +915,22 @@ function TransferTab() {
     );
   }
 
+  // Show merge summary confirmation before AI analysis
+  if (pendingMerge) {
+    return (
+      <div className="space-y-5" data-testid="transfer-upload-zone">
+        <MergeSummaryCard
+          pending={pendingMerge}
+          analyzing={analyzing}
+          analyzeError={analyzeError}
+          onConfirm={handleAnalyze}
+          onReset={reset}
+        />
+        <ExportInstructionsAccordion />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5" data-testid="transfer-upload-zone">
       {/* Drop zone */}
@@ -738,7 +946,7 @@ function TransferTab() {
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        onClick={() => !analyzing && fileInputRef.current?.click()}
+        onClick={() => !(merging || analyzing) && fileInputRef.current?.click()}
         data-testid="dropzone-transfer"
       >
         <input
@@ -752,25 +960,14 @@ function TransferTab() {
         />
 
         <div className="flex flex-col items-center justify-center py-12 px-6 text-center gap-3">
-          {analyzing ? (
+          {merging ? (
             <>
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <div>
-                <p className="font-medium text-sm">Analyzing your files...</p>
+                <p className="font-medium text-sm">Reading your files...</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Merging and mapping columns with AI. This takes a few seconds.
+                  Merging columns and detecting platform.
                 </p>
-              </div>
-            </>
-          ) : selectedFiles.length > 0 && !analyzeError ? (
-            <>
-              <CheckCircle2 className="h-8 w-8 text-primary" />
-              <div>
-                {selectedFiles.map((f) => (
-                  <p key={f.name} className="text-sm font-medium">
-                    {f.name}
-                  </p>
-                ))}
               </div>
             </>
           ) : (
@@ -799,7 +996,7 @@ function TransferTab() {
       {analyzeError && (
         <Alert variant="destructive" data-testid="alert-analyze-error">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Analysis failed</AlertTitle>
+          <AlertTitle>Could not read files</AlertTitle>
           <AlertDescription className="flex items-center justify-between gap-3">
             <span>{analyzeError}</span>
             <Button variant="outline" size="sm" onClick={reset} data-testid="button-try-again">

@@ -1,6 +1,6 @@
 import { parseCSV, normalizePhone, splitFullName } from "./import-transforms";
 
-export type Platform = "sweepandgo" | "jobber" | "unknown";
+export type Platform = "sweepandgo" | "jobber" | "housecallpro" | "unknown";
 
 export interface ParsedContact {
   firstName: string;
@@ -68,6 +68,71 @@ const SWEEPANDGO_HEADERS: Record<string, string[]> = {
   leadSource: ["lead source", "lead_source", "source", "referral source", "how did you hear"],
 };
 
+const HOUSECALLPRO_HEADERS: Record<string, string[]> = {
+  // Customer export columns
+  firstName: [
+    "first name",
+    "firstname",
+    "first_name",
+    "fname",
+    "customer first name",
+  ],
+  lastName: [
+    "last name",
+    "lastname",
+    "last_name",
+    "lname",
+    "customer last name",
+  ],
+  fullName: [
+    "customer name",
+    "full name",
+    "name",
+    "client name",
+    "customer",
+  ],
+  email: [
+    "email",
+    "e-mail",
+    "email address",
+    "customer email",
+  ],
+  phone: [
+    "phone",
+    "phone number",
+    "mobile",
+    "mobile phone",
+    "cell",
+    "cell phone",
+    "home phone",
+    "customer phone",
+    "customer phone number",
+  ],
+  streetAddress: [
+    "street",
+    "street address",
+    "address",
+    "service address",
+    "billing address",
+    "address line 1",
+    "service street",
+  ],
+  address2: ["address 2", "address2", "apt", "suite", "unit"],
+  city: ["city", "service city", "billing city"],
+  state: ["state", "province", "service state", "billing state"],
+  zipCode: ["zip", "zip code", "zipcode", "postal code", "service zip", "billing zip"],
+  notes: ["notes", "customer notes", "job notes", "job description", "description", "comments"],
+  status: ["status", "customer status", "job status"],
+  leadSource: ["lead source", "source", "referral source", "how did you hear"],
+  tags: ["tags", "labels"],
+  // Job export columns
+  serviceFrequency: ["frequency", "service frequency", "recurrence", "schedule type"],
+  serviceDay: ["service day", "day of week", "scheduled day"],
+  numberOfDogs: ["# of dogs", "number of dogs", "dogs", "dog count"],
+  yardSize: ["yard size", "lot size"],
+  gateCode: ["gate code", "access code", "entry code"],
+};
+
 const JOBBER_HEADERS: Record<string, string[]> = {
   firstName: ["client first name", "client firstname", "first name", "firstname"],
   lastName: ["client last name", "client lastname", "last name", "lastname"],
@@ -106,6 +171,14 @@ const JOBBER_HEADERS: Record<string, string[]> = {
 
 function detectPlatform(headers: string[]): Platform {
   const normalized = headers.map((h) => h.toLowerCase().trim());
+
+  // HouseCall Pro: jobs export always has "job description" + "job amount"
+  // or "job description" + "customer name" from merged customer+jobs exports
+  const hcpStrongSignals = ["job amount", "job status", "job type", "job total"];
+  const hcpHasJobDesc = normalized.includes("job description");
+  const hcpStrongMatches = hcpStrongSignals.filter((s) => normalized.includes(s)).length;
+  if (hcpHasJobDesc && hcpStrongMatches >= 1) return "housecallpro";
+  if (hcpHasJobDesc && normalized.includes("customer name")) return "housecallpro";
 
   const jobberSignals = [
     "client first name",
@@ -241,7 +314,12 @@ export function parseCompetitorCSV(
   }
 
   const platform = platformOverride || detectPlatform(headers);
-  const headerMap = platform === "jobber" ? JOBBER_HEADERS : SWEEPANDGO_HEADERS;
+  const headerMap =
+    platform === "jobber"
+      ? JOBBER_HEADERS
+      : platform === "housecallpro"
+        ? HOUSECALLPRO_HEADERS
+        : SWEEPANDGO_HEADERS;
   const mapping = mapHeaders(headers, headerMap);
 
   const fieldMapping: Record<string, string> = {};
@@ -331,6 +409,7 @@ export function parseCompetitorCSV(
   const platformLabels: Record<Platform, string> = {
     sweepandgo: "Sweep & Go",
     jobber: "Jobber",
+    housecallpro: "HouseCall Pro",
     unknown: "Unknown",
   };
 
