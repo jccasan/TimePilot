@@ -102,7 +102,7 @@ interface ImportResult {
   errors: Array<{ row: number; message: string }>;
 }
 
-type SourceSystem = "sweepandgo" | "jobber" | "generic" | "googlesheet";
+type SourceSystem = "sweepandgo" | "jobber" | "generic" | "googlesheet" | "housecallpro";
 type RoutePreference = "preserve" | "rebuild" | "hybrid";
 type UploadMode = "csv" | "paste" | "googlesheet" | "screenshot";
 
@@ -250,6 +250,15 @@ const PLATFORM_CONFIG: Record<
     exportHint:
       "Share your Google Sheet publicly (View only) and paste the link below. We'll fetch it as a CSV automatically. Your sheet should have a header row.",
     columnHints: ["Name", "Email", "Phone", "Address"],
+  },
+  housecallpro: {
+    label: "HouseCall Pro",
+    shortLabel: "HCP",
+    color: "text-indigo-700 dark:text-indigo-400",
+    bgColor: "bg-indigo-100 dark:bg-indigo-900/30",
+    exportHint:
+      "In HouseCall Pro, go to Customers → Actions → Export to request your customer file by email (from notifications@housecallpro.com). Also export Jobs: Customers → Jobs → Actions → Export. Upload both CSV files together.",
+    columnHints: ["Customer Name", "Email", "Mobile Number", "Street", "City", "Job Description"],
   },
 };
 

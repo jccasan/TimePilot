@@ -725,7 +725,7 @@ function TransferTab() {
     return (
       <ImportWizard
         targetSchema="contacts"
-        initialPlatform={wizardPlatform === "housecallpro" ? "generic" : wizardPlatform}
+        initialPlatform={wizardPlatform}
         preloadedMappings={preloaded}
         onComplete={(result) => {
           toast({
