@@ -120,6 +120,14 @@ export interface ImportWizardProps {
   onComplete: (result: ImportResult) => void;
   onCancel: () => void;
   initialPlatform?: SourceSystem | null;
+  preloadedMappings?: {
+    headers: string[];
+    rows: string[][];
+    fileName: string;
+    mappingResult: MappingResult;
+    initialMappings: Record<string, string>;
+    transformations: TransformSuggestion[];
+  } | null;
 }
 
 // Schema Fields
@@ -1557,9 +1565,10 @@ export function ImportWizard({
   onComplete,
   onCancel,
   initialPlatform,
+  preloadedMappings,
 }: ImportWizardProps) {
   // Step 0=checklist, 1=upload, 2=map, 3=review, 4=route assignment (→ navigate to resolve page)
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(preloadedMappings ? 2 : 0);
   const [, navigate] = useLocation();
 
   const [wizardAnswers, setWizardAnswers] = useState<WizardAnswers>({
@@ -1572,14 +1581,20 @@ export function ImportWizard({
   });
 
   // CSV data
-  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
-  const [csvRows, setCsvRows] = useState<string[][]>([]);
-  const [fileName, setFileName] = useState("");
+  const [csvHeaders, setCsvHeaders] = useState<string[]>(preloadedMappings?.headers ?? []);
+  const [csvRows, setCsvRows] = useState<string[][]>(preloadedMappings?.rows ?? []);
+  const [fileName, setFileName] = useState(preloadedMappings?.fileName ?? "");
 
   // Mapping state
-  const [mappingResult, setMappingResult] = useState<MappingResult | null>(null);
-  const [userMappings, setUserMappings] = useState<Record<string, string>>({});
-  const [userTransforms, setUserTransforms] = useState<TransformSuggestion[]>([]);
+  const [mappingResult, setMappingResult] = useState<MappingResult | null>(
+    preloadedMappings?.mappingResult ?? null
+  );
+  const [userMappings, setUserMappings] = useState<Record<string, string>>(
+    preloadedMappings?.initialMappings ?? {}
+  );
+  const [userTransforms, setUserTransforms] = useState<TransformSuggestion[]>(
+    preloadedMappings?.transformations ?? []
+  );
 
   // Review state
   const [previewRows, setPreviewRows] = useState<TransformedRow[]>([]);

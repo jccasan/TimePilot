@@ -101,113 +101,734 @@ function formatDollars(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
+// ── TransferTab types ────────────────────────────────────────────────────────
+
+type TransferPlatform = "sweepandgo" | "jobber" | "housecallpro" | "generic";
+
+interface MappingResult {
+  mappings: Array<{ csvColumn: string; internalField: string; confidence: number; reason: string }>;
+  transformations: Array<{ field: string; type: string; params?: Record<string, unknown> }>;
+  warnings: string[];
+}
+
+interface PreloadedMappings {
+  headers: string[];
+  rows: string[][];
+  fileName: string;
+  mappingResult: MappingResult;
+  initialMappings: Record<string, string>;
+  transformations: Array<{ field: string; type: string; params?: Record<string, unknown> }>;
+}
+
+// ── Export instruction data (from reference design) ──────────────────────────
+
+const EXPORT_INSTRUCTIONS = {
+  sweepandgo: {
+    label: "Sweep & Go",
+    color: "text-emerald-700 dark:text-emerald-400",
+    borderColor: "border-emerald-200 dark:border-emerald-800",
+    bgColor: "bg-emerald-50 dark:bg-emerald-950/30",
+    files: [
+      {
+        label: "Residential Client List",
+        nav: "Clients → Residential → CSV",
+        required: true,
+        steps: [
+          "Log into Sweep & Go",
+          'Click "Clients" in the left sidebar',
+          'Click "Residential"',
+          'Click "CSV" to export',
+          "Upload that file here",
+        ],
+        tip: "Name, email, phone, address, status, referral source.",
+      },
+      {
+        label: "Residential Subscriptions",
+        nav: "Billing → Residential Subscriptions → CSV",
+        required: true,
+        steps: [
+          'Click "Billing" in the left sidebar',
+          'Click "Residential Subscriptions"',
+          'Click "CSV" to export',
+          "Upload that file here",
+        ],
+        tip: "Subscription name, billing interval, revenue, start/end dates.",
+      },
+      {
+        label: "Master Schedule",
+        nav: "Scheduler → Schedule → CSV",
+        required: true,
+        steps: [
+          'Click "Scheduler" in the left sidebar',
+          'Click "Schedule"',
+          'Click "CSV" to export',
+          "Upload that file here",
+        ],
+        tip: "Service days, cleanup frequency, dog count. The most critical file.",
+      },
+    ],
+  },
+  jobber: {
+    label: "Jobber",
+    color: "text-amber-700 dark:text-amber-400",
+    borderColor: "border-amber-200 dark:border-amber-800",
+    bgColor: "bg-amber-50 dark:bg-amber-950/30",
+    emailNote: "Jobber emails your exports. Watch for an email at the address you use to log in.",
+    files: [
+      {
+        label: "Client List",
+        nav: "Clients → More Actions → Export Clients → CSV",
+        required: true,
+        steps: [
+          'Click "Clients" in the left sidebar',
+          'In the top right corner, click "More Actions"',
+          'Click "Export Clients"',
+          'In the pop-up, click "CSV"',
+          "Jobber will email you the file — download the CSV attachment and upload it here",
+        ],
+        tip: "Contact info, addresses, custom fields (dog count, notes), tags, lead source.",
+      },
+      {
+        label: "Recurring Jobs Report",
+        nav: "Insights → Reports → Recurring Jobs Report → Export to CSV",
+        required: true,
+        steps: [
+          'Click "Insights" in the left sidebar, then select "Reports"',
+          'Under Work Reports, click "Recurring Jobs Report"',
+          'Click the "Columns" button and enable: Client name, Client email, Client phone number, Service street, Service city, Service state/province, Service zip/postal code, Line items, Total ($), Schedule start date, Billing type',
+          'Set the Active filter to "Active" and Started date to "All time"',
+          'Click "Export to CSV" and select "All columns"',
+          "Jobber will email you the file — download the CSV attachment and upload it here",
+        ],
+        tip: "Pricing, frequency, and start dates live here. Enabling the right columns before exporting is critical.",
+      },
+    ],
+  },
+  housecallpro: {
+    label: "HouseCall Pro",
+    color: "text-indigo-700 dark:text-indigo-400",
+    borderColor: "border-indigo-200 dark:border-indigo-800",
+    bgColor: "bg-indigo-50 dark:bg-indigo-950/30",
+    emailNote:
+      "HouseCall Pro emails your exports. Watch for an email from notifications@housecallpro.com — check spam if it doesn't arrive within a few minutes.",
+    files: [
+      {
+        label: "Customer Export",
+        nav: "Customers → Actions → Export",
+        required: true,
+        steps: [
+          'Click "Customers" in the navigation bar at the top of your HCP account',
+          'Click the "Actions" button on the right side of your screen',
+          'Select "Export" from the drop-down',
+          "Confirm your email address and click the blue Send File button",
+          "Wait for the email from notifications@housecallpro.com, download the CSV attachment",
+          "Upload that file here",
+        ],
+        tip: "HCP emails the file — usually arrives within a few minutes. Check spam if it doesn't show up.",
+      },
+      {
+        label: "Jobs Export",
+        nav: "Customers → Jobs → Actions → Export",
+        required: true,
+        steps: [
+          'Click "Customers" in the navigation bar at the top of your HCP account',
+          'Click "Jobs" from the menu on the left',
+          'Click the "Actions" button on the right side of your screen',
+          'Select "Export" from the drop-down',
+          "Verify your email address and click Send File",
+          "Wait for the email from notifications@housecallpro.com, download the CSV attachment",
+          "Upload that file here",
+        ],
+        tip: "Grab both exports before coming back to upload — they both arrive via email.",
+      },
+    ],
+  },
+};
+
+// ── Client-side CSV parser (re-used from wizard pattern) ──────────────────────
+
+function parseCSVSimple(text: string): { headers: string[]; rows: string[][] } {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lines.length === 0) return { headers: [], rows: [] };
+
+  const parseLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (inQuotes) {
+        if (char === '"' && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else if (char === '"') {
+          inQuotes = false;
+        } else {
+          current += char;
+        }
+      } else {
+        if (char === '"') {
+          inQuotes = true;
+        } else if (char === ",") {
+          result.push(current.trim());
+          current = "";
+        } else if (char === "\t") {
+          result.push(current.trim());
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+    }
+    result.push(current.trim());
+    return result;
+  };
+
+  const firstLine = lines[0];
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+  const commaCount = (firstLine.match(/,/g) || []).length;
+
+  if (tabCount > commaCount) {
+    const parseTabLine = (line: string) =>
+      line.split("\t").map((c) => c.trim().replace(/^"|"$/g, ""));
+    return { headers: parseTabLine(lines[0]), rows: lines.slice(1).map(parseTabLine) };
+  }
+
+  return { headers: parseLine(lines[0]), rows: lines.slice(1).map(parseLine) };
+}
+
+// ── Platform detection from merged headers ────────────────────────────────────
+
+function detectPlatformFromHeaders(headers: string[]): TransferPlatform {
+  const normalized = new Set(headers.map((h) => h.toLowerCase().trim()));
+  if (normalized.has("job description") && normalized.has("job amount")) return "housecallpro";
+  if (normalized.has("job description") && normalized.has("customer name")) return "housecallpro";
+  if (
+    normalized.has("subs. name") ||
+    normalized.has("cleanup frequency") ||
+    normalized.has("subs name")
+  )
+    return "sweepandgo";
+  if (
+    normalized.has("j-id") ||
+    (normalized.has("client first name") && normalized.has("property street 1"))
+  )
+    return "jobber";
+  return "generic";
+}
+
+// ── Multi-file client-side merge ──────────────────────────────────────────────
+
+function normalizeKey(firstName: string, lastName: string, street: string): string {
+  const clean = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  return `${clean(firstName)}|${clean(lastName)}|${clean(street)}`;
+}
+
+async function mergeUploadedFiles(files: File[]): Promise<{
+  mergedHeaders: string[];
+  mergedRows: string[][];
+  detectedPlatform: TransferPlatform;
+  fileName: string;
+}> {
+  const parsed: Array<{ headers: string[]; rows: string[][] }> = [];
+
+  for (const file of files) {
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+    parsed.push(parseCSVSimple(text));
+  }
+
+  if (parsed.length === 0)
+    return { mergedHeaders: [], mergedRows: [], detectedPlatform: "generic", fileName: "" };
+  if (parsed.length === 1) {
+    const { headers, rows } = parsed[0];
+    return {
+      mergedHeaders: headers,
+      mergedRows: rows,
+      detectedPlatform: detectPlatformFromHeaders(headers),
+      fileName: files[0].name,
+    };
+  }
+
+  // Union all headers (preserve first-seen order)
+  const allHeaders: string[] = [];
+  const headerSet = new Set<string>();
+  for (const { headers } of parsed) {
+    for (const h of headers) {
+      const key = h.toLowerCase().trim();
+      if (!headerSet.has(key)) {
+        headerSet.add(key);
+        allHeaders.push(h);
+      }
+    }
+  }
+
+  // Build index maps per file
+  const fileMaps = parsed.map(({ headers }) => {
+    const map: Record<string, number> = {};
+    headers.forEach((h, i) => {
+      map[h.toLowerCase().trim()] = i;
+    });
+    return map;
+  });
+
+  // Detect name/address columns in each file for join key
+  const nameFirstAliases = [
+    "first name",
+    "firstname",
+    "first_name",
+    "client first name",
+    "fname",
+    "customer first name",
+  ];
+  const nameLastAliases = [
+    "last name",
+    "lastname",
+    "last_name",
+    "client last name",
+    "lname",
+    "customer last name",
+  ];
+  const streetAliases = [
+    "address",
+    "street address",
+    "property street 1",
+    "street",
+    "service address",
+    "address line 1",
+  ];
+
+  function findColIdx(map: Record<string, number>, aliases: string[]): number {
+    for (const a of aliases) {
+      if (map[a] !== undefined) return map[a];
+    }
+    return -1;
+  }
+
+  // Produce rows from each file with all merged headers
+  const fileRows = parsed.map(({ rows }, fi) => {
+    const fileMap = fileMaps[fi];
+    return rows.map((row) => {
+      return allHeaders.map((h) => {
+        const idx = fileMap[h.toLowerCase().trim()];
+        return idx !== undefined ? (row[idx] ?? "") : "";
+      });
+    });
+  });
+
+  // Attempt row joining on primary file (first) against secondary files
+  const primaryRows = fileRows[0];
+  const primaryMap = fileMaps[0];
+  const pFirstIdx = findColIdx(primaryMap, nameFirstAliases);
+  const pLastIdx = findColIdx(primaryMap, nameLastAliases);
+  const pStreetIdx = findColIdx(primaryMap, streetAliases);
+
+  // Build merge-key → row index map for primary
+  const primaryKeyMap = new Map<string, number>();
+  for (let i = 0; i < primaryRows.length; i++) {
+    const raw = parsed[0].rows[i];
+    const firstName = pFirstIdx >= 0 ? (raw[pFirstIdx] ?? "") : "";
+    const lastName = pLastIdx >= 0 ? (raw[pLastIdx] ?? "") : "";
+    const street = pStreetIdx >= 0 ? (raw[pStreetIdx] ?? "") : "";
+    const key = normalizeKey(firstName, lastName, street);
+    if (key && key !== "||") primaryKeyMap.set(key, i);
+  }
+
+  // Merged result starts with a copy of primary rows (as full-header arrays)
+  const merged = primaryRows.map((row) => [...row]);
+  const usedSecondaryRows = new Map<number, Set<number>>(); // fileIndex -> set of used row indices
+
+  for (let fi = 1; fi < parsed.length; fi++) {
+    const secMap = fileMaps[fi];
+    const secFirstIdx = findColIdx(secMap, nameFirstAliases);
+    const secLastIdx = findColIdx(secMap, nameLastAliases);
+    const secStreetIdx = findColIdx(secMap, streetAliases);
+    const usedInThisFile = new Set<number>();
+
+    for (let si = 0; si < parsed[fi].rows.length; si++) {
+      const secRaw = parsed[fi].rows[si];
+      const firstName = secFirstIdx >= 0 ? (secRaw[secFirstIdx] ?? "") : "";
+      const lastName = secLastIdx >= 0 ? (secRaw[secLastIdx] ?? "") : "";
+      const street = secStreetIdx >= 0 ? (secRaw[secStreetIdx] ?? "") : "";
+      const key = normalizeKey(firstName, lastName, street);
+
+      if (key && key !== "||" && primaryKeyMap.has(key)) {
+        // Merge into existing primary row — fill blank columns only
+        const pi = primaryKeyMap.get(key)!;
+        const secFullRow = fileRows[fi][si];
+        for (let ci = 0; ci < allHeaders.length; ci++) {
+          if (!merged[pi][ci] && secFullRow[ci]) {
+            merged[pi][ci] = secFullRow[ci];
+          }
+        }
+        usedInThisFile.add(si);
+      }
+    }
+    usedSecondaryRows.set(fi, usedInThisFile);
+  }
+
+  // Append unmatched secondary rows
+  for (let fi = 1; fi < parsed.length; fi++) {
+    const used = usedSecondaryRows.get(fi) ?? new Set();
+    for (let si = 0; si < fileRows[fi].length; si++) {
+      if (!used.has(si)) {
+        merged.push([...fileRows[fi][si]]);
+      }
+    }
+  }
+
+  const fileName = files.map((f) => f.name).join(" + ");
+  return {
+    mergedHeaders: allHeaders,
+    mergedRows: merged,
+    detectedPlatform: detectPlatformFromHeaders(allHeaders),
+    fileName,
+  };
+}
+
+// ── Accordion help section ────────────────────────────────────────────────────
+
+function ExportInstructionsAccordion() {
+  const [openPlatform, setOpenPlatform] = useState<string | null>(null);
+  const [openFileIdx, setOpenFileIdx] = useState<Record<string, number | null>>({});
+
+  const platforms = Object.entries(EXPORT_INSTRUCTIONS) as Array<
+    [
+      keyof typeof EXPORT_INSTRUCTIONS,
+      (typeof EXPORT_INSTRUCTIONS)[keyof typeof EXPORT_INSTRUCTIONS],
+    ]
+  >;
+
+  return (
+    <div
+      className="rounded-lg border border-border bg-muted/30"
+      data-testid="export-instructions-accordion"
+    >
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+        onClick={() => setOpenPlatform(openPlatform ? null : platforms[0][0])}
+        data-testid="button-toggle-instructions"
+      >
+        <span>Not sure what to export? Get step-by-step instructions</span>
+        <ArrowRight className={`h-4 w-4 transition-transform ${openPlatform ? "rotate-90" : ""}`} />
+      </button>
+
+      {openPlatform !== null && (
+        <div className="border-t border-border px-4 pb-4 pt-3 space-y-2">
+          <div className="flex flex-wrap gap-2 mb-3">
+            {platforms.map(([key, cfg]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setOpenPlatform(key);
+                  setOpenFileIdx({});
+                }}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  openPlatform === key
+                    ? `${cfg.bgColor} ${cfg.color} ${cfg.borderColor}`
+                    : "border-border text-muted-foreground hover:border-primary/40"
+                }`}
+                data-testid={`button-instructions-tab-${key}`}
+              >
+                {cfg.label}
+              </button>
+            ))}
+          </div>
+
+          {platforms.map(([key, cfg]) => {
+            if (openPlatform !== key) return null;
+            return (
+              <div key={key} className="space-y-2">
+                {"emailNote" in cfg && cfg.emailNote && (
+                  <div
+                    className={`text-xs p-2.5 rounded-md border ${cfg.bgColor} ${cfg.borderColor} ${cfg.color}`}
+                  >
+                    {cfg.emailNote}
+                  </div>
+                )}
+                {cfg.files.map((file, fi) => {
+                  const fileKey = `${key}-${fi}`;
+                  const isOpen = openFileIdx[key] === fi;
+                  return (
+                    <div key={fi} className="rounded-md border border-border overflow-hidden">
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-muted/50 transition-colors"
+                        onClick={() =>
+                          setOpenFileIdx((prev) => ({
+                            ...prev,
+                            [key]: prev[key] === fi ? null : fi,
+                          }))
+                        }
+                        data-testid={`button-instructions-file-${fileKey}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold">{file.label}</span>
+                          {file.required ? (
+                            <span className="text-xs text-destructive font-medium">required</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">optional</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-mono ${cfg.color} hidden sm:inline`}>
+                            {file.nav}
+                          </span>
+                          <ArrowRight
+                            className={`h-3 w-3 text-muted-foreground flex-shrink-0 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                          />
+                        </div>
+                      </button>
+                      {isOpen && (
+                        <div className="px-3 pb-3 pt-1 border-t border-border bg-muted/20 space-y-2">
+                          <ol className="space-y-1.5">
+                            {file.steps.map((step, si) => (
+                              <li key={si} className="flex gap-2 text-xs text-muted-foreground">
+                                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-bold mt-0.5">
+                                  {si + 1}
+                                </span>
+                                <span>{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                          <div
+                            className={`text-xs italic p-2 rounded border ${cfg.bgColor} ${cfg.borderColor} ${cfg.color}`}
+                          >
+                            {file.tip}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── TransferTab ───────────────────────────────────────────────────────────────
+
 function TransferTab() {
   const { toast } = useToast();
-  const [wizardPlatform, setWizardPlatform] = useState<
-    "sweepandgo" | "jobber" | "generic" | "googlesheet" | null
-  >(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [preloaded, setPreloaded] = useState<PreloadedMappings | null>(null);
+  const [wizardPlatform, setWizardPlatform] = useState<TransferPlatform>("generic");
   const [wizardStarted, setWizardStarted] = useState(false);
 
-  if (!wizardStarted) {
-    return (
-      <div className="space-y-6" data-testid="transfer-platform-select">
-        <Alert>
-          <ArrowRightLeft className="h-4 w-4" />
-          <AlertTitle>Transfer Your Data</AlertTitle>
-          <AlertDescription>
-            Select the software you are coming from. We'll guide you through every step — from
-            export to route preview.
-          </AlertDescription>
-        </Alert>
+  const handleFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const csvFiles = Array.from(files).filter(
+        (f) => f.name.toLowerCase().endsWith(".csv") || f.type === "text/csv"
+      );
+      if (csvFiles.length === 0) {
+        toast({
+          title: "No CSV files found",
+          description: "Please upload one or more .csv files.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSelectedFiles(csvFiles);
+      setAnalyzeError(null);
+      setAnalyzing(true);
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            {
-              value: "sweepandgo" as const,
-              icon: "S&G",
-              label: "Sweep & Go",
-              description: "Import customers from Sweep & Go",
-              color: "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400",
-              testId: "card-platform-sweepandgo",
-            },
-            {
-              value: "jobber" as const,
-              icon: "J",
-              label: "Jobber",
-              description: "Import clients from Jobber",
-              color: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400",
-              testId: "card-platform-jobber",
-            },
-            {
-              value: "googlesheet" as const,
-              icon: "GS",
-              label: "Google Sheets",
-              description: "Paste a Google Sheet link directly",
-              color: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400",
-              testId: "card-platform-googlesheet",
-            },
-            {
-              value: "generic" as const,
-              icon: "CSV",
-              label: "Other / CSV",
-              description: "Upload any customer CSV",
-              color: "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300",
-              testId: "card-platform-generic",
-            },
-          ].map((p) => (
-            <Card
-              key={p.value}
-              className="cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => {
-                setWizardPlatform(p.value);
-                setWizardStarted(true);
-              }}
-              data-testid={p.testId}
-            >
-              <CardHeader className="text-center pb-2">
-                <div
-                  className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-2 ${p.color}`}
-                >
-                  <span className="text-sm font-bold">{p.icon}</span>
-                </div>
-                <CardTitle className="text-base">{p.label}</CardTitle>
-              </CardHeader>
-              <CardContent className="text-center">
-                <p className="text-xs text-muted-foreground">{p.description}</p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-3"
-                  data-testid={`button-select-${p.value}`}
-                >
-                  Start Wizard <ArrowRight className="h-3 w-3 ml-1" />
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+      try {
+        const { mergedHeaders, mergedRows, detectedPlatform, fileName } =
+          await mergeUploadedFiles(csvFiles);
+
+        const sampleRows = mergedRows.slice(0, 25);
+
+        const res = await apiRequest("POST", "/api/imports/ai-map", {
+          headers: mergedHeaders,
+          sampleRows,
+          targetSchema: "contacts",
+        });
+
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(body || "AI mapping failed");
+        }
+
+        const mappingResult: MappingResult = await res.json();
+
+        const initialMappings: Record<string, string> = {};
+        for (const m of mappingResult.mappings) {
+          initialMappings[m.internalField] = m.csvColumn;
+        }
+
+        setPreloaded({
+          headers: mergedHeaders,
+          rows: mergedRows,
+          fileName,
+          mappingResult,
+          initialMappings,
+          transformations: mappingResult.transformations,
+        });
+        setWizardPlatform(detectedPlatform);
+        setWizardStarted(true);
+      } catch (err) {
+        setAnalyzeError(
+          err instanceof Error ? err.message : "Something went wrong analyzing your files."
+        );
+      } finally {
+        setAnalyzing(false);
+      }
+    },
+    [toast]
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      handleFiles(e.dataTransfer.files);
+    },
+    [handleFiles]
+  );
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files) handleFiles(e.target.files);
+    },
+    [handleFiles]
+  );
+
+  const reset = useCallback(() => {
+    setSelectedFiles([]);
+    setAnalyzeError(null);
+    setPreloaded(null);
+    setWizardStarted(false);
+    setWizardPlatform("generic");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  if (wizardStarted && preloaded) {
+    return (
+      <ImportWizard
+        targetSchema="contacts"
+        initialPlatform={wizardPlatform === "housecallpro" ? "generic" : wizardPlatform}
+        preloadedMappings={preloaded}
+        onComplete={(result) => {
+          toast({
+            title: "Transfer Complete",
+            description: `${result.importedRows} contacts imported successfully.`,
+          });
+          queryClient.invalidateQueries({ queryKey: ["/api/imports"] });
+          reset();
+        }}
+        onCancel={reset}
+      />
     );
   }
 
   return (
-    <ImportWizard
-      targetSchema="contacts"
-      initialPlatform={wizardPlatform}
-      onComplete={(result) => {
-        toast({
-          title: "Transfer Complete",
-          description: `${result.importedRows} contacts imported successfully.`,
-        });
-        queryClient.invalidateQueries({ queryKey: ["/api/imports"] });
-        setWizardStarted(false);
-        setWizardPlatform(null);
-      }}
-      onCancel={() => {
-        setWizardStarted(false);
-        setWizardPlatform(null);
-      }}
-    />
+    <div className="space-y-5" data-testid="transfer-upload-zone">
+      {/* Drop zone */}
+      <div
+        className={`relative rounded-xl border-2 border-dashed transition-colors cursor-pointer ${
+          dragOver
+            ? "border-primary bg-primary/5"
+            : "border-border hover:border-primary/50 hover:bg-muted/30"
+        }`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => !analyzing && fileInputRef.current?.click()}
+        data-testid="dropzone-transfer"
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          multiple
+          className="hidden"
+          onChange={handleInputChange}
+          data-testid="input-transfer-files"
+        />
+
+        <div className="flex flex-col items-center justify-center py-12 px-6 text-center gap-3">
+          {analyzing ? (
+            <>
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <div>
+                <p className="font-medium text-sm">Analyzing your files...</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Merging and mapping columns with AI. This takes a few seconds.
+                </p>
+              </div>
+            </>
+          ) : selectedFiles.length > 0 && !analyzeError ? (
+            <>
+              <CheckCircle2 className="h-8 w-8 text-primary" />
+              <div>
+                {selectedFiles.map((f) => (
+                  <p key={f.name} className="text-sm font-medium">
+                    {f.name}
+                  </p>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <Upload className="h-8 w-8 text-muted-foreground" />
+              <div>
+                <p className="font-medium text-sm">Drop your CSV files here, or click to browse</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Upload one file or multiple — we'll merge them automatically
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-1"
+                data-testid="button-browse-files"
+              >
+                Browse files
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Error state */}
+      {analyzeError && (
+        <Alert variant="destructive" data-testid="alert-analyze-error">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Analysis failed</AlertTitle>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>{analyzeError}</span>
+            <Button variant="outline" size="sm" onClick={reset} data-testid="button-try-again">
+              Try again
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Export instructions accordion */}
+      <ExportInstructionsAccordion />
+    </div>
   );
 }
 
