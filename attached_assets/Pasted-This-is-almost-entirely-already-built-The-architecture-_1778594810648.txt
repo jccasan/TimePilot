@@ -1,0 +1,39 @@
+This is almost entirely already built. The architecture we want exists — we just need to change the entry point.
+Right now the flow is:
+Pick platform card → wizard starts → upload file → ai-map
+We want:
+Drop files → ai-map → wizard continues from step 2
+The platform cards become a help dropdown. The multi-file merge is the only real new piece since ai-map expects a single flat input.
+Here's what I'd tell Replit:
+
+Task: Rebuild the TransferTab entry point — upload-first, platform-optional
+What changes:
+Only TransferTab in migration-page.tsx. The ImportWizard itself is untouched. The other three tabs (Invoices, Documents, History) are untouched.
+New TransferTab flow:
+
+Landing state — a single drop zone that accepts multiple files simultaneously. No platform selection required. Below the drop zone, a collapsed accordion or dropdown labeled "Not sure what to export? Get instructions for your platform" — opens to show export instructions for Sweep & Go, Jobber, and HouseCall Pro as expandable sections. This is help content, not a gate.
+On file drop/select — parse each CSV client-side (headers + up to 25 sample rows per file). If multiple files are uploaded, merge them into a single flat column set before proceeding: union all headers, align rows by matching on a name+address key where possible, append unmatched rows. Pass the merged headers and sample rows to POST /api/imports/ai-map with targetSchema: "contacts".
+On ai-map response — mount the ImportWizard at step 2 (the mapping review UI) with the ai-map result pre-loaded. Skip step 1 entirely since the file is already parsed. The user reviews and corrects the mapping, then the wizard continues normally through steps 3–7 as today.
+Platform detection — after parsing headers, do a lightweight client-side check to set initialPlatform for the wizard:
+
+Headers contain "Job description" + "Job amount" → "housecallpro"
+Headers contain "J-ID" or "Subs. Name" or "Cleanup Frequency" → "jobber" or "sweepandgo" respectively
+Otherwise → "generic"
+This doesn't gate anything — it just helps the wizard's later steps behave correctly.
+
+
+
+What to preserve from current TransferTab:
+
+The four platform cards can be removed entirely or repurposed as the help dropdown content
+The initialPlatform prop still gets passed to ImportWizard, just derived from detection instead of card selection
+
+What NOT to touch:
+
+import-wizard.tsx — protected, no changes
+Steps 2–7 of the wizard — unchanged
+/api/imports/ai-map endpoint — unchanged
+Invoices, Documents, History tabs — unchanged
+
+The only genuinely new logic:
+Client-side multi-file merge before calling ai-map. This is the one piece that doesn't exist yet. It should be a utility function in the TransferTab component — not a new API endpoint. Keep it simple: union headers, attempt name+address join for rows that match, append remainder as separate rows with blank columns for the missing file's fields.
