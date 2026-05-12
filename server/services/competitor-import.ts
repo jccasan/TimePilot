@@ -70,33 +70,10 @@ const SWEEPANDGO_HEADERS: Record<string, string[]> = {
 
 const HOUSECALLPRO_HEADERS: Record<string, string[]> = {
   // Customer export columns
-  firstName: [
-    "first name",
-    "firstname",
-    "first_name",
-    "fname",
-    "customer first name",
-  ],
-  lastName: [
-    "last name",
-    "lastname",
-    "last_name",
-    "lname",
-    "customer last name",
-  ],
-  fullName: [
-    "customer name",
-    "full name",
-    "name",
-    "client name",
-    "customer",
-  ],
-  email: [
-    "email",
-    "e-mail",
-    "email address",
-    "customer email",
-  ],
+  firstName: ["first name", "firstname", "first_name", "fname", "customer first name"],
+  lastName: ["last name", "lastname", "last_name", "lname", "customer last name"],
+  fullName: ["customer name", "full name", "name", "client name", "customer"],
+  email: ["email", "e-mail", "email address", "customer email"],
   phone: [
     "phone",
     "phone number",

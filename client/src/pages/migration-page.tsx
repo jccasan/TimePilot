@@ -726,9 +726,7 @@ function MergeSummaryCard({
           <div className="flex items-center gap-1.5">
             <FileSpreadsheet className="h-3.5 w-3.5" />
             <span>
-              <span className="font-semibold text-foreground">
-                {pending.mergedHeaders.length}
-              </span>{" "}
+              <span className="font-semibold text-foreground">{pending.mergedHeaders.length}</span>{" "}
               columns
             </span>
           </div>
