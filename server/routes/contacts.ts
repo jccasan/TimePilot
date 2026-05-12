@@ -61,7 +61,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
           c.email             AS "email",
           c.phone             AS "phone",
           c.street_address    AS "streetAddress",
-          c.address2          AS "address2",
+          c.address_2         AS "address2",
           COALESCE(NULLIF(c.city,''),  p.city)          AS "city",
           COALESCE(NULLIF(c.state,''), p.state)         AS "state",
           COALESCE(NULLIF(c.zip_code,''), p.zip_code)   AS "zipCode",
