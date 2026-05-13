@@ -146,7 +146,7 @@ export default function CrmDocuments() {
     createMutation.mutate({
       name: fd.get("name") as string,
       type: (fd.get("type") as string) || "other",
-      url: (fd.get("url") as string) || undefined,
+      url: (fd.get("url") as string) || "",
       size: 0,
     });
   }

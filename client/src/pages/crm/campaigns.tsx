@@ -140,8 +140,7 @@ export default function CrmCampaigns() {
     createMutation.mutate({
       name: fd.get("name") as string,
       subject: fd.get("subject") as string,
-      bodyHtml: fd.get("body") as string,
-      type: (fd.get("type") as string) || "email",
+      body: (fd.get("body") as string) || "",
     });
   }
 

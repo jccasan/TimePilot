@@ -157,8 +157,8 @@ export default function CrmAutomations() {
     createMutation.mutate({
       name: fd.get("name") as string,
       description: (fd.get("description") as string) || undefined,
-      triggerType: fd.get("triggerType") as string,
-      triggerConditions: {},
+      trigger: fd.get("triggerType") as string,
+      conditions: {},
       actions: [{ type: fd.get("actionType") as string, config: {} }],
       active: true,
     });

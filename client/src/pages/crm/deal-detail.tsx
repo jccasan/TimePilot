@@ -80,7 +80,7 @@ export default function CrmDealDetail() {
 
   const noteMutation = useMutation({
     mutationFn: async (body: string) => {
-      const res = await apiRequest("POST", "/api/crm/notes", { body, dealId: id });
+      const res = await apiRequest("POST", "/api/crm/notes", { content: body, dealId: id });
       return res.json();
     },
     onSuccess: () => {

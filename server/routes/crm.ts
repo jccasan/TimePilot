@@ -1251,6 +1251,12 @@ export function registerCrmRoutes(app: Express) {
   });
 
   app.post("/api/crm/sequences/:id/steps", async (req, res) => {
+    const c = getCompanyId(req);
+    const [seq] = await db
+      .select()
+      .from(crmSequences)
+      .where(and(eq(crmSequences.id, req.params.id), eq(crmSequences.companyId, c)));
+    if (!seq) return res.status(403).json({ message: "Forbidden" });
     const parsed = insertCrmSequenceStepSchema.safeParse({
       ...req.body,
       sequenceId: req.params.id,
