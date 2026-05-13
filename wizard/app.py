@@ -87,11 +87,13 @@ def _require_admin():
 
 
 def _is_wizard_or_admin_authed() -> bool:
-    """Return True if the request has a valid wizard key OR valid admin auth."""
-    wizard_key = (
-        request.headers.get("X-Wizard-Key", "")
-        or request.args.get("key", "")
-    )
+    """Return True if the request has a valid wizard key OR valid admin auth.
+
+    Wizard keys are intentionally NOT accepted via URL query parameters to
+    prevent secret leakage through browser history, proxy logs, and Referer
+    headers sent to third-party resources.
+    """
+    wizard_key = request.headers.get("X-Wizard-Key", "")
     if wizard_key and _check_wizard_key(wizard_key):
         return True
     return _is_admin_authed()
@@ -120,11 +122,12 @@ def _is_tenant_or_admin_authed(phone: str) -> bool:
 
     This enforces tenant isolation: a key issued for tenant A cannot be used to
     access or mutate data belonging to tenant B.
+
+    Tenant keys are intentionally NOT accepted via URL query parameters to
+    prevent secret leakage through browser history, proxy logs, and Referer
+    headers sent to third-party resources.
     """
-    provided = (
-        request.headers.get("X-Wizard-Key", "")
-        or request.args.get("key", "")
-    )
+    provided = request.headers.get("X-Wizard-Key", "")
     if provided and _check_tenant_key(phone, provided):
         return True
     return _is_admin_authed()
