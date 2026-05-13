@@ -1801,19 +1801,32 @@ function DocumentSigningSection({ contactId }: { contactId: string }) {
     },
   });
 
-  const cancelMutation = useMutation({
+  const resendMutation = useMutation({
     mutationFn: async (requestId: string) => {
-      const res = await apiRequest(
-        "DELETE",
-        `/api/contacts/${contactId}/document-requests/${requestId}`
-      );
-      if (!res.ok) throw new Error("Failed to cancel");
+      const res = await apiRequest("POST", `/api/document-requests/${requestId}/resend`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to resend");
+      }
+    },
+    onSuccess: () => {
+      toast({ title: "Signing email resent" });
+    },
+    onError: (err: Error) => {
+      toast({ title: err.message, variant: "destructive" });
+    },
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const res = await apiRequest("PATCH", `/api/document-requests/${requestId}/revoke`);
+      if (!res.ok) throw new Error("Failed to revoke");
     },
     onSuccess: () => {
       refetch();
-      toast({ title: "Signing request cancelled" });
+      toast({ title: "Signing request revoked" });
     },
-    onError: () => toast({ title: "Failed to cancel", variant: "destructive" }),
+    onError: () => toast({ title: "Failed to revoke", variant: "destructive" }),
   });
 
   const activeRequest = requests.find((r) => r.status === "pending");
@@ -1855,7 +1868,7 @@ function DocumentSigningSection({ contactId }: { contactId: string }) {
           </div>
         ) : activeRequest ? (
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50 dark:bg-amber-950/20">
+            <div className="flex items-start justify-between p-3 border rounded-lg bg-amber-50 dark:bg-amber-950/20">
               <div>
                 <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                   Pending Signature
@@ -1867,7 +1880,7 @@ function DocumentSigningSection({ contactId }: { contactId: string }) {
                     : "recently"}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap justify-end">
                 <Button
                   size="sm"
                   variant="outline"
@@ -1879,23 +1892,46 @@ function DocumentSigningSection({ contactId }: { contactId: string }) {
                 </Button>
                 <Button
                   size="sm"
+                  variant="outline"
+                  data-testid="button-resend-signing-request"
+                  disabled={resendMutation.isPending}
+                  onClick={() => resendMutation.mutate(activeRequest.id)}
+                >
+                  <Send className="h-3.5 w-3.5 mr-1" />
+                  {resendMutation.isPending ? "Sending..." : "Resend Email"}
+                </Button>
+                <Button
+                  size="sm"
                   variant="ghost"
                   className="text-destructive hover:text-destructive"
-                  data-testid="button-cancel-signing-request"
-                  disabled={cancelMutation.isPending}
-                  onClick={() => cancelMutation.mutate(activeRequest.id)}
+                  data-testid="button-revoke-signing-request"
+                  disabled={revokeMutation.isPending}
+                  onClick={() => revokeMutation.mutate(activeRequest.id)}
                 >
-                  Cancel
+                  {revokeMutation.isPending ? "Revoking..." : "Revoke"}
                 </Button>
               </div>
             </div>
           </div>
         ) : completedRequests.length > 0 ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
-              <CheckCircle className="h-4 w-4" />
-              All documents signed
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+                <CheckCircle className="h-4 w-4" />
+                All documents signed
+              </div>
+              <span
+                className="inline-flex items-center rounded-full border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-800 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400"
+                data-testid="badge-signing-completed"
+              >
+                Completed
+              </span>
             </div>
+            {completedRequests[0].completedAt && (
+              <p className="text-xs text-muted-foreground">
+                Completed on {new Date(completedRequests[0].completedAt).toLocaleDateString()}
+              </p>
+            )}
             {completedRequests[0].signatures.length > 0 && (
               <div className="space-y-1">
                 {completedRequests[0].signatures.map((sig) => (

@@ -235,6 +235,87 @@ export async function registerDocumentsRoutes(app: Express): Promise<void> {
     }
   );
 
+  // ─── Resend / Revoke actions ───────────────────────────────────────────────
+
+  app.post(
+    "/api/document-requests/:id/resend",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const id = p(req.params.id);
+        const docRequest = await storage.getDocumentRequestById(id, companyId);
+        if (!docRequest) return res.status(404).json({ error: "Request not found" });
+        if (docRequest.status !== "pending") {
+          return res.status(400).json({ error: "Only pending requests can be resent" });
+        }
+
+        const contact = await storage.getContact(docRequest.contactId, companyId);
+        if (!contact) return res.status(404).json({ error: "Contact not found" });
+        if (!contact.email) {
+          return res.status(400).json({ error: "Contact has no email address" });
+        }
+
+        const company = await storage.getCompany(companyId);
+        const baseUrl = process.env.APP_BASE_URL || `https://${req.hostname}`;
+        const signUrl = `${baseUrl}/sign/${docRequest.token}`;
+
+        await sendEmail({
+          companyId,
+          contactId: docRequest.contactId,
+          to: contact.email as string,
+          subject: `Please sign your documents from ${company?.name || "your service provider"}`,
+          senderName: company?.name || undefined,
+          replyTo: company?.email || undefined,
+          text: `Hi ${contact.firstName || "there"},\n\nThis is a reminder to please review and sign the required documents at the link below:\n\n${signUrl}\n\nThis link is unique to you. Thank you!`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">${company?.name || "Document Signing"}</h1>
+              </div>
+              <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none;">
+                <p>Hi ${contact.firstName || "there"},</p>
+                <p>This is a reminder to please review and sign the required documents using the button below.</p>
+                <div style="text-align: center; margin: 28px 0;">
+                  <a href="${signUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                    Review & Sign Documents
+                  </a>
+                </div>
+                <p style="color: #6b7280; font-size: 14px;">This link is unique to you. If you have any questions, please reply to this email.</p>
+              </div>
+            </div>
+          `,
+        });
+
+        res.json({ success: true });
+      } catch (err) {
+        console.error("[documents] resend error:", err);
+        res.status(500).json({ error: "Failed to resend signing request" });
+      }
+    }
+  );
+
+  app.patch(
+    "/api/document-requests/:id/revoke",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const id = p(req.params.id);
+        const docRequest = await storage.getDocumentRequestById(id, companyId);
+        if (!docRequest) return res.status(404).json({ error: "Request not found" });
+        if (docRequest.status !== "pending") {
+          return res.status(400).json({ error: "Only pending requests can be revoked" });
+        }
+        const updated = await storage.updateDocumentRequest(id, { status: "cancelled" });
+        res.json(updated);
+      } catch (err) {
+        console.error("[documents] revoke error:", err);
+        res.status(500).json({ error: "Failed to revoke signing request" });
+      }
+    }
+  );
+
   // ─── Public signing endpoints (token-authenticated) ────────────────────────
 
   app.get("/api/public/sign/:token", async (req: Request, res: Response) => {
