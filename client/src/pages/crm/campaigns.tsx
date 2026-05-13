@@ -365,6 +365,8 @@ export default function CrmCampaigns() {
                     name: fd.get("name") as string,
                     subject: fd.get("subject") as string,
                     body: (fd.get("body") as string) || "",
+                    fromEmail: (fd.get("fromEmail") as string) || null,
+                    fromName: (fd.get("fromName") as string) || null,
                   },
                 });
               }}
@@ -396,6 +398,27 @@ export default function CrmCampaigns() {
                   defaultValue={editCampaign.body ?? ""}
                   data-testid="input-crm-edit-campaign-body"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>From Email</Label>
+                  <Input
+                    name="fromEmail"
+                    type="email"
+                    placeholder="sender@example.com"
+                    defaultValue={editCampaign.fromEmail ?? ""}
+                    data-testid="input-crm-edit-campaign-from-email"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>From Name</Label>
+                  <Input
+                    name="fromName"
+                    placeholder="Company Name"
+                    defaultValue={editCampaign.fromName ?? ""}
+                    data-testid="input-crm-edit-campaign-from-name"
+                  />
+                </div>
               </div>
               <Button
                 type="submit"

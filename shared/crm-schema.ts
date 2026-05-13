@@ -344,6 +344,8 @@ export const crmEmailCampaigns = pgTable("crm_email_campaigns", {
   name: text("name").notNull(),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
+  fromEmail: text("from_email"),
+  fromName: text("from_name"),
   segmentRules: jsonb("segment_rules").default({}),
   status: text("status").notNull().default("draft"),
   sentAt: timestamp("sent_at"),
