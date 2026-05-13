@@ -317,6 +317,34 @@ export async function registerDocumentsRoutes(app: Express): Promise<void> {
     }
   );
 
+  // ─── Staff certificate download (session-authenticated) ────────────────────
+
+  app.get(
+    "/api/document-requests/:id/certificate",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const id = p(req.params.id);
+        const docRequest = await storage.getDocumentRequestById(id, companyId);
+        if (!docRequest) return res.status(404).json({ error: "Request not found" });
+        if (docRequest.status !== "completed" || !docRequest.certificateUrl) {
+          return res.status(404).json({ error: "Certificate not available" });
+        }
+        const objectFile = await objStorage.getObjectEntityFile(docRequest.certificateUrl);
+        res.setHeader("Content-Disposition", 'inline; filename="signed-document-certificate.pdf"');
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Cache-Control", "private, max-age=0");
+        await objStorage.downloadObject(objectFile, res, 0);
+      } catch (err) {
+        console.error("[documents] staff certificate download error:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Failed to download certificate" });
+        }
+      }
+    }
+  );
+
   // ─── Public signing endpoints (token-authenticated) ────────────────────────
 
   app.get("/api/public/sign/:token", async (req: Request, res: Response) => {

@@ -115,6 +115,7 @@ import {
   RefreshCw,
   Sparkles,
   Users,
+  Download,
 } from "lucide-react";
 import {
   compressMessageAttachment,
@@ -1755,22 +1756,7 @@ function DocumentSigningSection({ contactId }: { contactId: string }) {
     data: requests = [],
     isLoading,
     refetch,
-  } = useQuery<
-    Array<{
-      id: string;
-      status: string;
-      sentAt: string | null;
-      completedAt: string | null;
-      token: string;
-      createdAt: string;
-      signatures: Array<{
-        id: string;
-        templateId: string;
-        signerName: string;
-        signedAt: string;
-      }>;
-    }>
-  >({
+  } = useQuery<Array<DocumentRequest>>({
     queryKey: ["/api/contacts", contactId, "document-requests"],
     queryFn: async () => {
       const { getAuthHeaders } = await import("@/lib/queryClient");
@@ -1782,6 +1768,22 @@ function DocumentSigningSection({ contactId }: { contactId: string }) {
       return res.json();
     },
   });
+
+  type DocumentRequest = {
+    id: string;
+    status: string;
+    sentAt: string | null;
+    completedAt: string | null;
+    token: string;
+    createdAt: string;
+    certificateUrl: string | null;
+    signatures: Array<{
+      id: string;
+      templateId: string;
+      signerName: string;
+      signedAt: string;
+    }>;
+  };
 
   const sendMutation = useMutation({
     mutationFn: async () => {
@@ -1945,6 +1947,18 @@ function DocumentSigningSection({ contactId }: { contactId: string }) {
                   </div>
                 ))}
               </div>
+            )}
+            {completedRequests[0].certificateUrl && (
+              <a
+                href={`/api/document-requests/${completedRequests[0].id}/certificate`}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="link-download-certificate"
+                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download Certificate
+              </a>
             )}
             <Button
               size="sm"
