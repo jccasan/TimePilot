@@ -293,11 +293,14 @@ export default function AdminTenants() {
     refetchInterval: 60000,
   });
 
+  const INACTIVE_STATUSES = ["cancelled", "suspended"];
+
   const filtered = useMemo(() => {
     if (!companies) return [];
-    if (!search.trim()) return companies;
+    const active = companies.filter((c) => !INACTIVE_STATUSES.includes(c.subscriptionStatus ?? ""));
+    if (!search.trim()) return active;
     const q = search.toLowerCase();
-    return companies.filter(
+    return active.filter(
       (c) =>
         c.name?.toLowerCase().includes(q) ||
         c.id?.toLowerCase().includes(q) ||
@@ -305,8 +308,14 @@ export default function AdminTenants() {
     );
   }, [companies, search]);
 
+  const cancelledCompanies = useMemo(() => {
+    if (!companies) return [];
+    return companies.filter((c) => INACTIVE_STATUSES.includes(c.subscriptionStatus ?? ""));
+  }, [companies]);
+
   const pendingCount = pendingApprovals?.length ?? 0;
   const pendingDeletionCount = pendingDeletion?.length ?? 0;
+  const cancelledCount = cancelledCompanies.length;
   const nameMatches = deleteConfirmName === deleteTarget?.name;
 
   return (
@@ -318,7 +327,7 @@ export default function AdminTenants() {
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             {companies
-              ? `${companies.length} tenant${companies.length !== 1 ? "s" : ""}`
+              ? `${filtered.length} active tenant${filtered.length !== 1 ? "s" : ""}`
               : "Loading..."}
             {pendingCount > 0 && (
               <span className="ml-2 text-amber-600 dark:text-amber-400 font-medium">
@@ -360,6 +369,14 @@ export default function AdminTenants() {
             {pendingDeletionCount > 0 && (
               <span className="ml-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
                 {pendingDeletionCount}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="cancelled" data-testid="tab-cancelled" className="relative">
+            Cancelled
+            {cancelledCount > 0 && (
+              <span className="ml-1.5 bg-slate-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
+                {cancelledCount}
               </span>
             )}
           </TabsTrigger>
@@ -685,6 +702,100 @@ export default function AdminTenants() {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="cancelled" className="mt-4">
+          {companiesLoading ? (
+            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+          ) : cancelledCompanies.length === 0 ? (
+            <div className="text-center py-12">
+              <CheckCircle className="h-10 w-10 text-green-500 mx-auto mb-3" />
+              <p className="font-medium">No cancelled accounts</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Cancelled and suspended tenants will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                {cancelledCompanies.length} cancelled or suspended account
+                {cancelledCompanies.length !== 1 ? "s" : ""}. These are hidden from the active list.
+              </p>
+              {cancelledCompanies.map((c) => {
+                const tierConfig = TIER_CONFIG[c.subscriptionTier as keyof typeof TIER_CONFIG];
+                return (
+                  <Card
+                    key={c.id}
+                    className="border-slate-200 dark:border-slate-700 opacity-80"
+                    data-testid={`card-cancelled-${c.id}`}
+                  >
+                    <CardContent className="py-3 px-4">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <Link
+                          href={`/admin/companies/${c.id}`}
+                          className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer"
+                        >
+                          <XCircle className="h-5 w-5 text-muted-foreground shrink-0" />
+                          <div className="min-w-0">
+                            <p
+                              className="font-medium truncate text-muted-foreground"
+                              data-testid={`text-cancelled-name-${c.id}`}
+                            >
+                              {c.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">{c.id}</p>
+                          </div>
+                        </Link>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <Badge
+                            className={tierColors[c.subscriptionTier] || ""}
+                            data-testid={`badge-cancelled-tier-${c.id}`}
+                          >
+                            {tierConfig?.name || c.subscriptionTier}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className="border-slate-400 text-slate-600 dark:border-slate-500 dark:text-slate-400"
+                            data-testid={`badge-cancelled-status-${c.id}`}
+                          >
+                            {c.subscriptionStatus}
+                          </Badge>
+                          {c.canceledAt && (
+                            <span className="text-xs text-muted-foreground">
+                              Cancelled{" "}
+                              {new Date(c.canceledAt).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })}
+                            </span>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDeleteTarget({ id: c.id, name: c.name });
+                              setDeleteConfirmName("");
+                              setDeleteOpen(true);
+                            }}
+                            data-testid={`button-delete-cancelled-${c.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                          <Link href={`/admin/companies/${c.id}`}>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          </Link>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>
