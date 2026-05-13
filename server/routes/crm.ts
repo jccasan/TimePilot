@@ -475,12 +475,16 @@ export function registerCrmRoutes(app: Express) {
     const [existing] = await db
       .select()
       .from(crmCompanies)
-      .where(and(eq(crmCompanies.id, req.params.id), eq(crmCompanies.companyId, getCompanyId(req))));
+      .where(
+        and(eq(crmCompanies.id, req.params.id), eq(crmCompanies.companyId, getCompanyId(req)))
+      );
     if (!existing) return res.status(404).json({ message: "Company not found" });
     await logCrmAudit(req, "delete", "company", existing.id, { name: existing.name });
     await db
       .delete(crmCompanies)
-      .where(and(eq(crmCompanies.id, req.params.id), eq(crmCompanies.companyId, getCompanyId(req))));
+      .where(
+        and(eq(crmCompanies.id, req.params.id), eq(crmCompanies.companyId, getCompanyId(req)))
+      );
     res.status(204).send();
   });
 
