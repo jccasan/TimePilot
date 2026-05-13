@@ -403,6 +403,8 @@ export interface IStorage {
   // Invoices
   getInvoice(id: string, companyId: string): Promise<Invoice | undefined>;
   getInvoiceById(id: string): Promise<Invoice | undefined>;
+  getInvoiceByPayToken(token: string): Promise<Invoice | undefined>;
+  ensureInvoicePayToken(id: string, companyId: string): Promise<string>;
   getInvoices(
     companyId: string,
     filters?: { contactId?: string; status?: string }
@@ -2079,6 +2081,23 @@ export class DatabaseStorage implements IStorage {
     return invoice;
   }
 
+  async getInvoiceByPayToken(token: string): Promise<Invoice | undefined> {
+    const [invoice] = await db.select().from(invoices).where(eq(invoices.payToken, token));
+    return invoice;
+  }
+
+  async ensureInvoicePayToken(id: string, companyId: string): Promise<string> {
+    const existing = await this.getInvoice(id, companyId);
+    if (existing?.payToken) return existing.payToken;
+    const { randomBytes } = await import("crypto");
+    const token = randomBytes(32).toString("hex");
+    await db
+      .update(invoices)
+      .set({ payToken: token })
+      .where(and(eq(invoices.id, id), eq(invoices.companyId, companyId)));
+    return token;
+  }
+
   async getInvoices(
     companyId: string,
     filters?: { contactId?: string; status?: string }
@@ -2144,7 +2163,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInvoice(data: InsertInvoice): Promise<Invoice> {
-    const [invoice] = await db.insert(invoices).values(data).returning();
+    const { randomBytes } = await import("crypto");
+    const payToken = randomBytes(32).toString("hex");
+    const [invoice] = await db
+      .insert(invoices)
+      .values({ ...data, payToken })
+      .returning();
     return invoice;
   }
 

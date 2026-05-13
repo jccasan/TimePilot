@@ -93,7 +93,8 @@ export async function sendInvoiceEmail(
         );
       }
     } else {
-      paymentUrl = `${baseUrl}/invoice/${invoice.id}/pay`;
+      const tok = invoice.payToken || (await storage.ensureInvoicePayToken(invoice.id, companyId));
+      paymentUrl = `${baseUrl}/invoice/${tok}/pay`;
     }
   }
 

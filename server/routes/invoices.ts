@@ -1099,7 +1099,10 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
                   } else {
                     // $0 invoice — link to tip page so customers can leave a tip
                     const baseUrl = getBaseUrl(req);
-                    paymentUrl = `${baseUrl}/invoice/${invoice.id}/pay`;
+                    const tok =
+                      invoice.payToken ||
+                      (await storage.ensureInvoicePayToken(invoice.id, companyId));
+                    paymentUrl = `${baseUrl}/invoice/${tok}/pay`;
                   }
                 }
 

@@ -914,6 +914,7 @@ export const invoices = pgTable(
     excludeFromReminders: boolean("exclude_from_reminders").notNull().default(false),
     lastReminderSentAt: timestamp("last_reminder_sent_at"),
     reminderCount: integer("reminder_count").notNull().default(0),
+    payToken: varchar("pay_token", { length: 64 }).unique(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -923,6 +924,7 @@ export const invoices = pgTable(
     index("idx_invoices_status").on(table.status),
     index("idx_invoices_source").on(table.source),
     index("idx_invoices_qbo_invoice").on(table.qboInvoiceId),
+    index("idx_invoices_pay_token").on(table.payToken),
     unique().on(table.companyId, table.invoiceNumber),
   ]
 );
@@ -1477,6 +1479,7 @@ export const insertVisitSchema = createInsertSchema(visits).omit({
 });
 export const insertInvoiceSchema = createInsertSchema(invoices).omit({
   id: true,
+  payToken: true,
   createdAt: true,
   updatedAt: true,
 });

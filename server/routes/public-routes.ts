@@ -658,9 +658,10 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
   // ================ Public Invoice Pay (tip-enabled checkout for sent invoices) ================
 
-  app.get("/api/public/invoices/:id", async (req: Request, res: Response) => {
+  app.get("/api/public/invoices/:token", async (req: Request, res: Response) => {
     try {
-      const invoice = await storage.getInvoiceById(p(req.params.id));
+      const token = p(req.params.token);
+      const invoice = await storage.getInvoiceByPayToken(token);
       if (!invoice || invoice.status === "draft")
         return res.status(404).json({ error: "Invoice not found" });
       const company = await storage.getCompany(invoice.companyId);
@@ -684,9 +685,10 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.post("/api/public/invoices/:id/pay", async (req: Request, res: Response) => {
+  app.post("/api/public/invoices/:token/pay", async (req: Request, res: Response) => {
     try {
-      const invoice = await storage.getInvoiceById(p(req.params.id));
+      const token = p(req.params.token);
+      const invoice = await storage.getInvoiceByPayToken(token);
       if (!invoice) return res.status(404).json({ error: "Invoice not found" });
       if (invoice.status === "draft")
         return res.status(400).json({ error: "Invoice not yet sent" });
@@ -730,8 +732,8 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
         amount: chargeAmount,
-        successUrl: `${baseUrl}/invoice/${invoice.id}/pay?paid=1`,
-        cancelUrl: `${baseUrl}/invoice/${invoice.id}/pay`,
+        successUrl: `${baseUrl}/invoice/${token}/pay?paid=1`,
+        cancelUrl: `${baseUrl}/invoice/${token}/pay`,
         tipAmount: tipAmount.toFixed(2),
         stripeConnectAccountId: connectAcct,
         tenantId: invoice.companyId,

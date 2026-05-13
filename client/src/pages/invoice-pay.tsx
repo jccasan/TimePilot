@@ -32,13 +32,13 @@ function getCurrencySymbol(currency: string): string {
   return formatted.replace(/[\d\s,.']/g, "").trim();
 }
 
-function getInvoiceIdFromPath(): string | undefined {
+function getTokenFromPath(): string | undefined {
   const match = window.location.pathname.match(/^\/invoice\/([^/]+)\/pay$/);
   return match?.[1];
 }
 
 export default function InvoicePayPage() {
-  const id = getInvoiceIdFromPath();
+  const token = getTokenFromPath();
   const { toast } = useToast();
 
   const [invoice, setInvoice] = useState<PublicInvoice | null>(null);
@@ -52,8 +52,8 @@ export default function InvoicePayPage() {
   const paid = searchParams.get("paid") === "1";
 
   useEffect(() => {
-    if (!id) return;
-    fetch(`/api/public/invoices/${id}`)
+    if (!token) return;
+    fetch(`/api/public/invoices/${token}`)
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.json()).error || "Invoice not found");
         return r.json();
@@ -61,7 +61,7 @@ export default function InvoicePayPage() {
       .then(setInvoice)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [token]);
 
   const invoiceTotal = invoice ? parseFloat(invoice.total) : 0;
   const tipValue = customTip ? parseFloat(customTip) || 0 : (selectedTip ?? 0);
@@ -71,10 +71,10 @@ export default function InvoicePayPage() {
   const fmt = (amount: number) => formatMoneyForCurrency(amount, currency);
 
   const handlePay = async () => {
-    if (!id) return;
+    if (!token) return;
     setPaying(true);
     try {
-      const res = await fetch(`/api/public/invoices/${id}/pay`, {
+      const res = await fetch(`/api/public/invoices/${token}/pay`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tipAmount: tipValue }),

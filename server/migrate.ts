@@ -809,6 +809,23 @@ export async function runStartupMigrations(): Promise<void> {
 
     console.log("[Migration] CRM tables ensured (crm_contacts, crm_deals, crm_tasks, et al.)");
 
+    // invoices.pay_token — dedicated secret for public payment links (Task #842)
+    await client.query(`
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS pay_token VARCHAR(64)
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS invoices_pay_token_unique ON invoices(pay_token) WHERE pay_token IS NOT NULL
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_invoices_pay_token ON invoices(pay_token) WHERE pay_token IS NOT NULL
+    `);
+    await client.query(`
+      UPDATE invoices
+      SET pay_token = replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '')
+      WHERE pay_token IS NULL
+    `);
+    console.log("[Migration] invoices.pay_token column backfilled and indexed");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);
