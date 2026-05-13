@@ -40,6 +40,8 @@ import {
   ClipboardList,
   Users2,
   Kanban,
+  Mail,
+  GitBranch,
 } from "lucide-react";
 import {
   Sidebar,
@@ -149,7 +151,14 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
       { title: "Deals", url: "/crm/deals", icon: DollarSign, requiresSubscription: true },
       { title: "Pipeline", url: "/crm/pipeline", icon: BarChart3, requiresSubscription: true },
       { title: "Tasks", url: "/crm/tasks", icon: ClipboardCheck, requiresSubscription: true },
-      { title: "Campaigns", url: "/crm/campaigns", icon: MessageSquare, requiresSubscription: true },
+      { title: "Emails", url: "/crm/emails", icon: Mail, requiresSubscription: true },
+      { title: "Sequences", url: "/crm/sequences", icon: GitBranch, requiresSubscription: true },
+      {
+        title: "Campaigns",
+        url: "/crm/campaigns",
+        icon: MessageSquare,
+        requiresSubscription: true,
+      },
       { title: "Reports", url: "/crm/reports", icon: TrendingUp, requiresSubscription: true },
     ],
   },

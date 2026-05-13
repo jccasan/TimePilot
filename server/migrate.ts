@@ -594,6 +594,157 @@ export async function runStartupMigrations(): Promise<void> {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // ─── CRM schema alignment: add columns missing from initial CREATE TABLE ──
+    // crm_notes: schema uses `content`, initial SQL used `body`
+    await client.query(`ALTER TABLE crm_notes ADD COLUMN IF NOT EXISTS content TEXT`);
+    await client.query(
+      `UPDATE crm_notes SET content = body WHERE content IS NULL AND body IS NOT NULL`
+    );
+
+    // crm_emails: schema requires subject/body NOT NULL and has thread_id
+    await client.query(`ALTER TABLE crm_emails ADD COLUMN IF NOT EXISTS thread_id VARCHAR`);
+    await client.query(`UPDATE crm_emails SET subject = '' WHERE subject IS NULL`);
+    await client.query(`UPDATE crm_emails SET body = '' WHERE body IS NULL`);
+
+    // crm_documents: schema uses `size` (not size_bytes) and has crm_company_id
+    await client.query(`ALTER TABLE crm_documents ADD COLUMN IF NOT EXISTS size INTEGER DEFAULT 0`);
+    await client.query(
+      `UPDATE crm_documents SET size = size_bytes WHERE size IS NULL AND size_bytes IS NOT NULL`
+    );
+    await client.query(`ALTER TABLE crm_documents ADD COLUMN IF NOT EXISTS crm_company_id VARCHAR`);
+
+    // crm_tasks: schema has crm_company_id
+    await client.query(`ALTER TABLE crm_tasks ADD COLUMN IF NOT EXISTS crm_company_id VARCHAR`);
+
+    // crm_quotes: schema uses `items` (not line_items), has currency, crm_company_id, signature columns
+    await client.query(`ALTER TABLE crm_quotes ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`);
+    await client.query(
+      `UPDATE crm_quotes SET items = line_items WHERE items = '[]'::jsonb AND line_items IS NOT NULL`
+    );
+    await client.query(
+      `ALTER TABLE crm_quotes ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'USD'`
+    );
+    await client.query(`ALTER TABLE crm_quotes ADD COLUMN IF NOT EXISTS crm_company_id VARCHAR`);
+    await client.query(`ALTER TABLE crm_quotes ADD COLUMN IF NOT EXISTS signature_token VARCHAR`);
+    await client.query(`ALTER TABLE crm_quotes ADD COLUMN IF NOT EXISTS signed_at TIMESTAMP`);
+    await client.query(`ALTER TABLE crm_quotes ADD COLUMN IF NOT EXISTS signed_by_name TEXT`);
+    await client.query(`ALTER TABLE crm_quotes ADD COLUMN IF NOT EXISTS signed_by_email TEXT`);
+    await client.query(`ALTER TABLE crm_quotes ADD COLUMN IF NOT EXISTS signature_data TEXT`);
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS crm_quotes_signature_token_key ON crm_quotes (signature_token) WHERE signature_token IS NOT NULL`
+    );
+
+    // crm_projects: schema has crm_company_id
+    await client.query(`ALTER TABLE crm_projects ADD COLUMN IF NOT EXISTS crm_company_id VARCHAR`);
+
+    // crm_project_tasks: schema uses `status TEXT` (not completed BOOLEAN)
+    await client.query(
+      `ALTER TABLE crm_project_tasks ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'`
+    );
+    await client.query(
+      `UPDATE crm_project_tasks SET status = CASE WHEN completed THEN 'completed' ELSE 'pending' END WHERE status = 'pending' AND completed IS NOT NULL`
+    );
+
+    // crm_email_campaigns: schema uses `body` (not body_html/body_text), no type/sent_count
+    await client.query(
+      `ALTER TABLE crm_email_campaigns ADD COLUMN IF NOT EXISTS body TEXT NOT NULL DEFAULT ''`
+    );
+    await client.query(
+      `UPDATE crm_email_campaigns SET body = COALESCE(body_html, body_text, '') WHERE body = ''`
+    );
+    await client.query(
+      `ALTER TABLE crm_email_campaigns ADD COLUMN IF NOT EXISTS segment_rules JSONB DEFAULT '{}'`
+    );
+
+    // crm_automations: schema uses `trigger` (not trigger_type) and `conditions` (not trigger_conditions)
+    await client.query(
+      `ALTER TABLE crm_automations ADD COLUMN IF NOT EXISTS trigger TEXT NOT NULL DEFAULT ''`
+    );
+    await client.query(
+      `UPDATE crm_automations SET trigger = trigger_type WHERE trigger = '' AND trigger_type IS NOT NULL`
+    );
+    await client.query(
+      `ALTER TABLE crm_automations ADD COLUMN IF NOT EXISTS conditions JSONB DEFAULT '{}'`
+    );
+    await client.query(
+      `UPDATE crm_automations SET conditions = trigger_conditions WHERE conditions = '{}'::jsonb AND trigger_conditions IS NOT NULL`
+    );
+
+    // crm_sequences: schema uses `status TEXT` (not active BOOLEAN)
+    await client.query(
+      `ALTER TABLE crm_sequences ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'draft'`
+    );
+    await client.query(
+      `UPDATE crm_sequences SET status = CASE WHEN active THEN 'active' ELSE 'draft' END WHERE status = 'draft' AND active IS NOT NULL`
+    );
+
+    // crm_sequence_steps: schema uses email_subject/email_body (not subject/body), has task_title/task_type; no company_id in schema
+    await client.query(
+      `ALTER TABLE crm_sequence_steps ADD COLUMN IF NOT EXISTS email_subject TEXT`
+    );
+    await client.query(
+      `UPDATE crm_sequence_steps SET email_subject = subject WHERE email_subject IS NULL AND subject IS NOT NULL`
+    );
+    await client.query(`ALTER TABLE crm_sequence_steps ADD COLUMN IF NOT EXISTS email_body TEXT`);
+    await client.query(
+      `UPDATE crm_sequence_steps SET email_body = body WHERE email_body IS NULL AND body IS NOT NULL`
+    );
+    await client.query(`ALTER TABLE crm_sequence_steps ADD COLUMN IF NOT EXISTS task_title TEXT`);
+    await client.query(
+      `ALTER TABLE crm_sequence_steps ADD COLUMN IF NOT EXISTS task_type TEXT DEFAULT 'call'`
+    );
+
+    // crm_audit_logs: schema uses `details` (not changes)
+    await client.query(
+      `ALTER TABLE crm_audit_logs ADD COLUMN IF NOT EXISTS details JSONB DEFAULT '{}'`
+    );
+    await client.query(
+      `UPDATE crm_audit_logs SET details = changes WHERE details = '{}'::jsonb AND changes IS NOT NULL`
+    );
+
+    // crm_campaign_recipients table (missing from initial migration)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_campaign_recipients (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        campaign_id VARCHAR NOT NULL,
+        contact_id VARCHAR NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        opened_at TIMESTAMP,
+        clicked_at TIMESTAMP,
+        tracking_token TEXT
+      )
+    `);
+
+    // crm_sequence_enrollments table (missing from initial migration)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_sequence_enrollments (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        sequence_id VARCHAR NOT NULL,
+        contact_id VARCHAR NOT NULL,
+        company_id VARCHAR NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        current_step INTEGER NOT NULL DEFAULT 0,
+        next_run_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // crm_lead_scoring_rules table (missing from initial migration)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_lead_scoring_rules (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        field TEXT NOT NULL,
+        operator TEXT NOT NULL,
+        value TEXT NOT NULL,
+        score INTEGER NOT NULL DEFAULT 0,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     console.log("[Migration] CRM tables ensured (crm_contacts, crm_deals, crm_tasks, et al.)");
 
     console.log("[Migrate] Startup schema migrations applied successfully");

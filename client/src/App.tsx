@@ -693,147 +693,146 @@ function AdminLayout() {
 
   return (
     <div className="flex h-screen">
-        <aside
-          className={`${sidebarOpen ? "w-56" : "w-0 overflow-hidden"} transition-all duration-200 border-r bg-background flex flex-col shrink-0`}
-        >
-          <div className="p-4 border-b">
-            <div className="flex items-center gap-2">
-              <img src={logoSquare} alt="ScooPilot" className="h-7 w-7 rounded" />
-              <div>
-                <p className="font-semibold text-sm leading-tight">ScooPilot</p>
-                <p className="text-[10px] text-muted-foreground leading-tight">Administration</p>
-              </div>
+      <aside
+        className={`${sidebarOpen ? "w-56" : "w-0 overflow-hidden"} transition-all duration-200 border-r bg-background flex flex-col shrink-0`}
+      >
+        <div className="p-4 border-b">
+          <div className="flex items-center gap-2">
+            <img src={logoSquare} alt="ScooPilot" className="h-7 w-7 rounded" />
+            <div>
+              <p className="font-semibold text-sm leading-tight">ScooPilot</p>
+              <p className="text-[10px] text-muted-foreground leading-tight">Administration</p>
             </div>
           </div>
-
-          <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
-            <div>
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">
-                Platform
-              </p>
-              <div className="space-y-1">
-                <AdminSidebarLink href="/admin" icon={Home} label="Overview" location={location} />
-                <AdminSidebarLink
-                  href="/admin/analytics"
-                  icon={BarChart3}
-                  label="Analytics"
-                  location={location}
-                />
-              </div>
-            </div>
-            <div>
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">
-                Management
-              </p>
-              <div className="space-y-1">
-                <AdminSidebarLink
-                  href="/admin/tenants"
-                  icon={Building2}
-                  label="Tenants"
-                  location={location}
-                />
-                <AdminSidebarLink
-                  href="/admin/pricing"
-                  icon={CreditCard}
-                  label="Pricing"
-                  location={location}
-                />
-              </div>
-            </div>
-            <div>
-              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">
-                System
-              </p>
-              <div className="space-y-1">
-                <AdminSidebarLink
-                  href="/admin/messaging"
-                  icon={MessageSquare}
-                  label="Messaging"
-                  location={location}
-                />
-                <AdminSidebarLink
-                  href="/admin/errors"
-                  icon={Bug}
-                  label="Errors"
-                  location={location}
-                  badge={errorStats?.openCount}
-                />
-                <AdminSidebarLink
-                  href="/admin/security"
-                  icon={Shield}
-                  label="Security"
-                  location={location}
-                />
-              </div>
-            </div>
-            
-          </nav>
-
-          <div className="p-3 border-t">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start text-muted-foreground"
-              onClick={() => logout()}
-              data-testid="button-admin-logout"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Log Out
-            </Button>
-          </div>
-        </aside>
-
-        <div className="flex-1 flex flex-col min-w-0">
-          <header className="flex items-center justify-between gap-2 px-4 py-2 border-b sticky top-0 z-50 bg-background">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              data-testid="button-admin-sidebar-toggle"
-              aria-label="Toggle sidebar"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="18" x2="21" y2="18" />
-              </svg>
-            </Button>
-            <div className="flex items-center gap-1">
-              <ThemeToggle />
-            </div>
-          </header>
-          <main className="flex-1 overflow-auto">
-            <Suspense fallback={<PageLoader />}>
-              <Switch>
-                <Route path="/admin" component={AdminDashboard} />
-                <Route path="/admin/tenants" component={AdminTenants} />
-                <Route path="/admin/analytics" component={AdminAnalytics} />
-                <Route path="/admin/security" component={AdminSecurity} />
-                <Route path="/admin/pricing" component={AdminSubscriptionPricing} />
-                <Route path="/admin/messaging" component={AdminMessaging} />
-                <Route path="/admin/errors" component={AdminErrors} />
-                <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
-                <Route path="/admin/login">
-                  {() => {
-                    window.location.href = "/admin";
-                    return null;
-                  }}
-                </Route>
-                <Route component={NotFound} />
-              </Switch>
-            </Suspense>
-          </main>
         </div>
+
+        <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">
+              Platform
+            </p>
+            <div className="space-y-1">
+              <AdminSidebarLink href="/admin" icon={Home} label="Overview" location={location} />
+              <AdminSidebarLink
+                href="/admin/analytics"
+                icon={BarChart3}
+                label="Analytics"
+                location={location}
+              />
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">
+              Management
+            </p>
+            <div className="space-y-1">
+              <AdminSidebarLink
+                href="/admin/tenants"
+                icon={Building2}
+                label="Tenants"
+                location={location}
+              />
+              <AdminSidebarLink
+                href="/admin/pricing"
+                icon={CreditCard}
+                label="Pricing"
+                location={location}
+              />
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">
+              System
+            </p>
+            <div className="space-y-1">
+              <AdminSidebarLink
+                href="/admin/messaging"
+                icon={MessageSquare}
+                label="Messaging"
+                location={location}
+              />
+              <AdminSidebarLink
+                href="/admin/errors"
+                icon={Bug}
+                label="Errors"
+                location={location}
+                badge={errorStats?.openCount}
+              />
+              <AdminSidebarLink
+                href="/admin/security"
+                icon={Shield}
+                label="Security"
+                location={location}
+              />
+            </div>
+          </div>
+        </nav>
+
+        <div className="p-3 border-t">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-muted-foreground"
+            onClick={() => logout()}
+            data-testid="button-admin-logout"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Log Out
+          </Button>
+        </div>
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="flex items-center justify-between gap-2 px-4 py-2 border-b sticky top-0 z-50 bg-background">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            data-testid="button-admin-sidebar-toggle"
+            aria-label="Toggle sidebar"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+          </div>
+        </header>
+        <main className="flex-1 overflow-auto">
+          <Suspense fallback={<PageLoader />}>
+            <Switch>
+              <Route path="/admin" component={AdminDashboard} />
+              <Route path="/admin/tenants" component={AdminTenants} />
+              <Route path="/admin/analytics" component={AdminAnalytics} />
+              <Route path="/admin/security" component={AdminSecurity} />
+              <Route path="/admin/pricing" component={AdminSubscriptionPricing} />
+              <Route path="/admin/messaging" component={AdminMessaging} />
+              <Route path="/admin/errors" component={AdminErrors} />
+              <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
+              <Route path="/admin/login">
+                {() => {
+                  window.location.href = "/admin";
+                  return null;
+                }}
+              </Route>
+              <Route component={NotFound} />
+            </Switch>
+          </Suspense>
+        </main>
+      </div>
     </div>
   );
 }

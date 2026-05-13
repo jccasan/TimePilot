@@ -7,26 +7,92 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Plus, Search, Zap, Trash2, Power, PowerOff } from "lucide-react";
 import type { CrmAutomation } from "@shared/crm-schema";
 
-interface PaginatedResult<T> { data: T[]; total: number; page: number; totalPages: number; }
+interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
 
-const triggerTypes = ["contact_created", "deal_stage_changed", "task_overdue", "form_submitted", "contact_tag_added", "scheduled"];
-const actionTypes = ["send_email", "create_task", "update_contact", "add_tag", "notify_user", "webhook"];
+const triggerTypes = [
+  "contact_created",
+  "deal_stage_changed",
+  "task_overdue",
+  "form_submitted",
+  "contact_tag_added",
+  "scheduled",
+];
+const actionTypes = [
+  "send_email",
+  "create_task",
+  "update_contact",
+  "add_tag",
+  "notify_user",
+  "webhook",
+];
 
-function Pagination({ page, totalPages, total, onPageChange }: { page: number; totalPages: number; total: number; onPageChange: (p: number) => void }) {
+function Pagination({
+  page,
+  totalPages,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  onPageChange: (p: number) => void;
+}) {
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between text-sm text-muted-foreground pt-2">
       <span>{total} total</span>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="button-crm-automations-prev">Prev</Button>
-        <span>{page} / {totalPages}</span>
-        <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} data-testid="button-crm-automations-next">Next</Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+          data-testid="button-crm-automations-prev"
+        >
+          Prev
+        </Button>
+        <span>
+          {page} / {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+          data-testid="button-crm-automations-next"
+        >
+          Next
+        </Button>
       </div>
     </div>
   );
@@ -60,8 +126,13 @@ export default function CrmAutomations() {
       if (!res.ok) throw new Error((await res.json()).message);
       return res.json();
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crm/automations"] }); setOpen(false); toast({ title: "Automation created" }); },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/automations"] });
+      setOpen(false);
+      toast({ title: "Automation created" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const toggleMutation = useMutation({
@@ -74,7 +145,10 @@ export default function CrmAutomations() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/crm/automations/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crm/automations"] }); toast({ title: "Automation deleted" }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/automations"] });
+      toast({ title: "Automation deleted" });
+    },
   });
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -82,7 +156,7 @@ export default function CrmAutomations() {
     const fd = new FormData(e.currentTarget);
     createMutation.mutate({
       name: fd.get("name") as string,
-      description: fd.get("description") as string || undefined,
+      description: (fd.get("description") as string) || undefined,
       triggerType: fd.get("triggerType") as string,
       triggerConditions: {},
       actions: [{ type: fd.get("actionType") as string, config: {} }],
@@ -94,8 +168,15 @@ export default function CrmAutomations() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-crm-automations-title">CRM Automations</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Trigger-based workflows for contacts and deals.</p>
+          <h1
+            className="text-2xl font-bold tracking-tight"
+            data-testid="text-crm-automations-title"
+          >
+            CRM Automations
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Trigger-based workflows for contacts and deals.
+          </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
@@ -104,27 +185,60 @@ export default function CrmAutomations() {
             </Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>New Automation</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>New Automation</DialogTitle>
+            </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5"><Label>Name</Label><Input name="name" required data-testid="input-crm-automation-name" /></div>
-              <div className="space-y-1.5"><Label>Description</Label><Textarea name="description" rows={2} data-testid="input-crm-automation-description" /></div>
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input name="name" required data-testid="input-crm-automation-name" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Description</Label>
+                <Textarea
+                  name="description"
+                  rows={2}
+                  data-testid="input-crm-automation-description"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Trigger</Label>
                   <Select name="triggerType" defaultValue="contact_created">
-                    <SelectTrigger data-testid="select-crm-automation-trigger"><SelectValue /></SelectTrigger>
-                    <SelectContent>{triggerTypes.map((t) => <SelectItem key={t} value={t}>{t.replace(/_/g, " ")}</SelectItem>)}</SelectContent>
+                    <SelectTrigger data-testid="select-crm-automation-trigger">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {triggerTypes.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t.replace(/_/g, " ")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Action</Label>
                   <Select name="actionType" defaultValue="send_email">
-                    <SelectTrigger data-testid="select-crm-automation-action"><SelectValue /></SelectTrigger>
-                    <SelectContent>{actionTypes.map((a) => <SelectItem key={a} value={a}>{a.replace(/_/g, " ")}</SelectItem>)}</SelectContent>
+                    <SelectTrigger data-testid="select-crm-automation-action">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {actionTypes.map((a) => (
+                        <SelectItem key={a} value={a}>
+                          {a.replace(/_/g, " ")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
               </div>
-              <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-crm-submit-automation">
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={createMutation.isPending}
+                data-testid="button-crm-submit-automation"
+              >
                 {createMutation.isPending ? "Creating..." : "Create Automation"}
               </Button>
             </form>
@@ -135,7 +249,17 @@ export default function CrmAutomations() {
       <div className="flex items-center gap-3 border-b border-border/50 pb-4">
         <div className="relative w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input type="search" placeholder="Search automations..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} data-testid="input-crm-search-automations" />
+          <Input
+            type="search"
+            placeholder="Search automations..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            data-testid="input-crm-search-automations"
+          />
         </div>
       </div>
 
@@ -165,17 +289,40 @@ export default function CrmAutomations() {
                     <TableCell className="font-medium">
                       <div>{a.name}</div>
                     </TableCell>
-                    <TableCell><Badge variant="outline" className="text-[10px]">{(a.trigger || "").replace(/_/g, " ")}</Badge></TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px]">
+                        {(a.trigger || "").replace(/_/g, " ")}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-sm">—</TableCell>
                     <TableCell>
-                      <Badge variant={a.active ? "default" : "outline"} className="text-[10px]">{a.active ? "active" : "inactive"}</Badge>
+                      <Badge variant={a.active ? "default" : "outline"} className="text-[10px]">
+                        {a.active ? "active" : "inactive"}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleMutation.mutate({ id: a.id, active: !a.active })} data-testid={`button-crm-toggle-automation-${a.id}`} title={a.active ? "Deactivate" : "Activate"}>
-                          {a.active ? <PowerOff className="w-3.5 h-3.5 text-muted-foreground" /> : <Power className="w-3.5 h-3.5 text-primary" />}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => toggleMutation.mutate({ id: a.id, active: !a.active })}
+                          data-testid={`button-crm-toggle-automation-${a.id}`}
+                          title={a.active ? "Deactivate" : "Activate"}
+                        >
+                          {a.active ? (
+                            <PowerOff className="w-3.5 h-3.5 text-muted-foreground" />
+                          ) : (
+                            <Power className="w-3.5 h-3.5 text-primary" />
+                          )}
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate(a.id)} data-testid={`button-crm-delete-automation-${a.id}`}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => deleteMutation.mutate(a.id)}
+                          data-testid={`button-crm-delete-automation-${a.id}`}
+                        >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
@@ -185,7 +332,14 @@ export default function CrmAutomations() {
               </TableBody>
             </Table>
           </div>
-          {result && <Pagination page={result.page} totalPages={result.totalPages} total={result.total} onPageChange={setPage} />}
+          {result && (
+            <Pagination
+              page={result.page}
+              totalPages={result.totalPages}
+              total={result.total}
+              onPageChange={setPage}
+            />
+          )}
         </>
       )}
     </div>

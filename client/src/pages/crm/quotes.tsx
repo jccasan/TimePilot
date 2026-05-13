@@ -6,23 +6,73 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Plus, Search, FileText, Trash2, X } from "lucide-react";
 import type { CrmQuote, CrmContact } from "@shared/crm-schema";
 
-interface PaginatedResult<T> { data: T[]; total: number; page: number; totalPages: number; }
-interface LineItem { description: string; quantity: number; unitPrice: number; }
+interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+interface LineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+}
 
-function Pagination({ page, totalPages, total, onPageChange }: { page: number; totalPages: number; total: number; onPageChange: (p: number) => void }) {
+function Pagination({
+  page,
+  totalPages,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  onPageChange: (p: number) => void;
+}) {
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between text-sm text-muted-foreground pt-2">
       <span>{total} total</span>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="button-crm-quotes-prev">Prev</Button>
-        <span>{page} / {totalPages}</span>
-        <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} data-testid="button-crm-quotes-next">Next</Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+          data-testid="button-crm-quotes-prev"
+        >
+          Prev
+        </Button>
+        <span>
+          {page} / {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+          data-testid="button-crm-quotes-next"
+        >
+          Next
+        </Button>
       </div>
     </div>
   );
@@ -33,7 +83,9 @@ export default function CrmQuotes() {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [lineItems, setLineItems] = useState<LineItem[]>([{ description: "", quantity: 1, unitPrice: 0 }]);
+  const [lineItems, setLineItems] = useState<LineItem[]>([
+    { description: "", quantity: 1, unitPrice: 0 },
+  ]);
   const [taxRate, setTaxRate] = useState(0);
 
   const queryParams = useMemo(() => {
@@ -54,7 +106,10 @@ export default function CrmQuotes() {
 
   const { data: contactsResult } = useQuery<PaginatedResult<CrmContact>>({
     queryKey: ["/api/crm/contacts", "all"],
-    queryFn: async () => { const res = await fetch("/api/crm/contacts?limit=200", { credentials: "include" }); return res.json(); },
+    queryFn: async () => {
+      const res = await fetch("/api/crm/contacts?limit=200", { credentials: "include" });
+      return res.json();
+    },
   });
   const contacts = contactsResult?.data ?? [];
 
@@ -71,7 +126,8 @@ export default function CrmQuotes() {
       setTaxRate(0);
       toast({ title: "Quote created" });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -84,7 +140,10 @@ export default function CrmQuotes() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/crm/quotes/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crm/quotes"] }); toast({ title: "Quote deleted" }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/quotes"] });
+      toast({ title: "Quote deleted" });
+    },
   });
 
   const subtotal = lineItems.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
@@ -107,7 +166,11 @@ export default function CrmQuotes() {
   }
 
   function updateLineItem(i: number, key: keyof LineItem, val: string | number) {
-    setLineItems((prev) => prev.map((l, idx) => idx === i ? { ...l, [key]: key === "description" ? val : Number(val) } : l));
+    setLineItems((prev) =>
+      prev.map((l, idx) =>
+        idx === i ? { ...l, [key]: key === "description" ? val : Number(val) } : l
+      )
+    );
   }
 
   const statusVariant = (s: string): "default" | "outline" | "destructive" | "secondary" =>
@@ -117,7 +180,9 @@ export default function CrmQuotes() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-crm-quotes-title">CRM Quotes</h1>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-crm-quotes-title">
+            CRM Quotes
+          </h1>
           <p className="text-muted-foreground mt-1 text-sm">Manage CRM quotes and proposals.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -127,27 +192,77 @@ export default function CrmQuotes() {
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-xl">
-            <DialogHeader><DialogTitle>New Quote</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>New Quote</DialogTitle>
+            </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5"><Label>Title</Label><Input name="title" required data-testid="input-crm-quote-title" /></div>
+              <div className="space-y-1.5">
+                <Label>Title</Label>
+                <Input name="title" required data-testid="input-crm-quote-title" />
+              </div>
               <div className="space-y-1.5">
                 <Label>Contact</Label>
-                <select name="contactId" defaultValue="none" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" data-testid="select-crm-quote-contact">
+                <select
+                  name="contactId"
+                  defaultValue="none"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  data-testid="select-crm-quote-contact"
+                >
                   <option value="none">No contact</option>
-                  {contacts.map((c) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.firstName} {c.lastName}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
                 <Label className="mb-2 block">Line Items</Label>
                 <div className="space-y-2">
                   {lineItems.map((l, i) => (
-                    <div key={i} className="grid grid-cols-12 gap-2 items-center" data-testid={`row-line-item-${i}`}>
-                      <Input placeholder="Description" value={l.description} onChange={(e) => updateLineItem(i, "description", e.target.value)} className="col-span-5" data-testid={`input-li-desc-${i}`} />
-                      <Input type="number" min="1" value={l.quantity} onChange={(e) => updateLineItem(i, "quantity", e.target.value)} className="col-span-2" placeholder="Qty" data-testid={`input-li-qty-${i}`} />
-                      <Input type="number" min="0" step="0.01" value={l.unitPrice} onChange={(e) => updateLineItem(i, "unitPrice", e.target.value)} className="col-span-3" placeholder="Unit $" data-testid={`input-li-price-${i}`} />
+                    <div
+                      key={i}
+                      className="grid grid-cols-12 gap-2 items-center"
+                      data-testid={`row-line-item-${i}`}
+                    >
+                      <Input
+                        placeholder="Description"
+                        value={l.description}
+                        onChange={(e) => updateLineItem(i, "description", e.target.value)}
+                        className="col-span-5"
+                        data-testid={`input-li-desc-${i}`}
+                      />
+                      <Input
+                        type="number"
+                        min="1"
+                        value={l.quantity}
+                        onChange={(e) => updateLineItem(i, "quantity", e.target.value)}
+                        className="col-span-2"
+                        placeholder="Qty"
+                        data-testid={`input-li-qty-${i}`}
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={l.unitPrice}
+                        onChange={(e) => updateLineItem(i, "unitPrice", e.target.value)}
+                        className="col-span-3"
+                        placeholder="Unit $"
+                        data-testid={`input-li-price-${i}`}
+                      />
                       <div className="col-span-2 flex justify-end">
                         {lineItems.length > 1 && (
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setLineItems((prev) => prev.filter((_, idx) => idx !== i))} data-testid={`button-remove-li-${i}`}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() =>
+                              setLineItems((prev) => prev.filter((_, idx) => idx !== i))
+                            }
+                            data-testid={`button-remove-li-${i}`}
+                          >
                             <X className="w-4 h-4" />
                           </Button>
                         )}
@@ -155,18 +270,46 @@ export default function CrmQuotes() {
                     </div>
                   ))}
                 </div>
-                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setLineItems((prev) => [...prev, { description: "", quantity: 1, unitPrice: 0 }])} data-testid="button-add-line-item">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() =>
+                    setLineItems((prev) => [
+                      ...prev,
+                      { description: "", quantity: 1, unitPrice: 0 },
+                    ])
+                  }
+                  data-testid="button-add-line-item"
+                >
                   Add Line
                 </Button>
               </div>
               <div className="flex items-center gap-4 justify-end text-sm">
                 <div className="flex items-center gap-2">
                   <Label>Tax %</Label>
-                  <Input type="number" min="0" max="100" step="0.01" value={taxRate} onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)} className="w-20 h-8" data-testid="input-crm-quote-tax" />
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                    className="w-20 h-8"
+                    data-testid="input-crm-quote-tax"
+                  />
                 </div>
-                <div className="text-muted-foreground">Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span></div>
+                <div className="text-muted-foreground">
+                  Total: <span className="font-semibold text-foreground">${total.toFixed(2)}</span>
+                </div>
               </div>
-              <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-crm-submit-quote">
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={createMutation.isPending}
+                data-testid="button-crm-submit-quote"
+              >
                 {createMutation.isPending ? "Creating..." : "Create Quote"}
               </Button>
             </form>
@@ -177,7 +320,17 @@ export default function CrmQuotes() {
       <div className="flex items-center gap-3 border-b border-border/50 pb-4">
         <div className="relative w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input type="search" placeholder="Search quotes..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} data-testid="input-crm-search-quotes" />
+          <Input
+            type="search"
+            placeholder="Search quotes..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            data-testid="input-crm-search-quotes"
+          />
         </div>
       </div>
 
@@ -207,15 +360,33 @@ export default function CrmQuotes() {
                     <TableCell className="font-medium">{q.title}</TableCell>
                     <TableCell>${((q.total || 0) / 100).toLocaleString()}</TableCell>
                     <TableCell>
-                      <Badge variant={statusVariant(q.status)} className="text-[10px]">{q.status}</Badge>
+                      <Badge variant={statusVariant(q.status)} className="text-[10px]">
+                        {q.status}
+                      </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{q.createdAt ? new Date(q.createdAt).toLocaleDateString() : ""}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {q.createdAt ? new Date(q.createdAt).toLocaleDateString() : ""}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         {q.status === "draft" && (
-                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => updateMutation.mutate({ id: q.id, status: "sent" })} data-testid={`button-crm-send-quote-${q.id}`}>Send</Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => updateMutation.mutate({ id: q.id, status: "sent" })}
+                            data-testid={`button-crm-send-quote-${q.id}`}
+                          >
+                            Send
+                          </Button>
                         )}
-                        <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate(q.id)} data-testid={`button-crm-delete-quote-${q.id}`}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => deleteMutation.mutate(q.id)}
+                          data-testid={`button-crm-delete-quote-${q.id}`}
+                        >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
@@ -225,7 +396,14 @@ export default function CrmQuotes() {
               </TableBody>
             </Table>
           </div>
-          {result && <Pagination page={result.page} totalPages={result.totalPages} total={result.total} onPageChange={setPage} />}
+          {result && (
+            <Pagination
+              page={result.page}
+              totalPages={result.totalPages}
+              total={result.total}
+              onPageChange={setPage}
+            />
+          )}
         </>
       )}
     </div>

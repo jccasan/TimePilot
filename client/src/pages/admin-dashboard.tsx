@@ -101,7 +101,6 @@ const METRIC_LABELS: Record<string, string> = {
   rover_chat: "Rover Chat",
 };
 
-
 function CostSparkline({ data }: { data: { date: string; calls: number }[] }) {
   const last30 = data.slice(-30);
   if (last30.every((d) => d.calls === 0)) {
@@ -1214,9 +1213,13 @@ export default function AdminDashboard() {
         <h2 className="text-lg font-semibold mb-3">CRM</h2>
         <Card>
           <CardContent className="pt-4 pb-4 px-4 flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Manage contacts, deals, tasks, and more in the native CRM.</p>
+            <p className="text-sm text-muted-foreground">
+              Manage contacts, deals, tasks, and more in the native CRM.
+            </p>
             <Link href="/crm">
-              <Button size="sm" data-testid="button-open-crm">Open CRM</Button>
+              <Button size="sm" data-testid="button-open-crm">
+                Open CRM
+              </Button>
             </Link>
           </CardContent>
         </Card>

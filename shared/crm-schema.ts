@@ -5,7 +5,9 @@ import { z } from "zod";
 
 // ─── CRM Contacts ────────────────────────────────────────────
 export const crmContacts = pgTable("crm_contacts", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
@@ -17,18 +19,26 @@ export const crmContacts = pgTable("crm_contacts", {
   source: text("source").default("manual"),
   leadScore: integer("lead_score").default(0),
   assignedTo: text("assigned_to"),
-  tags: text("tags").array().default(sql`'{}'::text[]`),
+  tags: text("tags")
+    .array()
+    .default(sql`'{}'::text[]`),
   customFields: jsonb("custom_fields").default({}),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmContactSchema = createInsertSchema(crmContacts).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmContactSchema = createInsertSchema(crmContacts).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmContact = z.infer<typeof insertCrmContactSchema>;
 export type CrmContact = typeof crmContacts.$inferSelect;
 
 // ─── CRM Companies ───────────────────────────────────────────
 export const crmCompanies = pgTable("crm_companies", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   name: text("name").notNull(),
   domain: text("domain"),
@@ -39,13 +49,19 @@ export const crmCompanies = pgTable("crm_companies", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmCompanySchema = createInsertSchema(crmCompanies).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmCompanySchema = createInsertSchema(crmCompanies).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmCompany = z.infer<typeof insertCrmCompanySchema>;
 export type CrmCompany = typeof crmCompanies.$inferSelect;
 
 // ─── CRM Deals ───────────────────────────────────────────────
 export const crmDeals = pgTable("crm_deals", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   title: text("title").notNull(),
   value: integer("value").default(0),
@@ -62,15 +78,19 @@ export const crmDeals = pgTable("crm_deals", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmDealSchema = createInsertSchema(crmDeals).omit({ id: true, companyId: true, createdAt: true }).extend({
-  expectedCloseDate: z.coerce.date().optional().nullable(),
-});
+export const insertCrmDealSchema = createInsertSchema(crmDeals)
+  .omit({ id: true, companyId: true, createdAt: true })
+  .extend({
+    expectedCloseDate: z.coerce.date().optional().nullable(),
+  });
 export type InsertCrmDeal = z.infer<typeof insertCrmDealSchema>;
 export type CrmDeal = typeof crmDeals.$inferSelect;
 
 // ─── CRM Tasks ───────────────────────────────────────────────
 export const crmTasks = pgTable("crm_tasks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   title: text("title").notNull(),
   description: text("description"),
@@ -86,15 +106,19 @@ export const crmTasks = pgTable("crm_tasks", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmTaskSchema = createInsertSchema(crmTasks).omit({ id: true, companyId: true, completedAt: true, createdAt: true }).extend({
-  dueDate: z.coerce.date().optional().nullable(),
-});
+export const insertCrmTaskSchema = createInsertSchema(crmTasks)
+  .omit({ id: true, companyId: true, completedAt: true, createdAt: true })
+  .extend({
+    dueDate: z.coerce.date().optional().nullable(),
+  });
 export type InsertCrmTask = z.infer<typeof insertCrmTaskSchema>;
 export type CrmTask = typeof crmTasks.$inferSelect;
 
 // ─── CRM Activities ──────────────────────────────────────────
 export const crmActivities = pgTable("crm_activities", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   type: text("type").notNull(),
   description: text("description").notNull(),
@@ -104,13 +128,19 @@ export const crmActivities = pgTable("crm_activities", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmActivitySchema = createInsertSchema(crmActivities).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmActivitySchema = createInsertSchema(crmActivities).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmActivity = z.infer<typeof insertCrmActivitySchema>;
 export type CrmActivity = typeof crmActivities.$inferSelect;
 
 // ─── CRM Notes ───────────────────────────────────────────────
 export const crmNotes = pgTable("crm_notes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   content: text("content").notNull(),
   contactId: varchar("contact_id"),
@@ -119,13 +149,19 @@ export const crmNotes = pgTable("crm_notes", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmNoteSchema = createInsertSchema(crmNotes).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmNoteSchema = createInsertSchema(crmNotes).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmNote = z.infer<typeof insertCrmNoteSchema>;
 export type CrmNote = typeof crmNotes.$inferSelect;
 
 // ─── CRM Emails ──────────────────────────────────────────────
 export const crmEmails = pgTable("crm_emails", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
@@ -140,13 +176,20 @@ export const crmEmails = pgTable("crm_emails", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmEmailSchema = createInsertSchema(crmEmails).omit({ id: true, companyId: true, sentAt: true, createdAt: true });
+export const insertCrmEmailSchema = createInsertSchema(crmEmails).omit({
+  id: true,
+  companyId: true,
+  sentAt: true,
+  createdAt: true,
+});
 export type InsertCrmEmail = z.infer<typeof insertCrmEmailSchema>;
 export type CrmEmail = typeof crmEmails.$inferSelect;
 
 // ─── CRM Documents ───────────────────────────────────────────
 export const crmDocuments = pgTable("crm_documents", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   name: text("name").notNull(),
   type: text("type").notNull().default("other"),
@@ -158,13 +201,19 @@ export const crmDocuments = pgTable("crm_documents", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmDocumentSchema = createInsertSchema(crmDocuments).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmDocumentSchema = createInsertSchema(crmDocuments).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmDocument = z.infer<typeof insertCrmDocumentSchema>;
 export type CrmDocument = typeof crmDocuments.$inferSelect;
 
 // ─── CRM Web Forms ───────────────────────────────────────────
 export const crmWebForms = pgTable("crm_web_forms", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   name: text("name").notNull(),
   fields: jsonb("fields").notNull().default([]),
@@ -173,25 +222,37 @@ export const crmWebForms = pgTable("crm_web_forms", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmWebFormSchema = createInsertSchema(crmWebForms).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmWebFormSchema = createInsertSchema(crmWebForms).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmWebForm = z.infer<typeof insertCrmWebFormSchema>;
 export type CrmWebForm = typeof crmWebForms.$inferSelect;
 
 export const crmFormSubmissions = pgTable("crm_form_submissions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   formId: varchar("form_id").notNull(),
   data: jsonb("data").notNull().default({}),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmFormSubmissionSchema = createInsertSchema(crmFormSubmissions).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmFormSubmissionSchema = createInsertSchema(crmFormSubmissions).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmFormSubmission = z.infer<typeof insertCrmFormSubmissionSchema>;
 export type CrmFormSubmission = typeof crmFormSubmissions.$inferSelect;
 
 // ─── CRM Quotes ──────────────────────────────────────────────
 export const crmQuotes = pgTable("crm_quotes", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   title: text("title").notNull(),
   dealId: varchar("deal_id"),
@@ -212,16 +273,26 @@ export const crmQuotes = pgTable("crm_quotes", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmQuoteSchema = createInsertSchema(crmQuotes).omit({
-  id: true, companyId: true, createdAt: true, signatureToken: true,
-  signedAt: true, signedByName: true, signedByEmail: true, signatureData: true,
-}).extend({ validUntil: z.coerce.date().optional().nullable() });
+export const insertCrmQuoteSchema = createInsertSchema(crmQuotes)
+  .omit({
+    id: true,
+    companyId: true,
+    createdAt: true,
+    signatureToken: true,
+    signedAt: true,
+    signedByName: true,
+    signedByEmail: true,
+    signatureData: true,
+  })
+  .extend({ validUntil: z.coerce.date().optional().nullable() });
 export type InsertCrmQuote = z.infer<typeof insertCrmQuoteSchema>;
 export type CrmQuote = typeof crmQuotes.$inferSelect;
 
 // ─── CRM Projects ────────────────────────────────────────────
 export const crmProjects = pgTable("crm_projects", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   name: text("name").notNull(),
   description: text("description"),
@@ -234,15 +305,19 @@ export const crmProjects = pgTable("crm_projects", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmProjectSchema = createInsertSchema(crmProjects).omit({ id: true, companyId: true, createdAt: true }).extend({
-  startDate: z.coerce.date().optional().nullable(),
-  endDate: z.coerce.date().optional().nullable(),
-});
+export const insertCrmProjectSchema = createInsertSchema(crmProjects)
+  .omit({ id: true, companyId: true, createdAt: true })
+  .extend({
+    startDate: z.coerce.date().optional().nullable(),
+    endDate: z.coerce.date().optional().nullable(),
+  });
 export type InsertCrmProject = z.infer<typeof insertCrmProjectSchema>;
 export type CrmProject = typeof crmProjects.$inferSelect;
 
 export const crmProjectTasks = pgTable("crm_project_tasks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   projectId: varchar("project_id").notNull(),
   title: text("title").notNull(),
@@ -252,15 +327,19 @@ export const crmProjectTasks = pgTable("crm_project_tasks", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmProjectTaskSchema = createInsertSchema(crmProjectTasks).omit({ id: true, companyId: true, createdAt: true }).extend({
-  dueDate: z.coerce.date().optional().nullable(),
-});
+export const insertCrmProjectTaskSchema = createInsertSchema(crmProjectTasks)
+  .omit({ id: true, companyId: true, createdAt: true })
+  .extend({
+    dueDate: z.coerce.date().optional().nullable(),
+  });
 export type InsertCrmProjectTask = z.infer<typeof insertCrmProjectTaskSchema>;
 export type CrmProjectTask = typeof crmProjectTasks.$inferSelect;
 
 // ─── CRM Email Campaigns ─────────────────────────────────────
 export const crmEmailCampaigns = pgTable("crm_email_campaigns", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   name: text("name").notNull(),
   subject: text("subject").notNull(),
@@ -271,12 +350,19 @@ export const crmEmailCampaigns = pgTable("crm_email_campaigns", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmEmailCampaignSchema = createInsertSchema(crmEmailCampaigns).omit({ id: true, companyId: true, sentAt: true, createdAt: true });
+export const insertCrmEmailCampaignSchema = createInsertSchema(crmEmailCampaigns).omit({
+  id: true,
+  companyId: true,
+  sentAt: true,
+  createdAt: true,
+});
 export type InsertCrmEmailCampaign = z.infer<typeof insertCrmEmailCampaignSchema>;
 export type CrmEmailCampaign = typeof crmEmailCampaigns.$inferSelect;
 
 export const crmCampaignRecipients = pgTable("crm_campaign_recipients", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   campaignId: varchar("campaign_id").notNull(),
   contactId: varchar("contact_id").notNull(),
@@ -286,13 +372,20 @@ export const crmCampaignRecipients = pgTable("crm_campaign_recipients", {
   trackingToken: text("tracking_token"),
 });
 
-export const insertCrmCampaignRecipientSchema = createInsertSchema(crmCampaignRecipients).omit({ id: true, companyId: true, openedAt: true, clickedAt: true });
+export const insertCrmCampaignRecipientSchema = createInsertSchema(crmCampaignRecipients).omit({
+  id: true,
+  companyId: true,
+  openedAt: true,
+  clickedAt: true,
+});
 export type InsertCrmCampaignRecipient = z.infer<typeof insertCrmCampaignRecipientSchema>;
 export type CrmCampaignRecipient = typeof crmCampaignRecipients.$inferSelect;
 
 // ─── CRM Automations ─────────────────────────────────────────
 export const crmAutomations = pgTable("crm_automations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   name: text("name").notNull(),
   trigger: text("trigger").notNull(),
@@ -302,13 +395,19 @@ export const crmAutomations = pgTable("crm_automations", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmAutomationSchema = createInsertSchema(crmAutomations).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmAutomationSchema = createInsertSchema(crmAutomations).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmAutomation = z.infer<typeof insertCrmAutomationSchema>;
 export type CrmAutomation = typeof crmAutomations.$inferSelect;
 
 // ─── CRM Audit Logs ──────────────────────────────────────────
 export const crmAuditLogs = pgTable("crm_audit_logs", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   action: text("action").notNull(),
   entity: text("entity").notNull(),
@@ -318,13 +417,19 @@ export const crmAuditLogs = pgTable("crm_audit_logs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmAuditLogSchema = createInsertSchema(crmAuditLogs).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmAuditLogSchema = createInsertSchema(crmAuditLogs).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmAuditLog = z.infer<typeof insertCrmAuditLogSchema>;
 export type CrmAuditLog = typeof crmAuditLogs.$inferSelect;
 
 // ─── CRM Sequences ───────────────────────────────────────────
 export const crmSequences = pgTable("crm_sequences", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   name: text("name").notNull(),
   description: text("description"),
@@ -332,12 +437,18 @@ export const crmSequences = pgTable("crm_sequences", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmSequenceSchema = createInsertSchema(crmSequences).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmSequenceSchema = createInsertSchema(crmSequences).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmSequence = z.infer<typeof insertCrmSequenceSchema>;
 export type CrmSequence = typeof crmSequences.$inferSelect;
 
 export const crmSequenceSteps = pgTable("crm_sequence_steps", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   sequenceId: varchar("sequence_id").notNull(),
   stepNumber: integer("step_number").notNull().default(1),
   type: text("type").notNull().default("email"),
@@ -349,12 +460,17 @@ export const crmSequenceSteps = pgTable("crm_sequence_steps", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmSequenceStepSchema = createInsertSchema(crmSequenceSteps).omit({ id: true, createdAt: true });
+export const insertCrmSequenceStepSchema = createInsertSchema(crmSequenceSteps).omit({
+  id: true,
+  createdAt: true,
+});
 export type InsertCrmSequenceStep = z.infer<typeof insertCrmSequenceStepSchema>;
 export type CrmSequenceStep = typeof crmSequenceSteps.$inferSelect;
 
 export const crmSequenceEnrollments = pgTable("crm_sequence_enrollments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   sequenceId: varchar("sequence_id").notNull(),
   contactId: varchar("contact_id").notNull(),
   companyId: varchar("company_id").notNull(),
@@ -364,13 +480,18 @@ export const crmSequenceEnrollments = pgTable("crm_sequence_enrollments", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmSequenceEnrollmentSchema = createInsertSchema(crmSequenceEnrollments).omit({ id: true, createdAt: true });
+export const insertCrmSequenceEnrollmentSchema = createInsertSchema(crmSequenceEnrollments).omit({
+  id: true,
+  createdAt: true,
+});
 export type InsertCrmSequenceEnrollment = z.infer<typeof insertCrmSequenceEnrollmentSchema>;
 export type CrmSequenceEnrollment = typeof crmSequenceEnrollments.$inferSelect;
 
 // ─── CRM Lead Scoring Rules ──────────────────────────────────
 export const crmLeadScoringRules = pgTable("crm_lead_scoring_rules", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   companyId: varchar("company_id").notNull(),
   name: text("name").notNull(),
   field: text("field").notNull(),
@@ -381,7 +502,11 @@ export const crmLeadScoringRules = pgTable("crm_lead_scoring_rules", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmLeadScoringRuleSchema = createInsertSchema(crmLeadScoringRules).omit({ id: true, companyId: true, createdAt: true });
+export const insertCrmLeadScoringRuleSchema = createInsertSchema(crmLeadScoringRules).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
 export type InsertCrmLeadScoringRule = z.infer<typeof insertCrmLeadScoringRuleSchema>;
 export type CrmLeadScoringRule = typeof crmLeadScoringRules.$inferSelect;
 

@@ -7,23 +7,75 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Plus, Search, Megaphone, Trash2, Play, Pause } from "lucide-react";
 import type { CrmEmailCampaign } from "@shared/crm-schema";
 
-interface PaginatedResult<T> { data: T[]; total: number; page: number; totalPages: number; }
+interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
 
-function Pagination({ page, totalPages, total, onPageChange }: { page: number; totalPages: number; total: number; onPageChange: (p: number) => void }) {
+function Pagination({
+  page,
+  totalPages,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  onPageChange: (p: number) => void;
+}) {
   if (totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between text-sm text-muted-foreground pt-2">
       <span>{total} total</span>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)} data-testid="button-crm-campaigns-prev">Prev</Button>
-        <span>{page} / {totalPages}</span>
-        <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)} data-testid="button-crm-campaigns-next">Next</Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+          data-testid="button-crm-campaigns-prev"
+        >
+          Prev
+        </Button>
+        <span>
+          {page} / {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+          data-testid="button-crm-campaigns-next"
+        >
+          Next
+        </Button>
       </div>
     </div>
   );
@@ -57,8 +109,13 @@ export default function CrmCampaigns() {
       if (!res.ok) throw new Error((await res.json()).message);
       return res.json();
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crm/campaigns"] }); setOpen(false); toast({ title: "Campaign created" }); },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/campaigns"] });
+      setOpen(false);
+      toast({ title: "Campaign created" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -71,7 +128,10 @@ export default function CrmCampaigns() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/crm/campaigns/${id}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/crm/campaigns"] }); toast({ title: "Campaign deleted" }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/campaigns"] });
+      toast({ title: "Campaign deleted" });
+    },
   });
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -81,7 +141,7 @@ export default function CrmCampaigns() {
       name: fd.get("name") as string,
       subject: fd.get("subject") as string,
       bodyHtml: fd.get("body") as string,
-      type: fd.get("type") as string || "email",
+      type: (fd.get("type") as string) || "email",
     });
   }
 
@@ -92,7 +152,9 @@ export default function CrmCampaigns() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-crm-campaigns-title">Email Campaigns</h1>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-crm-campaigns-title">
+            Email Campaigns
+          </h1>
           <p className="text-muted-foreground mt-1 text-sm">Bulk email campaigns for contacts.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
@@ -102,22 +164,45 @@ export default function CrmCampaigns() {
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
-            <DialogHeader><DialogTitle>New Campaign</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>New Campaign</DialogTitle>
+            </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5"><Label>Campaign Name</Label><Input name="name" required data-testid="input-crm-campaign-name" /></div>
-              <div className="space-y-1.5"><Label>Email Subject</Label><Input name="subject" required data-testid="input-crm-campaign-subject" /></div>
+              <div className="space-y-1.5">
+                <Label>Campaign Name</Label>
+                <Input name="name" required data-testid="input-crm-campaign-name" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email Subject</Label>
+                <Input name="subject" required data-testid="input-crm-campaign-subject" />
+              </div>
               <div className="space-y-1.5">
                 <Label>Type</Label>
                 <Select name="type" defaultValue="email">
-                  <SelectTrigger data-testid="select-crm-campaign-type"><SelectValue /></SelectTrigger>
+                  <SelectTrigger data-testid="select-crm-campaign-type">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="email">Email</SelectItem>
                     <SelectItem value="sms">SMS</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5"><Label>Body</Label><Textarea name="body" rows={6} placeholder="Campaign body content..." data-testid="input-crm-campaign-body" /></div>
-              <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-crm-submit-campaign">
+              <div className="space-y-1.5">
+                <Label>Body</Label>
+                <Textarea
+                  name="body"
+                  rows={6}
+                  placeholder="Campaign body content..."
+                  data-testid="input-crm-campaign-body"
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={createMutation.isPending}
+                data-testid="button-crm-submit-campaign"
+              >
                 {createMutation.isPending ? "Creating..." : "Create Campaign"}
               </Button>
             </form>
@@ -128,7 +213,17 @@ export default function CrmCampaigns() {
       <div className="flex items-center gap-3 border-b border-border/50 pb-4">
         <div className="relative w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input type="search" placeholder="Search campaigns..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} data-testid="input-crm-search-campaigns" />
+          <Input
+            type="search"
+            placeholder="Search campaigns..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            data-testid="input-crm-search-campaigns"
+          />
         </div>
       </div>
 
@@ -157,23 +252,53 @@ export default function CrmCampaigns() {
                 {campaigns.map((c) => (
                   <TableRow key={c.id} data-testid={`row-crm-campaign-${c.id}`}>
                     <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{c.subject || "—"}</TableCell>
-                    <TableCell><Badge variant="outline" className="text-[10px]">email</Badge></TableCell>
-                    <TableCell><Badge variant={statusVariant(c.status)} className="text-[10px]">{c.status}</Badge></TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {c.subject || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px]">
+                        email
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={statusVariant(c.status)} className="text-[10px]">
+                        {c.status}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-sm">—</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         {c.status === "draft" && (
-                          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateMutation.mutate({ id: c.id, status: "active" })} data-testid={`button-crm-start-campaign-${c.id}`} title="Start">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => updateMutation.mutate({ id: c.id, status: "active" })}
+                            data-testid={`button-crm-start-campaign-${c.id}`}
+                            title="Start"
+                          >
                             <Play className="w-3.5 h-3.5" />
                           </Button>
                         )}
                         {c.status === "active" && (
-                          <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateMutation.mutate({ id: c.id, status: "paused" })} data-testid={`button-crm-pause-campaign-${c.id}`} title="Pause">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => updateMutation.mutate({ id: c.id, status: "paused" })}
+                            data-testid={`button-crm-pause-campaign-${c.id}`}
+                            title="Pause"
+                          >
                             <Pause className="w-3.5 h-3.5" />
                           </Button>
                         )}
-                        <Button variant="ghost" size="icon" className="w-7 h-7 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate(c.id)} data-testid={`button-crm-delete-campaign-${c.id}`}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => deleteMutation.mutate(c.id)}
+                          data-testid={`button-crm-delete-campaign-${c.id}`}
+                        >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
@@ -183,7 +308,14 @@ export default function CrmCampaigns() {
               </TableBody>
             </Table>
           </div>
-          {result && <Pagination page={result.page} totalPages={result.totalPages} total={result.total} onPageChange={setPage} />}
+          {result && (
+            <Pagination
+              page={result.page}
+              totalPages={result.totalPages}
+              total={result.total}
+              onPageChange={setPage}
+            />
+          )}
         </>
       )}
     </div>
