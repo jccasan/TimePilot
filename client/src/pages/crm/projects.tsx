@@ -523,7 +523,12 @@ export default function CrmProjects() {
         </>
       )}
 
-      <Dialog open={!!editProject} onOpenChange={(o) => { if (!o) setEditProject(null); }}>
+      <Dialog
+        open={!!editProject}
+        onOpenChange={(o) => {
+          if (!o) setEditProject(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Project</DialogTitle>
@@ -539,6 +544,8 @@ export default function CrmProjects() {
                     name: fd.get("name") as string,
                     description: (fd.get("description") as string) || null,
                     status: fd.get("status") as string,
+                    startDate: (fd.get("startDate") as string) || null,
+                    endDate: (fd.get("endDate") as string) || null,
                   },
                 });
               }}
@@ -576,6 +583,34 @@ export default function CrmProjects() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Start Date</Label>
+                  <Input
+                    type="date"
+                    name="startDate"
+                    defaultValue={
+                      editProject.startDate
+                        ? new Date(editProject.startDate).toISOString().slice(0, 10)
+                        : ""
+                    }
+                    data-testid="input-crm-edit-project-start-date"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>End Date</Label>
+                  <Input
+                    type="date"
+                    name="endDate"
+                    defaultValue={
+                      editProject.endDate
+                        ? new Date(editProject.endDate).toISOString().slice(0, 10)
+                        : ""
+                    }
+                    data-testid="input-crm-edit-project-end-date"
+                  />
+                </div>
               </div>
               <Button
                 type="submit"

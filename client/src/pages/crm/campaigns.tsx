@@ -344,7 +344,12 @@ export default function CrmCampaigns() {
         </>
       )}
 
-      <Dialog open={!!editCampaign} onOpenChange={(o) => { if (!o) setEditCampaign(null); }}>
+      <Dialog
+        open={!!editCampaign}
+        onOpenChange={(o) => {
+          if (!o) setEditCampaign(null);
+        }}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Campaign</DialogTitle>

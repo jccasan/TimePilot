@@ -353,7 +353,12 @@ export default function CrmDocuments() {
         </>
       )}
 
-      <Dialog open={!!editDoc} onOpenChange={(o) => { if (!o) setEditDoc(null); }}>
+      <Dialog
+        open={!!editDoc}
+        onOpenChange={(o) => {
+          if (!o) setEditDoc(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Document</DialogTitle>

@@ -17,7 +17,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Plus, Mail, CheckSquare, TrendingUp, FileText, Pencil, X, Check } from "lucide-react";
+import {
+  ChevronLeft,
+  Plus,
+  Mail,
+  CheckSquare,
+  TrendingUp,
+  FileText,
+  Pencil,
+  X,
+  Check,
+} from "lucide-react";
 import type { CrmContact, CrmDeal, CrmTask, CrmNote, CrmEmail } from "@shared/crm-schema";
 
 export default function CrmContactDetail() {

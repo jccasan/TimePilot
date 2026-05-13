@@ -1124,6 +1124,7 @@ export function registerCrmRoutes(app: Express) {
       )
       .returning();
     if (!c) return res.status(404).json({ message: "Campaign not found" });
+    await logCrmAudit(req, "updated", "campaign", c.id, { name: c.name });
     res.json(c);
   });
 

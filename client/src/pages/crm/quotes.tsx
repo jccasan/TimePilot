@@ -176,7 +176,11 @@ export default function CrmQuotes() {
     const contactId = fd.get("contactId") as string;
     createMutation.mutate({
       title: fd.get("title") as string,
-      lineItems,
+      items: lineItems.map((l) => ({
+        description: l.description,
+        quantity: l.quantity,
+        unitPrice: Math.round(l.unitPrice * 100),
+      })),
       subtotal: Math.round(subtotal * 100),
       taxRate,
       taxAmount: Math.round(tax * 100),
@@ -447,145 +451,177 @@ export default function CrmQuotes() {
         </>
       )}
 
-      {editQuote && (() => {
-        const editSubtotal = editLineItems.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
-        const editTax = editSubtotal * (editTaxRate / 100);
-        const editTotal = editSubtotal + editTax;
-        return (
-          <Dialog open={true} onOpenChange={(o) => { if (!o) { setEditQuote(null); setEditLineItems([]); setEditTaxRate(0); } }}>
-            <DialogContent className="sm:max-w-xl">
-              <DialogHeader>
-                <DialogTitle>Edit Quote</DialogTitle>
-              </DialogHeader>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const fd = new FormData(e.currentTarget);
-                  editMutation.mutate({
-                    id: editQuote.id,
-                    data: {
-                      title: fd.get("title") as string,
-                      items: editLineItems,
-                      subtotal: Math.round(editSubtotal * 100),
-                      taxRate: editTaxRate,
-                      taxAmount: Math.round(editTax * 100),
-                      total: Math.round(editTotal * 100),
-                    },
-                  });
-                }}
-                className="space-y-4"
-              >
-                <div className="space-y-1.5">
-                  <Label>Title</Label>
-                  <Input
-                    name="title"
-                    required
-                    defaultValue={editQuote.title}
-                    data-testid="input-crm-edit-quote-title"
-                  />
-                </div>
-                <div>
-                  <Label className="mb-2 block">Line Items</Label>
-                  <div className="space-y-2">
-                    {editLineItems.map((l, i) => (
-                      <div key={i} className="grid grid-cols-12 gap-2 items-center" data-testid={`row-edit-line-item-${i}`}>
-                        <Input
-                          placeholder="Description"
-                          value={l.description}
-                          onChange={(e) =>
-                            setEditLineItems((prev) =>
-                              prev.map((li, idx) => idx === i ? { ...li, description: e.target.value } : li)
-                            )
-                          }
-                          className="col-span-5"
-                          data-testid={`input-edit-li-desc-${i}`}
-                        />
-                        <Input
-                          type="number"
-                          min="1"
-                          value={l.quantity}
-                          onChange={(e) =>
-                            setEditLineItems((prev) =>
-                              prev.map((li, idx) => idx === i ? { ...li, quantity: Number(e.target.value) } : li)
-                            )
-                          }
-                          className="col-span-2"
-                          placeholder="Qty"
-                          data-testid={`input-edit-li-qty-${i}`}
-                        />
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={l.unitPrice}
-                          onChange={(e) =>
-                            setEditLineItems((prev) =>
-                              prev.map((li, idx) => idx === i ? { ...li, unitPrice: Number(e.target.value) } : li)
-                            )
-                          }
-                          className="col-span-3"
-                          placeholder="Unit $"
-                          data-testid={`input-edit-li-price-${i}`}
-                        />
-                        <div className="col-span-2 flex justify-end">
-                          {editLineItems.length > 1 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => setEditLineItems((prev) => prev.filter((_, idx) => idx !== i))}
-                              data-testid={`button-remove-edit-li-${i}`}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => setEditLineItems((prev) => [...prev, { description: "", quantity: 1, unitPrice: 0 }])}
-                    data-testid="button-add-edit-line-item"
-                  >
-                    Add Line
-                  </Button>
-                </div>
-                <div className="flex items-center gap-4 justify-end text-sm">
-                  <div className="flex items-center gap-2">
-                    <Label>Tax %</Label>
+      {editQuote &&
+        (() => {
+          const editSubtotal = editLineItems.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
+          const editTax = editSubtotal * (editTaxRate / 100);
+          const editTotal = editSubtotal + editTax;
+          return (
+            <Dialog
+              open={true}
+              onOpenChange={(o) => {
+                if (!o) {
+                  setEditQuote(null);
+                  setEditLineItems([]);
+                  setEditTaxRate(0);
+                }
+              }}
+            >
+              <DialogContent className="sm:max-w-xl">
+                <DialogHeader>
+                  <DialogTitle>Edit Quote</DialogTitle>
+                </DialogHeader>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const fd = new FormData(e.currentTarget);
+                    editMutation.mutate({
+                      id: editQuote.id,
+                      data: {
+                        title: fd.get("title") as string,
+                        items: editLineItems.map((l) => ({
+                          description: l.description,
+                          quantity: l.quantity,
+                          unitPrice: Math.round(l.unitPrice * 100),
+                        })),
+                        subtotal: Math.round(editSubtotal * 100),
+                        taxRate: editTaxRate,
+                        taxAmount: Math.round(editTax * 100),
+                        total: Math.round(editTotal * 100),
+                      },
+                    });
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="space-y-1.5">
+                    <Label>Title</Label>
                     <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={editTaxRate}
-                      onChange={(e) => setEditTaxRate(parseFloat(e.target.value) || 0)}
-                      className="w-20 h-8"
-                      data-testid="input-crm-edit-quote-tax"
+                      name="title"
+                      required
+                      defaultValue={editQuote.title}
+                      data-testid="input-crm-edit-quote-title"
                     />
                   </div>
-                  <div className="text-muted-foreground">
-                    Total: <span className="font-semibold text-foreground">${editTotal.toFixed(2)}</span>
+                  <div>
+                    <Label className="mb-2 block">Line Items</Label>
+                    <div className="space-y-2">
+                      {editLineItems.map((l, i) => (
+                        <div
+                          key={i}
+                          className="grid grid-cols-12 gap-2 items-center"
+                          data-testid={`row-edit-line-item-${i}`}
+                        >
+                          <Input
+                            placeholder="Description"
+                            value={l.description}
+                            onChange={(e) =>
+                              setEditLineItems((prev) =>
+                                prev.map((li, idx) =>
+                                  idx === i ? { ...li, description: e.target.value } : li
+                                )
+                              )
+                            }
+                            className="col-span-5"
+                            data-testid={`input-edit-li-desc-${i}`}
+                          />
+                          <Input
+                            type="number"
+                            min="1"
+                            value={l.quantity}
+                            onChange={(e) =>
+                              setEditLineItems((prev) =>
+                                prev.map((li, idx) =>
+                                  idx === i ? { ...li, quantity: Number(e.target.value) } : li
+                                )
+                              )
+                            }
+                            className="col-span-2"
+                            placeholder="Qty"
+                            data-testid={`input-edit-li-qty-${i}`}
+                          />
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={l.unitPrice}
+                            onChange={(e) =>
+                              setEditLineItems((prev) =>
+                                prev.map((li, idx) =>
+                                  idx === i ? { ...li, unitPrice: Number(e.target.value) } : li
+                                )
+                              )
+                            }
+                            className="col-span-3"
+                            placeholder="Unit $"
+                            data-testid={`input-edit-li-price-${i}`}
+                          />
+                          <div className="col-span-2 flex justify-end">
+                            {editLineItems.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() =>
+                                  setEditLineItems((prev) => prev.filter((_, idx) => idx !== i))
+                                }
+                                data-testid={`button-remove-edit-li-${i}`}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() =>
+                        setEditLineItems((prev) => [
+                          ...prev,
+                          { description: "", quantity: 1, unitPrice: 0 },
+                        ])
+                      }
+                      data-testid="button-add-edit-line-item"
+                    >
+                      Add Line
+                    </Button>
                   </div>
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={editMutation.isPending}
-                  data-testid="button-crm-submit-edit-quote"
-                >
-                  {editMutation.isPending ? "Saving..." : "Save Changes"}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        );
-      })()}
+                  <div className="flex items-center gap-4 justify-end text-sm">
+                    <div className="flex items-center gap-2">
+                      <Label>Tax %</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={editTaxRate}
+                        onChange={(e) => setEditTaxRate(parseFloat(e.target.value) || 0)}
+                        className="w-20 h-8"
+                        data-testid="input-crm-edit-quote-tax"
+                      />
+                    </div>
+                    <div className="text-muted-foreground">
+                      Total:{" "}
+                      <span className="font-semibold text-foreground">${editTotal.toFixed(2)}</span>
+                    </div>
+                  </div>
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={editMutation.isPending}
+                    data-testid="button-crm-submit-edit-quote"
+                  >
+                    {editMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          );
+        })()}
     </div>
   );
 }
