@@ -862,16 +862,20 @@ export async function runStartupMigrations(): Promise<void> {
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS document_requests (
-        id           VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        company_id   VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-        contact_id   VARCHAR NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-        token        VARCHAR(128) NOT NULL UNIQUE,
-        status       document_request_status NOT NULL DEFAULT 'pending',
-        sent_at      TIMESTAMP,
-        completed_at TIMESTAMP,
-        created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+        id              VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        company_id      VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        contact_id      VARCHAR NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+        token           VARCHAR(128) NOT NULL UNIQUE,
+        status          document_request_status NOT NULL DEFAULT 'pending',
+        sent_at         TIMESTAMP,
+        completed_at    TIMESTAMP,
+        certificate_url TEXT,
+        created_at      TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `);
+    await client.query(
+      `ALTER TABLE document_requests ADD COLUMN IF NOT EXISTS certificate_url TEXT`
+    );
     await client.query(
       `CREATE INDEX IF NOT EXISTS idx_doc_requests_company ON document_requests (company_id)`
     );

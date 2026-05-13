@@ -5,6 +5,7 @@ import { storage } from "../storage";
 import { isAuthenticated, getCompanyContext, p } from "./shared";
 import { ObjectStorageService } from "../replit_integrations/object_storage";
 import { sendEmail } from "../services/email";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -400,15 +401,31 @@ export async function registerDocumentsRoutes(app: Express): Promise<void> {
         });
 
         const templates = await storage.listDocumentTemplates(docRequest.companyId);
-        const activeTemplates = templates.filter((t) => t.isActive && t.isRequired);
+        const allActiveTemplates = templates.filter((t) => t.isActive);
+        const requiredTemplates = allActiveTemplates.filter((t) => t.isRequired);
         const allSignatures = await storage.getDocumentSignatures(docRequest.id);
         const signedTemplateIds = new Set(allSignatures.map((s) => s.templateId));
-        const allSigned = activeTemplates.every((t) => signedTemplateIds.has(t.id));
+        const allSigned = requiredTemplates.every((t) => signedTemplateIds.has(t.id));
 
         if (allSigned) {
+          const company = await storage.getCompany(docRequest.companyId);
+          const businessName = company?.name || "Your Service Provider";
+
+          const certificateUrl = await generateSignedCertificate({
+            objStorage,
+            docRequest,
+            allSignatures,
+            templates: allActiveTemplates,
+            signatureImageBuffer: req.file?.buffer,
+            signerName,
+            signerIp,
+            businessName,
+          });
+
           await storage.updateDocumentRequest(docRequest.id, {
             status: "completed",
             completedAt: new Date(),
+            certificateUrl,
           });
         }
 
@@ -419,4 +436,205 @@ export async function registerDocumentsRoutes(app: Express): Promise<void> {
       }
     }
   );
+
+  // ─── Token-gated certificate download ──────────────────────────────────────
+
+  app.get("/api/public/sign/:token/certificate", async (req: Request, res: Response) => {
+    try {
+      const token = p(req.params.token);
+      const docRequest = await storage.getDocumentRequestByToken(token);
+      if (!docRequest) return res.status(404).json({ error: "Signing request not found" });
+      if (!docRequest.certificateUrl) {
+        return res.status(404).json({ error: "Certificate not yet available" });
+      }
+
+      const objectFile = await objStorage.getObjectEntityFile(docRequest.certificateUrl);
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="signed-document-certificate.pdf"'
+      );
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Cache-Control", "private, max-age=0");
+      await objStorage.downloadObject(objectFile, res, 0);
+    } catch (err) {
+      console.error("[documents] certificate download error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to download certificate" });
+      }
+    }
+  });
+}
+
+// ─── PDF Certificate Generation ────────────────────────────────────────────
+
+interface CertificateOptions {
+  objStorage: ObjectStorageService;
+  docRequest: { id: string; companyId: string; contactId: string };
+  allSignatures: Array<{
+    signerName: string;
+    signerIp: string | null;
+    signedAt: Date;
+    signatureImagePath?: string | null;
+  }>;
+  templates: Array<{ name: string }>;
+  signatureImageBuffer?: Buffer;
+  signerName: string;
+  signerIp: string;
+  businessName: string;
+}
+
+async function generateSignedCertificate(opts: CertificateOptions): Promise<string> {
+  const {
+    objStorage,
+    allSignatures,
+    templates,
+    signatureImageBuffer,
+    signerName,
+    signerIp,
+    businessName,
+  } = opts;
+
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([612, 792]);
+  const { width, height } = page.getSize();
+
+  const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const green = rgb(0.176, 0.541, 0.369);
+  const darkGray = rgb(0.2, 0.2, 0.2);
+  const midGray = rgb(0.45, 0.45, 0.45);
+  const lightGray = rgb(0.85, 0.85, 0.85);
+
+  const margin = 48;
+  let y = height - margin;
+
+  page.drawRectangle({
+    x: 0,
+    y: height - 80,
+    width,
+    height: 80,
+    color: green,
+  });
+
+  page.drawText("Electronic Signature Certificate", {
+    x: margin,
+    y: height - 52,
+    size: 22,
+    font: boldFont,
+    color: rgb(1, 1, 1),
+  });
+
+  page.drawText(
+    "This document certifies that the agreement was reviewed and signed electronically.",
+    {
+      x: margin,
+      y: height - 72,
+      size: 9,
+      font: regularFont,
+      color: rgb(0.9, 0.9, 0.9),
+    }
+  );
+
+  y = height - 110;
+
+  const drawSectionHeader = (label: string) => {
+    page.drawRectangle({
+      x: margin,
+      y: y - 2,
+      width: width - margin * 2,
+      height: 20,
+      color: rgb(0.95, 0.97, 0.95),
+    });
+    page.drawText(label, { x: margin + 6, y: y + 2, size: 10, font: boldFont, color: green });
+    y -= 28;
+  };
+
+  const drawRow = (label: string, value: string) => {
+    page.drawText(label, { x: margin + 6, y, size: 9, font: boldFont, color: midGray });
+    page.drawText(value, { x: margin + 140, y, size: 9, font: regularFont, color: darkGray });
+    y -= 16;
+  };
+
+  const signedAt = allSignatures[0]?.signedAt ?? new Date();
+  const timestamp = signedAt.toUTCString();
+
+  drawSectionHeader("Signer Information");
+  drawRow("Business", businessName);
+  drawRow("Full Name", signerName);
+  drawRow("IP Address", signerIp || "Unknown");
+  drawRow("Timestamp (UTC)", timestamp);
+  y -= 8;
+
+  drawSectionHeader("Documents Signed");
+  for (const tpl of templates) {
+    page.drawText(`  \u2022  ${tpl.name}`, {
+      x: margin + 6,
+      y,
+      size: 9,
+      font: regularFont,
+      color: darkGray,
+    });
+    y -= 15;
+  }
+  y -= 8;
+
+  if (signatureImageBuffer) {
+    const sigImage = await pdfDoc.embedPng(signatureImageBuffer);
+    const sigDims = sigImage.scaleToFit(200, 80);
+
+    drawSectionHeader("Drawn Signature");
+    page.drawRectangle({
+      x: margin + 6,
+      y: y - sigDims.height - 4,
+      width: sigDims.width + 8,
+      height: sigDims.height + 8,
+      borderColor: lightGray,
+      borderWidth: 1,
+    });
+    page.drawImage(sigImage, {
+      x: margin + 10,
+      y: y - sigDims.height,
+      width: sigDims.width,
+      height: sigDims.height,
+    });
+    y -= sigDims.height + 20;
+  }
+
+  y -= 8;
+  page.drawLine({
+    start: { x: margin, y },
+    end: { x: width - margin, y },
+    thickness: 0.5,
+    color: lightGray,
+  });
+  y -= 14;
+  page.drawText(
+    "This certificate was generated automatically by Scoopilot upon completion of the electronic signature workflow.",
+    { x: margin, y, size: 7.5, font: regularFont, color: midGray }
+  );
+  y -= 12;
+  page.drawText(`Certificate generated: ${new Date().toUTCString()}`, {
+    x: margin,
+    y,
+    size: 7.5,
+    font: regularFont,
+    color: midGray,
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  const pdfBuffer = Buffer.from(pdfBytes);
+
+  const uploadURL = await objStorage.getObjectEntityUploadURL();
+  const objectPath = objStorage.normalizeObjectEntityPath(uploadURL);
+  const putRes = await fetch(uploadURL, {
+    method: "PUT",
+    body: pdfBuffer,
+    headers: { "Content-Type": "application/pdf" },
+  });
+  if (!putRes.ok) {
+    throw new Error("Failed to upload certificate PDF to storage");
+  }
+
+  return objectPath;
 }

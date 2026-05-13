@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, FileText, PenLine, AlertCircle, ExternalLink } from "lucide-react";
+import { CheckCircle, FileText, PenLine, AlertCircle, ExternalLink, Download } from "lucide-react";
 import SignaturePad from "signature_pad";
 import type { DocumentTemplate, DocumentRequest, DocumentSignature } from "@shared/schema";
 
@@ -92,6 +92,7 @@ export default function SignDocumentsPage() {
         .every((t) => data.signatures.some((s) => s.templateId === t.id)));
 
   if (isComplete) {
+    const certUrl = data.request.certificateUrl;
     return (
       <div className="min-h-screen bg-muted/30 flex items-center justify-center p-4">
         <Card className="w-full max-w-lg">
@@ -101,6 +102,24 @@ export default function SignDocumentsPage() {
             <p className="text-muted-foreground text-center">
               All documents have been successfully signed. Thank you!
             </p>
+            {certUrl && (
+              <Button
+                variant="outline"
+                asChild
+                data-testid="button-download-certificate"
+                className="mt-2"
+              >
+                <a
+                  href={`/api/public/sign/${token}/certificate`}
+                  download="signed-document-certificate.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download your signed document
+                </a>
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>

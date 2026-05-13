@@ -3407,6 +3407,7 @@ export const documentRequests = pgTable(
     status: documentRequestStatusEnum("status").notNull().default("pending"),
     sentAt: timestamp("sent_at"),
     completedAt: timestamp("completed_at"),
+    certificateUrl: text("certificate_url"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
