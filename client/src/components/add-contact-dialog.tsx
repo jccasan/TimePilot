@@ -59,22 +59,34 @@ const DAYS = [
   { value: "sunday", label: "S" },
 ];
 
-const contactFormSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().optional().or(z.literal("")),
-  phone: z.string().optional().or(z.literal("")),
-  email: z.string().email("Enter a valid email").optional().or(z.literal("")),
-  streetAddress: z.string().optional().or(z.literal("")),
-  address2: z.string().optional().or(z.literal("")),
-  city: z.string().optional().or(z.literal("")),
-  state: z.string().optional().or(z.literal("")),
-  zipCode: z.string().optional().or(z.literal("")),
-  serviceFrequency: z.string().optional().or(z.literal("")),
-  numberOfDogs: z.number().min(0).optional(),
-  serviceDay: z.string().optional().or(z.literal("")),
-  notes: z.string().optional().or(z.literal("")),
-  status: z.enum(["lead", "estimate", "active", "paused", "cancelled"]),
-});
+const contactFormSchema = z
+  .object({
+    firstName: z.string().min(1, "First name is required"),
+    lastName: z.string().optional().or(z.literal("")),
+    phone: z.string().optional().or(z.literal("")),
+    email: z.string().email("Enter a valid email").optional().or(z.literal("")),
+    streetAddress: z.string().optional().or(z.literal("")),
+    address2: z.string().optional().or(z.literal("")),
+    city: z.string().optional().or(z.literal("")),
+    state: z.string().optional().or(z.literal("")),
+    zipCode: z.string().optional().or(z.literal("")),
+    serviceFrequency: z.string().optional().or(z.literal("")),
+    numberOfDogs: z.number().min(0).optional(),
+    serviceDay: z.string().optional().or(z.literal("")),
+    notes: z.string().optional().or(z.literal("")),
+    status: z.enum(["lead", "estimate", "active", "paused", "cancelled"]),
+    contactType: z.enum(["residential", "commercial"]),
+    companyName: z.string().optional().or(z.literal("")),
+  })
+  .superRefine((data, ctx) => {
+    if (data.contactType === "commercial" && !data.companyName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Company name is required for commercial contacts",
+        path: ["companyName"],
+      });
+    }
+  });
 
 type ContactFormValues = z.infer<typeof contactFormSchema>;
 
@@ -118,6 +130,8 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
       serviceDay: "",
       notes: "",
       status: "lead",
+      contactType: "residential",
+      companyName: "",
     },
   });
 
@@ -188,10 +202,11 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
   };
 
   const goToStep2 = async () => {
-    const valid = await form.trigger(["firstName", "email"]);
+    const fieldsToValidate: (keyof ContactFormValues)[] = ["firstName", "email"];
+    if (form.getValues("contactType") === "commercial") fieldsToValidate.push("companyName");
+    const valid = await form.trigger(fieldsToValidate);
     if (!valid) return;
     setStep(2);
-    // Fetch day suggestion in background if we have coordinates
     if (addressCoords) {
       setIsFetchingSuggestion(true);
       try {
@@ -202,7 +217,6 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
         const data = await res.json();
         if (data?.day) {
           setSuggestedDay(data.day);
-          // Pre-select only if nothing picked yet
           if (!form.getValues("serviceDay")) {
             form.setValue("serviceDay", data.day);
           }
@@ -216,7 +230,9 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
   };
 
   const submit = async (scheduleNow: boolean) => {
-    const valid = await form.trigger(["firstName", "email"]);
+    const fieldsToValidate: (keyof ContactFormValues)[] = ["firstName", "email"];
+    if (form.getValues("contactType") === "commercial") fieldsToValidate.push("companyName");
+    const valid = await form.trigger(fieldsToValidate);
     if (!valid) {
       setStep(1);
       return;
@@ -385,8 +401,73 @@ function Step1({
   onSaveAndFinish: () => void;
   onAddressSelect: (lat: string, lng: string) => void;
 }) {
+  const contactType = form.watch("contactType");
+
   return (
     <div className="space-y-4">
+      <div className="space-y-1.5">
+        <p className="text-sm font-medium">Customer type</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-testid="toggle-type-residential"
+            onClick={() => form.setValue("contactType", "residential")}
+            className={cn(
+              "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+              contactType === "residential"
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-background text-foreground hover:bg-muted"
+            )}
+          >
+            Residential
+          </button>
+          <button
+            type="button"
+            data-testid="toggle-type-commercial"
+            onClick={() => form.setValue("contactType", "commercial")}
+            className={cn(
+              "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+              contactType === "commercial"
+                ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
+                : "border-border bg-background text-foreground hover:bg-muted"
+            )}
+          >
+            Commercial
+          </button>
+        </div>
+      </div>
+
+      <FormField
+        control={form.control}
+        name="companyName"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>
+              Company / Business name
+              {contactType === "commercial" && <span className="text-destructive ml-1">*</span>}
+            </FormLabel>
+            <FormControl>
+              <Input
+                {...field}
+                data-testid="input-company-name"
+                placeholder="Acme Property Management"
+                className="h-11"
+                onChange={(e) => {
+                  field.onChange(e);
+                  const val = e.target.value.trim();
+                  if (val) {
+                    form.setValue("contactType", "commercial");
+                  } else {
+                    form.setValue("contactType", "residential");
+                  }
+                }}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
       <div className="grid grid-cols-2 gap-3">
         <FormField
           control={form.control}

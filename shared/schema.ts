@@ -110,6 +110,7 @@ export const priceRecommendationSourceEnum = pgEnum("price_recommendation_source
   "auto",
   "ai_optimizer",
 ]);
+export const contactTypeEnum = pgEnum("contact_type", ["residential", "commercial"]);
 
 export interface PricingRulesConfig {
   basePrices: {
@@ -523,6 +524,8 @@ export const contacts = pgTable(
     dismissedOpportunities: jsonb("dismissed_opportunities")
       .$type<string[]>()
       .default(sql`'[]'::jsonb`),
+    contactType: contactTypeEnum("contact_type").notNull().default("residential"),
+    companyName: varchar("company_name", { length: 255 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

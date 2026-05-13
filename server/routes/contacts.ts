@@ -524,9 +524,10 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
   app.get("/api/contacts", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const filters: { status?: string; search?: string } = {};
+      const filters: { status?: string; search?: string; contactType?: string } = {};
       if (req.query.status) filters.status = req.query.status as string;
       if (req.query.search) filters.search = (req.query.search as string).replace(/\0/g, "");
+      if (req.query.contactType) filters.contactType = req.query.contactType as string;
 
       const rawPage = parseInt(req.query.page as string);
       const rawLimit = parseInt(req.query.limit as string);
@@ -703,7 +704,12 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       }
 
       const { suppressNotifications: _sn, ...bodyWithoutFlag } = req.body;
-      const parsed = insertContactSchema.parse({ ...bodyWithoutFlag, companyId });
+      const cleanedBody = Object.fromEntries(
+        Object.entries(bodyWithoutFlag)
+          .map(([k, v]) => [k, v === "" ? undefined : v])
+          .filter(([, v]) => v !== undefined)
+      );
+      const parsed = insertContactSchema.parse({ ...cleanedBody, companyId });
       const contact = await storage.createContact(parsed);
 
       let propertyCreated = false;
@@ -790,6 +796,10 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         return res
           .status(400)
           .json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+      }
+      const resolvedType = req.body.contactType ?? existing.contactType ?? "residential";
+      if (resolvedType === "commercial" && req.body.companyName === "") {
+        return res.status(400).json({ error: "Company name is required for commercial contacts" });
       }
       const { costOverrides: _stripCostOverrides, ...safeBody } = req.body;
       const contact = await storage.updateContact(p(req.params.id), companyId, safeBody);

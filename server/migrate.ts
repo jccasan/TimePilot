@@ -907,6 +907,21 @@ export async function runStartupMigrations(): Promise<void> {
 
     console.log("[Migration] Document signing tables ensured");
 
+    // contact_type enum + columns
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'contact_type') THEN
+          CREATE TYPE contact_type AS ENUM ('residential', 'commercial');
+        END IF;
+      END $$
+    `);
+    await client.query(`
+      ALTER TABLE contacts
+        ADD COLUMN IF NOT EXISTS contact_type contact_type NOT NULL DEFAULT 'residential',
+        ADD COLUMN IF NOT EXISTS company_name  VARCHAR(255)
+    `);
+    console.log("[Migration] contacts contact_type / company_name columns ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

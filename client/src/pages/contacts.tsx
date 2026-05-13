@@ -91,11 +91,41 @@ const CONTACT_FIELDS = [
 ];
 
 const VALID_STATUS_FILTERS = ["all", "lead", "estimate", "active", "paused", "cancelled"];
+const VALID_TYPE_FILTERS = ["all", "residential", "commercial"];
 
 function getInitialStatusFilter(): string {
   const params = new URLSearchParams(window.location.search);
   const s = params.get("status");
   return s && VALID_STATUS_FILTERS.includes(s) ? s : "all";
+}
+
+function getInitialTypeFilter(): string {
+  const params = new URLSearchParams(window.location.search);
+  const t = params.get("contactType");
+  return t && VALID_TYPE_FILTERS.includes(t) ? t : "all";
+}
+
+function ContactTypeBadge({ type, testId }: { type: string | null | undefined; testId?: string }) {
+  if (!type || type === "residential") {
+    return (
+      <Badge
+        variant="outline"
+        className="text-xs border-green-300 text-green-700 bg-green-50 dark:border-green-700 dark:text-green-400 dark:bg-green-950/20"
+        data-testid={testId}
+      >
+        Residential
+      </Badge>
+    );
+  }
+  return (
+    <Badge
+      variant="outline"
+      className="text-xs border-blue-300 text-blue-700 bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:bg-blue-950/20"
+      data-testid={testId}
+    >
+      Commercial
+    </Badge>
+  );
 }
 
 export default function Contacts() {
@@ -104,6 +134,7 @@ export default function Contacts() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(getInitialStatusFilter);
+  const [typeFilter, setTypeFilter] = useState(getInitialTypeFilter);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importStep, setImportStep] = useState<"idle" | "mapping" | "review">("idle");
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
@@ -129,10 +160,11 @@ export default function Contacts() {
 
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, search]);
+  }, [statusFilter, typeFilter, search]);
 
   const queryParams = new URLSearchParams();
   if (statusFilter !== "all") queryParams.set("status", statusFilter);
+  if (typeFilter !== "all") queryParams.set("contactType", typeFilter);
   if (search) queryParams.set("search", search);
   queryParams.set("page", String(page));
   queryParams.set("limit", String(PAGE_SIZE));
@@ -367,28 +399,45 @@ export default function Contacts() {
         />
       </div>
 
-      <Tabs value={statusFilter} onValueChange={setStatusFilter}>
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="all" data-testid="tab-all">
-            All
-          </TabsTrigger>
-          <TabsTrigger value="lead" data-testid="tab-lead">
-            Lead
-          </TabsTrigger>
-          <TabsTrigger value="estimate" data-testid="tab-estimate">
-            Estimate
-          </TabsTrigger>
-          <TabsTrigger value="active" data-testid="tab-active">
-            Active
-          </TabsTrigger>
-          <TabsTrigger value="paused" data-testid="tab-paused">
-            Paused
-          </TabsTrigger>
-          <TabsTrigger value="cancelled" data-testid="tab-cancelled">
-            Cancelled
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="flex flex-wrap items-center gap-3">
+        <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+          <TabsList className="flex-wrap">
+            <TabsTrigger value="all" data-testid="tab-all">
+              All
+            </TabsTrigger>
+            <TabsTrigger value="lead" data-testid="tab-lead">
+              Lead
+            </TabsTrigger>
+            <TabsTrigger value="estimate" data-testid="tab-estimate">
+              Estimate
+            </TabsTrigger>
+            <TabsTrigger value="active" data-testid="tab-active">
+              Active
+            </TabsTrigger>
+            <TabsTrigger value="paused" data-testid="tab-paused">
+              Paused
+            </TabsTrigger>
+            <TabsTrigger value="cancelled" data-testid="tab-cancelled">
+              Cancelled
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <Select
+          value={typeFilter}
+          onValueChange={(v) => {
+            if (VALID_TYPE_FILTERS.includes(v)) setTypeFilter(v);
+          }}
+        >
+          <SelectTrigger className="w-[160px] h-9" data-testid="select-type-filter">
+            <SelectValue placeholder="Type: All" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Type: All</SelectItem>
+            <SelectItem value="residential">Residential</SelectItem>
+            <SelectItem value="commercial">Commercial</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       {isLoading ? (
         <div className="space-y-3">
@@ -445,6 +494,10 @@ export default function Contacts() {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5">
+                      <ContactTypeBadge
+                        type={contact.contactType}
+                        testId={`badge-contact-type-${contact.id}`}
+                      />
                       {contact.status === "active" && contact.onboardingStatus?.pending && (
                         <Badge
                           className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"

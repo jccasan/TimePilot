@@ -274,11 +274,11 @@ export interface IStorage {
   getContact(id: string, companyId: string): Promise<Contact | undefined>;
   getContacts(
     companyId: string,
-    filters?: { status?: string; search?: string }
+    filters?: { status?: string; search?: string; contactType?: string }
   ): Promise<Contact[]>;
   getContactsPage(
     companyId: string,
-    filters?: { status?: string; search?: string },
+    filters?: { status?: string; search?: string; contactType?: string },
     page?: number,
     limit?: number
   ): Promise<{ data: Contact[]; total: number }>;
@@ -1183,12 +1183,19 @@ export class DatabaseStorage implements IStorage {
 
   async getContacts(
     companyId: string,
-    filters?: { status?: string; search?: string }
+    filters?: { status?: string; search?: string; contactType?: string }
   ): Promise<Contact[]> {
     const conditions = [eq(contacts.companyId, companyId)];
     if (filters?.status)
       conditions.push(
         eq(contacts.status, filters.status as (typeof contacts.$inferSelect)["status"])
+      );
+    if (filters?.contactType)
+      conditions.push(
+        eq(
+          contacts.contactType,
+          filters.contactType as (typeof contacts.$inferSelect)["contactType"]
+        )
       );
     if (filters?.search) {
       conditions.push(
@@ -1209,7 +1216,7 @@ export class DatabaseStorage implements IStorage {
 
   async getContactsPage(
     companyId: string,
-    filters?: { status?: string; search?: string },
+    filters?: { status?: string; search?: string; contactType?: string },
     page: number = 1,
     limit: number = 50
   ): Promise<{ data: Contact[]; total: number }> {
@@ -1217,6 +1224,13 @@ export class DatabaseStorage implements IStorage {
     if (filters?.status)
       conditions.push(
         eq(contacts.status, filters.status as (typeof contacts.$inferSelect)["status"])
+      );
+    if (filters?.contactType)
+      conditions.push(
+        eq(
+          contacts.contactType,
+          filters.contactType as (typeof contacts.$inferSelect)["contactType"]
+        )
       );
     if (filters?.search) {
       conditions.push(

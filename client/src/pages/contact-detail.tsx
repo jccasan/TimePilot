@@ -528,10 +528,37 @@ export default function ContactDetail() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
-          <CardTitle className="text-xl" data-testid="text-contact-detail-name">
-            {contact.firstName} {contact.lastName}
-          </CardTitle>
+          <div>
+            <CardTitle className="text-xl" data-testid="text-contact-detail-name">
+              {contact.firstName} {contact.lastName}
+            </CardTitle>
+            {contact.contactType === "commercial" && contact.companyName && (
+              <p
+                className="text-sm text-muted-foreground mt-0.5 font-medium"
+                data-testid="text-contact-company-name"
+              >
+                {contact.companyName}
+              </p>
+            )}
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {contact.contactType === "commercial" ? (
+              <Badge
+                variant="outline"
+                className="text-xs border-blue-300 text-blue-700 bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:bg-blue-950/20"
+                data-testid="badge-contact-type"
+              >
+                Commercial
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="text-xs border-green-300 text-green-700 bg-green-50 dark:border-green-700 dark:text-green-400 dark:bg-green-950/20"
+                data-testid="badge-contact-type"
+              >
+                Residential
+              </Badge>
+            )}
             <Badge
               variant="secondary"
               className={statusColors[contact.status] || ""}
