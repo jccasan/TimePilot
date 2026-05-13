@@ -474,6 +474,72 @@ export function registerCrmRoutes(app: Express) {
     res.status(204).send();
   });
 
+  app.get("/api/crm/companies/:id/contacts", async (req, res) => {
+    const companyId = getCompanyId(req);
+    const [co] = await db
+      .select()
+      .from(crmCompanies)
+      .where(and(eq(crmCompanies.id, req.params.id), eq(crmCompanies.companyId, companyId)));
+    if (!co) return res.status(404).json({ message: "Company not found" });
+    const contacts = await db
+      .select()
+      .from(crmContacts)
+      .where(and(eq(crmContacts.companyId, companyId), ilike(crmContacts.company, co.name)))
+      .orderBy(crmContacts.lastName);
+    res.json(contacts);
+  });
+
+  app.get("/api/crm/companies/:id/deals", async (req, res) => {
+    const companyId = getCompanyId(req);
+    const deals = await db
+      .select()
+      .from(crmDeals)
+      .where(and(eq(crmDeals.companyId, companyId), eq(crmDeals.crmCompanyId, req.params.id)))
+      .orderBy(desc(crmDeals.createdAt));
+    res.json(deals);
+  });
+
+  app.get("/api/crm/companies/:id/notes", async (req, res) => {
+    const companyId = getCompanyId(req);
+    const notes = await db
+      .select()
+      .from(crmNotes)
+      .where(and(eq(crmNotes.companyId, companyId), eq(crmNotes.crmCompanyId, req.params.id)))
+      .orderBy(desc(crmNotes.createdAt));
+    res.json(notes);
+  });
+
+  app.post("/api/crm/companies/:id/notes", async (req, res) => {
+    const companyId = getCompanyId(req);
+    const [co] = await db
+      .select({ id: crmCompanies.id })
+      .from(crmCompanies)
+      .where(and(eq(crmCompanies.id, req.params.id), eq(crmCompanies.companyId, companyId)));
+    if (!co) return res.status(404).json({ message: "Company not found" });
+    const [note] = await db
+      .insert(crmNotes)
+      .values({ content: req.body.content, crmCompanyId: req.params.id, companyId })
+      .returning();
+    res.status(201).json(note);
+  });
+
+  app.get("/api/crm/companies/:id/activity", async (req, res) => {
+    const companyId = getCompanyId(req);
+    const logs = await db
+      .select()
+      .from(crmAuditLogs)
+      .where(
+        and(
+          eq(crmAuditLogs.companyId, companyId),
+          eq(crmAuditLogs.entity, "company"),
+          eq(crmAuditLogs.entityId, req.params.id)
+        )
+      )
+      .orderBy(desc(crmAuditLogs.createdAt))
+      .limit(50);
+    res.json(logs);
+  });
+
   // ─── CRM Deals ────────────────────────────────────────
   app.get("/api/crm/deals", async (req, res) => {
     const c = getCompanyId(req);

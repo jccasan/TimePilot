@@ -23,7 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Plus, FileText, Mail, CheckSquare, Pencil, X, Check } from "lucide-react";
+import { ChevronLeft, Plus, FileText, Mail, CheckSquare, Pencil, X, Check, Building2 } from "lucide-react";
 import type { CrmDeal, CrmNote, CrmTask, CrmEmail } from "@shared/crm-schema";
 
 const stages = ["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"];
@@ -262,6 +262,19 @@ export default function CrmDealDetail() {
               <span className="text-muted-foreground">Status: </span>
               {deal.status}
             </div>
+            {deal.crmCompanyId && (
+              <div>
+                <span className="text-muted-foreground">Company: </span>
+                <Link
+                  href={`/crm/companies/${deal.crmCompanyId}`}
+                  className="text-primary hover:underline inline-flex items-center gap-1"
+                  data-testid="link-crm-deal-company"
+                >
+                  <Building2 className="w-3 h-3" />
+                  View Company
+                </Link>
+              </div>
+            )}
             {deal.assignedTo && (
               <div>
                 <span className="text-muted-foreground">Assigned To: </span>

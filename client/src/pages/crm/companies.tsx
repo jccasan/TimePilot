@@ -28,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useLocation } from "wouter";
 import { Plus, Search, Building2, Trash2 } from "lucide-react";
 import type { CrmCompany } from "@shared/crm-schema";
 
@@ -94,6 +95,7 @@ function Pagination({
 
 export default function CrmCompanies() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [industryFilter, setIndustryFilter] = useState("all");
@@ -290,7 +292,12 @@ export default function CrmCompanies() {
               </TableHeader>
               <TableBody>
                 {companies.map((co) => (
-                  <TableRow key={co.id} data-testid={`row-crm-company-${co.id}`}>
+                  <TableRow
+                    key={co.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`/crm/companies/${co.id}`)}
+                    data-testid={`row-crm-company-${co.id}`}
+                  >
                     <TableCell className="font-medium">{co.name}</TableCell>
                     <TableCell className="text-sm font-mono">{co.domain || "—"}</TableCell>
                     <TableCell>{co.industry ? co.industry.replace("_", " ") : "—"}</TableCell>
@@ -305,7 +312,10 @@ export default function CrmCompanies() {
                         variant="ghost"
                         size="icon"
                         className="w-8 h-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => deleteMutation.mutate(co.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteMutation.mutate(co.id);
+                        }}
                         data-testid={`button-crm-delete-company-${co.id}`}
                       >
                         <Trash2 className="w-4 h-4" />

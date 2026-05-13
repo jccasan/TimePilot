@@ -6,6 +6,7 @@ const CrmDashboard = lazy(() => import("./dashboard"));
 const CrmContacts = lazy(() => import("./contacts"));
 const CrmContactDetail = lazy(() => import("./contact-detail"));
 const CrmCompanies = lazy(() => import("./companies"));
+const CrmCompanyDetail = lazy(() => import("./company-detail"));
 const CrmDeals = lazy(() => import("./deals"));
 const CrmDealDetail = lazy(() => import("./deal-detail"));
 const CrmPipeline = lazy(() => import("./pipeline"));
@@ -36,6 +37,7 @@ export default function CrmRouter() {
         <Route path="/crm" component={CrmDashboard} />
         <Route path="/crm/contacts/:id" component={CrmContactDetail} />
         <Route path="/crm/contacts" component={CrmContacts} />
+        <Route path="/crm/companies/:id" component={CrmCompanyDetail} />
         <Route path="/crm/companies" component={CrmCompanies} />
         <Route path="/crm/deals/:id" component={CrmDealDetail} />
         <Route path="/crm/deals" component={CrmDeals} />
