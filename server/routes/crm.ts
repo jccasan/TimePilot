@@ -384,6 +384,9 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmContacts.id, req.params.id), eq(crmContacts.companyId, getCompanyId(req))))
       .returning();
     if (!r.length) return res.status(404).json({ message: "Contact not found" });
+    await logCrmAudit(req, "deleted", "contact", r[0].id, {
+      name: `${r[0].firstName} ${r[0].lastName}`,
+    });
     res.status(204).send();
   });
 
@@ -471,6 +474,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmCompanies.id, req.params.id), eq(crmCompanies.companyId, getCompanyId(req))))
       .returning();
     if (!r.length) return res.status(404).json({ message: "Company not found" });
+    await logCrmAudit(req, "deleted", "company", r[0].id, { name: r[0].name });
     res.status(204).send();
   });
 
@@ -668,6 +672,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmDeals.id, req.params.id), eq(crmDeals.companyId, getCompanyId(req))))
       .returning();
     if (!r.length) return res.status(404).json({ message: "Deal not found" });
+    await logCrmAudit(req, "deleted", "deal", r[0].id, { title: r[0].title });
     res.status(204).send();
   });
 
@@ -733,6 +738,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmTasks.id, req.params.id), eq(crmTasks.companyId, getCompanyId(req))))
       .returning();
     if (!r.length) return res.status(404).json({ message: "Task not found" });
+    await logCrmAudit(req, "deleted", "task", r[0].id, { title: r[0].title });
     res.status(204).send();
   });
 
@@ -776,6 +782,9 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmNotes.id, req.params.id), eq(crmNotes.companyId, getCompanyId(req))))
       .returning();
     if (!r.length) return res.status(404).json({ message: "Note not found" });
+    await logCrmAudit(req, "deleted", "note", r[0].id, {
+      preview: r[0].content?.slice(0, 80) ?? "",
+    });
     res.status(204).send();
   });
 
@@ -888,6 +897,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmDocuments.id, req.params.id), eq(crmDocuments.companyId, getCompanyId(req))))
       .returning();
     if (!r.length) return res.status(404).json({ message: "Document not found" });
+    await logCrmAudit(req, "deleted", "document", r[0].id, { name: r[0].name });
     res.status(204).send();
   });
 
@@ -930,6 +940,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmWebForms.id, req.params.id), eq(crmWebForms.companyId, getCompanyId(req))))
       .returning();
     if (!r.length) return res.status(404).json({ message: "Form not found" });
+    await logCrmAudit(req, "deleted", "form", r[0].id, { name: r[0].name });
     res.status(204).send();
   });
 
@@ -1006,6 +1017,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmQuotes.id, req.params.id), eq(crmQuotes.companyId, getCompanyId(req))))
       .returning();
     if (!r.length) return res.status(404).json({ message: "Quote not found" });
+    await logCrmAudit(req, "deleted", "quote", r[0].id, { title: r[0].title });
     res.status(204).send();
   });
 
@@ -1079,6 +1091,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmProjects.id, req.params.id), eq(crmProjects.companyId, getCompanyId(req))))
       .returning();
     if (!r.length) return res.status(404).json({ message: "Project not found" });
+    await logCrmAudit(req, "deleted", "project", r[0].id, { name: r[0].name });
     res.status(204).send();
   });
 
@@ -1113,6 +1126,7 @@ export function registerCrmRoutes(app: Express) {
       )
       .returning();
     if (!r.length) return res.status(404).json({ message: "Task not found" });
+    await logCrmAudit(req, "deleted", "project_task", r[0].id, { title: r[0].title });
     res.status(204).send();
   });
 
@@ -1205,6 +1219,7 @@ export function registerCrmRoutes(app: Express) {
       )
       .returning();
     if (!r.length) return res.status(404).json({ message: "Campaign not found" });
+    await logCrmAudit(req, "deleted", "campaign", r[0].id, { name: r[0].name });
     res.status(204).send();
   });
 
@@ -1275,6 +1290,7 @@ export function registerCrmRoutes(app: Express) {
       )
       .returning();
     if (!r.length) return res.status(404).json({ message: "Automation not found" });
+    await logCrmAudit(req, "deleted", "automation", r[0].id, { name: r[0].name });
     res.status(204).send();
   });
 
@@ -1348,6 +1364,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmSequences.id, req.params.id), eq(crmSequences.companyId, getCompanyId(req))))
       .returning();
     if (!r.length) return res.status(404).json({ message: "Sequence not found" });
+    await logCrmAudit(req, "deleted", "sequence", r[0].id, { name: r[0].name });
     res.status(204).send();
   });
 
@@ -1384,6 +1401,10 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmSequences.id, step.sequenceId), eq(crmSequences.companyId, c)));
     if (!seq) return res.status(403).json({ message: "Forbidden" });
     await db.delete(crmSequenceSteps).where(eq(crmSequenceSteps.id, req.params.id));
+    await logCrmAudit(req, "deleted", "sequence_step", step.id, {
+      sequenceId: step.sequenceId,
+      stepNumber: step.stepNumber,
+    });
     res.status(204).send();
   });
 
@@ -1467,6 +1488,9 @@ export function registerCrmRoutes(app: Express) {
       )
       .returning();
     if (!result.length) return res.status(404).json({ message: "Rule not found" });
+    await logCrmAudit(req, "deleted", "lead_scoring_rule", result[0].id, {
+      field: result[0].field,
+    });
     res.status(204).send();
   });
 
@@ -1526,6 +1550,7 @@ export function registerCrmRoutes(app: Express) {
       )
       .returning();
     if (!result.length) return res.status(404).json({ message: "Notification not found" });
+    await logCrmAudit(req, "deleted", "notification", result[0].id, { title: result[0].title });
     res.status(204).send();
   });
 
@@ -1569,6 +1594,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmWebhooks.id, req.params.id), eq(crmWebhooks.companyId, getCompanyId(req))))
       .returning();
     if (!result.length) return res.status(404).json({ message: "Webhook not found" });
+    await logCrmAudit(req, "deleted", "webhook", result[0].id, { url: result[0].url });
     res.status(204).send();
   });
 
