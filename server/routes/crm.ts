@@ -1269,7 +1269,10 @@ export function registerCrmRoutes(app: Express) {
     });
     if (!parsed.success)
       return res.status(400).json({ message: fromError(parsed.error).toString() });
-    const [step] = await db.insert(crmSequenceSteps).values(parsed.data).returning();
+    const [step] = await db
+      .insert(crmSequenceSteps)
+      .values({ ...parsed.data, companyId: c })
+      .returning();
     res.status(201).json(step);
   });
 

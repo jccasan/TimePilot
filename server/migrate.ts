@@ -601,8 +601,25 @@ export async function runStartupMigrations(): Promise<void> {
       `UPDATE crm_notes SET content = body WHERE content IS NULL AND body IS NOT NULL`
     );
 
-    // crm_emails: schema requires subject/body NOT NULL and has thread_id
+    // crm_activities table (was missing from initial migration)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_activities (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        type TEXT NOT NULL,
+        description TEXT NOT NULL,
+        contact_id VARCHAR,
+        deal_id VARCHAR,
+        crm_company_id VARCHAR,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // crm_emails: schema requires subject/body NOT NULL and has thread_id and sent_at
     await client.query(`ALTER TABLE crm_emails ADD COLUMN IF NOT EXISTS thread_id VARCHAR`);
+    await client.query(
+      `ALTER TABLE crm_emails ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP DEFAULT NOW()`
+    );
     await client.query(`UPDATE crm_emails SET subject = '' WHERE subject IS NULL`);
     await client.query(`UPDATE crm_emails SET body = '' WHERE body IS NULL`);
 

@@ -449,6 +449,7 @@ export const crmSequenceSteps = pgTable("crm_sequence_steps", {
   id: varchar("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull(),
   sequenceId: varchar("sequence_id").notNull(),
   stepNumber: integer("step_number").notNull().default(1),
   type: text("type").notNull().default("email"),
@@ -462,6 +463,7 @@ export const crmSequenceSteps = pgTable("crm_sequence_steps", {
 
 export const insertCrmSequenceStepSchema = createInsertSchema(crmSequenceSteps).omit({
   id: true,
+  companyId: true,
   createdAt: true,
 });
 export type InsertCrmSequenceStep = z.infer<typeof insertCrmSequenceStepSchema>;
