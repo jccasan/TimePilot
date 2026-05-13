@@ -23,7 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Plus, FileText, Mail, CheckSquare } from "lucide-react";
+import { ChevronLeft, Plus, FileText, Mail, CheckSquare, Pencil, X, Check } from "lucide-react";
 import type { CrmDeal, CrmNote, CrmTask, CrmEmail } from "@shared/crm-schema";
 
 const stages = ["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"];
@@ -33,6 +33,8 @@ export default function CrmDealDetail() {
   const { toast } = useToast();
   const [noteOpen, setNoteOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState("");
 
   const { data: deal, isLoading } = useQuery<CrmDeal>({
     queryKey: ["/api/crm/deals", id],
@@ -99,6 +101,19 @@ export default function CrmDealDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/crm/deals", id, "tasks"] });
       setTaskOpen(false);
       toast({ title: "Task created" });
+    },
+  });
+
+  const updateNoteMutation = useMutation({
+    mutationFn: async ({ noteId, content }: { noteId: string; content: string }) => {
+      const res = await apiRequest("PATCH", `/api/crm/notes/${noteId}`, { content });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/deals", id, "notes"] });
+      setEditingNoteId(null);
+      setEditingContent("");
+      toast({ title: "Note updated" });
     },
   });
 
@@ -288,10 +303,62 @@ export default function CrmDealDetail() {
                       className="p-3 rounded border border-border/50"
                       data-testid={`item-crm-deal-note-${n.id}`}
                     >
-                      <p className="text-sm">{n.content}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {n.createdAt ? new Date(n.createdAt).toLocaleDateString() : ""}
-                      </p>
+                      {editingNoteId === n.id ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            value={editingContent}
+                            onChange={(e) => setEditingContent(e.target.value)}
+                            rows={3}
+                            className="text-sm"
+                            autoFocus
+                            data-testid={`input-crm-edit-deal-note-${n.id}`}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              onClick={() =>
+                                updateNoteMutation.mutate({ noteId: n.id, content: editingContent })
+                              }
+                              disabled={updateNoteMutation.isPending}
+                              data-testid={`button-crm-save-deal-note-${n.id}`}
+                            >
+                              <Check className="w-3 h-3" /> Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs gap-1"
+                              onClick={() => {
+                                setEditingNoteId(null);
+                                setEditingContent("");
+                              }}
+                              data-testid={`button-crm-cancel-deal-note-${n.id}`}
+                            >
+                              <X className="w-3 h-3" /> Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2 group">
+                          <div className="flex-1">
+                            <p className="text-sm">{n.content}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {n.createdAt ? new Date(n.createdAt).toLocaleDateString() : ""}
+                            </p>
+                          </div>
+                          <button
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              setEditingNoteId(n.id);
+                              setEditingContent(n.content ?? "");
+                            }}
+                            data-testid={`button-crm-edit-deal-note-${n.id}`}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}

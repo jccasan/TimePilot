@@ -693,6 +693,17 @@ export function registerCrmRoutes(app: Express) {
     res.status(201).json(note);
   });
 
+  app.patch("/api/crm/notes/:id", async (req, res) => {
+    const [n] = await db
+      .update(crmNotes)
+      .set({ content: req.body.content })
+      .where(and(eq(crmNotes.id, req.params.id), eq(crmNotes.companyId, getCompanyId(req))))
+      .returning();
+    if (!n) return res.status(404).json({ message: "Note not found" });
+    await logCrmAudit(req, "updated", "note", n.id);
+    res.json(n);
+  });
+
   app.delete("/api/crm/notes/:id", async (req, res) => {
     const r = await db
       .delete(crmNotes)
@@ -788,6 +799,21 @@ export function registerCrmRoutes(app: Express) {
       .values({ ...parsed.data, companyId: getCompanyId(req) })
       .returning();
     res.status(201).json(doc);
+  });
+
+  app.patch("/api/crm/documents/:id", async (req, res) => {
+    const allowed: Record<string, unknown> = {};
+    if (req.body.name !== undefined) allowed.name = req.body.name;
+    if (req.body.url !== undefined) allowed.url = req.body.url;
+    if (req.body.type !== undefined) allowed.type = req.body.type;
+    const [doc] = await db
+      .update(crmDocuments)
+      .set(allowed)
+      .where(and(eq(crmDocuments.id, req.params.id), eq(crmDocuments.companyId, getCompanyId(req))))
+      .returning();
+    if (!doc) return res.status(404).json({ message: "Document not found" });
+    await logCrmAudit(req, "updated", "document", doc.id, { name: doc.name });
+    res.json(doc);
   });
 
   app.delete("/api/crm/documents/:id", async (req, res) => {
@@ -904,6 +930,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmQuotes.id, req.params.id), eq(crmQuotes.companyId, getCompanyId(req))))
       .returning();
     if (!q) return res.status(404).json({ message: "Quote not found" });
+    await logCrmAudit(req, "updated", "quote", q.id, { title: q.title });
     res.json(q);
   });
 
@@ -976,6 +1003,7 @@ export function registerCrmRoutes(app: Express) {
       .where(and(eq(crmProjects.id, req.params.id), eq(crmProjects.companyId, getCompanyId(req))))
       .returning();
     if (!p) return res.status(404).json({ message: "Project not found" });
+    await logCrmAudit(req, "updated", "project", p.id, { name: p.name });
     res.json(p);
   });
 

@@ -29,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Search, Megaphone, Trash2, Play, Pause } from "lucide-react";
+import { Plus, Search, Megaphone, Trash2, Play, Pause, Pencil } from "lucide-react";
 import type { CrmEmailCampaign } from "@shared/crm-schema";
 
 interface PaginatedResult<T> {
@@ -84,6 +84,7 @@ function Pagination({
 export default function CrmCampaigns() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [editCampaign, setEditCampaign] = useState<CrmEmailCampaign | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
@@ -124,6 +125,21 @@ export default function CrmCampaigns() {
       return res.json();
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/crm/campaigns"] }),
+  });
+
+  const updateContentMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+      const res = await apiRequest("PATCH", `/api/crm/campaigns/${id}`, data);
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/campaigns"] });
+      setEditCampaign(null);
+      toast({ title: "Campaign updated" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -294,6 +310,16 @@ export default function CrmCampaigns() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="w-7 h-7 text-muted-foreground hover:text-foreground"
+                          onClick={() => setEditCampaign(c)}
+                          data-testid={`button-crm-edit-campaign-${c.id}`}
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="w-7 h-7 text-muted-foreground hover:text-destructive"
                           onClick={() => deleteMutation.mutate(c.id)}
                           data-testid={`button-crm-delete-campaign-${c.id}`}
@@ -317,6 +343,67 @@ export default function CrmCampaigns() {
           )}
         </>
       )}
+
+      <Dialog open={!!editCampaign} onOpenChange={(o) => { if (!o) setEditCampaign(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Campaign</DialogTitle>
+          </DialogHeader>
+          {editCampaign && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                updateContentMutation.mutate({
+                  id: editCampaign.id,
+                  data: {
+                    name: fd.get("name") as string,
+                    subject: fd.get("subject") as string,
+                    body: (fd.get("body") as string) || "",
+                  },
+                });
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-1.5">
+                <Label>Campaign Name</Label>
+                <Input
+                  name="name"
+                  required
+                  defaultValue={editCampaign.name}
+                  data-testid="input-crm-edit-campaign-name"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email Subject</Label>
+                <Input
+                  name="subject"
+                  required
+                  defaultValue={editCampaign.subject ?? ""}
+                  data-testid="input-crm-edit-campaign-subject"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Body</Label>
+                <Textarea
+                  name="body"
+                  rows={6}
+                  defaultValue={editCampaign.body ?? ""}
+                  data-testid="input-crm-edit-campaign-body"
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={updateContentMutation.isPending}
+                data-testid="button-crm-submit-edit-campaign"
+              >
+                {updateContentMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -37,6 +37,7 @@ import {
   ChevronLeft,
   CheckCircle2,
   Circle,
+  Pencil,
 } from "lucide-react";
 import type { CrmProject, CrmProjectTask } from "@shared/crm-schema";
 
@@ -275,6 +276,7 @@ function ProjectDetail({
 export default function CrmProjects() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [editProject, setEditProject] = useState<CrmProject | null>(null);
   const [search, setSearch] = useState("");
   const [selectedProject, setSelectedProject] = useState<CrmProject | null>(null);
   const [page, setPage] = useState(1);
@@ -306,6 +308,22 @@ export default function CrmProjects() {
       queryClient.invalidateQueries({ queryKey: ["/api/crm/stats"] });
       setOpen(false);
       toast({ title: "Project created" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const updateProjectMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+      const res = await apiRequest("PATCH", `/api/crm/projects/${id}`, data);
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (updated: CrmProject) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/projects"] });
+      setEditProject(null);
+      if (selectedProject?.id === updated.id) setSelectedProject(updated);
+      toast({ title: "Project updated" });
     },
     onError: (err: Error) =>
       toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -468,15 +486,26 @@ export default function CrmProjects() {
                       {proj.createdAt ? new Date(proj.createdAt).toLocaleDateString() : ""}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="w-8 h-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => deleteMutation.mutate(proj.id)}
-                        data-testid={`button-crm-delete-project-${proj.id}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => setEditProject(proj)}
+                          data-testid={`button-crm-edit-project-${proj.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => deleteMutation.mutate(proj.id)}
+                          data-testid={`button-crm-delete-project-${proj.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -493,6 +522,73 @@ export default function CrmProjects() {
           )}
         </>
       )}
+
+      <Dialog open={!!editProject} onOpenChange={(o) => { if (!o) setEditProject(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+          </DialogHeader>
+          {editProject && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                updateProjectMutation.mutate({
+                  id: editProject.id,
+                  data: {
+                    name: fd.get("name") as string,
+                    description: (fd.get("description") as string) || null,
+                    status: fd.get("status") as string,
+                  },
+                });
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input
+                  name="name"
+                  required
+                  defaultValue={editProject.name}
+                  data-testid="input-crm-edit-project-name"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Description</Label>
+                <Textarea
+                  name="description"
+                  rows={3}
+                  defaultValue={editProject.description ?? ""}
+                  data-testid="input-crm-edit-project-description"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Status</Label>
+                <Select name="status" defaultValue={editProject.status ?? "active"}>
+                  <SelectTrigger data-testid="select-crm-edit-project-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projectStatuses.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s.replace("_", " ")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={updateProjectMutation.isPending}
+                data-testid="button-crm-submit-edit-project"
+              >
+                {updateProjectMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -28,7 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Search, FileText, Trash2, ExternalLink } from "lucide-react";
+import { Plus, Search, FileText, Trash2, ExternalLink, Pencil } from "lucide-react";
 import type { CrmDocument } from "@shared/crm-schema";
 
 interface PaginatedResult<T> {
@@ -94,6 +94,7 @@ function Pagination({
 export default function CrmDocuments() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [editDoc, setEditDoc] = useState<CrmDocument | null>(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -126,6 +127,21 @@ export default function CrmDocuments() {
       queryClient.invalidateQueries({ queryKey: ["/api/crm/stats"] });
       setOpen(false);
       toast({ title: "Document added" });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+      const res = await apiRequest("PATCH", `/api/crm/documents/${id}`, data);
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/documents"] });
+      setEditDoc(null);
+      toast({ title: "Document updated" });
     },
     onError: (err: Error) =>
       toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -304,6 +320,15 @@ export default function CrmDocuments() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="w-7 h-7 text-muted-foreground hover:text-foreground"
+                          onClick={() => setEditDoc(doc)}
+                          data-testid={`button-crm-edit-doc-${doc.id}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="w-7 h-7 text-muted-foreground hover:text-destructive"
                           onClick={() => deleteMutation.mutate(doc.id)}
                           data-testid={`button-crm-delete-doc-${doc.id}`}
@@ -327,6 +352,73 @@ export default function CrmDocuments() {
           )}
         </>
       )}
+
+      <Dialog open={!!editDoc} onOpenChange={(o) => { if (!o) setEditDoc(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Document</DialogTitle>
+          </DialogHeader>
+          {editDoc && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                updateMutation.mutate({
+                  id: editDoc.id,
+                  data: {
+                    name: fd.get("name") as string,
+                    url: (fd.get("url") as string) || "",
+                    type: fd.get("type") as string,
+                  },
+                });
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-1.5">
+                <Label>Name</Label>
+                <Input
+                  name="name"
+                  required
+                  defaultValue={editDoc.name}
+                  data-testid="input-crm-edit-doc-name"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Type</Label>
+                <Select name="type" defaultValue={editDoc.type ?? "other"}>
+                  <SelectTrigger data-testid="select-crm-edit-doc-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {documentTypes.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>URL (optional)</Label>
+                <Input
+                  name="url"
+                  placeholder="https://..."
+                  defaultValue={editDoc.url ?? ""}
+                  data-testid="input-crm-edit-doc-url"
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={updateMutation.isPending}
+                data-testid="button-crm-submit-edit-document"
+              >
+                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
