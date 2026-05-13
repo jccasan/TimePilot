@@ -3344,3 +3344,6 @@ export const fallbackLog = pgTable(
 
 export type FallbackLog = typeof fallbackLog.$inferSelect;
 export type InsertFallbackLog = typeof fallbackLog.$inferInsert;
+
+// Re-export CRM schema so CRM types are accessible from @shared/schema
+export * from "./crm-schema";

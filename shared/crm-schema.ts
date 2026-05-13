@@ -510,6 +510,76 @@ export const insertCrmLeadScoringRuleSchema = createInsertSchema(crmLeadScoringR
 export type InsertCrmLeadScoringRule = z.infer<typeof insertCrmLeadScoringRuleSchema>;
 export type CrmLeadScoringRule = typeof crmLeadScoringRules.$inferSelect;
 
+// ─── CRM Notifications ───────────────────────────────────────
+export const crmNotifications = pgTable("crm_notifications", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull(),
+  userId: varchar("user_id"),
+  type: text("type").notNull().default("info"),
+  title: text("title").notNull(),
+  body: text("body"),
+  entityType: text("entity_type"),
+  entityId: varchar("entity_id"),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCrmNotificationSchema = createInsertSchema(crmNotifications).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
+export type InsertCrmNotification = z.infer<typeof insertCrmNotificationSchema>;
+export type CrmNotification = typeof crmNotifications.$inferSelect;
+
+// ─── CRM Webhooks ─────────────────────────────────────────────
+export const crmWebhooks = pgTable("crm_webhooks", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  secret: text("secret"),
+  events: text("events")
+    .array()
+    .default(sql`'{}'::text[]`),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCrmWebhookSchema = createInsertSchema(crmWebhooks).omit({
+  id: true,
+  companyId: true,
+  createdAt: true,
+});
+export type InsertCrmWebhook = z.infer<typeof insertCrmWebhookSchema>;
+export type CrmWebhook = typeof crmWebhooks.$inferSelect;
+
+// ─── CRM Webhook Deliveries ───────────────────────────────────
+export const crmWebhookDeliveries = pgTable("crm_webhook_deliveries", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  webhookId: varchar("webhook_id").notNull(),
+  event: text("event").notNull(),
+  payload: jsonb("payload").default({}),
+  status: text("status").notNull().default("pending"),
+  responseStatus: integer("response_status"),
+  responseBody: text("response_body"),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCrmWebhookDeliverySchema = createInsertSchema(crmWebhookDeliveries).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCrmWebhookDelivery = z.infer<typeof insertCrmWebhookDeliverySchema>;
+export type CrmWebhookDelivery = typeof crmWebhookDeliveries.$inferSelect;
+
 // ─── Shared Paginated Result type ────────────────────────────
 export interface CrmPaginatedResult<T> {
   data: T[];

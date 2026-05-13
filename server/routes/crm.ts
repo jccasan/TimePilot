@@ -22,6 +22,9 @@ import {
   crmSequenceSteps,
   crmSequenceEnrollments,
   crmLeadScoringRules,
+  crmNotifications,
+  crmWebhooks,
+  crmWebhookDeliveries,
   crmWebForms,
   crmFormSubmissions,
   insertCrmContactSchema,
@@ -42,6 +45,9 @@ import {
   insertCrmSequenceStepSchema,
   insertCrmSequenceEnrollmentSchema,
   insertCrmLeadScoringRuleSchema,
+  insertCrmNotificationSchema,
+  insertCrmWebhookSchema,
+  insertCrmWebhookDeliverySchema,
   insertCrmWebFormSchema,
   type CrmPaginatedResult,
 } from "@shared/crm-schema";
@@ -1364,5 +1370,146 @@ export function registerCrmRoutes(app: Express) {
       .returning();
     if (!result.length) return res.status(404).json({ message: "Rule not found" });
     res.status(204).send();
+  });
+
+  // ─── CRM Notifications ────────────────────────────────────
+  app.get("/api/crm/notifications", async (req, res) => {
+    const c = getCompanyId(req);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 25;
+    const conditions = [eq(crmNotifications.companyId, c)];
+    if (req.query.read !== undefined)
+      conditions.push(eq(crmNotifications.read, req.query.read === "true"));
+    const where = and(...conditions);
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(crmNotifications)
+      .where(where);
+    const data = await db
+      .select()
+      .from(crmNotifications)
+      .where(where)
+      .orderBy(desc(crmNotifications.createdAt))
+      .limit(limit)
+      .offset((page - 1) * limit);
+    res.json(buildPaginated(data, Number(count), page, limit));
+  });
+
+  app.post("/api/crm/notifications", async (req, res) => {
+    const parsed = insertCrmNotificationSchema.safeParse(req.body);
+    if (!parsed.success)
+      return res.status(400).json({ message: fromError(parsed.error).toString() });
+    const [n] = await db
+      .insert(crmNotifications)
+      .values({ ...parsed.data, companyId: getCompanyId(req) })
+      .returning();
+    res.status(201).json(n);
+  });
+
+  app.patch("/api/crm/notifications/:id", async (req, res) => {
+    const c = getCompanyId(req);
+    const [n] = await db
+      .update(crmNotifications)
+      .set(req.body)
+      .where(and(eq(crmNotifications.id, req.params.id), eq(crmNotifications.companyId, c)))
+      .returning();
+    if (!n) return res.status(404).json({ message: "Notification not found" });
+    res.json(n);
+  });
+
+  app.delete("/api/crm/notifications/:id", async (req, res) => {
+    const result = await db
+      .delete(crmNotifications)
+      .where(
+        and(
+          eq(crmNotifications.id, req.params.id),
+          eq(crmNotifications.companyId, getCompanyId(req))
+        )
+      )
+      .returning();
+    if (!result.length) return res.status(404).json({ message: "Notification not found" });
+    res.status(204).send();
+  });
+
+  // ─── CRM Webhooks ─────────────────────────────────────────
+  app.get("/api/crm/webhooks", async (req, res) => {
+    const c = getCompanyId(req);
+    res.json(
+      await db
+        .select()
+        .from(crmWebhooks)
+        .where(eq(crmWebhooks.companyId, c))
+        .orderBy(desc(crmWebhooks.createdAt))
+    );
+  });
+
+  app.post("/api/crm/webhooks", async (req, res) => {
+    const parsed = insertCrmWebhookSchema.safeParse(req.body);
+    if (!parsed.success)
+      return res.status(400).json({ message: fromError(parsed.error).toString() });
+    const [w] = await db
+      .insert(crmWebhooks)
+      .values({ ...parsed.data, companyId: getCompanyId(req) })
+      .returning();
+    res.status(201).json(w);
+  });
+
+  app.patch("/api/crm/webhooks/:id", async (req, res) => {
+    const c = getCompanyId(req);
+    const [w] = await db
+      .update(crmWebhooks)
+      .set(req.body)
+      .where(and(eq(crmWebhooks.id, req.params.id), eq(crmWebhooks.companyId, c)))
+      .returning();
+    if (!w) return res.status(404).json({ message: "Webhook not found" });
+    res.json(w);
+  });
+
+  app.delete("/api/crm/webhooks/:id", async (req, res) => {
+    const result = await db
+      .delete(crmWebhooks)
+      .where(and(eq(crmWebhooks.id, req.params.id), eq(crmWebhooks.companyId, getCompanyId(req))))
+      .returning();
+    if (!result.length) return res.status(404).json({ message: "Webhook not found" });
+    res.status(204).send();
+  });
+
+  // ─── CRM Webhook Deliveries ───────────────────────────────
+  app.get("/api/crm/webhooks/:id/deliveries", async (req, res) => {
+    const c = getCompanyId(req);
+    const [wh] = await db
+      .select()
+      .from(crmWebhooks)
+      .where(and(eq(crmWebhooks.id, req.params.id), eq(crmWebhooks.companyId, c)));
+    if (!wh) return res.status(403).json({ message: "Forbidden" });
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 25;
+    const where = eq(crmWebhookDeliveries.webhookId, req.params.id);
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(crmWebhookDeliveries)
+      .where(where);
+    const data = await db
+      .select()
+      .from(crmWebhookDeliveries)
+      .where(where)
+      .orderBy(desc(crmWebhookDeliveries.createdAt))
+      .limit(limit)
+      .offset((page - 1) * limit);
+    res.json(buildPaginated(data, Number(count), page, limit));
+  });
+
+  app.post("/api/crm/webhook-deliveries", async (req, res) => {
+    const parsed = insertCrmWebhookDeliverySchema.safeParse(req.body);
+    if (!parsed.success)
+      return res.status(400).json({ message: fromError(parsed.error).toString() });
+    const c = getCompanyId(req);
+    const [wh] = await db
+      .select()
+      .from(crmWebhooks)
+      .where(and(eq(crmWebhooks.id, parsed.data.webhookId), eq(crmWebhooks.companyId, c)));
+    if (!wh) return res.status(403).json({ message: "Forbidden" });
+    const [d] = await db.insert(crmWebhookDeliveries).values(parsed.data).returning();
+    res.status(201).json(d);
   });
 }

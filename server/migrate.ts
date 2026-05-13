@@ -745,6 +745,51 @@ export async function runStartupMigrations(): Promise<void> {
       )
     `);
 
+    // crm_notifications table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_notifications (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        user_id VARCHAR,
+        type TEXT NOT NULL DEFAULT 'info',
+        title TEXT NOT NULL,
+        body TEXT,
+        entity_type TEXT,
+        entity_id VARCHAR,
+        read BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // crm_webhooks table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_webhooks (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        secret TEXT,
+        events TEXT[] NOT NULL DEFAULT '{}',
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // crm_webhook_deliveries table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_webhook_deliveries (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        webhook_id VARCHAR NOT NULL,
+        event TEXT NOT NULL,
+        payload JSONB DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'pending',
+        response_status INTEGER,
+        response_body TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     console.log("[Migration] CRM tables ensured (crm_contacts, crm_deals, crm_tasks, et al.)");
 
     console.log("[Migrate] Startup schema migrations applied successfully");
