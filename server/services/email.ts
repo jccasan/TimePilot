@@ -125,6 +125,17 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     return { success: true, messageId: "suppressed" };
   }
 
+  if (options.companyId) {
+    const { getDemoCompanyId } = await import("../utils/demo");
+    const demoId = await getDemoCompanyId();
+    if (demoId && options.companyId === demoId) {
+      console.log(
+        `[sendEmail] Demo account suppressed — skipping SendGrid send to ${options.to} (${options.subject})`
+      );
+      return { success: true, messageId: "demo-suppressed", suppressed: true };
+    }
+  }
+
   if (options.contactId && options.companyId && !options.bypassClientSuppression) {
     const [co] = await db
       .select({ clientNotificationsSuppressed: companies.clientNotificationsSuppressed })

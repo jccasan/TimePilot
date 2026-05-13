@@ -28,6 +28,13 @@ function formatPhoneNumber(phone: string): string {
 }
 
 export async function sendTelnyxSms(options: TelnyxSmsOptions): Promise<SendSmsResult> {
+  const { getDemoCompanyId } = await import("../utils/demo");
+  const demoId = await getDemoCompanyId();
+  if (demoId && options.companyId === demoId) {
+    console.log(`[SMS] Demo account suppressed — skipping Telnyx send to ${options.to}`);
+    return { success: true, messageSid: "demo-suppressed" };
+  }
+
   try {
     const to = formatPhoneNumber(options.to);
     const from = formatPhoneNumber(options.from);
