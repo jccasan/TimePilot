@@ -455,6 +455,48 @@ export async function registerDocumentsRoutes(app: Express): Promise<void> {
             completedAt: new Date(),
             certificateUrl,
           });
+
+          const contact = await storage.getContact(docRequest.contactId, docRequest.companyId);
+          if (contact?.email) {
+            try {
+              const certFile = await objStorage.getObjectEntityFile(certificateUrl);
+              const [pdfBuffer] = await certFile.download();
+              const pdfBase64 = pdfBuffer.toString("base64");
+
+              await sendEmail({
+                companyId: docRequest.companyId,
+                contactId: docRequest.contactId,
+                to: contact.email as string,
+                subject: `Your signed documents from ${businessName}`,
+                senderName: company?.name || undefined,
+                replyTo: company?.email || undefined,
+                text: `Hi ${contact.firstName || "there"},\n\nThank you for signing your documents with ${businessName}. Your signed certificate is attached to this email for your records.\n\nIf you have any questions, please don't hesitate to reach out.\n\nThank you!`,
+                html: `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                      <h1 style="color: white; margin: 0;">${businessName}</h1>
+                    </div>
+                    <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none;">
+                      <p>Hi ${contact.firstName || "there"},</p>
+                      <p>Thank you for signing your documents with <strong>${businessName}</strong>. Your signed certificate is attached to this email for your records.</p>
+                      <p style="color: #6b7280; font-size: 14px;">If you have any questions, please don't hesitate to reach out.</p>
+                      <p style="margin-top: 24px;">Thank you!</p>
+                    </div>
+                  </div>
+                `,
+                attachments: [
+                  {
+                    content: pdfBase64,
+                    filename: "signed-document-certificate.pdf",
+                    type: "application/pdf",
+                    disposition: "attachment",
+                  },
+                ],
+              });
+            } catch (emailErr) {
+              console.error("[documents] Failed to send certificate email:", emailErr);
+            }
+          }
         }
 
         res.json({ success: true, allSigned });

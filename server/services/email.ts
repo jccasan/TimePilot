@@ -12,6 +12,13 @@ if (SENDGRID_API_KEY) {
 
 const INBOUND_EMAIL_DOMAIN = process.env.INBOUND_EMAIL_DOMAIN || "inbound.scoopilot.com";
 
+interface SendEmailAttachment {
+  content: string;
+  filename: string;
+  type: string;
+  disposition?: string;
+}
+
 interface SendEmailOptions {
   to: string;
   from?: string;
@@ -24,6 +31,7 @@ interface SendEmailOptions {
   html?: string;
   replyTo?: string;
   emailThreadId?: string;
+  attachments?: SendEmailAttachment[];
 }
 
 interface SendEmailResult {
@@ -176,6 +184,15 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
         clickTracking: { enable: false, enableText: false },
         openTracking: { enable: false },
       },
+      ...(options.attachments &&
+        options.attachments.length > 0 && {
+          attachments: options.attachments.map((a) => ({
+            content: a.content,
+            filename: a.filename,
+            type: a.type,
+            disposition: a.disposition || "attachment",
+          })),
+        }),
     };
 
     if (Object.keys(headers).length > 0) {
