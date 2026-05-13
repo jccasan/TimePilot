@@ -435,12 +435,21 @@ Rules:
 - impactCents is the estimated additional monthly profit in cents (0 if uncertain or not applicable).`;
 
   const { anthropic, CLAUDE_FAST_MODEL } = await import("./claude");
-  const completion = await anthropic.messages.create({
-    model: CLAUDE_FAST_MODEL,
-    max_tokens: 1200,
-    system: systemPrompt,
-    messages: [{ role: "user", content: JSON.stringify(factSheet, null, 2) }],
-  });
+  let completion;
+  try {
+    completion = await anthropic.messages.create({
+      model: CLAUDE_FAST_MODEL,
+      max_tokens: 1200,
+      system: systemPrompt,
+      messages: [{ role: "user", content: JSON.stringify(factSheet, null, 2) }],
+    });
+  } catch (aiErr: unknown) {
+    console.error(
+      "[profitability-advisor] AI call failed:",
+      aiErr instanceof Error ? aiErr.message : aiErr
+    );
+    throw new Error("AI service unavailable — please try again later.");
+  }
 
   const raw = completion.content[0]?.type === "text" ? completion.content[0].text : "{}";
   let parsed: any;

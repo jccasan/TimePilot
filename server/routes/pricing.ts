@@ -1491,9 +1491,15 @@ Rules:
 
         res.json({ ...(parsed as Record<string, unknown>), scoreDelta });
       } catch (err) {
+        const errObj = err as { status?: number; code?: string; message?: string };
         if (
-          (err as { status?: number; code?: string })?.status === 429 ||
-          (err as { code?: string })?.code === "insufficient_quota"
+          errObj?.status === 429 ||
+          errObj?.status === 404 ||
+          errObj?.status === 503 ||
+          errObj?.code === "insufficient_quota" ||
+          (errObj?.message &&
+            (errObj.message.includes("AI service unavailable") ||
+              errObj.message.includes("temporarily unavailable")))
         ) {
           return res.status(503).json({ message: "AI service temporarily unavailable" });
         }
@@ -1729,8 +1735,11 @@ Rules:
         const errObj = err as { status?: number; code?: string; message?: string };
         if (
           errObj.status === 429 ||
+          errObj.status === 503 ||
           errObj.code === "insufficient_quota" ||
-          (errObj.message && errObj.message.includes("OpenAI"))
+          (errObj.message &&
+            (errObj.message.includes("AI service unavailable") ||
+              errObj.message.includes("temporarily unavailable")))
         ) {
           return res
             .status(503)
