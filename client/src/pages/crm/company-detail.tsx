@@ -52,13 +52,7 @@ const industries = [
 const companySizes = ["1-10", "11-50", "51-200", "201-1000", "1000+"];
 const statusOptions = ["active", "inactive", "prospect", "customer", "churned"];
 
-function EditCompanyDialog({
-  company,
-  onClose,
-}: {
-  company: CrmCompany;
-  onClose: () => void;
-}) {
+function EditCompanyDialog({ company, onClose }: { company: CrmCompany; onClose: () => void }) {
   const { toast } = useToast();
   const updateMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
@@ -277,10 +271,7 @@ export default function CrmCompanyDetail() {
             <Building2 className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1
-              className="text-xl font-bold leading-tight"
-              data-testid="text-crm-company-name"
-            >
+            <h1 className="text-xl font-bold leading-tight" data-testid="text-crm-company-name">
               {company.name}
             </h1>
             <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
@@ -401,7 +392,10 @@ export default function CrmCompanyDetail() {
             )}
             <div className="pt-2 border-t border-border/50 grid grid-cols-3 gap-3 text-center">
               <div>
-                <p className="text-lg font-bold text-primary" data-testid="stat-crm-company-contacts">
+                <p
+                  className="text-lg font-bold text-primary"
+                  data-testid="stat-crm-company-contacts"
+                >
                   {contacts.length}
                 </p>
                 <p className="text-xs text-muted-foreground">Contacts</p>
@@ -497,9 +491,7 @@ export default function CrmCompanyDetail() {
                         >
                           {d.title}
                         </Link>
-                        <p className="text-xs text-muted-foreground">
-                          {d.stage.replace("_", " ")}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{d.stage.replace("_", " ")}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge
@@ -611,7 +603,7 @@ export default function CrmCompanyDetail() {
                       >
                         <div className="absolute -left-[3px] top-1.5 h-2 w-2 rounded-full bg-primary/60" />
                         <p className="text-sm font-medium capitalize">{log.action}</p>
-                        {log.details && Object.keys(log.details as object).length > 0 && (
+                        {!!log.details && Object.keys(log.details as object).length > 0 && (
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {JSON.stringify(log.details)}
                           </p>

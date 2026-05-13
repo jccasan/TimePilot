@@ -23,7 +23,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Plus, FileText, Mail, CheckSquare, Pencil, X, Check, Building2 } from "lucide-react";
+import {
+  ChevronLeft,
+  Plus,
+  FileText,
+  Mail,
+  CheckSquare,
+  Pencil,
+  X,
+  Check,
+  Building2,
+} from "lucide-react";
 import type { CrmDeal, CrmNote, CrmTask, CrmEmail } from "@shared/crm-schema";
 
 const stages = ["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"];
