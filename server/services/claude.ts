@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-export const CLAUDE_FAST_MODEL = "claude-haiku-4-5-20251001";
-export const CLAUDE_SMART_MODEL = "claude-sonnet-4-6";
+export const CLAUDE_FAST_MODEL = "claude-haiku-4-5";
+export const CLAUDE_SMART_MODEL = "claude-sonnet-4-5";
 
 export const KNOWN_GOOD_CLAUDE_MODELS: ReadonlySet<string> = new Set([
   "claude-3-haiku-20240307",
