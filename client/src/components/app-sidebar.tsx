@@ -38,6 +38,8 @@ import {
   MessageCircle,
   Lock,
   ClipboardList,
+  Users2,
+  Kanban,
 } from "lucide-react";
 import {
   Sidebar,
@@ -135,6 +137,20 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
         icon: DollarSign,
         requiresSubscription: true,
       },
+    ],
+  },
+  {
+    label: "CRM",
+    key: "crm",
+    items: [
+      { title: "CRM Dashboard", url: "/crm", icon: Kanban, requiresSubscription: true },
+      { title: "Contacts", url: "/crm/contacts", icon: Users2, requiresSubscription: true },
+      { title: "Companies", url: "/crm/companies", icon: Building2, requiresSubscription: true },
+      { title: "Deals", url: "/crm/deals", icon: DollarSign, requiresSubscription: true },
+      { title: "Pipeline", url: "/crm/pipeline", icon: BarChart3, requiresSubscription: true },
+      { title: "Tasks", url: "/crm/tasks", icon: ClipboardCheck, requiresSubscription: true },
+      { title: "Campaigns", url: "/crm/campaigns", icon: MessageSquare, requiresSubscription: true },
+      { title: "Reports", url: "/crm/reports", icon: TrendingUp, requiresSubscription: true },
     ],
   },
   {

@@ -3,8 +3,6 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { HorsemanCRM } from "@horseman/react";
-import { useAdminCrm } from "@/contexts/admin-crm-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -103,41 +101,6 @@ const METRIC_LABELS: Record<string, string> = {
   rover_chat: "Rover Chat",
 };
 
-function HorsemanCRMWidget() {
-  const { crmPath, setCrmPath } = useAdminCrm();
-
-  const { data, isLoading, isError } = useQuery<{ token: string; baseUrl: string }>({
-    queryKey: ["/api/admin/horseman-token"],
-    queryFn: adminFetchFn("/api/admin/horseman-token"),
-    staleTime: 3 * 60 * 1000,
-  });
-
-  if (isLoading) {
-    return <div className="h-64 bg-muted rounded animate-pulse" />;
-  }
-
-  if (isError || !data?.token || !data?.baseUrl) {
-    return (
-      <p className="text-xs text-muted-foreground italic">
-        Horseman CRM unavailable — HORSEMAN_SSO_SECRET or HORSEMAN_BASE_URL is not configured.
-      </p>
-    );
-  }
-
-  return (
-    <div className="rounded-md border overflow-hidden" style={{ minHeight: 600 }}>
-      <HorsemanCRM
-        hideSidebar
-        path={crmPath}
-        onNavigate={setCrmPath}
-        baseUrl={data.baseUrl}
-        ssoToken={data.token}
-        style={{ height: "100%", width: "100%" }}
-        data-testid="horseman-crm-embed"
-      />
-    </div>
-  );
-}
 
 function CostSparkline({ data }: { data: { date: string; calls: number }[] }) {
   const last30 = data.slice(-30);
@@ -1247,11 +1210,14 @@ export default function AdminDashboard() {
         </Card>
       )}
 
-      <div data-testid="section-horseman-crm">
-        <h2 className="text-lg font-semibold mb-3">Horseman CRM</h2>
+      <div data-testid="section-native-crm">
+        <h2 className="text-lg font-semibold mb-3">CRM</h2>
         <Card>
-          <CardContent className="pt-4 pb-4 px-4">
-            <HorsemanCRMWidget />
+          <CardContent className="pt-4 pb-4 px-4 flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Manage contacts, deals, tasks, and more in the native CRM.</p>
+            <Link href="/crm">
+              <Button size="sm" data-testid="button-open-crm">Open CRM</Button>
+            </Link>
           </CardContent>
         </Card>
       </div>

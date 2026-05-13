@@ -325,6 +325,277 @@ export async function runStartupMigrations(): Promise<void> {
       "[Migration] quotes converted_service_plan_id column and converted status verified"
     );
 
+    // ─── CRM Tables (Task #790) ───────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_contacts (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT,
+        company TEXT,
+        title TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        source TEXT DEFAULT 'manual',
+        lead_score INTEGER DEFAULT 0,
+        assigned_to TEXT,
+        tags TEXT[] DEFAULT '{}',
+        custom_fields JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_companies (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        domain TEXT,
+        industry TEXT,
+        size TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        custom_fields JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_deals (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        title TEXT NOT NULL,
+        value INTEGER DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'USD',
+        stage TEXT NOT NULL DEFAULT 'lead',
+        probability INTEGER DEFAULT 0,
+        expected_close_date TIMESTAMP,
+        description TEXT,
+        contact_id VARCHAR,
+        crm_company_id VARCHAR,
+        assigned_to TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        custom_fields JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_tasks (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        type TEXT NOT NULL DEFAULT 'todo',
+        priority TEXT NOT NULL DEFAULT 'medium',
+        status TEXT NOT NULL DEFAULT 'pending',
+        due_date TIMESTAMP,
+        contact_id VARCHAR,
+        deal_id VARCHAR,
+        assigned_to TEXT,
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_notes (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        body TEXT NOT NULL,
+        contact_id VARCHAR,
+        deal_id VARCHAR,
+        author_id VARCHAR,
+        pinned BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_emails (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        subject TEXT,
+        body TEXT,
+        from_address TEXT NOT NULL,
+        to_address TEXT NOT NULL,
+        direction TEXT NOT NULL DEFAULT 'outbound',
+        status TEXT NOT NULL DEFAULT 'sent',
+        contact_id VARCHAR,
+        deal_id VARCHAR,
+        external_id TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_documents (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'other',
+        url TEXT,
+        mime_type TEXT,
+        size_bytes INTEGER DEFAULT 0,
+        contact_id VARCHAR,
+        deal_id VARCHAR,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_quotes (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        title TEXT NOT NULL,
+        line_items JSONB DEFAULT '[]',
+        subtotal INTEGER DEFAULT 0,
+        tax_rate NUMERIC DEFAULT 0,
+        tax_amount INTEGER DEFAULT 0,
+        total INTEGER DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'draft',
+        contact_id VARCHAR,
+        deal_id VARCHAR,
+        valid_until TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_projects (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        contact_id VARCHAR,
+        deal_id VARCHAR,
+        start_date TIMESTAMP,
+        end_date TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_project_tasks (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        project_id VARCHAR NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        completed BOOLEAN DEFAULT FALSE,
+        step_number INTEGER DEFAULT 1,
+        assigned_to TEXT,
+        due_date TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_email_campaigns (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'email',
+        subject TEXT,
+        body_html TEXT,
+        body_text TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        scheduled_at TIMESTAMP,
+        sent_at TIMESTAMP,
+        sent_count INTEGER DEFAULT 0,
+        open_count INTEGER DEFAULT 0,
+        click_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_automations (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        trigger_type TEXT NOT NULL,
+        trigger_conditions JSONB DEFAULT '{}',
+        actions JSONB DEFAULT '[]',
+        active BOOLEAN DEFAULT TRUE,
+        run_count INTEGER DEFAULT 0,
+        last_run_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_sequences (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_sequence_steps (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        sequence_id VARCHAR NOT NULL,
+        step_number INTEGER NOT NULL,
+        type TEXT NOT NULL DEFAULT 'email',
+        subject TEXT,
+        body TEXT,
+        delay_days INTEGER DEFAULT 1,
+        delay_hours INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_web_forms (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        fields JSONB DEFAULT '[]',
+        submit_action TEXT DEFAULT 'thank_you',
+        redirect_url TEXT,
+        active BOOLEAN DEFAULT TRUE,
+        submission_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_form_submissions (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        form_id VARCHAR NOT NULL,
+        data JSONB DEFAULT '{}',
+        ip_address TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_audit_logs (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        entity TEXT NOT NULL,
+        entity_id VARCHAR,
+        action TEXT NOT NULL,
+        changes JSONB,
+        user_id VARCHAR,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_pipeline_stages (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        color TEXT,
+        is_default BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_tags (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT,
+        entity TEXT NOT NULL DEFAULT 'contact',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log("[Migration] CRM tables ensured (crm_contacts, crm_deals, crm_tasks, et al.)");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

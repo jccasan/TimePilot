@@ -31,8 +31,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Component, lazy, Suspense, useEffect, useState, useRef, useCallback } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { adminFetchFn } from "@/lib/adminApi";
-import { HORSEMAN_NAV_SECTIONS } from "@horseman/react";
-import { AdminCrmContext } from "@/contexts/admin-crm-context";
 import RoverChatbot, { type RoverChatbotHandle } from "@/components/rover-chatbot";
 import BusinessOnboarding from "@/components/business-onboarding";
 import { ImportModePopup } from "@/components/import-mode-popup";
@@ -96,6 +94,7 @@ const OnboardingForm = lazy(() => import("@/pages/onboarding-form"));
 const PendingApproval = lazy(() => import("@/pages/pending-approval"));
 const ReviewRouter = lazy(() => import("@/pages/review-router"));
 const ImportResolverPage = lazy(() => import("@/pages/import-resolver-page"));
+const CrmRouter = lazy(() => import("@/pages/crm/index"));
 
 function PageLoader() {
   return (
@@ -229,6 +228,8 @@ function Router() {
           </SubscriptionGate>
         </Route>
         <Route path="/command-center" component={CommandCenter} />
+        <Route path="/crm/:rest*" component={CrmRouter} />
+        <Route path="/crm" component={CrmRouter} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>
@@ -665,7 +666,6 @@ function AdminSidebarLink({
 function AdminLayout() {
   const { isAuthenticated, isLoading, mustChangePassword, logout } = useAdminAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [crmPath, setCrmPath] = useState("/");
   const [location] = useLocation();
 
   const { data: errorStats } = useQuery<{ openCount: number; latestTimestamp: string | null }>({
@@ -692,8 +692,7 @@ function AdminLayout() {
   }
 
   return (
-    <AdminCrmContext.Provider value={{ crmPath, setCrmPath }}>
-      <div className="flex h-screen">
+    <div className="flex h-screen">
         <aside
           className={`${sidebarOpen ? "w-56" : "w-0 overflow-hidden"} transition-all duration-200 border-r bg-background flex flex-col shrink-0`}
         >
@@ -767,39 +766,7 @@ function AdminLayout() {
                 />
               </div>
             </div>
-            {location === "/admin" && (
-              <>
-                <div className="border-t -mx-3" />
-                <div>
-                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider px-3 mb-2">
-                    Horseman CRM
-                  </p>
-                  <div className="space-y-0.5">
-                    {HORSEMAN_NAV_SECTIONS.map((section) => (
-                      <div key={section.label} className="mb-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 px-3 mb-1">
-                          {section.label}
-                        </p>
-                        {section.items.map((item) => (
-                          <button
-                            key={item.path}
-                            data-testid={`horseman-nav-${item.path.replace(/\//g, "")}`}
-                            onClick={() => setCrmPath(item.path)}
-                            className={`w-full flex items-center px-3 py-1.5 text-sm rounded-md transition-colors ${
-                              crmPath === item.path
-                                ? "bg-primary/10 text-primary font-medium"
-                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                            }`}
-                          >
-                            {item.name}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
+            
           </nav>
 
           <div className="p-3 border-t">
@@ -867,8 +834,7 @@ function AdminLayout() {
             </Suspense>
           </main>
         </div>
-      </div>
-    </AdminCrmContext.Provider>
+    </div>
   );
 }
 
