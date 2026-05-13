@@ -176,6 +176,7 @@ type Company = {
   retellAgentId?: string | null;
   passStripeFees?: boolean;
   requireCardOnSignup?: boolean;
+  requireDocumentSigning?: boolean;
 };
 
 type SettingsLayoutItem = {
@@ -264,6 +265,7 @@ const SETTINGS_BLOCK_DEFS: {
     minH: 4,
   },
   { id: "voice_agent", label: "Voice Agent", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
+  { id: "document_signing", label: "Document Signing", defaultW: 6, defaultH: 6, minW: 4, minH: 5 },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -293,6 +295,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "client_notifications",
   "voice_agent",
   "portal_api_docs",
+  "document_signing",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -2301,6 +2304,239 @@ type KbDocument = {
   filename: string;
   createdAt: string | null;
 };
+
+function DocumentSigningSection({
+  company,
+  onCompanyUpdate,
+}: {
+  company: Company | null;
+  onCompanyUpdate: () => void;
+}) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const {
+    data: templates = [],
+    isLoading: templatesLoading,
+    refetch: refetchTemplates,
+  } = useQuery<
+    Array<{
+      id: string;
+      name: string;
+      filePath: string;
+      fileSize: number | null;
+      mimeType: string | null;
+      isActive: boolean;
+      isRequired: boolean;
+      displayOrder: number;
+      createdAt: string;
+    }>
+  >({ queryKey: ["/api/document-templates"] });
+
+  const enableMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await apiRequest("PATCH", "/api/company", {
+        requireDocumentSigning: enabled,
+      });
+      if (!res.ok) throw new Error("Failed to update setting");
+      return res.json();
+    },
+    onSuccess: () => {
+      onCompanyUpdate();
+      toast({ title: "Setting saved" });
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("name", file.name.replace(/\.[^.]+$/, ""));
+      formData.append("isRequired", "true");
+      const { getAuthHeaders } = await import("@/lib/queryClient");
+      const res = await fetch("/api/document-templates", {
+        method: "POST",
+        body: formData,
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Upload failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchTemplates();
+      toast({ title: "Template uploaded" });
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/document-templates/${id}`);
+      if (!res.ok) throw new Error("Delete failed");
+    },
+    onSuccess: () => {
+      refetchTemplates();
+      toast({ title: "Template deleted" });
+    },
+    onError: () => toast({ title: "Delete failed", variant: "destructive" }),
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/document-templates/${id}`, { isActive });
+      if (!res.ok) throw new Error("Update failed");
+      return res.json();
+    },
+    onSuccess: () => refetchTemplates(),
+    onError: () => toast({ title: "Update failed", variant: "destructive" }),
+  });
+
+  const toggleRequiredMutation = useMutation({
+    mutationFn: async ({ id, isRequired }: { id: string; isRequired: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/document-templates/${id}`, { isRequired });
+      if (!res.ok) throw new Error("Update failed");
+      return res.json();
+    },
+    onSuccess: () => refetchTemplates(),
+    onError: () => toast({ title: "Update failed", variant: "destructive" }),
+  });
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadMutation.mutate(file);
+    e.target.value = "";
+  };
+
+  return (
+    <Card className="h-full overflow-auto">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Document Signing
+        </CardTitle>
+        <CardDescription>
+          Require clients to sign documents before or after portal access is granted.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium text-sm">Require document signing</p>
+            <p className="text-xs text-muted-foreground">
+              Auto-send a signing request when a client receives portal access.
+            </p>
+          </div>
+          <Switch
+            checked={company?.requireDocumentSigning ?? false}
+            onCheckedChange={(v) => enableMutation.mutate(v)}
+            disabled={enableMutation.isPending}
+            data-testid="switch-require-document-signing"
+          />
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="font-medium text-sm">Document Templates</p>
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt"
+                className="hidden"
+                onChange={handleFileSelected}
+                data-testid="input-template-file"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={uploadMutation.isPending}
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="button-upload-template"
+              >
+                <Upload className="h-3.5 w-3.5 mr-1" />
+                {uploadMutation.isPending ? "Uploading..." : "Upload Template"}
+              </Button>
+            </div>
+          </div>
+
+          {templatesLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-14 w-full" />
+            </div>
+          ) : templates.length === 0 ? (
+            <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+              <FileText className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+              <p className="text-sm text-muted-foreground">No templates uploaded yet.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Upload PDFs or Word documents that clients must sign.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {templates.map((t) => (
+                <div
+                  key={t.id}
+                  className="border rounded-lg p-3 flex items-center justify-between gap-2"
+                  data-testid={`card-template-${t.id}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{t.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t.mimeType || "document"}
+                        {t.fileSize ? ` · ${Math.round(t.fileSize / 1024)} KB` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Badge
+                      variant={t.isActive ? "default" : "secondary"}
+                      className="cursor-pointer select-none text-xs"
+                      data-testid={`badge-template-active-${t.id}`}
+                      onClick={() =>
+                        toggleActiveMutation.mutate({ id: t.id, isActive: !t.isActive })
+                      }
+                    >
+                      {t.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                    <Badge
+                      variant={t.isRequired ? "outline" : "secondary"}
+                      className="cursor-pointer select-none text-xs"
+                      data-testid={`badge-template-required-${t.id}`}
+                      onClick={() =>
+                        toggleRequiredMutation.mutate({ id: t.id, isRequired: !t.isRequired })
+                      }
+                    >
+                      {t.isRequired ? "Required" : "Optional"}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                      data-testid={`button-delete-template-${t.id}`}
+                      onClick={() => deleteMutation.mutate(t.id)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function VoiceAgentSection({ company }: { company: Company | null }) {
   const { toast } = useToast();
@@ -7560,6 +7796,15 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+        );
+      case "document_signing":
+        return (
+          <div className="h-full overflow-auto">
+            <DocumentSigningSection
+              company={company ?? null}
+              onCompanyUpdate={() => queryClient.invalidateQueries({ queryKey: ["/api/company"] })}
+            />
+          </div>
         );
       default:
         return null;

@@ -798,7 +798,62 @@ export async function provisionPortalAccess(
     return { success: false as const, error: String(err), suppressed: false as const };
   });
 
-  return { tempPassword, emailSent: sendResult.success && !sendResult.suppressed };
+  const emailSent = sendResult.success && !sendResult.suppressed;
+
+  // Auto-send document signing request if enabled and active templates exist.
+  if (company?.requireDocumentSigning && contact.email) {
+    try {
+      const templates = await storage.listDocumentTemplates(companyId);
+      const activeTemplates = templates.filter((t) => t.isActive);
+      if (activeTemplates.length > 0) {
+        const token = crypto.randomBytes(48).toString("hex");
+        await storage.createDocumentRequest({
+          companyId,
+          contactId,
+          token,
+          status: "pending",
+          sentAt: new Date(),
+        });
+
+        const baseUrl = process.env.APP_BASE_URL || `https://${companyId}.scoopilot.com`;
+        const signUrl = `${baseUrl}/sign/${token}`;
+
+        await sendEmail({
+          companyId,
+          contactId,
+          bypassClientSuppression: opts?.sendEmail === true,
+          to: contact.email,
+          subject: `Please sign your documents from ${company?.name || "your service provider"}`,
+          senderName: company?.name || undefined,
+          replyTo: company?.email || undefined,
+          text: `Hi ${contact.firstName || "there"},\n\nPlease review and sign the required documents at:\n\n${signUrl}\n\nThank you!`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0;">${company?.name || "Document Signing"}</h1>
+              </div>
+              <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none;">
+                <p>Hi ${contact.firstName || "there"},</p>
+                <p>Please review and sign the required documents using the button below.</p>
+                <div style="text-align: center; margin: 28px 0;">
+                  <a href="${signUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                    Review &amp; Sign Documents
+                  </a>
+                </div>
+                <p style="color: #6b7280; font-size: 14px;">This link is unique to you.</p>
+              </div>
+            </div>
+          `,
+        }).catch((err) => {
+          console.error("[provisionPortalAccess] Failed to send document signing email:", err);
+        });
+      }
+    } catch (signingErr) {
+      console.error("[provisionPortalAccess] Error creating document signing request:", signingErr);
+    }
+  }
+
+  return { tempPassword, emailSent };
 }
 
 export function normalizeQuoteFrequency(

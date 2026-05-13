@@ -826,6 +826,83 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] invoices.pay_token column backfilled and indexed");
 
+    // ── Document Signing ─────────────────────────────────────────────────────
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE document_request_status AS ENUM ('pending', 'completed', 'cancelled');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+
+    await client.query(`
+      ALTER TABLE companies
+        ADD COLUMN IF NOT EXISTS require_document_signing BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS document_templates (
+        id            VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        company_id    VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        name          VARCHAR(255) NOT NULL,
+        file_path     TEXT NOT NULL,
+        file_size     INTEGER,
+        mime_type     VARCHAR(100),
+        is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+        is_required   BOOLEAN NOT NULL DEFAULT TRUE,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_doc_templates_company ON document_templates (company_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_doc_templates_order ON document_templates (company_id, display_order)`
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS document_requests (
+        id           VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        company_id   VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        contact_id   VARCHAR NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+        token        VARCHAR(128) NOT NULL UNIQUE,
+        status       document_request_status NOT NULL DEFAULT 'pending',
+        sent_at      TIMESTAMP,
+        completed_at TIMESTAMP,
+        created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_doc_requests_company ON document_requests (company_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_doc_requests_contact ON document_requests (contact_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_doc_requests_token ON document_requests (token)`
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS document_signatures (
+        id                   VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        request_id           VARCHAR NOT NULL REFERENCES document_requests(id) ON DELETE CASCADE,
+        template_id          VARCHAR NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
+        signer_name          VARCHAR(255) NOT NULL,
+        signer_ip            VARCHAR(64),
+        signature_image_path TEXT,
+        certificate_path     TEXT,
+        signed_at            TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_doc_signatures_request ON document_signatures (request_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_doc_signatures_template ON document_signatures (template_id)`
+    );
+
+    console.log("[Migration] Document signing tables ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

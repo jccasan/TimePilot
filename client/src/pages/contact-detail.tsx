@@ -1742,8 +1742,193 @@ export default function ContactDetail() {
         </div>
       )}
 
+      <DocumentSigningSection contactId={id!} />
       <ActivitySection contactId={id!} />
     </div>
+  );
+}
+
+function DocumentSigningSection({ contactId }: { contactId: string }) {
+  const { toast } = useToast();
+
+  const {
+    data: requests = [],
+    isLoading,
+    refetch,
+  } = useQuery<
+    Array<{
+      id: string;
+      status: string;
+      sentAt: string | null;
+      completedAt: string | null;
+      token: string;
+      createdAt: string;
+      signatures: Array<{
+        id: string;
+        templateId: string;
+        signerName: string;
+        signedAt: string;
+      }>;
+    }>
+  >({
+    queryKey: ["/api/contacts", contactId, "document-requests"],
+    queryFn: async () => {
+      const { getAuthHeaders } = await import("@/lib/queryClient");
+      const res = await fetch(`/api/contacts/${contactId}/document-requests`, {
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to load");
+      return res.json();
+    },
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/contacts/${contactId}/document-requests`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to send");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetch();
+      toast({ title: "Signing request sent" });
+    },
+    onError: (err: Error) => {
+      toast({ title: err.message, variant: "destructive" });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const res = await apiRequest(
+        "DELETE",
+        `/api/contacts/${contactId}/document-requests/${requestId}`
+      );
+      if (!res.ok) throw new Error("Failed to cancel");
+    },
+    onSuccess: () => {
+      refetch();
+      toast({ title: "Signing request cancelled" });
+    },
+    onError: () => toast({ title: "Failed to cancel", variant: "destructive" }),
+  });
+
+  const activeRequest = requests.find((r) => r.status === "pending");
+  const completedRequests = requests.filter((r) => r.status === "completed");
+
+  const copySignLink = (token: string) => {
+    const url = `${window.location.origin}/sign/${token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      toast({ title: "Link copied to clipboard" });
+    });
+  };
+
+  return (
+    <Card data-testid="card-document-signing">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Document Signing
+          </CardTitle>
+        </div>
+        {!activeRequest && (
+          <Button
+            size="sm"
+            variant="outline"
+            data-testid="button-send-signing-request"
+            disabled={sendMutation.isPending}
+            onClick={() => sendMutation.mutate()}
+          >
+            <Send className="h-3.5 w-3.5 mr-1" />
+            {sendMutation.isPending ? "Sending..." : "Send Request"}
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : activeRequest ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50 dark:bg-amber-950/20">
+              <div>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  Pending Signature
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Sent{" "}
+                  {activeRequest.sentAt
+                    ? new Date(activeRequest.sentAt).toLocaleDateString()
+                    : "recently"}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  data-testid="button-copy-sign-link"
+                  onClick={() => copySignLink(activeRequest.token)}
+                >
+                  <Copy className="h-3.5 w-3.5 mr-1" />
+                  Copy Link
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  data-testid="button-cancel-signing-request"
+                  disabled={cancelMutation.isPending}
+                  onClick={() => cancelMutation.mutate(activeRequest.id)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : completedRequests.length > 0 ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+              <CheckCircle className="h-4 w-4" />
+              All documents signed
+            </div>
+            {completedRequests[0].signatures.length > 0 && (
+              <div className="space-y-1">
+                {completedRequests[0].signatures.map((sig) => (
+                  <div
+                    key={sig.id}
+                    className="text-xs text-muted-foreground flex items-center gap-2"
+                    data-testid={`text-signature-${sig.id}`}
+                  >
+                    <CheckCircle className="h-3 w-3 text-green-600" />
+                    Signed by {sig.signerName} on {new Date(sig.signedAt).toLocaleDateString()}
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              data-testid="button-send-new-signing-request"
+              disabled={sendMutation.isPending}
+              onClick={() => sendMutation.mutate()}
+            >
+              <Send className="h-3.5 w-3.5 mr-1" />
+              Send New Request
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground" data-testid="text-no-signing-requests">
+            No signing requests sent yet.
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

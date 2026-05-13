@@ -95,6 +95,7 @@ const PendingApproval = lazy(() => import("@/pages/pending-approval"));
 const ReviewRouter = lazy(() => import("@/pages/review-router"));
 const ImportResolverPage = lazy(() => import("@/pages/import-resolver-page"));
 const CrmRouter = lazy(() => import("@/pages/crm/index"));
+const SignDocumentsPage = lazy(() => import("@/pages/sign-documents-page"));
 
 function PageLoader() {
   return (
@@ -889,8 +890,18 @@ function AppContent() {
 
   const isSmsTermsPath = typeof window !== "undefined" && window.location.pathname === "/sms-terms";
 
+  const isSignPath = typeof window !== "undefined" && window.location.pathname.startsWith("/sign/");
+
   const isReviewPath =
     typeof window !== "undefined" && window.location.pathname.startsWith("/review/");
+
+  if (isSignPath) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <SignDocumentsPage />
+      </Suspense>
+    );
+  }
 
   if (isReviewPath) {
     return (

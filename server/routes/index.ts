@@ -40,6 +40,7 @@ import { registerPlannerRoutes } from "./planner";
 import { registerImportBatchesRoutes } from "./import-batches";
 import { registerSmsAgentRoutes } from "./sms-agent";
 import { registerCrmRoutes } from "./crm";
+import { registerDocumentsRoutes } from "./documents";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Object file download route — registered before registerObjectStorageRoutes so this
@@ -241,6 +242,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   await registerImportBatchesRoutes(app);
   await registerSmsAgentRoutes(app);
   await registerCrmRoutes(app);
+  await registerDocumentsRoutes(app);
 
   return httpServer;
 }

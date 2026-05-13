@@ -202,6 +202,15 @@ import {
   retellWebhookRepairs,
   type RetellWebhookRepair,
   type InsertRetellWebhookRepair,
+  documentTemplates,
+  documentRequests,
+  documentSignatures,
+  type DocumentTemplate,
+  type InsertDocumentTemplate,
+  type DocumentRequest,
+  type InsertDocumentRequest,
+  type DocumentSignature,
+  type InsertDocumentSignature,
 } from "@shared/schema";
 
 export interface CustomerProfitabilityEntry {
@@ -992,6 +1001,28 @@ export interface IStorage {
   getAutocompleteCache(queryKey: string): Promise<AutocompleteCache | undefined>;
   setAutocompleteCache(queryKey: string, results: unknown[]): Promise<void>;
   pruneAutocompleteCache(olderThanDays: number): Promise<void>;
+
+  // Document Templates
+  listDocumentTemplates(companyId: string): Promise<DocumentTemplate[]>;
+  getDocumentTemplate(id: string, companyId: string): Promise<DocumentTemplate | undefined>;
+  createDocumentTemplate(data: InsertDocumentTemplate): Promise<DocumentTemplate>;
+  updateDocumentTemplate(
+    id: string,
+    companyId: string,
+    data: Partial<InsertDocumentTemplate>
+  ): Promise<DocumentTemplate>;
+  deleteDocumentTemplate(id: string, companyId: string): Promise<void>;
+
+  // Document Requests
+  createDocumentRequest(data: InsertDocumentRequest): Promise<DocumentRequest>;
+  getDocumentRequestByToken(token: string): Promise<DocumentRequest | undefined>;
+  getDocumentRequestById(id: string, companyId: string): Promise<DocumentRequest | undefined>;
+  listDocumentRequests(companyId: string, contactId?: string): Promise<DocumentRequest[]>;
+  updateDocumentRequest(id: string, data: Partial<InsertDocumentRequest>): Promise<DocumentRequest>;
+
+  // Document Signatures
+  createDocumentSignature(data: InsertDocumentSignature): Promise<DocumentSignature>;
+  getDocumentSignatures(requestId: string): Promise<DocumentSignature[]>;
 }
 
 export type GroupedErrorReport = {
@@ -5156,6 +5187,105 @@ export class DatabaseStorage implements IStorage {
   async pruneAutocompleteCache(olderThanDays: number): Promise<void> {
     const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
     await db.delete(autocompleteCacheTable).where(lt(autocompleteCacheTable.cachedAt, cutoff));
+  }
+
+  // ================ Document Templates ================
+  async listDocumentTemplates(companyId: string): Promise<DocumentTemplate[]> {
+    return db
+      .select()
+      .from(documentTemplates)
+      .where(eq(documentTemplates.companyId, companyId))
+      .orderBy(asc(documentTemplates.displayOrder), asc(documentTemplates.createdAt));
+  }
+
+  async getDocumentTemplate(id: string, companyId: string): Promise<DocumentTemplate | undefined> {
+    const [row] = await db
+      .select()
+      .from(documentTemplates)
+      .where(and(eq(documentTemplates.id, id), eq(documentTemplates.companyId, companyId)));
+    return row;
+  }
+
+  async createDocumentTemplate(data: InsertDocumentTemplate): Promise<DocumentTemplate> {
+    const [row] = await db.insert(documentTemplates).values(data).returning();
+    return row;
+  }
+
+  async updateDocumentTemplate(
+    id: string,
+    companyId: string,
+    data: Partial<InsertDocumentTemplate>
+  ): Promise<DocumentTemplate> {
+    const [row] = await db
+      .update(documentTemplates)
+      .set(data)
+      .where(and(eq(documentTemplates.id, id), eq(documentTemplates.companyId, companyId)))
+      .returning();
+    return row;
+  }
+
+  async deleteDocumentTemplate(id: string, companyId: string): Promise<void> {
+    await db
+      .delete(documentTemplates)
+      .where(and(eq(documentTemplates.id, id), eq(documentTemplates.companyId, companyId)));
+  }
+
+  // ================ Document Requests ================
+  async createDocumentRequest(data: InsertDocumentRequest): Promise<DocumentRequest> {
+    const [row] = await db.insert(documentRequests).values(data).returning();
+    return row;
+  }
+
+  async getDocumentRequestByToken(token: string): Promise<DocumentRequest | undefined> {
+    const [row] = await db.select().from(documentRequests).where(eq(documentRequests.token, token));
+    return row;
+  }
+
+  async getDocumentRequestById(
+    id: string,
+    companyId: string
+  ): Promise<DocumentRequest | undefined> {
+    const [row] = await db
+      .select()
+      .from(documentRequests)
+      .where(and(eq(documentRequests.id, id), eq(documentRequests.companyId, companyId)));
+    return row;
+  }
+
+  async listDocumentRequests(companyId: string, contactId?: string): Promise<DocumentRequest[]> {
+    const conditions = [eq(documentRequests.companyId, companyId)];
+    if (contactId) conditions.push(eq(documentRequests.contactId, contactId));
+    return db
+      .select()
+      .from(documentRequests)
+      .where(and(...conditions))
+      .orderBy(desc(documentRequests.createdAt));
+  }
+
+  async updateDocumentRequest(
+    id: string,
+    data: Partial<InsertDocumentRequest>
+  ): Promise<DocumentRequest> {
+    const [row] = await db
+      .update(documentRequests)
+      .set(data)
+      .where(eq(documentRequests.id, id))
+      .returning();
+    return row;
+  }
+
+  // ================ Document Signatures ================
+  async createDocumentSignature(data: InsertDocumentSignature): Promise<DocumentSignature> {
+    const [row] = await db.insert(documentSignatures).values(data).returning();
+    return row;
+  }
+
+  async getDocumentSignatures(requestId: string): Promise<DocumentSignature[]> {
+    return db
+      .select()
+      .from(documentSignatures)
+      .where(eq(documentSignatures.requestId, requestId))
+      .orderBy(asc(documentSignatures.signedAt));
   }
 
   async createRetellWebhookRepair(data: InsertRetellWebhookRepair): Promise<RetellWebhookRepair> {

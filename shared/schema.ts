@@ -422,6 +422,7 @@ export const companies = pgTable("companies", {
   onboardingCompleteSentAt: timestamp("onboarding_complete_sent_at"),
   passStripeFees: boolean("pass_stripe_fees").notNull().default(false),
   requireCardOnSignup: boolean("require_card_on_signup").notNull().default(true),
+  requireDocumentSigning: boolean("require_document_signing").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -3350,3 +3351,104 @@ export type InsertFallbackLog = typeof fallbackLog.$inferInsert;
 
 // Re-export CRM schema so CRM types are accessible from @shared/schema
 export * from "./crm-schema";
+
+// ─── Document Signing ────────────────────────────────────────────────────────
+
+export const documentRequestStatusEnum = pgEnum("document_request_status", [
+  "pending",
+  "completed",
+  "cancelled",
+]);
+
+export const documentTemplates = pgTable(
+  "document_templates",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    companyId: varchar("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    filePath: text("file_path").notNull(),
+    fileSize: integer("file_size"),
+    mimeType: varchar("mime_type", { length: 100 }),
+    isActive: boolean("is_active").notNull().default(true),
+    isRequired: boolean("is_required").notNull().default(true),
+    displayOrder: integer("display_order").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_doc_templates_company").on(table.companyId),
+    index("idx_doc_templates_order").on(table.companyId, table.displayOrder),
+  ]
+);
+
+export const insertDocumentTemplateSchema = createInsertSchema(documentTemplates).omit({
+  id: true,
+  createdAt: true,
+});
+export type DocumentTemplate = typeof documentTemplates.$inferSelect;
+export type InsertDocumentTemplate = typeof insertDocumentTemplateSchema._type;
+
+export const documentRequests = pgTable(
+  "document_requests",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    companyId: varchar("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    contactId: varchar("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    token: varchar("token", { length: 128 }).notNull().unique(),
+    status: documentRequestStatusEnum("status").notNull().default("pending"),
+    sentAt: timestamp("sent_at"),
+    completedAt: timestamp("completed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_doc_requests_company").on(table.companyId),
+    index("idx_doc_requests_contact").on(table.contactId),
+    index("idx_doc_requests_token").on(table.token),
+  ]
+);
+
+export const insertDocumentRequestSchema = createInsertSchema(documentRequests).omit({
+  id: true,
+  createdAt: true,
+});
+export type DocumentRequest = typeof documentRequests.$inferSelect;
+export type InsertDocumentRequest = typeof insertDocumentRequestSchema._type;
+
+export const documentSignatures = pgTable(
+  "document_signatures",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    requestId: varchar("request_id")
+      .notNull()
+      .references(() => documentRequests.id, { onDelete: "cascade" }),
+    templateId: varchar("template_id")
+      .notNull()
+      .references(() => documentTemplates.id, { onDelete: "cascade" }),
+    signerName: varchar("signer_name", { length: 255 }).notNull(),
+    signerIp: varchar("signer_ip", { length: 64 }),
+    signatureImagePath: text("signature_image_path"),
+    certificatePath: text("certificate_path"),
+    signedAt: timestamp("signed_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_doc_signatures_request").on(table.requestId),
+    index("idx_doc_signatures_template").on(table.templateId),
+  ]
+);
+
+export const insertDocumentSignatureSchema = createInsertSchema(documentSignatures).omit({
+  id: true,
+});
+export type DocumentSignature = typeof documentSignatures.$inferSelect;
+export type InsertDocumentSignature = typeof insertDocumentSignatureSchema._type;
