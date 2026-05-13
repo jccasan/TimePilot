@@ -2,6 +2,12 @@ import { db } from "../db";
 import { sql, gte } from "drizzle-orm";
 import { systemHealthChecks, stripeEvents, companies } from "@shared/schema";
 import { sendEmail } from "../services/email";
+import {
+  anthropic,
+  CLAUDE_FAST_MODEL,
+  CLAUDE_SMART_MODEL,
+  KNOWN_GOOD_CLAUDE_MODELS,
+} from "../services/claude";
 
 type CheckStatus = "pass" | "warn" | "fail";
 type CheckSeverity = "critical" | "high" | "medium" | "low";
@@ -79,6 +85,71 @@ function checkEnvVar(
     message: `${label} (${envVar}) is not set`,
     lastRunAt,
   };
+}
+
+async function checkClaudeApi(): Promise<CheckResult> {
+  const lastRunAt = new Date();
+
+  if (!process.env.CLAUDE_API_KEY) {
+    return {
+      checkName: "claude_api",
+      status: "fail",
+      severity: "medium",
+      message: "CLAUDE_API_KEY is not set — AI features are disabled",
+      lastRunAt,
+    };
+  }
+
+  const unknownModels: string[] = [];
+  if (!KNOWN_GOOD_CLAUDE_MODELS.has(CLAUDE_FAST_MODEL)) {
+    unknownModels.push(`CLAUDE_FAST_MODEL="${CLAUDE_FAST_MODEL}"`);
+  }
+  if (!KNOWN_GOOD_CLAUDE_MODELS.has(CLAUDE_SMART_MODEL)) {
+    unknownModels.push(`CLAUDE_SMART_MODEL="${CLAUDE_SMART_MODEL}"`);
+  }
+
+  try {
+    await anthropic.messages.create({
+      model: CLAUDE_FAST_MODEL,
+      max_tokens: 1,
+      messages: [{ role: "user", content: "ping" }],
+    });
+
+    if (unknownModels.length > 0) {
+      return {
+        checkName: "claude_api",
+        status: "warn",
+        severity: "medium",
+        message: `Claude API reachable but model IDs not in known-good list: ${unknownModels.join(", ")}`,
+        lastRunAt,
+      };
+    }
+
+    return {
+      checkName: "claude_api",
+      status: "pass",
+      severity: "medium",
+      message: `Claude API is reachable (fast: ${CLAUDE_FAST_MODEL}, smart: ${CLAUDE_SMART_MODEL})`,
+      lastRunAt,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const isModelError =
+      /model/i.test(message) ||
+      /not found/i.test(message) ||
+      /invalid/i.test(message) ||
+      /deprecated/i.test(message);
+
+    return {
+      checkName: "claude_api",
+      status: "fail",
+      severity: "medium",
+      message: isModelError
+        ? `Claude API call failed — possible deprecated model ID (${CLAUDE_FAST_MODEL}): ${message}`
+        : `Claude API call failed: ${message}`,
+      lastRunAt,
+    };
+  }
 }
 
 async function checkStripeRecentEvents(): Promise<CheckResult> {
@@ -363,6 +434,11 @@ export async function runSystemHealthCheck(options?: { sendEmail?: boolean }): P
     .where(sql`${systemHealthChecks.checkName} = 'openai_configured'`)
     .catch(() => {});
 
+  await db
+    .delete(systemHealthChecks)
+    .where(sql`${systemHealthChecks.checkName} = 'claude_configured'`)
+    .catch(() => {});
+
   const checks: CheckResult[] = await Promise.all([
     checkDbConnectivity(),
     checkEnvVar(
@@ -380,7 +456,7 @@ export async function runSystemHealthCheck(options?: { sendEmail?: boolean }): P
     checkStripeRecentEvents(),
     checkStripeConfig(),
     checkEnvVar("telnyx_configured", "TELNYX_API_KEY", "high", "Telnyx API key"),
-    checkEnvVar("claude_configured", "CLAUDE_API_KEY", "medium", "Claude API key"),
+    checkClaudeApi(),
     checkNoStuckSubscriptions(),
     getJobTrackingResult("job_nightly_rollup", "medium", 26 * 60 * 60 * 1000, "Nightly rollup"),
     getJobTrackingResult("job_auto_invoice", "high", 26 * 60 * 60 * 1000, "Auto invoice"),
