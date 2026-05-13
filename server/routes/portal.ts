@@ -2666,4 +2666,22 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
+
+  // ─── Documents ─────────────────────────────────────────────────────────────
+
+  app.get("/api/portal/documents", async (req: Request, res: Response) => {
+    try {
+      const { contactId, companyId } = await getPortalContext(req);
+      const requests = await storage.listDocumentRequests(companyId, contactId);
+      const withSigs = await Promise.all(
+        requests.map(async (r) => {
+          const signatures = await storage.getDocumentSignatures(r.id);
+          return { ...r, signatures };
+        })
+      );
+      res.json(withSigs);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
 }

@@ -179,6 +179,23 @@ interface GalleryPhoto {
   proofOfServicePhotoBefore: string | null;
 }
 
+interface PortalDocumentSignature {
+  id: string;
+  signerName: string;
+  signedAt: string;
+  certificatePath: string | null;
+}
+
+interface PortalDocument {
+  id: string;
+  token: string;
+  status: string;
+  sentAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  signatures: PortalDocumentSignature[];
+}
+
 function usePortalApi() {
   const [, navigate] = useLocation();
   const token = sessionStorage.getItem("portalToken");
@@ -467,6 +484,8 @@ export default function PortalClient() {
   const [submittingChange, setSubmittingChange] = useState(false);
   const [galleryPhotos, setGalleryPhotos] = useState<GalleryPhoto[]>([]);
   const [photoModalIndex, setPhotoModalIndex] = useState<number | null>(null);
+  const [documents, setDocuments] = useState<PortalDocument[]>([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(true);
   const [visitPhotoModal, setVisitPhotoModal] = useState<PastVisit | null>(null);
   const [billingStartDate, setBillingStartDate] = useState("");
   const [billingEndDate, setBillingEndDate] = useState("");
@@ -557,6 +576,7 @@ export default function PortalClient() {
           changesData,
           photosData,
           messagesData,
+          docsData,
         ] = await Promise.all([
           portalFetch("/api/portal/payment-methods").catch(() => ({
             methods: [],
@@ -571,6 +591,7 @@ export default function PortalClient() {
           portalFetch("/api/portal/service-changes").catch(() => []),
           portalFetch("/api/portal/photos").catch(() => []),
           portalFetch("/api/portal/messages").catch(() => []),
+          portalFetch("/api/portal/documents").catch(() => []),
         ]);
 
         setPaymentMethods(pmData.methods || []);
@@ -594,6 +615,8 @@ export default function PortalClient() {
         setGalleryPhotos(photosData);
         setPortalMessages(messagesData);
         setLoadingMessages(false);
+        setDocuments(Array.isArray(docsData) ? docsData : []);
+        setLoadingDocuments(false);
       } catch (err: any) {
         if (err.message !== "Not authenticated" && err.message !== "Session expired") {
           toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -601,6 +624,7 @@ export default function PortalClient() {
       } finally {
         setLoading(false);
         setLoadingMessages(false);
+        setLoadingDocuments(false);
       }
     };
 
@@ -1296,7 +1320,7 @@ export default function PortalClient() {
       <div className="max-w-4xl mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList
-            className="w-full grid grid-cols-5 mb-6 h-auto min-h-[44px]"
+            className="w-full grid grid-cols-6 mb-6 h-auto min-h-[44px]"
             data-testid="tabs-portal-nav"
           >
             <TabsTrigger
@@ -1343,6 +1367,19 @@ export default function PortalClient() {
             >
               <Settings className="h-5 w-5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Account</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="documents"
+              className="gap-1 min-h-[44px] flex-col sm:flex-row px-1 sm:px-3 text-[11px] sm:text-sm relative"
+              data-testid="tab-documents"
+            >
+              <FileText className="h-5 w-5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Documents</span>
+              {documents.filter((d) => d.status === "pending").length > 0 && (
+                <span className="absolute -top-0.5 right-0 sm:-top-1 sm:-right-1 h-4 w-4 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center font-bold">
+                  {documents.filter((d) => d.status === "pending").length}
+                </span>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -3251,6 +3288,104 @@ export default function PortalClient() {
                 <LogOut className="h-4 w-4 mr-2" /> Sign Out
               </Button>
             </div>
+          </TabsContent>
+
+          {/* ==================== DOCUMENTS TAB ==================== */}
+          <TabsContent value="documents" className="space-y-6">
+            <SectionHeader
+              title="Documents"
+              description="Review and sign documents sent by your service provider."
+            />
+            {loadingDocuments ? (
+              <div className="space-y-3">
+                {[1, 2].map((i) => (
+                  <Skeleton key={i} className="h-20 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : documents.length === 0 ? (
+              <EmptyState
+                icon={FileText}
+                title="No documents on file"
+                description="Documents sent for your signature will appear here."
+              />
+            ) : (
+              <div className="space-y-3">
+                {documents.map((doc) => {
+                  const isPending = doc.status === "pending";
+                  const isSigned = doc.status === "completed";
+                  const signedAt = doc.completedAt
+                    ? new Date(doc.completedAt).toLocaleDateString()
+                    : doc.signatures[0]?.signedAt
+                      ? new Date(doc.signatures[0].signedAt).toLocaleDateString()
+                      : null;
+                  const certPath = doc.signatures.find((s) => s.certificatePath)?.certificatePath;
+                  return (
+                    <Card key={doc.id} data-testid={`card-document-${doc.id}`}>
+                      <CardContent className="p-4 flex items-start gap-4">
+                        <div
+                          className={`rounded-lg p-2.5 shrink-0 ${
+                            isSigned
+                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                              : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                          }`}
+                        >
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-sm">Signing Request</span>
+                            <Badge
+                              className={
+                                isSigned
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-0"
+                                  : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-0"
+                              }
+                              data-testid={`badge-doc-status-${doc.id}`}
+                            >
+                              {isSigned ? "Signed" : isPending ? "Pending" : doc.status}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {doc.sentAt
+                              ? `Sent ${new Date(doc.sentAt).toLocaleDateString()}`
+                              : `Created ${new Date(doc.createdAt).toLocaleDateString()}`}
+                            {isSigned && signedAt ? ` · Signed ${signedAt}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isPending && (
+                            <Button size="sm" asChild data-testid={`button-sign-${doc.id}`}>
+                              <a href={`/sign/${doc.token}`} target="_blank" rel="noreferrer">
+                                Sign Now
+                              </a>
+                            </Button>
+                          )}
+                          {isSigned && certPath && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                portalDownload(`/objects/${certPath}`, "signed-document.pdf")
+                              }
+                              data-testid={`button-download-cert-${doc.id}`}
+                            >
+                              <Download className="h-4 w-4 mr-1" />
+                              Download
+                            </Button>
+                          )}
+                          {isSigned && !certPath && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                              Complete
+                            </span>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </div>
