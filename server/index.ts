@@ -116,6 +116,11 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later" },
 });
+// Health check — exempt from rate limiting, responds instantly even on cold start
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, ts: Date.now() });
+});
+
 app.use("/api", apiLimiter);
 
 const authLimiter = rateLimit({

@@ -1021,6 +1021,64 @@ function isChunkLoadError(error: Error | null): boolean {
   );
 }
 
+function ServerReconnectBanner() {
+  const [offline, setOffline] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const failCount = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function check() {
+      try {
+        const res = await fetch("/api/health", { credentials: "include" });
+        if (res.ok) {
+          failCount.current = 0;
+          if (!cancelled) {
+            setOffline(false);
+            setReconnecting(false);
+          }
+          timerRef.current = setTimeout(check, 30000);
+          return;
+        }
+      } catch {
+        // network error
+      }
+      if (cancelled) return;
+      failCount.current += 1;
+      if (failCount.current >= 2) {
+        setOffline(true);
+        setReconnecting(true);
+      }
+      timerRef.current = setTimeout(check, 5000);
+    }
+
+    timerRef.current = setTimeout(check, 10000);
+    return () => {
+      cancelled = true;
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  if (!offline) return null;
+
+  return (
+    <div
+      data-testid="server-reconnect-banner"
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950 dark:border-amber-700 shadow-lg px-4 py-3 text-sm"
+      style={{ maxWidth: "calc(100vw - 2rem)" }}
+    >
+      {reconnecting && (
+        <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
+      )}
+      <span className="text-amber-800 dark:text-amber-200 font-medium">
+        {reconnecting ? "Server is starting up — reconnecting automatically…" : "Connection lost. Retrying…"}
+      </span>
+    </div>
+  );
+}
+
 function UpdateBanner() {
   const [visible, setVisible] = useState(false);
 
@@ -1172,6 +1230,7 @@ function App() {
             <Toaster />
             <PwaInstallPrompt />
             <UpdateBanner />
+            <ServerReconnectBanner />
           </TooltipProvider>
         </ThemeProvider>
       </QueryClientProvider>

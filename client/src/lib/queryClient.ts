@@ -67,6 +67,17 @@ export const getQueryFn: <T>(options: { on401: UnauthorizedBehavior }) => QueryF
     return await res.json();
   };
 
+function isTransientError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /^5\d\d/.test(err.message) ||
+    err.message.includes("Bad Gateway") ||
+    err.message.includes("Service Unavailable") ||
+    err.message.includes("Gateway Timeout") ||
+    err.message.includes("Failed to fetch") ||
+    err.message.includes("NetworkError") ||
+    err.message.includes("Load failed");
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -74,7 +85,11 @@ export const queryClient = new QueryClient({
       refetchInterval: false,
       refetchOnWindowFocus: true,
       staleTime: 5 * 60 * 1000,
-      retry: 1,
+      retry: (failureCount, err) => {
+        if (err instanceof Error && /^4\d\d/.test(err.message)) return false;
+        return failureCount < 3 && isTransientError(err);
+      },
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     },
     mutations: {
       retry: false,
