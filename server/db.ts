@@ -30,11 +30,7 @@ function isTransientDbError(err: unknown): boolean {
   return false;
 }
 
-export async function withDbRetry<T>(
-  fn: () => Promise<T>,
-  retries = 3,
-  delayMs = 600
-): Promise<T> {
+export async function withDbRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 600): Promise<T> {
   try {
     return await fn();
   } catch (err) {

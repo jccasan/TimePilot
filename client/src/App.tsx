@@ -1073,7 +1073,9 @@ function ServerReconnectBanner() {
         <Loader2 className="h-4 w-4 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
       )}
       <span className="text-amber-800 dark:text-amber-200 font-medium">
-        {reconnecting ? "Server is starting up — reconnecting automatically…" : "Connection lost. Retrying…"}
+        {reconnecting
+          ? "Server is starting up — reconnecting automatically…"
+          : "Connection lost. Retrying…"}
       </span>
     </div>
   );

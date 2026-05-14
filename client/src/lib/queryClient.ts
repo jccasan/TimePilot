@@ -69,13 +69,15 @@ export const getQueryFn: <T>(options: { on401: UnauthorizedBehavior }) => QueryF
 
 function isTransientError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
-  return /^5\d\d/.test(err.message) ||
+  return (
+    /^5\d\d/.test(err.message) ||
     err.message.includes("Bad Gateway") ||
     err.message.includes("Service Unavailable") ||
     err.message.includes("Gateway Timeout") ||
     err.message.includes("Failed to fetch") ||
     err.message.includes("NetworkError") ||
-    err.message.includes("Load failed");
+    err.message.includes("Load failed")
+  );
 }
 
 export const queryClient = new QueryClient({
