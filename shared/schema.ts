@@ -424,6 +424,7 @@ export const companies = pgTable("companies", {
   passStripeFees: boolean("pass_stripe_fees").notNull().default(false),
   requireCardOnSignup: boolean("require_card_on_signup").notNull().default(true),
   widgetFieldConfig: jsonb("widget_field_config").$type<WidgetFieldConfig>(),
+  yardSizeTierConfig: jsonb("yard_size_tier_config").$type<YardSizeTierConfig>(),
   requireDocumentSigning: boolean("require_document_signing").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1037,6 +1038,20 @@ export type WidgetFieldConfig = {
   streetAddress?: { required: boolean };
   city?: { required: boolean };
   state?: { required: boolean };
+};
+
+export type YardSizeTierEntry = {
+  label: string;
+  price: number;
+};
+
+export type YardSizeTierConfig = {
+  tier1?: YardSizeTierEntry;
+  tier2?: YardSizeTierEntry;
+  tier3?: YardSizeTierEntry;
+  tier4?: YardSizeTierEntry;
+  tier5?: YardSizeTierEntry;
+  tier6?: YardSizeTierEntry;
 };
 
 export type ReminderRule = {

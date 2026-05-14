@@ -922,6 +922,11 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] contacts contact_type / company_name columns ensured");
 
+    await client.query(
+      `ALTER TABLE companies ADD COLUMN IF NOT EXISTS yard_size_tier_config JSONB`
+    );
+    console.log("[Migration] companies yard_size_tier_config column ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

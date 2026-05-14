@@ -178,6 +178,7 @@ type Company = {
   requireCardOnSignup?: boolean;
   requireDocumentSigning?: boolean;
   widgetFieldConfig?: WidgetFieldConfig | null;
+  yardSizeTierConfig?: YardSizeTierConfig | null;
 };
 
 type SettingsLayoutItem = {
@@ -3832,6 +3833,20 @@ type WidgetFieldConfig = {
   state?: { required: boolean };
 };
 
+type YardSizeTierEntry = {
+  label: string;
+  price: number;
+};
+
+type YardSizeTierConfig = {
+  tier1?: YardSizeTierEntry;
+  tier2?: YardSizeTierEntry;
+  tier3?: YardSizeTierEntry;
+  tier4?: YardSizeTierEntry;
+  tier5?: YardSizeTierEntry;
+  tier6?: YardSizeTierEntry;
+};
+
 function SignupWidgetSection({
   company,
 }: {
@@ -3840,6 +3855,7 @@ function SignupWidgetSection({
     name: string;
     quoteFormLayout: string;
     widgetFieldConfig?: WidgetFieldConfig | null;
+    yardSizeTierConfig?: YardSizeTierConfig | null;
   } | null;
 }) {
   const { toast } = useToast();
@@ -3897,6 +3913,82 @@ function SignupWidgetSection({
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
+
+  const TIER_PLACEHOLDERS = ["Small", "Medium", "Large", "Extra Large", "Estate", "Acreage"];
+
+  const getTierValues = (config: YardSizeTierConfig | null | undefined) => {
+    return Array.from({ length: 6 }, (_, i) => {
+      const key = `tier${i + 1}` as keyof YardSizeTierConfig;
+      return {
+        label: config?.[key]?.label ?? "",
+        price: config?.[key]?.price != null ? String(config[key]!.price) : "",
+      };
+    });
+  };
+
+  const [tierRows, setTierRows] = useState<{ label: string; price: string }[]>(() =>
+    getTierValues(company?.yardSizeTierConfig)
+  );
+  const [tierValidationError, setTierValidationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTierRows(getTierValues(company?.yardSizeTierConfig));
+  }, [company?.yardSizeTierConfig]);
+
+  const tierConfigMutation = useMutation({
+    mutationFn: async (config: YardSizeTierConfig) => {
+      const res = await apiRequest("PATCH", "/api/company", { yardSizeTierConfig: config });
+      if (!res.ok) throw new Error("Failed to update yard size tiers");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Yard size tiers saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSaveTiers = () => {
+    setTierValidationError(null);
+    const anyFilled = tierRows.some((r) => r.label.trim() || r.price.trim());
+    if (anyFilled) {
+      for (let i = 0; i < 3; i++) {
+        const row = tierRows[i];
+        if (!row.label.trim()) {
+          setTierValidationError(`Tier ${i + 1} label is required when any tier is configured.`);
+          return;
+        }
+        if (row.price.trim() === "" || isNaN(Number(row.price)) || Number(row.price) < 0) {
+          setTierValidationError(`Tier ${i + 1} price must be a valid number (0 or more).`);
+          return;
+        }
+      }
+      for (let i = 3; i < 6; i++) {
+        const row = tierRows[i];
+        if ((row.label.trim() && row.price.trim() === "") || (!row.label.trim() && row.price.trim())) {
+          setTierValidationError(
+            `Tier ${i + 1} must have both a label and a price, or leave both blank.`
+          );
+          return;
+        }
+        if (row.price.trim() && (isNaN(Number(row.price)) || Number(row.price) < 0)) {
+          setTierValidationError(`Tier ${i + 1} price must be a valid number.`);
+          return;
+        }
+      }
+    }
+    const config: YardSizeTierConfig = {};
+    for (let i = 0; i < 6; i++) {
+      const row = tierRows[i];
+      if (row.label.trim()) {
+        const key = `tier${i + 1}` as keyof YardSizeTierConfig;
+        config[key] = { label: row.label.trim(), price: Number(row.price) || 0 };
+      }
+    }
+    tierConfigMutation.mutate(config);
+  };
 
   const currentFieldConfig: WidgetFieldConfig = {
     lastName: { required: company?.widgetFieldConfig?.lastName?.required ?? false },
@@ -4104,6 +4196,79 @@ function SignupWidgetSection({
             </Button>
           </div>
         )}
+
+        <div className="space-y-3 pt-2 border-t">
+          <div>
+            <Label className="text-sm font-medium">Yard Size Tiers</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Configure up to 6 yard size options shown to prospects on the signup widget. Tiers 1–3
+              are required if you use this feature. Leave all labels blank to disable. The value
+              sent in the lead webhook will be <span className="font-mono">tier_1</span> through{" "}
+              <span className="font-mono">tier_6</span>.
+            </p>
+          </div>
+          <div className="space-y-2">
+            {tierRows.map((row, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground w-[56px] shrink-0 text-right">
+                  Tier {i + 1}
+                  {i < 3 ? " *" : ""}
+                </span>
+                <Input
+                  placeholder={TIER_PLACEHOLDERS[i]}
+                  value={row.label}
+                  onChange={(e) => {
+                    setTierValidationError(null);
+                    setTierRows((prev) => {
+                      const next = [...prev];
+                      next[i] = { ...next[i], label: e.target.value };
+                      return next;
+                    });
+                  }}
+                  className="flex-1 h-8 text-sm"
+                  data-testid={`input-yard-tier-label-${i + 1}`}
+                />
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-xs text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    value={row.price}
+                    onChange={(e) => {
+                      setTierValidationError(null);
+                      setTierRows((prev) => {
+                        const next = [...prev];
+                        next[i] = { ...next[i], price: e.target.value };
+                        return next;
+                      });
+                    }}
+                    className="w-20 h-8 text-sm"
+                    data-testid={`input-yard-tier-price-${i + 1}`}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          {tierValidationError && (
+            <p className="text-xs text-destructive">{tierValidationError}</p>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSaveTiers}
+            disabled={tierConfigMutation.isPending}
+            data-testid="button-save-yard-tiers"
+          >
+            {tierConfigMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Tiers
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -7483,6 +7648,8 @@ export default function Settings() {
                       name: company.name,
                       quoteFormLayout: company.quoteFormLayout || "stepper",
                       widgetFieldConfig: (company.widgetFieldConfig as WidgetFieldConfig) ?? null,
+                      yardSizeTierConfig:
+                        (company.yardSizeTierConfig as YardSizeTierConfig) ?? null,
                     }
                   : null
               }

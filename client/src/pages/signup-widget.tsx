@@ -81,6 +81,20 @@ type WidgetFieldConfig = {
   state?: { required: boolean };
 };
 
+type YardSizeTierEntry = {
+  label: string;
+  price: number;
+};
+
+type YardSizeTierConfig = {
+  tier1?: YardSizeTierEntry;
+  tier2?: YardSizeTierEntry;
+  tier3?: YardSizeTierEntry;
+  tier4?: YardSizeTierEntry;
+  tier5?: YardSizeTierEntry;
+  tier6?: YardSizeTierEntry;
+};
+
 type CompanyInfo = {
   name: string;
   logoUrl: string | null;
@@ -92,6 +106,7 @@ type CompanyInfo = {
   stripeConnectOnboarded: boolean;
   stripeConnectAccountId: string | null;
   widgetFieldConfig: WidgetFieldConfig | null;
+  yardSizeTierConfig: YardSizeTierConfig | null;
 };
 
 type QuoteResult = {
@@ -806,7 +821,9 @@ export default function SignupWidget() {
       const numberOfDogs = currentTier ? currentTier.dogCount : 1;
       const backendFreq = BACKEND_FREQ_MAP[selectedFreq] || selectedFreq || "weekly";
       let yardSize: string;
-      if (["small", "medium", "large", "extra-large"].includes(selectedLot)) {
+      if (hasYardSizeTiers && /^tier_[1-6]$/.test(selectedLot)) {
+        yardSize = selectedLot;
+      } else if (["small", "medium", "large", "extra-large"].includes(selectedLot)) {
         yardSize = selectedLot;
       } else {
         const acreVal = parseFloat(selectedLot);
@@ -899,6 +916,23 @@ export default function SignupWidget() {
   const totalSteps = showCardStep ? 4 : 3;
 
   const hasLotAddons = parsed && parsed.lotAddons.length > 0;
+
+  const yardSizeTiers = useMemo(() => {
+    const config = company?.yardSizeTierConfig;
+    if (!config) return [];
+    const result: { value: string; label: string; price: number }[] = [];
+    for (let i = 1; i <= 6; i++) {
+      const key = `tier${i}` as keyof YardSizeTierConfig;
+      const tier = config[key];
+      if (tier?.label?.trim()) {
+        result.push({ value: `tier_${i}`, label: tier.label.trim(), price: tier.price ?? 0 });
+      }
+    }
+    return result;
+  }, [company?.yardSizeTierConfig]);
+
+  const hasYardSizeTiers = yardSizeTiers.length > 0;
+
   const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!lastCleanup;
 
   const fieldRequired = (field: keyof WidgetFieldConfig): boolean => {
@@ -1628,7 +1662,31 @@ export default function SignupWidget() {
                       </div>
                     </div>
 
-                    {hasLotAddons && (
+                    {hasYardSizeTiers ? (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">Yard Size (optional)</Label>
+                        <div className="space-y-1.5">
+                          {yardSizeTiers.map((tier) => (
+                            <RadioOption
+                              key={tier.value}
+                              isSelected={selectedLot === tier.value}
+                              brandStyles={brandStyles}
+                              testId={`radio-lot-${tier.value}`}
+                              onClick={() =>
+                                setSelectedLot(selectedLot === tier.value ? "" : tier.value)
+                              }
+                            >
+                              <span className="text-sm flex-1">{tier.label}</span>
+                              {tier.price > 0 && (
+                                <span className="text-sm text-muted-foreground ml-2">
+                                  ${tier.price.toFixed(0)}
+                                </span>
+                              )}
+                            </RadioOption>
+                          ))}
+                        </div>
+                      </div>
+                    ) : hasLotAddons ? (
                       <div className="space-y-2">
                         <Label className="text-sm font-semibold">
                           Estimated Yard Size (optional)
@@ -1647,7 +1705,7 @@ export default function SignupWidget() {
                           ))}
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">Last Time Yard Was Cleaned *</Label>
@@ -2259,7 +2317,31 @@ export default function SignupWidget() {
                     </div>
                   </div>
 
-                  {hasLotAddons && (
+                  {hasYardSizeTiers ? (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Yard Size (optional)</Label>
+                      <div className="space-y-1.5">
+                        {yardSizeTiers.map((tier) => (
+                          <RadioOption
+                            key={tier.value}
+                            isSelected={selectedLot === tier.value}
+                            brandStyles={brandStyles}
+                            testId={`radio-lot-${tier.value}`}
+                            onClick={() =>
+                              setSelectedLot(selectedLot === tier.value ? "" : tier.value)
+                            }
+                          >
+                            <span className="text-sm flex-1">{tier.label}</span>
+                            {tier.price > 0 && (
+                              <span className="text-sm text-muted-foreground ml-2">
+                                ${tier.price.toFixed(0)}
+                              </span>
+                            )}
+                          </RadioOption>
+                        ))}
+                      </div>
+                    </div>
+                  ) : hasLotAddons ? (
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">
                         Estimated Yard Size (optional)
@@ -2278,7 +2360,7 @@ export default function SignupWidget() {
                         ))}
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Last Time Yard Was Cleaned *</Label>
