@@ -3967,7 +3967,10 @@ function SignupWidgetSection({
       }
       for (let i = 3; i < 6; i++) {
         const row = tierRows[i];
-        if ((row.label.trim() && row.price.trim() === "") || (!row.label.trim() && row.price.trim())) {
+        if (
+          (row.label.trim() && row.price.trim() === "") ||
+          (!row.label.trim() && row.price.trim())
+        ) {
           setTierValidationError(
             `Tier ${i + 1} must have both a label and a price, or leave both blank.`
           );
@@ -4251,9 +4254,7 @@ function SignupWidgetSection({
               </div>
             ))}
           </div>
-          {tierValidationError && (
-            <p className="text-xs text-destructive">{tierValidationError}</p>
-          )}
+          {tierValidationError && <p className="text-xs text-destructive">{tierValidationError}</p>}
           <Button
             variant="outline"
             size="sm"
