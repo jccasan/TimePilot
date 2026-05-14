@@ -177,6 +177,7 @@ type Company = {
   passStripeFees?: boolean;
   requireCardOnSignup?: boolean;
   requireDocumentSigning?: boolean;
+  widgetFieldConfig?: WidgetFieldConfig | null;
 };
 
 type SettingsLayoutItem = {
@@ -3822,10 +3823,24 @@ function AuditLogSection() {
   );
 }
 
+type WidgetFieldConfig = {
+  lastName?: { required: boolean };
+  email?: { required: boolean };
+  phone?: { required: boolean };
+  streetAddress?: { required: boolean };
+  city?: { required: boolean };
+  state?: { required: boolean };
+};
+
 function SignupWidgetSection({
   company,
 }: {
-  company: { slug: string | null; name: string; quoteFormLayout: string } | null;
+  company: {
+    slug: string | null;
+    name: string;
+    quoteFormLayout: string;
+    widgetFieldConfig?: WidgetFieldConfig | null;
+  } | null;
 }) {
   const { toast } = useToast();
   const [slugInput, setSlugInput] = useState(company?.slug || "");
@@ -3867,6 +3882,30 @@ function SignupWidgetSection({
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
+
+  const fieldConfigMutation = useMutation({
+    mutationFn: async (config: WidgetFieldConfig) => {
+      const res = await apiRequest("PATCH", "/api/company", { widgetFieldConfig: config });
+      if (!res.ok) throw new Error("Failed to update field configuration");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Field requirements updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const currentFieldConfig: WidgetFieldConfig = {
+    lastName: { required: company?.widgetFieldConfig?.lastName?.required ?? false },
+    email: { required: company?.widgetFieldConfig?.email?.required ?? false },
+    phone: { required: company?.widgetFieldConfig?.phone?.required ?? false },
+    streetAddress: { required: company?.widgetFieldConfig?.streetAddress?.required ?? true },
+    city: { required: company?.widgetFieldConfig?.city?.required ?? true },
+    state: { required: company?.widgetFieldConfig?.state?.required ?? true },
+  };
 
   const baseUrl = window.location.origin;
   const signupUrl = company?.slug ? `${baseUrl}/signup/${company.slug}` : "";
@@ -3961,6 +4000,44 @@ function SignupWidgetSection({
               ? "All form sections are shown on a single page."
               : "The form is divided into steps that prospects complete one at a time."}
           </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Required Fields</Label>
+          <p className="text-xs text-muted-foreground">
+            First name is always required. Toggle which other fields prospects must fill in to
+            submit.
+          </p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 pt-1">
+            {(
+              [
+                { key: "lastName", label: "Last Name" },
+                { key: "email", label: "Email" },
+                { key: "phone", label: "Phone" },
+                { key: "streetAddress", label: "Street Address" },
+                { key: "city", label: "City" },
+                { key: "state", label: "State" },
+              ] as { key: keyof WidgetFieldConfig; label: string }[]
+            ).map(({ key, label }) => {
+              const isRequired = currentFieldConfig[key]?.required ?? false;
+              return (
+                <div key={key} className="flex items-center justify-between gap-3 py-0.5">
+                  <Label className="text-sm font-normal cursor-pointer">{label}</Label>
+                  <Switch
+                    checked={isRequired}
+                    onCheckedChange={(v) => {
+                      fieldConfigMutation.mutate({
+                        ...currentFieldConfig,
+                        [key]: { required: v },
+                      });
+                    }}
+                    disabled={fieldConfigMutation.isPending}
+                    data-testid={`switch-field-required-${key}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {company?.slug && (
@@ -7405,6 +7482,7 @@ export default function Settings() {
                       slug: company.slug,
                       name: company.name,
                       quoteFormLayout: company.quoteFormLayout || "stepper",
+                      widgetFieldConfig: (company.widgetFieldConfig as WidgetFieldConfig) ?? null,
                     }
                   : null
               }

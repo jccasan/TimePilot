@@ -72,6 +72,15 @@ type PricingItem = {
   sortOrder: number;
 };
 
+type WidgetFieldConfig = {
+  lastName?: { required: boolean };
+  email?: { required: boolean };
+  phone?: { required: boolean };
+  streetAddress?: { required: boolean };
+  city?: { required: boolean };
+  state?: { required: boolean };
+};
+
 type CompanyInfo = {
   name: string;
   logoUrl: string | null;
@@ -82,6 +91,7 @@ type CompanyInfo = {
   stripePublishableKey: string | null;
   stripeConnectOnboarded: boolean;
   stripeConnectAccountId: string | null;
+  widgetFieldConfig: WidgetFieldConfig | null;
 };
 
 type QuoteResult = {
@@ -375,7 +385,7 @@ function StepIndicator({
   labels?: string[];
   extraCompletedSteps?: number[];
 }) {
-  const defaultLabels = ["Service Area", "Service Details", "Contact Info"];
+  const defaultLabels = ["Your Info", "Service Details", "Confirm"];
   const stepLabels = labels || defaultLabels;
   return (
     <div className="flex items-center justify-center gap-2 py-4 px-6" data-testid="step-indicator">
@@ -884,17 +894,31 @@ export default function SignupWidget() {
   }, [company?.stripePublishableKey]);
 
   const stepLabels = showCardStep
-    ? ["Service Area", "Service Details", "Contact Info", "Payment Info"]
-    : ["Service Area", "Service Details", "Contact Info"];
+    ? ["Your Info", "Service Details", "Confirm", "Payment Info"]
+    : ["Your Info", "Service Details", "Confirm"];
   const totalSteps = showCardStep ? 4 : 3;
 
   const hasLotAddons = parsed && parsed.lotAddons.length > 0;
   const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!lastCleanup;
-  const isStep1Valid = zipVerified && formData.firstName.trim().length > 0;
-  const isStep3Valid =
-    formData.streetAddress.trim().length > 0 &&
-    formData.city.trim().length > 0 &&
-    formData.state.trim().length > 0;
+
+  const fieldRequired = (field: keyof WidgetFieldConfig): boolean => {
+    const cfg = company?.widgetFieldConfig;
+    if (!cfg || cfg[field] === undefined) {
+      return ["streetAddress", "city", "state"].includes(field);
+    }
+    return cfg[field]!.required;
+  };
+
+  const isStep1Valid =
+    zipVerified &&
+    formData.firstName.trim().length > 0 &&
+    (!fieldRequired("lastName") || formData.lastName.trim().length > 0) &&
+    (!fieldRequired("email") || formData.email.trim().length > 0) &&
+    (!fieldRequired("phone") || formData.phone.trim().length > 0) &&
+    (!fieldRequired("streetAddress") || formData.streetAddress.trim().length > 0) &&
+    (!fieldRequired("city") || formData.city.trim().length > 0) &&
+    (!fieldRequired("state") || formData.state.trim().length > 0);
+  const isStep3Valid = true;
 
   if (isLoading) {
     return (
@@ -1277,8 +1301,7 @@ export default function SignupWidget() {
   }
 
   if (isSingleLayout) {
-    const singleFormValid =
-      zipVerified && formData.firstName.trim().length > 0 && isStep2Valid && isStep3Valid;
+    const singleFormValid = isStep1Valid && isStep2Valid;
     return (
       <div
         className={isEmbed ? "" : "min-h-screen flex items-center justify-center p-4"}
@@ -1411,7 +1434,9 @@ export default function SignupWidget() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="lastNameSingle">Last Name</Label>
+                      <Label htmlFor="lastNameSingle">
+                        Last Name{fieldRequired("lastName") ? " *" : ""}
+                      </Label>
                       <Input
                         id="lastNameSingle"
                         value={formData.lastName}
@@ -1422,7 +1447,9 @@ export default function SignupWidget() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="emailSingle">Email</Label>
+                      <Label htmlFor="emailSingle">
+                        Email{fieldRequired("email") ? " *" : ""}
+                      </Label>
                       <Input
                         id="emailSingle"
                         type="email"
@@ -1432,13 +1459,60 @@ export default function SignupWidget() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="phoneSingle">Phone</Label>
+                      <Label htmlFor="phoneSingle">
+                        Phone{fieldRequired("phone") ? " *" : ""}
+                      </Label>
                       <Input
                         id="phoneSingle"
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => updateField("phone", e.target.value)}
                         data-testid="input-phone"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="streetAddressSingle">
+                      Street Address{fieldRequired("streetAddress") ? " *" : ""}
+                    </Label>
+                    <Input
+                      id="streetAddressSingle"
+                      value={formData.streetAddress}
+                      onChange={(e) => updateField("streetAddress", e.target.value)}
+                      data-testid="input-street-address"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="citySingle">
+                        City{fieldRequired("city") ? " *" : ""}
+                      </Label>
+                      <Input
+                        id="citySingle"
+                        value={formData.city}
+                        onChange={(e) => updateField("city", e.target.value)}
+                        data-testid="input-city"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="stateSingle">
+                        State{fieldRequired("state") ? " *" : ""}
+                      </Label>
+                      <Input
+                        id="stateSingle"
+                        value={formData.state}
+                        onChange={(e) => updateField("state", e.target.value)}
+                        maxLength={2}
+                        data-testid="input-state"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>ZIP Code</Label>
+                      <Input
+                        value={zipCode}
+                        disabled
+                        className="bg-muted"
+                        data-testid="input-zip-display"
                       />
                     </div>
                   </div>
@@ -1692,64 +1766,12 @@ export default function SignupWidget() {
                   )}
                 </div>
 
-                <div className="border-t pt-6 space-y-4" data-testid="section-contact-single">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold text-white"
-                      style={{ backgroundColor: brandStyles.accentText }}
+                <div className="border-t pt-6" data-testid="section-contact-single">
+                  <div className="mt-2">
+                    <label
+                      className="flex items-start gap-2.5 cursor-pointer"
+                      data-testid="label-sms-opt-in"
                     >
-                      3
-                    </div>
-                    <h2 className="text-lg font-bold">Service Address</h2>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="streetAddressSingle">Street Address *</Label>
-                      <Input
-                        id="streetAddressSingle"
-                        value={formData.streetAddress}
-                        onChange={(e) => updateField("streetAddress", e.target.value)}
-                        required
-                        data-testid="input-street-address"
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="citySingle">City *</Label>
-                        <Input
-                          id="citySingle"
-                          value={formData.city}
-                          onChange={(e) => updateField("city", e.target.value)}
-                          required
-                          data-testid="input-city"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="stateSingle">State *</Label>
-                        <Input
-                          id="stateSingle"
-                          value={formData.state}
-                          onChange={(e) => updateField("state", e.target.value)}
-                          maxLength={2}
-                          required
-                          data-testid="input-state"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>ZIP Code</Label>
-                        <Input
-                          value={zipCode}
-                          disabled
-                          className="bg-muted"
-                          data-testid="input-zip-display"
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-2">
-                      <label
-                        className="flex items-start gap-2.5 cursor-pointer"
-                        data-testid="label-sms-opt-in"
-                      >
                         <input
                           type="checkbox"
                           checked={smsOptIn}
@@ -1788,7 +1810,6 @@ export default function SignupWidget() {
                       </label>
                     </div>
                   </div>
-                </div>
 
                 {submitMutation.isError && (
                   <div
@@ -2012,7 +2033,9 @@ export default function SignupWidget() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="lastName">Last Name</Label>
+                        <Label htmlFor="lastName">
+                          Last Name{fieldRequired("lastName") ? " *" : ""}
+                        </Label>
                         <Input
                           id="lastName"
                           value={formData.lastName}
@@ -2023,7 +2046,9 @@ export default function SignupWidget() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="email">Email</Label>
+                        <Label htmlFor="email">
+                          Email{fieldRequired("email") ? " *" : ""}
+                        </Label>
                         <Input
                           id="email"
                           type="email"
@@ -2037,13 +2062,60 @@ export default function SignupWidget() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="phone">Phone</Label>
+                        <Label htmlFor="phone">
+                          Phone{fieldRequired("phone") ? " *" : ""}
+                        </Label>
                         <Input
                           id="phone"
                           type="tel"
                           value={formData.phone}
                           onChange={(e) => updateField("phone", e.target.value)}
                           data-testid="input-phone"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="streetAddress">
+                        Street Address{fieldRequired("streetAddress") ? " *" : ""}
+                      </Label>
+                      <Input
+                        id="streetAddress"
+                        value={formData.streetAddress}
+                        onChange={(e) => updateField("streetAddress", e.target.value)}
+                        data-testid="input-street-address"
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="city">
+                          City{fieldRequired("city") ? " *" : ""}
+                        </Label>
+                        <Input
+                          id="city"
+                          value={formData.city}
+                          onChange={(e) => updateField("city", e.target.value)}
+                          data-testid="input-city"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="state">
+                          State{fieldRequired("state") ? " *" : ""}
+                        </Label>
+                        <Input
+                          id="state"
+                          value={formData.state}
+                          onChange={(e) => updateField("state", e.target.value)}
+                          maxLength={2}
+                          data-testid="input-state"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>ZIP Code</Label>
+                        <Input
+                          value={zipCode}
+                          disabled
+                          className="bg-muted"
+                          data-testid="input-zip-display"
                         />
                       </div>
                     </div>
@@ -2376,9 +2448,9 @@ export default function SignupWidget() {
               >
                 <StepTracker track={track} />
                 <div className="text-center space-y-1">
-                  <h2 className="text-xl font-bold">Service Address</h2>
+                  <h2 className="text-xl font-bold">Almost There</h2>
                   <p className="text-sm text-muted-foreground">
-                    Almost done! Where should we scoop?
+                    Review your info and get your free quote
                   </p>
                 </div>
 
@@ -2386,56 +2458,10 @@ export default function SignupWidget() {
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (isPreview || previewResolving) return;
-                    if (isStep3Valid) {
-                      submitMutation.mutate();
-                    }
+                    submitMutation.mutate();
                   }}
                   className="space-y-4"
                 >
-                  <div className="space-y-1.5">
-                    <Label htmlFor="streetAddress">Street Address *</Label>
-                    <Input
-                      id="streetAddress"
-                      value={formData.streetAddress}
-                      onChange={(e) => updateField("streetAddress", e.target.value)}
-                      required
-                      data-testid="input-street-address"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="city">City *</Label>
-                      <Input
-                        id="city"
-                        value={formData.city}
-                        onChange={(e) => updateField("city", e.target.value)}
-                        required
-                        data-testid="input-city"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="state">State *</Label>
-                      <Input
-                        id="state"
-                        value={formData.state}
-                        onChange={(e) => updateField("state", e.target.value)}
-                        maxLength={2}
-                        required
-                        data-testid="input-state"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>ZIP Code</Label>
-                      <Input
-                        value={zipCode}
-                        disabled
-                        className="bg-muted"
-                        data-testid="input-zip-display"
-                      />
-                    </div>
-                  </div>
-
                   <div className="mt-2">
                     <label
                       className="flex items-start gap-2.5 cursor-pointer"

@@ -384,6 +384,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "onboardingCompleteSentAt",
         "passStripeFees",
         "requireCardOnSignup",
+        "widgetFieldConfig",
       ];
       const updates: Partial<Record<keyof InsertCompany, unknown>> = {};
       for (const key of allowed as (keyof InsertCompany)[]) {

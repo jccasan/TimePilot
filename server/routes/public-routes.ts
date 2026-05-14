@@ -594,6 +594,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         quoteFormLayout: company.quoteFormLayout || "stepper",
         country: company.country || "us",
         requireCardOnSignup: company.requireCardOnSignup ?? true,
+        widgetFieldConfig: company.widgetFieldConfig ?? null,
         stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
         stripeConnectOnboarded: company.stripeConnectOnboarded || false,
         stripeConnectAccountId: company.stripeConnectAccountId || null,

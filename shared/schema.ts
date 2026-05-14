@@ -423,6 +423,7 @@ export const companies = pgTable("companies", {
   onboardingCompleteSentAt: timestamp("onboarding_complete_sent_at"),
   passStripeFees: boolean("pass_stripe_fees").notNull().default(false),
   requireCardOnSignup: boolean("require_card_on_signup").notNull().default(true),
+  widgetFieldConfig: jsonb("widget_field_config").$type<WidgetFieldConfig>(),
   requireDocumentSigning: boolean("require_document_signing").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1028,6 +1029,15 @@ export const webhooks = pgTable("webhooks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export type WidgetFieldConfig = {
+  lastName?: { required: boolean };
+  email?: { required: boolean };
+  phone?: { required: boolean };
+  streetAddress?: { required: boolean };
+  city?: { required: boolean };
+  state?: { required: boolean };
+};
 
 export type ReminderRule = {
   id: string;
