@@ -1447,9 +1447,7 @@ export default function SignupWidget() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="emailSingle">
-                        Email{fieldRequired("email") ? " *" : ""}
-                      </Label>
+                      <Label htmlFor="emailSingle">Email{fieldRequired("email") ? " *" : ""}</Label>
                       <Input
                         id="emailSingle"
                         type="email"
@@ -1459,9 +1457,7 @@ export default function SignupWidget() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="phoneSingle">
-                        Phone{fieldRequired("phone") ? " *" : ""}
-                      </Label>
+                      <Label htmlFor="phoneSingle">Phone{fieldRequired("phone") ? " *" : ""}</Label>
                       <Input
                         id="phoneSingle"
                         type="tel"
@@ -1484,9 +1480,7 @@ export default function SignupWidget() {
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="citySingle">
-                        City{fieldRequired("city") ? " *" : ""}
-                      </Label>
+                      <Label htmlFor="citySingle">City{fieldRequired("city") ? " *" : ""}</Label>
                       <Input
                         id="citySingle"
                         value={formData.city}
@@ -1495,9 +1489,7 @@ export default function SignupWidget() {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="stateSingle">
-                        State{fieldRequired("state") ? " *" : ""}
-                      </Label>
+                      <Label htmlFor="stateSingle">State{fieldRequired("state") ? " *" : ""}</Label>
                       <Input
                         id="stateSingle"
                         value={formData.state}
@@ -1772,44 +1764,44 @@ export default function SignupWidget() {
                       className="flex items-start gap-2.5 cursor-pointer"
                       data-testid="label-sms-opt-in"
                     >
-                        <input
-                          type="checkbox"
-                          checked={smsOptIn}
-                          onChange={(e) => setSmsOptIn(e.target.checked)}
-                          className="mt-0.5 h-4 w-4 rounded border-gray-300"
-                          style={{ accentColor: brandStyles.accentText }}
-                          data-testid="checkbox-sms-opt-in"
-                        />
-                        <span className="text-xs text-muted-foreground leading-relaxed">
-                          I agree to receive recurring automated marketing and informational text
-                          messages (e.g., service alerts and project updates) from{" "}
-                          <strong>{company.name}</strong> at the phone number provided. Consent is
-                          not a condition of purchase. Msg &amp; data rates may apply. Msg frequency
-                          varies. Reply HELP for help and STOP to cancel. View our{" "}
-                          <a
-                            href="/privacy-policy"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline"
-                            style={{ color: brandStyles.accentText }}
-                          >
-                            Privacy Policy
-                          </a>{" "}
-                          and{" "}
-                          <a
-                            href="/sms-terms"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline"
-                            style={{ color: brandStyles.accentText }}
-                          >
-                            SMS Terms
-                          </a>
-                          .
-                        </span>
-                      </label>
-                    </div>
+                      <input
+                        type="checkbox"
+                        checked={smsOptIn}
+                        onChange={(e) => setSmsOptIn(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                        style={{ accentColor: brandStyles.accentText }}
+                        data-testid="checkbox-sms-opt-in"
+                      />
+                      <span className="text-xs text-muted-foreground leading-relaxed">
+                        I agree to receive recurring automated marketing and informational text
+                        messages (e.g., service alerts and project updates) from{" "}
+                        <strong>{company.name}</strong> at the phone number provided. Consent is not
+                        a condition of purchase. Msg &amp; data rates may apply. Msg frequency
+                        varies. Reply HELP for help and STOP to cancel. View our{" "}
+                        <a
+                          href="/privacy-policy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline"
+                          style={{ color: brandStyles.accentText }}
+                        >
+                          Privacy Policy
+                        </a>{" "}
+                        and{" "}
+                        <a
+                          href="/sms-terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline"
+                          style={{ color: brandStyles.accentText }}
+                        >
+                          SMS Terms
+                        </a>
+                        .
+                      </span>
+                    </label>
                   </div>
+                </div>
 
                 {submitMutation.isError && (
                   <div
@@ -2046,9 +2038,7 @@ export default function SignupWidget() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="email">
-                          Email{fieldRequired("email") ? " *" : ""}
-                        </Label>
+                        <Label htmlFor="email">Email{fieldRequired("email") ? " *" : ""}</Label>
                         <Input
                           id="email"
                           type="email"
@@ -2062,9 +2052,7 @@ export default function SignupWidget() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="phone">
-                          Phone{fieldRequired("phone") ? " *" : ""}
-                        </Label>
+                        <Label htmlFor="phone">Phone{fieldRequired("phone") ? " *" : ""}</Label>
                         <Input
                           id="phone"
                           type="tel"
@@ -2087,9 +2075,7 @@ export default function SignupWidget() {
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="city">
-                          City{fieldRequired("city") ? " *" : ""}
-                        </Label>
+                        <Label htmlFor="city">City{fieldRequired("city") ? " *" : ""}</Label>
                         <Input
                           id="city"
                           value={formData.city}
@@ -2098,9 +2084,7 @@ export default function SignupWidget() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="state">
-                          State{fieldRequired("state") ? " *" : ""}
-                        </Label>
+                        <Label htmlFor="state">State{fieldRequired("state") ? " *" : ""}</Label>
                         <Input
                           id="state"
                           value={formData.state}
