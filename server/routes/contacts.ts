@@ -25,6 +25,7 @@ import {
   getStopOnlyOnlyContactIds,
   provisionPortalAccess,
   validateAndResolveAddOns,
+  requireApiKeyScope,
 } from "./shared";
 
 export async function registerContactsRoutes(app: Express): Promise<void> {
@@ -524,6 +525,27 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
   app.get("/api/contacts", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      if (req._apiKeyAuth) requireApiKeyScope(req, "crm:read");
+
+      // Exact-match lookup by phone or email — returns array with 0 or 1 item
+      const exactPhone = req.query.phone as string | undefined;
+      const exactEmail = req.query.email as string | undefined;
+      if (exactPhone || exactEmail) {
+        const normalizedPhone = exactPhone?.trim().toLowerCase();
+        const normalizedEmail = exactEmail?.trim().toLowerCase();
+        const allContacts = await storage.getContacts(companyId);
+        const match = allContacts.find((c) => {
+          if (normalizedPhone && c.phone) {
+            return c.phone.trim().toLowerCase() === normalizedPhone;
+          }
+          if (normalizedEmail && c.email) {
+            return c.email.trim().toLowerCase() === normalizedEmail;
+          }
+          return false;
+        });
+        return res.json(match ? [match] : []);
+      }
+
       const filters: { status?: string; search?: string; contactType?: string } = {};
       if (req.query.status) filters.status = req.query.status as string;
       if (req.query.search) filters.search = (req.query.search as string).replace(/\0/g, "");
@@ -675,6 +697,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
   app.get("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      if (req._apiKeyAuth) requireApiKeyScope(req, "crm:read");
       const contact = await storage.getContact(p(req.params.id), companyId);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       res.json(contact);
@@ -686,6 +709,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
   app.post("/api/contacts", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      if (req._apiKeyAuth) requireApiKeyScope(req, "crm:write");
       const suppressNotifications = req.body.suppressNotifications === true;
 
       const _company = await storage.getCompany(companyId);
@@ -789,6 +813,7 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
   app.patch("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
+      if (req._apiKeyAuth) requireApiKeyScope(req, "crm:write");
       const existing = await storage.getContact(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Contact not found" });
       const validStatuses = ["lead", "estimate", "active", "paused", "cancelled"];

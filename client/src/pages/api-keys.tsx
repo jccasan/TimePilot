@@ -30,11 +30,10 @@ import {
 import { Plus, Key, Copy, Trash2 } from "lucide-react";
 
 const availableScopes = [
-  "contacts.read",
-  "contacts.write",
-  "visits.read",
-  "visits.write",
-  "invoices.read",
+  { value: "crm:read", label: "CRM Read — view contacts, service plans, visits" },
+  { value: "crm:write", label: "CRM Write — create and update contacts, service plans, visits" },
+  { value: "voice:read", label: "Voice Read — lookup customer and call logs" },
+  { value: "voice:write", label: "Voice Write — book and modify service via voice agent" },
 ];
 
 const keyFormSchema = z.object({
@@ -137,26 +136,31 @@ export default function ApiKeys() {
                       <div className="space-y-2">
                         {availableScopes.map((scope) => (
                           <FormField
-                            key={scope}
+                            key={scope.value}
                             control={form.control}
                             name="scopes"
                             render={({ field }) => (
-                              <FormItem className="flex items-center gap-2 space-y-0">
+                              <FormItem className="flex items-start gap-2 space-y-0">
                                 <FormControl>
                                   <Checkbox
-                                    checked={field.value?.includes(scope)}
+                                    checked={field.value?.includes(scope.value)}
                                     onCheckedChange={(checked) => {
                                       const current = field.value || [];
                                       if (checked) {
-                                        field.onChange([...current, scope]);
+                                        field.onChange([...current, scope.value]);
                                       } else {
-                                        field.onChange(current.filter((s: string) => s !== scope));
+                                        field.onChange(
+                                          current.filter((s: string) => s !== scope.value)
+                                        );
                                       }
                                     }}
-                                    data-testid={`checkbox-scope-${scope}`}
+                                    data-testid={`checkbox-scope-${scope.value}`}
                                   />
                                 </FormControl>
-                                <span className="text-sm font-mono">{scope}</span>
+                                <div>
+                                  <span className="text-sm font-mono">{scope.value}</span>
+                                  <p className="text-xs text-muted-foreground">{scope.label}</p>
+                                </div>
                               </FormItem>
                             )}
                           />

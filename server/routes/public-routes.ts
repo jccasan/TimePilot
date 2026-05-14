@@ -37,6 +37,7 @@ import {
   escapeHtml,
   seedDefaultLeadSources,
 } from "./shared";
+import { dispatchWebhooksForEvent } from "../services/webhook-dispatcher";
 
 export async function registerPublicRoutes(app: Express): Promise<void> {
   // ================ Public Signup Routes (no auth required) ================
@@ -1457,48 +1458,163 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         smsOptIn,
       } = parsed.data;
 
-      const contact = await storage.createContact({
-        companyId: company.id,
-        firstName,
-        lastName,
-        email: email || null,
-        phone: phone || null,
-        streetAddress,
-        city,
-        state,
-        zipCode,
-        numberOfDogs,
-        yardSize,
-        serviceFrequency,
-        serviceDay: serviceDay || null,
-        notes:
-          [lastCleanup ? `Last cleanup: ${lastCleanup}` : null, notes || null]
-            .filter(Boolean)
-            .join(". ") || null,
-        status: "lead",
-        leadSource: "website_widget",
-      });
+      const dedup = req.query.dedup === "true";
+      const notesText =
+        [lastCleanup ? `Last cleanup: ${lastCleanup}` : null, notes || null]
+          .filter(Boolean)
+          .join(". ") || null;
 
-      const hasFullAddress = !!(streetAddress && city && state && zipCode);
-      if (hasFullAddress) {
-        await createPropertyWithGeocode({
+      let contact: Awaited<ReturnType<typeof storage.createContact>>;
+      let isUpsert = false;
+
+      if (dedup) {
+        // Try phone match first, then email
+        const allContacts = await storage.getContacts(company.id);
+        const normalizedPhone = phone?.trim().toLowerCase();
+        const normalizedEmail = email?.trim().toLowerCase();
+        let existing = normalizedPhone
+          ? (allContacts.find((c) => c.phone && c.phone.trim().toLowerCase() === normalizedPhone) ??
+            null)
+          : null;
+        if (!existing && normalizedEmail) {
+          existing =
+            allContacts.find((c) => c.email && c.email.trim().toLowerCase() === normalizedEmail) ??
+            null;
+        }
+        if (existing) {
+          contact = await storage.updateContact(existing.id, company.id, {
+            firstName,
+            lastName,
+            email: email || existing.email || null,
+            phone: phone || existing.phone || null,
+            streetAddress: streetAddress || existing.streetAddress || null,
+            city: city || existing.city || null,
+            state: state || existing.state || null,
+            zipCode: zipCode || existing.zipCode || null,
+            numberOfDogs: numberOfDogs ?? existing.numberOfDogs ?? null,
+            yardSize: yardSize || existing.yardSize || null,
+            serviceFrequency: serviceFrequency || existing.serviceFrequency || null,
+            serviceDay: serviceDay || existing.serviceDay || null,
+            notes: notesText || existing.notes || null,
+          });
+          isUpsert = true;
+        } else {
+          contact = await storage.createContact({
+            companyId: company.id,
+            firstName,
+            lastName,
+            email: email || null,
+            phone: phone || null,
+            streetAddress,
+            city,
+            state,
+            zipCode,
+            numberOfDogs,
+            yardSize,
+            serviceFrequency,
+            serviceDay: serviceDay || null,
+            notes: notesText,
+            status: "lead",
+            leadSource: "website_widget",
+          });
+        }
+      } else {
+        contact = await storage.createContact({
           companyId: company.id,
-          contactId: contact.id,
-          streetAddress: streetAddress!,
+          firstName,
+          lastName,
+          email: email || null,
+          phone: phone || null,
+          streetAddress,
           city,
           state,
           zipCode,
           numberOfDogs,
+          yardSize,
+          serviceFrequency,
+          serviceDay: serviceDay || null,
+          notes: notesText,
+          status: "lead",
+          leadSource: "website_widget",
         });
       }
 
+      const hasFullAddress = !!(streetAddress && city && state && zipCode);
+      let propertyId: string | null = null;
+
+      if (isUpsert) {
+        const existingProperties = await storage.getProperties(company.id, contact.id);
+        if (existingProperties.length > 0) {
+          propertyId = existingProperties[0].id;
+        } else if (hasFullAddress) {
+          const prop = await createPropertyWithGeocode({
+            companyId: company.id,
+            contactId: contact.id,
+            streetAddress: streetAddress!,
+            city,
+            state,
+            zipCode,
+            numberOfDogs,
+          });
+          propertyId = prop.id;
+        }
+      } else {
+        if (hasFullAddress) {
+          const prop = await createPropertyWithGeocode({
+            companyId: company.id,
+            contactId: contact.id,
+            streetAddress: streetAddress!,
+            city,
+            state,
+            zipCode,
+            numberOfDogs,
+          });
+          propertyId = prop.id;
+        }
+      }
+
+      // In-app + email notification (always). Use "general" type so notify does NOT also
+      // dispatch a thin contact.created webhook — the enriched dispatchWebhooksForEvent
+      // call below is the single authoritative webhook for this event.
       notify(
         company.id,
-        "new_lead",
-        "New Lead",
-        `${firstName} ${lastName} signed up via your website widget.`.trim(),
+        "general",
+        isUpsert ? "Lead Updated" : "New Lead",
+        `${firstName} ${lastName} ${isUpsert ? "updated their info via" : "signed up via"} your website widget.`.trim(),
         `/contacts/${contact.id}`
       );
+
+      // Enriched webhook payload
+      const enrichedPayload = {
+        contactId: contact.id,
+        propertyId,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        email: contact.email ?? null,
+        phone: contact.phone ?? null,
+        streetAddress: contact.streetAddress ?? streetAddress ?? null,
+        city: contact.city ?? city ?? null,
+        state: contact.state ?? state ?? null,
+        zipCode: contact.zipCode ?? zipCode ?? null,
+        numberOfDogs: contact.numberOfDogs ?? numberOfDogs ?? null,
+        yardSize: contact.yardSize ?? yardSize ?? null,
+        serviceFrequency: contact.serviceFrequency ?? serviceFrequency ?? null,
+        serviceDay: contact.serviceDay ?? serviceDay ?? null,
+        lastCleanup: lastCleanup ?? null,
+        notes: contact.notes ?? null,
+        smsOptIn: smsOptIn ?? false,
+      };
+
+      if (isUpsert) {
+        dispatchWebhooksForEvent(company.id, "contact.upserted", {
+          ...enrichedPayload,
+          action: "updated",
+        }).catch(console.error);
+      } else {
+        dispatchWebhooksForEvent(company.id, "contact.created", enrichedPayload).catch(
+          console.error
+        );
+      }
 
       let quotePriceCents: number | null = null;
       let callForQuote = false;

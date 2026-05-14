@@ -19,6 +19,7 @@ import {
   isAuthenticated,
   getCompanyContext,
   requireRole,
+  requireApiKeyScope,
   handleError,
   p,
   notify,
@@ -321,6 +322,7 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
   app.post("/api/visits", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      if (req._apiKeyAuth) requireApiKeyScope(req, "crm:write");
       const parsed = insertVisitSchema.parse({ ...req.body, companyId });
       const visit = await storage.createVisit(parsed);
       if (!visit)

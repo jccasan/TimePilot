@@ -24,9 +24,34 @@ export const CHANGE_PASSWORD_EXEMPT_PATHS = [
   "/api/auth/logout",
 ];
 
-// Paths that API key authentication is permitted to reach.
-// Everything else requires a human user session.
-export const API_KEY_ALLOWED_PATH_PREFIXES = ["/api/voice/"];
+// Explicit method+path allowlist for API key authentication.
+// Each entry is a regex matched against `req.method + " " + req.path`.
+// Everything not listed here requires a human user session.
+export const API_KEY_ALLOWED_ROUTES: { method: string; pathRegex: RegExp }[] = [
+  // Voice routes (AI agent scheduling API — all methods under /api/voice/)
+  { method: "GET", pathRegex: /^\/api\/voice\// },
+  { method: "POST", pathRegex: /^\/api\/voice\// },
+  { method: "PATCH", pathRegex: /^\/api\/voice\// },
+  { method: "DELETE", pathRegex: /^\/api\/voice\// },
+  // CRM — contact list/lookup and single contact CRUD only.
+  // UUID pattern deliberately excludes word-based subroutes (/unscheduled, /sample-csv, etc.).
+  { method: "GET", pathRegex: /^\/api\/contacts\/?$/ },
+  {
+    method: "GET",
+    pathRegex:
+      /^\/api\/contacts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/i,
+  },
+  { method: "POST", pathRegex: /^\/api\/contacts\/?$/ },
+  {
+    method: "PATCH",
+    pathRegex:
+      /^\/api\/contacts\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/i,
+  },
+  // CRM — create a service plan
+  { method: "POST", pathRegex: /^\/api\/service-plans\/?$/ },
+  // CRM — create a visit
+  { method: "POST", pathRegex: /^\/api\/visits\/?$/ },
+];
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   let userId = req.session.userId;
@@ -77,8 +102,8 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
         if (apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date()) {
           return res.status(401).json({ message: "API key has expired" });
         }
-        const isAllowedPath = API_KEY_ALLOWED_PATH_PREFIXES.some((prefix) =>
-          req.path.startsWith(prefix)
+        const isAllowedPath = API_KEY_ALLOWED_ROUTES.some(
+          (r) => r.method === req.method && r.pathRegex.test(req.path)
         );
         if (!isAllowedPath) {
           return res.status(403).json({
@@ -331,6 +356,7 @@ export function notify(
     invoice_overdue: "invoice.created",
     visit_completed: "visit.completed",
     new_lead: "contact.created",
+    contact_upserted: "contact.upserted",
     payment_failed: "payment.failed",
   };
   const webhookEvent = eventMap[type];

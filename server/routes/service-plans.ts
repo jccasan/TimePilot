@@ -17,6 +17,7 @@ import {
   isAuthenticated,
   getCompanyContext,
   requireRole,
+  requireApiKeyScope,
   getBaseUrl,
   handleError,
   sanitizeDecimal,
@@ -265,6 +266,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
   app.post("/api/service-plans", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
+      if (req._apiKeyAuth) requireApiKeyScope(req, "crm:write");
       const body = { ...req.body, companyId };
       if (!body.routeId || body.routeId === "") body.routeId = null;
       const parsed = insertServicePlanSchema.parse(body);
