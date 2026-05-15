@@ -764,7 +764,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     numberOfDogs: z
       .union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)])
       .default(1),
-    yardSize: z.enum(["small", "medium", "large", "extra-large"]).optional(),
+    yardSize: z.enum(["tier_1", "tier_2", "tier_3", "tier_4", "tier_5", "tier_6"]).optional(),
     serviceFrequency: z
       .enum(["twice_weekly", "weekly", "biweekly", "monthly", "onetime"])
       .default("weekly"),
@@ -842,12 +842,14 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       (p) => p.name.toLowerCase().includes("lot size") || p.name.toLowerCase().includes("acre")
     );
     const yardAcreMap: Record<string, number> = {
-      small: 0.1,
-      medium: 0.35,
-      large: 0.75,
-      "extra-large": 1.0,
+      tier_1: 0.1,
+      tier_2: 0.2,
+      tier_3: 0.35,
+      tier_4: 0.5,
+      tier_5: 0.75,
+      tier_6: 1.0,
     };
-    const acreage = yardAcreMap[yardSize || "medium"] || 0.35;
+    const acreage = yardAcreMap[yardSize || "tier_3"] ?? 0.35;
     let bestAddon: (typeof activeAddOns)[0] | null = null;
     for (const addon of lotSizeAddOns.sort((a, b) => a.sortOrder - b.sortOrder)) {
       const acreMatch = addon.name.match(/([\d.]+)\s*acre/i);
@@ -1338,7 +1340,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     numberOfDogs: z
       .union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)])
       .default(1),
-    yardSize: z.enum(["small", "medium", "large", "extra-large"]).default("medium"),
+    yardSize: z.enum(["tier_1", "tier_2", "tier_3", "tier_4", "tier_5", "tier_6"]).optional(),
     serviceFrequency: z
       .enum(["twice_weekly", "weekly", "biweekly", "monthly", "onetime"])
       .default("weekly"),
