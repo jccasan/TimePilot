@@ -362,9 +362,17 @@ export function notify(
   const webhookEvent = eventMap[type];
   if (webhookEvent) {
     import("../services/webhook-dispatcher").then(({ dispatchWebhooksForEvent }) => {
-      dispatchWebhooksForEvent(companyId, webhookEvent, { type, title, message, linkUrl }).catch(
-        console.error
-      );
+      (async () => {
+        const company = await storage.getCompany(companyId);
+        const resolvedCompanyId = company?.slug ?? companyId;
+        dispatchWebhooksForEvent(companyId, webhookEvent, {
+          companyId: resolvedCompanyId,
+          type,
+          title,
+          message,
+          linkUrl,
+        }).catch(console.error);
+      })();
     });
   }
 }
