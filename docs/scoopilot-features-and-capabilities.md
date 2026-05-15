@@ -28,6 +28,8 @@ ScooPilot includes a full customer relationship management system designed for s
 - **Tags & Filtering** — Organize contacts with custom tags and filter your database by status, service frequency, yard size, location, or any custom criteria.
 - **Bulk Actions** — Update statuses, apply tags, send portal invites, or trigger communications for multiple contacts at once.
 - **Cross-sell Opportunities** — The contact detail page surfaces upgrade and add-on suggestions specific to that client — based on service frequency, yard size, dog count, and account history. See section 20 for full details.
+- **CRM Company Records (B2B)** — A dedicated company record type exists alongside contacts, for account-based selling and commercial client management. The company detail page shows associated contacts, open deals, notes, and a chronological activity log in tabbed views. Companies can be linked to multiple contacts for tracking relationships across large commercial accounts.
+- **Audit Log** — Every delete operation across CRM entities (contacts, deals, notes, documents, etc.) is logged with the acting user, timestamp, and a snapshot of what was removed. The audit log provides accountability and a recovery trail for accidental deletions. Available to company admins from the CRM section.
 
 ---
 
@@ -95,6 +97,14 @@ ScooPilot's route builder helps you plan the most efficient paths for your crews
 - **Multi-Day Planning** — Assign stops to specific days of the week. See your Monday route separate from your Wednesday route. Balance workloads across days and crews.
 - **Route Performance Metrics** — Track total drive distance, estimated drive time, number of stops, and estimated revenue for each route.
 - **Drag-and-Drop Stop Ordering** — Manually reorder stops when you know the neighborhood better than the algorithm. Your local knowledge combined with AI optimization gives you the best of both worlds.
+
+### Live Field Map
+
+- **Real-Time Overview** — Managers can open a real-time map view showing all technician locations and route progress for the current day.
+- **Color-Coded Stop Status** — Each stop on the map shows its current status (scheduled, in progress, completed, skipped) with color-coded markers so the state of every yard is visible at a glance.
+- **Filter by Technician or Route** — Filter the map by technician or route to focus on a specific crew without the noise of unrelated stops.
+- **Auto-Refresh** — The map auto-refreshes so managers always see the latest stop status without manual page refreshes.
+- **Technician Assignment Labels** — Technician assignment labels appear on each route overlay so managers can tell crews apart at a glance.
 
 ---
 
@@ -328,6 +338,21 @@ ScooPilot is built to integrate with your existing tools and external services t
 ### Voice Agent Scheduling API
 
 - **Platform-Agnostic REST API** — A dedicated API for AI voice agents (or any external system) to perform caller lookup, check service availability, book new services, pause/resume accounts, reschedule visits, cancel services, and retrieve call logs.
+
+### REST API for External Integrations
+
+- **Full REST API** — ScooPilot exposes a full REST API accessible to any external tool or automation platform.
+- **Bearer Token Authentication** — Authenticate with a scoped API key using a standard `Authorization: Bearer <key>` header — no browser session required, making the API suitable for server-to-server integrations.
+- **Scoped API Keys** — API keys can be scoped to specific operations (e.g. `crm:read`, `crm:write`) to limit access to only what each integration needs.
+- **Create a Contact** — `POST /api/contacts` creates a client record, automatically geocodes the address, creates a linked Property, and provisions a Stripe Customer if Stripe is configured. An optional `suppressNotifications: true` flag silences automations during bulk loads.
+- **Lookup by Phone or Email** — Dedicated lookup endpoints let external systems check whether a contact already exists before creating a new one, supporting clean deduplication in Zapier workflows and voice agent integrations.
+- **Webhook Enrichment** — The lead webhook payload includes the contact ID, calculated price quote, and normalized field values so downstream automation steps have everything they need without additional API calls.
+
+### Zapier Integration
+
+- **No-Code Automation** — ScooPilot's API is designed to work out of the box with Zapier, enabling no-code automation workflows without writing code.
+- **Common Use Cases** — Create a ScooPilot contact when a lead form is submitted, trigger follow-up actions when a contact status changes, sync new clients to a CRM or spreadsheet.
+- **Simple Authentication** — Use your ScooPilot API key as the authentication credential in any Zapier HTTP action step.
 
 ---
 
