@@ -31,7 +31,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   AlertDialog,
@@ -2386,13 +2385,11 @@ export default function RoutesPage() {
     },
     onMutate: async ({ stopId, routeId }) => {
       await queryClient.cancelQueries({ queryKey: ["/api/service-plans?isActive=true"] });
-      const previous = queryClient.getQueryData<ServicePlan[]>(["/api/service-plans?isActive=true"]);
+      const previous = queryClient.getQueryData<ServicePlan[]>([
+        "/api/service-plans?isActive=true",
+      ]);
       queryClient.setQueryData<ServicePlan[]>(["/api/service-plans?isActive=true"], (old) =>
-        old
-          ? old.map((sp) =>
-              sp.id === stopId ? { ...sp, routeId: routeId ?? null } : sp
-            )
-          : old
+        old ? old.map((sp) => (sp.id === stopId ? { ...sp, routeId: routeId ?? null } : sp)) : old
       );
       return { previous };
     },
