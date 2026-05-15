@@ -1667,13 +1667,15 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
       if (quotePriceCents === null && !callForQuote && !hasActiveRecurring) {
         const yardSizeMap: Record<string, number> = {
-          small: 0.05,
-          medium: 0.1,
-          large: 0.2,
-          "extra-large": 0.35,
+          tier_1: 0.05,
+          tier_2: 0.1,
+          tier_3: 0.2,
+          tier_4: 0.35,
+          tier_5: 0.5,
+          tier_6: 0.75,
         };
         const pricingInputs: PriceCalculatorInputs = {
-          yardSizeAcres: yardSizeMap[yardSize] || 0.1,
+          yardSizeAcres: yardSizeMap[yardSize ?? "tier_2"] ?? 0.1,
           dogCount: numberOfDogs,
           serviceFrequency: serviceFrequency as (typeof servicePlans.$inferSelect)["frequency"],
           yardDifficulty: "flat",
