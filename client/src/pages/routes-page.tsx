@@ -2384,13 +2384,29 @@ export default function RoutesPage() {
       if (dayOfWeek) body.dayOfWeek = dayOfWeek;
       await apiRequest("PATCH", `/api/service-plans/${stopId}`, body);
     },
-    onSuccess: () => {
+    onMutate: async ({ stopId, routeId }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+      const previous = queryClient.getQueryData<ServicePlan[]>(["/api/service-plans?isActive=true"]);
+      queryClient.setQueryData<ServicePlan[]>(["/api/service-plans?isActive=true"], (old) =>
+        old
+          ? old.map((sp) =>
+              sp.id === stopId ? { ...sp, routeId: routeId ?? null } : sp
+            )
+          : old
+      );
+      return { previous };
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["/api/service-plans?isActive=true"], context.previous);
+      }
+      toast({ title: "Error moving stop", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/visits/range"] });
       setRouteMetrics({});
     },
-    onError: (err: Error) =>
-      toast({ title: "Error moving stop", description: err.message, variant: "destructive" }),
   });
 
   const reorderStopsMutation = useMutation({
@@ -3386,7 +3402,7 @@ export default function RoutesPage() {
                       </div>
                     </CardHeader>
                     <CardContent className="p-2 pt-0 flex-1 overflow-hidden">
-                      <ScrollArea className="h-full">
+                      <div className="h-full overflow-y-auto">
                         <DroppableZone
                           id={UNASSIGNED_DROP}
                           isOver={overContainerId === UNASSIGNED_DROP}
@@ -3408,7 +3424,7 @@ export default function RoutesPage() {
                             </p>
                           )}
                         </DroppableZone>
-                      </ScrollArea>
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
