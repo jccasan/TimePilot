@@ -1589,7 +1589,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
       // Enriched webhook payload
       const enrichedPayload = {
-        companyId: company.slug ?? company.id,
+        companyId: company.id,
         contactId: contact.id,
         propertyId,
         firstName: contact.firstName,

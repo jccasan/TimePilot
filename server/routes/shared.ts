@@ -363,10 +363,8 @@ export function notify(
   if (webhookEvent) {
     import("../services/webhook-dispatcher").then(({ dispatchWebhooksForEvent }) => {
       (async () => {
-        const company = await storage.getCompany(companyId);
-        const resolvedCompanyId = company?.slug ?? companyId;
         dispatchWebhooksForEvent(companyId, webhookEvent, {
-          companyId: resolvedCompanyId,
+          companyId: companyId,
           type,
           title,
           message,
