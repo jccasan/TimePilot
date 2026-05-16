@@ -475,6 +475,8 @@ export const contacts = pgTable(
     zipCode: varchar("zip_code", { length: 20 }),
     yardSize: varchar("yard_size", { length: 50 }),
     numberOfDogs: integer("number_of_dogs"),
+    yardAccess: varchar("yard_access", { length: 255 }),
+    dogTemperament: varchar("dog_temperament", { length: 50 }),
     serviceFrequency: varchar("service_frequency", { length: 50 }),
     leadSource: varchar("lead_source", { length: 50 }),
     serviceDay: dayOfWeekEnum("service_day"),

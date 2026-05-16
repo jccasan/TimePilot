@@ -617,6 +617,8 @@ export default function ContactDetail() {
                   zipCode: contact.zipCode,
                   yardSize: contact.yardSize,
                   numberOfDogs: contact.numberOfDogs,
+                  yardAccess: contact.yardAccess,
+                  dogTemperament: contact.dogTemperament,
                   serviceFrequency: contact.serviceFrequency,
                   leadSource: contact.leadSource,
                   serviceDay: contact.serviceDay,
@@ -776,6 +778,28 @@ export default function ContactDetail() {
                   data-testid="input-edit-number-of-dogs"
                 />
                 <Select
+                  value={editForm.dogTemperament || ""}
+                  onValueChange={(v) => setEditForm({ ...editForm, dogTemperament: v })}
+                >
+                  <SelectTrigger data-testid="select-edit-dog-temperament">
+                    <SelectValue placeholder="Dog Temperament" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="friendly">Friendly</SelectItem>
+                    <SelectItem value="cautious">Cautious</SelectItem>
+                    <SelectItem value="aggressive">Aggressive</SelectItem>
+                    <SelectItem value="unknown">Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Input
+                placeholder="Yard Access (e.g. gate code 1234, side gate on left)"
+                value={editForm.yardAccess || ""}
+                onChange={(e) => setEditForm({ ...editForm, yardAccess: e.target.value })}
+                data-testid="input-edit-yard-access"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Select
                   value={editForm.serviceFrequency || ""}
                   onValueChange={(v) => setEditForm({ ...editForm, serviceFrequency: v })}
                 >
@@ -865,6 +889,19 @@ export default function ContactDetail() {
               )}
               {contact.numberOfDogs != null && (
                 <p data-testid="text-contact-dogs">Number of Dogs: {contact.numberOfDogs}</p>
+              )}
+              {contact.dogTemperament && (
+                <p data-testid="text-contact-dog-temperament">
+                  Dog Temperament:{" "}
+                  {
+                    { friendly: "Friendly", cautious: "Cautious", aggressive: "Aggressive", unknown: "Unknown" }[
+                      contact.dogTemperament
+                    ] || contact.dogTemperament
+                  }
+                </p>
+              )}
+              {contact.yardAccess && (
+                <p data-testid="text-contact-yard-access">Yard Access: {contact.yardAccess}</p>
               )}
               {contact.serviceFrequency && (
                 <p data-testid="text-contact-frequency">
