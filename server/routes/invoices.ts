@@ -1460,8 +1460,7 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         const { companyId } = await getCompanyContext(req);
 
         const contacts = await storage.getContacts(companyId);
-        if (contacts.length === 0)
-          return res.status(400).json({ error: "No contacts found" });
+        if (contacts.length === 0) return res.status(400).json({ error: "No contacts found" });
 
         const ids = contacts.slice(0, 4).map((c) => c.id);
         const now = new Date();
