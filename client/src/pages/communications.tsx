@@ -101,6 +101,35 @@ type Conversation = {
   subject: string;
 };
 
+function MmsImageWithFallback({
+  url,
+  className,
+  testId,
+}: {
+  url: string;
+  className: string;
+  testId: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <span className="text-xs text-muted-foreground italic" data-testid={testId}>
+        Image unavailable
+      </span>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt="Attached image"
+      className={className}
+      loading="lazy"
+      data-testid={testId}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function DirectionIcon({ direction }: { direction: string }) {
   if (direction === "outbound")
     return <ArrowUpRight className="h-4 w-4 text-blue-500 dark:text-blue-400" />;
@@ -422,12 +451,10 @@ function ConversationThread({
                         rel="noopener noreferrer"
                         data-testid={`media-link-${msg.id}-${idx}`}
                       >
-                        <img
-                          src={url}
-                          alt="Attached image"
+                        <MmsImageWithFallback
+                          url={url}
                           className="rounded max-w-full max-h-48 object-cover cursor-pointer"
-                          loading="lazy"
-                          data-testid={`media-img-${msg.id}-${idx}`}
+                          testId={`media-img-${msg.id}-${idx}`}
                         />
                       </a>
                     ))}
@@ -823,11 +850,10 @@ function EmailThread({
                       rel="noopener noreferrer"
                       data-testid={`email-media-link-${msg.id}-${idx}`}
                     >
-                      <img
-                        src={url}
-                        alt="Attachment"
-                        className="rounded max-h-32 object-cover border"
-                        loading="lazy"
+                      <MmsImageWithFallback
+                        url={url}
+                        className="rounded max-h-32 object-cover border cursor-pointer"
+                        testId={`email-media-img-${msg.id}-${idx}`}
                       />
                     </a>
                   ))}

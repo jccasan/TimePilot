@@ -502,6 +502,10 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
           }
           storedPaths.push(objectPath);
           publicUrls.push(`${protocol}://${host}${objectPath}`);
+          // Mark public so the image loads in the conversation thread for all staff
+          objStorage
+            .trySetObjectEntityAclPolicy(objectPath, { owner: "system", visibility: "public" })
+            .catch((err) => console.warn(`[MMS] Failed to set ACL on media ${objectPath}:`, err));
         }
 
         const fromPhone = await getFromPhoneForCompany(companyId);
@@ -1133,6 +1137,12 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
             }
 
             storedPaths.push(storagePath);
+            // Mark public so the image loads in the conversation thread for all staff
+            ingestStorage
+              .trySetObjectEntityAclPolicy(storagePath, { owner: "system", visibility: "public" })
+              .catch((err) =>
+                console.warn(`[Telnyx MMS] Failed to set ACL on inbound media ${storagePath}:`, err)
+              );
 
             await storage.createMessageAttachment({
               messageId: savedMsg.id,
@@ -1403,6 +1413,15 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
               storedUrls.push(storagePath);
               attachCount++;
               totalBytes += file.size;
+              // Mark public so the image loads in the email thread for all staff
+              objStorage
+                .trySetObjectEntityAclPolicy(storagePath, { owner: "system", visibility: "public" })
+                .catch((err) =>
+                  console.warn(
+                    `[Inbound Email] Failed to set ACL on attachment ${storagePath}:`,
+                    err
+                  )
+                );
               await storage.createMessageAttachment({
                 messageId: savedMsg.id,
                 companyId,
