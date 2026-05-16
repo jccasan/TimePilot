@@ -63,6 +63,7 @@ import {
   invoicePayments,
   estimates,
   serviceChangeRequests,
+  customFieldDefinitions,
   DEFAULT_PRICING_RULES,
   type Company,
   type InsertCompany,
@@ -211,6 +212,8 @@ import {
   type InsertDocumentRequest,
   type DocumentSignature,
   type InsertDocumentSignature,
+  type CustomFieldDefinition,
+  type InsertCustomFieldDefinition,
 } from "@shared/schema";
 
 export interface CustomerProfitabilityEntry {
@@ -298,6 +301,21 @@ export interface IStorage {
   getLeadSources(companyId: string): Promise<LeadSource[]>;
   createLeadSource(data: InsertLeadSource): Promise<LeadSource>;
   deleteLeadSource(id: string, companyId?: string): Promise<void>;
+
+  // Custom Field Definitions
+  getCustomFieldDefinitions(
+    companyId: string,
+    entityType?: string
+  ): Promise<CustomFieldDefinition[]>;
+  createCustomFieldDefinition(
+    data: InsertCustomFieldDefinition
+  ): Promise<CustomFieldDefinition>;
+  updateCustomFieldDefinition(
+    id: string,
+    companyId: string,
+    data: Partial<InsertCustomFieldDefinition>
+  ): Promise<CustomFieldDefinition>;
+  deleteCustomFieldDefinition(id: string, companyId: string): Promise<void>;
 
   // Properties
   getProperty(id: string, companyId: string): Promise<Property | undefined>;
@@ -1343,6 +1361,48 @@ export class DatabaseStorage implements IStorage {
       ? and(eq(leadSources.id, id), eq(leadSources.companyId, companyId))
       : eq(leadSources.id, id);
     await db.delete(leadSources).where(conditions);
+  }
+
+  // ================ Custom Field Definitions ================
+  async getCustomFieldDefinitions(
+    companyId: string,
+    entityType?: string
+  ): Promise<CustomFieldDefinition[]> {
+    const conditions = [eq(customFieldDefinitions.companyId, companyId)];
+    if (entityType) conditions.push(eq(customFieldDefinitions.entityType, entityType));
+    return db
+      .select()
+      .from(customFieldDefinitions)
+      .where(and(...conditions))
+      .orderBy(customFieldDefinitions.sortOrder, customFieldDefinitions.label);
+  }
+
+  async createCustomFieldDefinition(
+    data: InsertCustomFieldDefinition
+  ): Promise<CustomFieldDefinition> {
+    const [def] = await db.insert(customFieldDefinitions).values(data).returning();
+    return def;
+  }
+
+  async updateCustomFieldDefinition(
+    id: string,
+    companyId: string,
+    data: Partial<InsertCustomFieldDefinition>
+  ): Promise<CustomFieldDefinition> {
+    const [def] = await db
+      .update(customFieldDefinitions)
+      .set(data)
+      .where(and(eq(customFieldDefinitions.id, id), eq(customFieldDefinitions.companyId, companyId)))
+      .returning();
+    return def;
+  }
+
+  async deleteCustomFieldDefinition(id: string, companyId: string): Promise<void> {
+    await db
+      .delete(customFieldDefinitions)
+      .where(
+        and(eq(customFieldDefinitions.id, id), eq(customFieldDefinitions.companyId, companyId))
+      );
   }
 
   // ================ Properties ================

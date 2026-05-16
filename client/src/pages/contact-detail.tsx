@@ -22,6 +22,7 @@ import type {
   Message,
   Route,
   ServiceBillingRule,
+  CustomFieldDefinition,
 } from "@shared/schema";
 import {
   BILLING_CADENCE_LABELS,
@@ -202,6 +203,10 @@ export default function ContactDetail() {
 
   const { data: allRoutes } = useQuery<Route[]>({
     queryKey: ["/api/routes"],
+  });
+
+  const { data: contactCustomFieldDefs = [] } = useQuery<CustomFieldDefinition[]>({
+    queryKey: ["/api/custom-field-definitions?entityType=contact"],
   });
 
   const { data: pricingConfig } = useQuery<{
@@ -623,6 +628,7 @@ export default function ContactDetail() {
                   leadSource: contact.leadSource,
                   serviceDay: contact.serviceDay,
                   status: contact.status,
+                  customFields: (contact.customFields as Record<string, unknown>) ?? {},
                 });
               }}
               data-testid="button-edit-contact"
@@ -862,6 +868,55 @@ export default function ContactDetail() {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
+              {contactCustomFieldDefs.length > 0 && (
+                <div className="space-y-2 pt-1 border-t">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Custom Fields
+                  </p>
+                  {contactCustomFieldDefs.map((def) => {
+                    const cfValue = (editForm.customFields as Record<string, unknown> | undefined)?.[def.key];
+                    return (
+                      <div key={def.id}>
+                        <label className="text-xs text-muted-foreground">{def.label}</label>
+                        {def.fieldType === "checkbox" ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <Switch
+                              checked={!!cfValue}
+                              onCheckedChange={(checked) =>
+                                setEditForm({
+                                  ...editForm,
+                                  customFields: {
+                                    ...(editForm.customFields as Record<string, unknown>),
+                                    [def.key]: checked,
+                                  },
+                                })
+                              }
+                              data-testid={`switch-cf-${def.key}`}
+                            />
+                          </div>
+                        ) : (
+                          <Input
+                            type={def.fieldType === "number" ? "number" : def.fieldType === "date" ? "date" : "text"}
+                            value={cfValue != null ? String(cfValue) : ""}
+                            onChange={(e) =>
+                              setEditForm({
+                                ...editForm,
+                                customFields: {
+                                  ...(editForm.customFields as Record<string, unknown>),
+                                  [def.key]: def.fieldType === "number" ? Number(e.target.value) : e.target.value,
+                                },
+                              })
+                            }
+                            placeholder={def.label}
+                            className="mt-1"
+                            data-testid={`input-cf-${def.key}`}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <Button
                 onClick={() => updateMutation.mutate(editForm)}
                 disabled={updateMutation.isPending}
@@ -934,6 +989,26 @@ export default function ContactDetail() {
                   Service Day: <span className="capitalize">{contact.serviceDay}</span>
                 </p>
               )}
+              {contactCustomFieldDefs.length > 0 &&
+                contact.customFields &&
+                Object.keys(contact.customFields as Record<string, unknown>).length > 0 && (
+                  <div className="pt-1 border-t mt-1">
+                    {contactCustomFieldDefs.map((def) => {
+                      const val = (contact.customFields as Record<string, unknown>)?.[def.key];
+                      if (val == null || val === "") return null;
+                      return (
+                        <p key={def.id} data-testid={`text-cf-${def.key}`}>
+                          {def.label}:{" "}
+                          {def.fieldType === "checkbox"
+                            ? val
+                              ? "Yes"
+                              : "No"
+                            : String(val)}
+                        </p>
+                      );
+                    })}
+                  </div>
+                )}
             </div>
           )}
         </CardContent>
@@ -2270,13 +2345,26 @@ function OnboardingCard({
   const [linkCopied, setLinkCopied] = useState(false);
   const [onboardingLink, setOnboardingLink] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<{
+    dogNames: string;
+    dogBreeds: string;
+    hasDangerousDog: boolean;
+    dangerousDogNotes: string;
+    gateCode: string;
+    specialInstructions: string;
+    customFields: Record<string, unknown>;
+  }>({
     dogNames: "",
     dogBreeds: "",
     hasDangerousDog: false,
     dangerousDogNotes: "",
     gateCode: "",
     specialInstructions: "",
+    customFields: {},
+  });
+
+  const { data: propCustomFieldDefs = [] } = useQuery<CustomFieldDefinition[]>({
+    queryKey: ["/api/custom-field-definitions?entityType=property"],
   });
 
   const firstProperty = properties[0] || null;
@@ -2309,6 +2397,7 @@ function OnboardingCard({
       dangerousDogNotes: firstProperty?.dangerousDogNotes ?? "",
       gateCode: firstProperty?.gateCode ?? "",
       specialInstructions: firstProperty?.specialInstructions ?? "",
+      customFields: (firstProperty?.customFields as Record<string, unknown>) ?? {},
     });
     setEditOpen(true);
   };
@@ -2688,6 +2777,60 @@ function OnboardingCard({
                 rows={3}
               />
             </div>
+            {propCustomFieldDefs.length > 0 && (
+              <div className="space-y-3 pt-2 border-t">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Custom Fields
+                </p>
+                {propCustomFieldDefs.map((def) => {
+                  const cfVal = editForm.customFields?.[def.key];
+                  return (
+                    <div key={def.id} className="space-y-1.5">
+                      <Label>{def.label}</Label>
+                      {def.fieldType === "checkbox" ? (
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={!!cfVal}
+                            onCheckedChange={(checked) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                customFields: { ...f.customFields, [def.key]: checked },
+                              }))
+                            }
+                            data-testid={`switch-prop-cf-${def.key}`}
+                          />
+                        </div>
+                      ) : (
+                        <Input
+                          type={
+                            def.fieldType === "number"
+                              ? "number"
+                              : def.fieldType === "date"
+                                ? "date"
+                                : "text"
+                          }
+                          value={cfVal != null ? String(cfVal) : ""}
+                          onChange={(e) =>
+                            setEditForm((f) => ({
+                              ...f,
+                              customFields: {
+                                ...f.customFields,
+                                [def.key]:
+                                  def.fieldType === "number"
+                                    ? Number(e.target.value)
+                                    : e.target.value,
+                              },
+                            }))
+                          }
+                          placeholder={def.label}
+                          data-testid={`input-prop-cf-${def.key}`}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button

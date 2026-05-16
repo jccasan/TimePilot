@@ -66,6 +66,7 @@ import {
   Radio,
   Clock,
   Trash2,
+  SlidersHorizontal,
 } from "lucide-react";
 import { ResponsiveGridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -96,7 +97,7 @@ import {
 } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
-import { TIER_CONFIG } from "@shared/schema";
+import { TIER_CONFIG, type CustomFieldDefinition } from "@shared/schema";
 import { useUpload } from "@/hooks/use-upload";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { LearnHowButton } from "@/components/interactive-tutorial";
@@ -268,6 +269,7 @@ const SETTINGS_BLOCK_DEFS: {
   },
   { id: "voice_agent", label: "Voice Agent", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "document_signing", label: "Document Signing", defaultW: 6, defaultH: 6, minW: 4, minH: 5 },
+  { id: "custom_fields", label: "Custom Fields", defaultW: 6, defaultH: 7, minW: 4, minH: 5 },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -298,6 +300,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "voice_agent",
   "portal_api_docs",
   "document_signing",
+  "custom_fields",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -6546,6 +6549,52 @@ export default function Settings() {
     },
   });
 
+  const [newCfLabel, setNewCfLabel] = useState("");
+  const [newCfType, setNewCfType] = useState("text");
+  const [newCfEntity, setNewCfEntity] = useState("contact");
+  const customFieldDefsQuery = useQuery<CustomFieldDefinition[]>({
+    queryKey: ["/api/custom-field-definitions"],
+  });
+  const customFieldDefs = customFieldDefsQuery.data ?? [];
+
+  const createCustomFieldMutation = useMutation({
+    mutationFn: async (data: { label: string; fieldType: string; entityType: string }) => {
+      const res = await apiRequest("POST", "/api/custom-field-definitions", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/custom-field-definitions"] });
+      setNewCfLabel("");
+      setNewCfType("text");
+      setNewCfEntity("contact");
+      toast({ title: "Custom field added" });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to add custom field.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteCustomFieldMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/custom-field-definitions/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/custom-field-definitions"] });
+      toast({ title: "Custom field removed" });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to remove custom field.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const geocodeAllMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/properties/geocode-all");
@@ -7780,6 +7829,119 @@ export default function Settings() {
                       data-testid="button-add-lead-source"
                     >
                       <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        );
+      case "custom_fields":
+        return (
+          <Card className="h-full overflow-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <SlidersHorizontal className="h-5 w-5" />
+                Custom Fields
+              </CardTitle>
+              <CardDescription>
+                Define additional data fields that appear on contact and property records.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {customFieldDefsQuery.isLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ) : (
+                <>
+                  {customFieldDefs.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No custom fields defined yet.</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {customFieldDefs.map((def) => (
+                        <div
+                          key={def.id}
+                          className="flex items-center justify-between py-1.5 px-2 rounded border bg-muted/30 text-sm"
+                          data-testid={`row-custom-field-${def.id}`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-medium truncate">{def.label}</span>
+                            <Badge variant="secondary" className="text-xs shrink-0">
+                              {def.fieldType}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs shrink-0 capitalize">
+                              {def.entityType}
+                            </Badge>
+                          </div>
+                          <button
+                            onClick={() => deleteCustomFieldMutation.mutate(def.id)}
+                            className="ml-2 rounded-full hover:bg-muted-foreground/20 p-0.5 shrink-0"
+                            data-testid={`button-delete-custom-field-${def.id}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="space-y-2 pt-1 border-t">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-2">
+                      Add Field
+                    </p>
+                    <Input
+                      value={newCfLabel}
+                      onChange={(e) => setNewCfLabel(e.target.value)}
+                      placeholder="Field label..."
+                      data-testid="input-new-custom-field-label"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newCfLabel.trim()) {
+                          e.preventDefault();
+                          createCustomFieldMutation.mutate({
+                            label: newCfLabel.trim(),
+                            fieldType: newCfType,
+                            entityType: newCfEntity,
+                          });
+                        }
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <Select value={newCfType} onValueChange={setNewCfType}>
+                        <SelectTrigger className="flex-1" data-testid="select-new-cf-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text">Text</SelectItem>
+                          <SelectItem value="number">Number</SelectItem>
+                          <SelectItem value="checkbox">Checkbox</SelectItem>
+                          <SelectItem value="date">Date</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={newCfEntity} onValueChange={setNewCfEntity}>
+                        <SelectTrigger className="flex-1" data-testid="select-new-cf-entity">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="contact">Contact</SelectItem>
+                          <SelectItem value="property">Property</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        newCfLabel.trim() &&
+                        createCustomFieldMutation.mutate({
+                          label: newCfLabel.trim(),
+                          fieldType: newCfType,
+                          entityType: newCfEntity,
+                        })
+                      }
+                      disabled={!newCfLabel.trim() || createCustomFieldMutation.isPending}
+                      data-testid="button-add-custom-field"
+                    >
+                      <Plus className="mr-1 h-4 w-4" /> Add Field
                     </Button>
                   </div>
                 </>

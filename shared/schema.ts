@@ -477,6 +477,7 @@ export const contacts = pgTable(
     numberOfDogs: integer("number_of_dogs"),
     yardAccess: varchar("yard_access", { length: 255 }),
     dogTemperament: varchar("dog_temperament", { length: 50 }),
+    customFields: jsonb("custom_fields").$type<Record<string, unknown>>(),
     serviceFrequency: varchar("service_frequency", { length: 50 }),
     leadSource: varchar("lead_source", { length: 50 }),
     serviceDay: dayOfWeekEnum("service_day"),
@@ -622,6 +623,7 @@ export const properties = pgTable(
     onboardingCompletedAt: timestamp("onboarding_completed_at"),
     dogNames: text("dog_names"),
     dogBreeds: text("dog_breeds"),
+    customFields: jsonb("custom_fields").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -3483,3 +3485,31 @@ export const insertDocumentSignatureSchema = createInsertSchema(documentSignatur
 });
 export type DocumentSignature = typeof documentSignatures.$inferSelect;
 export type InsertDocumentSignature = typeof insertDocumentSignatureSchema._type;
+
+// ============================================================
+// Custom Field Definitions
+// ============================================================
+export const customFieldDefinitions = pgTable(
+  "custom_field_definitions",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    companyId: varchar("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    label: varchar("label", { length: 100 }).notNull(),
+    key: varchar("key", { length: 100 }).notNull(),
+    fieldType: varchar("field_type", { length: 20 }).notNull().default("text"),
+    entityType: varchar("entity_type", { length: 20 }).notNull().default("contact"),
+    options: jsonb("options").$type<string[]>(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("idx_custom_field_defs_company").on(table.companyId)]
+);
+
+export const insertCustomFieldDefinitionSchema = createInsertSchema(customFieldDefinitions).omit({
+  id: true,
+  createdAt: true,
+});
+export type CustomFieldDefinition = typeof customFieldDefinitions.$inferSelect;
+export type InsertCustomFieldDefinition = typeof insertCustomFieldDefinitionSchema._type;
