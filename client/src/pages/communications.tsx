@@ -1459,7 +1459,16 @@ export default function Communications() {
           Messages
         </h1>
         <div className="flex items-center gap-2">
-          <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+          <Dialog
+            open={emailDialogOpen}
+            onOpenChange={(open) => {
+              setEmailDialogOpen(open);
+              if (!open) {
+                setEmailDialogFiles([]);
+                setEmailDialogMeta([]);
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button variant="outline" data-testid="button-compose-email">
                 <Mail className="mr-1 h-4 w-4" /> Email
@@ -1617,7 +1626,17 @@ export default function Communications() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={smsDialogOpen} onOpenChange={setSmsDialogOpen}>
+          <Dialog
+            open={smsDialogOpen}
+            onOpenChange={(open) => {
+              setSmsDialogOpen(open);
+              if (!open) {
+                setSmsDialogFiles([]);
+                setSmsDialogPreviews([]);
+                setSmsDialogOrigSizes([]);
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button data-testid="button-compose-sms">
                 <MessageSquare className="mr-1 h-4 w-4" /> New SMS
