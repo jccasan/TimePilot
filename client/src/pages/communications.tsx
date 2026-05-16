@@ -1631,8 +1631,11 @@ export default function Communications() {
             onOpenChange={(open) => {
               setSmsDialogOpen(open);
               if (!open) {
+                setSmsDialogPreviews((prev) => {
+                  prev.forEach((url) => URL.revokeObjectURL(url));
+                  return [];
+                });
                 setSmsDialogFiles([]);
-                setSmsDialogPreviews([]);
                 setSmsDialogOrigSizes([]);
               }
             }}

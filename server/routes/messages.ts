@@ -1,4 +1,5 @@
 import type { Express, Request, Response, NextFunction } from "express";
+import express from "express";
 import { maskEmail, maskPhone } from "../utils/pii";
 import multer from "multer";
 import { storage } from "../storage";
@@ -237,112 +238,122 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
     }
   );
 
-  app.post("/api/messages/email", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, userId } = await getCompanyContext(req);
-      const {
-        contactId,
-        to,
-        subject,
-        body,
-        htmlBody,
-        emailThreadId: existingThreadId,
-        attachments,
-      } = req.body;
-      if (!to || !subject || !body) {
-        return res.status(400).json({ error: "to, subject, and body are required" });
-      }
+  const emailJsonParser = express.json({ limit: "30mb" });
 
-      if (contactId) {
-        const contact = await storage.getContact(contactId, companyId);
-        if (!contact) return res.status(400).json({ error: "Contact not found in your company" });
-      }
+  app.post(
+    "/api/messages/email",
+    isAuthenticated,
+    emailJsonParser,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, userId } = await getCompanyContext(req);
+        const {
+          contactId,
+          to,
+          subject,
+          body,
+          htmlBody,
+          emailThreadId: existingThreadId,
+          attachments,
+        } = req.body;
+        if (!to || !subject || !body) {
+          return res.status(400).json({ error: "to, subject, and body are required" });
+        }
 
-      const company = await storage.getCompany(companyId);
-      const fromAddress = company?.email || "jeremy@scoopilot.com";
+        if (contactId) {
+          const contact = await storage.getContact(contactId, companyId);
+          if (!contact) return res.status(400).json({ error: "Contact not found in your company" });
+        }
 
-      let emailThreadId = generateEmailThreadId();
-      if (existingThreadId) {
-        const existingThread = await storage.getMessagesByEmailThreadId(
-          existingThreadId,
-          companyId
-        );
-        if (existingThread.length > 0) {
-          emailThreadId = existingThreadId;
-        } else {
-          const [legacyMsg] = await db
-            .select()
-            .from(messagesTable)
-            .where(
-              and(
-                eq(messagesTable.id, existingThreadId),
-                eq(messagesTable.companyId, companyId),
-                eq(messagesTable.channel, "email")
-              )
-            )
-            .limit(1);
-          if (legacyMsg && !legacyMsg.emailThreadId) {
-            await db
-              .update(messagesTable)
-              .set({ emailThreadId })
+        const company = await storage.getCompany(companyId);
+        const fromAddress = company?.email || "jeremy@scoopilot.com";
+
+        let emailThreadId = generateEmailThreadId();
+        if (existingThreadId) {
+          const existingThread = await storage.getMessagesByEmailThreadId(
+            existingThreadId,
+            companyId
+          );
+          if (existingThread.length > 0) {
+            emailThreadId = existingThreadId;
+          } else {
+            const [legacyMsg] = await db
+              .select()
+              .from(messagesTable)
               .where(
-                and(eq(messagesTable.id, existingThreadId), eq(messagesTable.companyId, companyId))
-              );
+                and(
+                  eq(messagesTable.id, existingThreadId),
+                  eq(messagesTable.companyId, companyId),
+                  eq(messagesTable.channel, "email")
+                )
+              )
+              .limit(1);
+            if (legacyMsg && !legacyMsg.emailThreadId) {
+              await db
+                .update(messagesTable)
+                .set({ emailThreadId })
+                .where(
+                  and(
+                    eq(messagesTable.id, existingThreadId),
+                    eq(messagesTable.companyId, companyId)
+                  )
+                );
+            }
           }
         }
+
+        const msg = await storage.createMessage({
+          companyId,
+          contactId: contactId || null,
+          channel: "email",
+          direction: "outbound",
+          status: "queued",
+          fromAddress,
+          toAddress: to,
+          subject,
+          body,
+          htmlBody: htmlBody || null,
+          sentBy: userId,
+          emailThreadId,
+        });
+
+        const safeAttachments =
+          Array.isArray(attachments) && attachments.length > 0
+            ? attachments.filter(
+                (a: unknown) =>
+                  a &&
+                  typeof a === "object" &&
+                  typeof (a as Record<string, unknown>).content === "string" &&
+                  typeof (a as Record<string, unknown>).filename === "string" &&
+                  typeof (a as Record<string, unknown>).type === "string"
+              )
+            : undefined;
+
+        const result = await sendEmail({
+          companyId: companyId,
+          contactId: contactId || undefined,
+          to,
+          from: fromAddress,
+          subject,
+          text: body,
+          html: htmlBody || body,
+          senderName: company?.name || undefined,
+          emailThreadId,
+          attachments: safeAttachments,
+        });
+
+        if (result.success) {
+          const updated = await storage.updateMessageStatus(msg.id, "sent");
+          res.json(updated);
+        } else {
+          const updated = await storage.updateMessageStatus(msg.id, "failed", result.error);
+          res.status(500).json({ error: result.error, message: updated });
+        }
+      } catch (err) {
+        handleError(res, err);
       }
-
-      const msg = await storage.createMessage({
-        companyId,
-        contactId: contactId || null,
-        channel: "email",
-        direction: "outbound",
-        status: "queued",
-        fromAddress,
-        toAddress: to,
-        subject,
-        body,
-        htmlBody: htmlBody || null,
-        sentBy: userId,
-        emailThreadId,
-      });
-
-      const safeAttachments =
-        Array.isArray(attachments) && attachments.length > 0
-          ? attachments.filter(
-              (a: unknown) =>
-                a &&
-                typeof a === "object" &&
-                typeof (a as Record<string, unknown>).content === "string" &&
-                typeof (a as Record<string, unknown>).filename === "string" &&
-                typeof (a as Record<string, unknown>).type === "string"
-            )
-          : undefined;
-
-      const result = await sendEmail({
-        companyId: companyId,
-        contactId: contactId || undefined,
-        to,
-        from: fromAddress,
-        subject,
-        text: body,
-        html: htmlBody || body,
-        senderName: company?.name || undefined,
-        emailThreadId,
-        attachments: safeAttachments,
-      });
-
-      if (result.success) {
-        const updated = await storage.updateMessageStatus(msg.id, "sent");
-        res.json(updated);
-      } else {
-        const updated = await storage.updateMessageStatus(msg.id, "failed", result.error);
-        res.status(500).json({ error: result.error, message: updated });
-      }
-    } catch (err) {
-      handleError(res, err);
     }
-  });
+  );
 
   app.post("/api/messages/sms", isAuthenticated, async (req: Request, res: Response) => {
     try {
