@@ -209,6 +209,25 @@ export default function ContactDetail() {
     queryKey: ["/api/custom-field-definitions?entityType=contact"],
   });
 
+  const [newContactCfLabel, setNewContactCfLabel] = useState("");
+  const [newContactCfType, setNewContactCfType] = useState("text");
+
+  const createContactCfMutation = useMutation({
+    mutationFn: async (data: { label: string; fieldType: string; entityType: string }) => {
+      await apiRequest("POST", "/api/custom-field-definitions", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/custom-field-definitions?entityType=contact"],
+      });
+      setNewContactCfLabel("");
+      setNewContactCfType("text");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error creating field", description: error.message, variant: "destructive" });
+    },
+  });
+
   const { data: pricingConfig } = useQuery<{
     pricingRules?: {
       yardSizeTiers?: Array<{ name?: string; upToAcres: number | null; surcharge: number }>;
@@ -868,66 +887,112 @@ export default function ContactDetail() {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
-              {contactCustomFieldDefs.length > 0 && (
-                <div className="space-y-2 pt-1 border-t">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Custom Fields
-                  </p>
-                  {contactCustomFieldDefs.map((def) => {
-                    const cfValue = (
-                      editForm.customFields as Record<string, unknown> | undefined
-                    )?.[def.key];
-                    return (
-                      <div key={def.id}>
-                        <label className="text-xs text-muted-foreground">{def.label}</label>
-                        {def.fieldType === "checkbox" ? (
-                          <div className="flex items-center gap-2 mt-1">
-                            <Switch
-                              checked={!!cfValue}
-                              onCheckedChange={(checked) =>
-                                setEditForm({
-                                  ...editForm,
-                                  customFields: {
-                                    ...(editForm.customFields as Record<string, unknown>),
-                                    [def.key]: checked,
-                                  },
-                                })
-                              }
-                              data-testid={`switch-cf-${def.key}`}
-                            />
-                          </div>
-                        ) : (
-                          <Input
-                            type={
-                              def.fieldType === "number"
-                                ? "number"
-                                : def.fieldType === "date"
-                                  ? "date"
-                                  : "text"
-                            }
-                            value={cfValue != null ? String(cfValue) : ""}
-                            onChange={(e) =>
+              <div className="space-y-2 pt-1 border-t">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Custom Fields
+                </p>
+                {contactCustomFieldDefs.map((def) => {
+                  const cfValue = (editForm.customFields as Record<string, unknown> | undefined)?.[
+                    def.key
+                  ];
+                  return (
+                    <div key={def.id}>
+                      <label className="text-xs text-muted-foreground">{def.label}</label>
+                      {def.fieldType === "checkbox" ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <Switch
+                            checked={!!cfValue}
+                            onCheckedChange={(checked) =>
                               setEditForm({
                                 ...editForm,
                                 customFields: {
                                   ...(editForm.customFields as Record<string, unknown>),
-                                  [def.key]:
-                                    def.fieldType === "number"
-                                      ? Number(e.target.value)
-                                      : e.target.value,
+                                  [def.key]: checked,
                                 },
                               })
                             }
-                            placeholder={def.label}
-                            className="mt-1"
-                            data-testid={`input-cf-${def.key}`}
+                            data-testid={`switch-cf-${def.key}`}
                           />
-                        )}
-                      </div>
-                    );
-                  })}
+                        </div>
+                      ) : (
+                        <Input
+                          type={
+                            def.fieldType === "number"
+                              ? "number"
+                              : def.fieldType === "date"
+                                ? "date"
+                                : "text"
+                          }
+                          value={cfValue != null ? String(cfValue) : ""}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              customFields: {
+                                ...(editForm.customFields as Record<string, unknown>),
+                                [def.key]:
+                                  def.fieldType === "number"
+                                    ? Number(e.target.value)
+                                    : e.target.value,
+                              },
+                            })
+                          }
+                          placeholder={def.label}
+                          className="mt-1"
+                          data-testid={`input-cf-${def.key}`}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+                <div className="flex gap-1 pt-1">
+                  <Input
+                    placeholder="New field name"
+                    value={newContactCfLabel}
+                    onChange={(e) => setNewContactCfLabel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newContactCfLabel.trim()) {
+                        createContactCfMutation.mutate({
+                          label: newContactCfLabel.trim(),
+                          fieldType: newContactCfType,
+                          entityType: "contact",
+                        });
+                      }
+                    }}
+                    className="h-7 text-xs"
+                    data-testid="input-new-contact-cf-label"
+                  />
+                  <Select value={newContactCfType} onValueChange={setNewContactCfType}>
+                    <SelectTrigger
+                      className="h-7 w-24 text-xs"
+                      data-testid="select-new-contact-cf-type"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text">Text</SelectItem>
+                      <SelectItem value="number">Number</SelectItem>
+                      <SelectItem value="checkbox">Checkbox</SelectItem>
+                      <SelectItem value="date">Date</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2"
+                    disabled={!newContactCfLabel.trim() || createContactCfMutation.isPending}
+                    onClick={() =>
+                      createContactCfMutation.mutate({
+                        label: newContactCfLabel.trim(),
+                        fieldType: newContactCfType,
+                        entityType: "contact",
+                      })
+                    }
+                    data-testid="button-add-contact-cf"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
                 </div>
-              )}
+              </div>
               <Button
                 onClick={() => updateMutation.mutate(editForm)}
                 disabled={updateMutation.isPending}
@@ -2374,6 +2439,25 @@ function OnboardingCard({
     queryKey: ["/api/custom-field-definitions?entityType=property"],
   });
 
+  const [newPropCfLabel, setNewPropCfLabel] = useState("");
+  const [newPropCfType, setNewPropCfType] = useState("text");
+
+  const createPropCfMutation = useMutation({
+    mutationFn: async (data: { label: string; fieldType: string; entityType: string }) => {
+      await apiRequest("POST", "/api/custom-field-definitions", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/custom-field-definitions?entityType=property"],
+      });
+      setNewPropCfLabel("");
+      setNewPropCfType("text");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error creating field", description: error.message, variant: "destructive" });
+    },
+  });
+
   const firstProperty = properties[0] || null;
   const onboardingCompleted = !!firstProperty?.onboardingCompletedAt;
   const hasToken = !!firstProperty?.onboardingToken;
@@ -2784,60 +2868,103 @@ function OnboardingCard({
                 rows={3}
               />
             </div>
-            {propCustomFieldDefs.length > 0 && (
-              <div className="space-y-3 pt-2 border-t">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Custom Fields
-                </p>
-                {propCustomFieldDefs.map((def) => {
-                  const cfVal = editForm.customFields?.[def.key];
-                  return (
-                    <div key={def.id} className="space-y-1.5">
-                      <Label>{def.label}</Label>
-                      {def.fieldType === "checkbox" ? (
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            checked={!!cfVal}
-                            onCheckedChange={(checked) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                customFields: { ...f.customFields, [def.key]: checked },
-                              }))
-                            }
-                            data-testid={`switch-prop-cf-${def.key}`}
-                          />
-                        </div>
-                      ) : (
-                        <Input
-                          type={
-                            def.fieldType === "number"
-                              ? "number"
-                              : def.fieldType === "date"
-                                ? "date"
-                                : "text"
-                          }
-                          value={cfVal != null ? String(cfVal) : ""}
-                          onChange={(e) =>
+            <div className="space-y-3 pt-2 border-t">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Custom Fields
+              </p>
+              {propCustomFieldDefs.map((def) => {
+                const cfVal = editForm.customFields?.[def.key];
+                return (
+                  <div key={def.id} className="space-y-1.5">
+                    <Label>{def.label}</Label>
+                    {def.fieldType === "checkbox" ? (
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={!!cfVal}
+                          onCheckedChange={(checked) =>
                             setEditForm((f) => ({
                               ...f,
-                              customFields: {
-                                ...f.customFields,
-                                [def.key]:
-                                  def.fieldType === "number"
-                                    ? Number(e.target.value)
-                                    : e.target.value,
-                              },
+                              customFields: { ...f.customFields, [def.key]: checked },
                             }))
                           }
-                          placeholder={def.label}
-                          data-testid={`input-prop-cf-${def.key}`}
+                          data-testid={`switch-prop-cf-${def.key}`}
                         />
-                      )}
-                    </div>
-                  );
-                })}
+                      </div>
+                    ) : (
+                      <Input
+                        type={
+                          def.fieldType === "number"
+                            ? "number"
+                            : def.fieldType === "date"
+                              ? "date"
+                              : "text"
+                        }
+                        value={cfVal != null ? String(cfVal) : ""}
+                        onChange={(e) =>
+                          setEditForm((f) => ({
+                            ...f,
+                            customFields: {
+                              ...f.customFields,
+                              [def.key]:
+                                def.fieldType === "number"
+                                  ? Number(e.target.value)
+                                  : e.target.value,
+                            },
+                          }))
+                        }
+                        placeholder={def.label}
+                        data-testid={`input-prop-cf-${def.key}`}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+              <div className="flex gap-1 pt-1">
+                <Input
+                  placeholder="New field name"
+                  value={newPropCfLabel}
+                  onChange={(e) => setNewPropCfLabel(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newPropCfLabel.trim()) {
+                      createPropCfMutation.mutate({
+                        label: newPropCfLabel.trim(),
+                        fieldType: newPropCfType,
+                        entityType: "property",
+                      });
+                    }
+                  }}
+                  className="h-7 text-xs"
+                  data-testid="input-new-prop-cf-label"
+                />
+                <Select value={newPropCfType} onValueChange={setNewPropCfType}>
+                  <SelectTrigger className="h-7 w-24 text-xs" data-testid="select-new-prop-cf-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Text</SelectItem>
+                    <SelectItem value="number">Number</SelectItem>
+                    <SelectItem value="checkbox">Checkbox</SelectItem>
+                    <SelectItem value="date">Date</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2"
+                  disabled={!newPropCfLabel.trim() || createPropCfMutation.isPending}
+                  onClick={() =>
+                    createPropCfMutation.mutate({
+                      label: newPropCfLabel.trim(),
+                      fieldType: newPropCfType,
+                      entityType: "property",
+                    })
+                  }
+                  data-testid="button-add-prop-cf"
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
               </div>
-            )}
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button
