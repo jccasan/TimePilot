@@ -87,6 +87,8 @@ import {
   AlertCircle,
   Activity,
   GitMerge,
+  FileDown,
+  Search,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import {
@@ -1039,6 +1041,7 @@ export default function Invoices() {
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
 
   const [contactId, setContactId] = useState("");
+  const [customerIdFilter, setCustomerIdFilter] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
   const [taxRate, setTaxRate] = useState("0");
@@ -1086,6 +1089,11 @@ export default function Invoices() {
   }, [statusFilter]);
 
   useEffect(() => {
+    setInvPage(1);
+    setSelectedIds(new Set());
+  }, [customerIdFilter]);
+
+  useEffect(() => {
     try {
       localStorage.setItem("scoopilot_inv_sort_field", sortField);
     } catch {}
@@ -1124,7 +1132,7 @@ export default function Invoices() {
   const isSpecialInvTab = statusFilter === "uninvoiced";
 
   const { data: invoicesResult, isLoading } = useQuery<{ data: Invoice[]; total: number }>({
-    queryKey: ["/api/invoices", statusFilter, invPage],
+    queryKey: ["/api/invoices", statusFilter, invPage, customerIdFilter],
     queryFn: async () => {
       const token = localStorage.getItem("sessionToken");
       const headers: Record<string, string> = {};
@@ -1133,7 +1141,10 @@ export default function Invoices() {
       if (statusFilter !== "all" && statusFilter !== "uninvoiced") {
         params.set("status", statusFilter);
       }
-      if (!isSpecialInvTab) {
+      if (customerIdFilter) {
+        params.set("contactId", customerIdFilter);
+      }
+      if (!isSpecialInvTab && !customerIdFilter) {
         params.set("page", String(invPage));
         params.set("limit", String(INV_PAGE_SIZE));
       }
@@ -1947,6 +1958,15 @@ export default function Invoices() {
     setLineItems(lineItems.filter((_, i) => i !== index));
   }
 
+  function handleDownloadPdf(invoiceId: string) {
+    const printWindow = window.open(`/invoice/${invoiceId}/render`, "_blank");
+    if (printWindow) {
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
+  }
+
   async function viewInvoiceDetail(invoiceId: string) {
     try {
       const token = localStorage.getItem("sessionToken");
@@ -2204,6 +2224,15 @@ export default function Invoices() {
                 title="Preview invoice"
               >
                 <Printer className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => handleDownloadPdf(invoice.id)}
+                title="Download PDF"
+              >
+                <FileDown className="h-4 w-4" />
               </Button>
               {invoice.status !== "paid" && stripeConfig?.configured && (
                 <>
@@ -3371,6 +3400,43 @@ export default function Invoices() {
         </Card>
       )}
 
+      {/* Customer filter */}
+      <div className="flex items-center gap-2" data-testid="customer-filter-bar">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <select
+            value={customerIdFilter}
+            onChange={(e) => setCustomerIdFilter(e.target.value)}
+            className="w-full pl-8 pr-3 h-9 rounded-md border border-input bg-background text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring appearance-none"
+            data-testid="select-customer-filter"
+            aria-label="Filter by customer"
+          >
+            <option value="">All customers</option>
+            {[...(contacts ?? [])]
+              .sort((a, b) =>
+                `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+              )
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.firstName} {c.lastName}
+                </option>
+              ))}
+          </select>
+        </div>
+        {customerIdFilter && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCustomerIdFilter("")}
+            className="h-9 px-2.5 text-muted-foreground"
+            data-testid="button-clear-customer-filter"
+            aria-label="Clear customer filter"
+          >
+            Clear filter
+          </Button>
+        )}
+      </div>
+
       <Tabs
         value={statusFilter}
         onValueChange={(v) => {
@@ -3796,6 +3862,16 @@ export default function Invoices() {
                         >
                           <Printer className="h-4 w-4" />
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleDownloadPdf(invoice.id)}
+                          data-testid={`button-download-pdf-${invoice.id}`}
+                          title="Download PDF"
+                        >
+                          <FileDown className="h-4 w-4" />
+                        </Button>
                         {invoice.status !== "paid" && stripeConfig?.configured && (
                           <>
                             <Button
@@ -3924,8 +4000,24 @@ export default function Invoices() {
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
         <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-2">
-            <DialogTitle data-testid="text-preview-title">Invoice Preview</DialogTitle>
-            <DialogDescription>Preview of the rendered invoice template</DialogDescription>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <DialogTitle data-testid="text-preview-title">Invoice Preview</DialogTitle>
+                <DialogDescription>Preview of the rendered invoice template</DialogDescription>
+              </div>
+              {previewInvoiceId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDownloadPdf(previewInvoiceId)}
+                  data-testid="button-dialog-download-pdf"
+                  className="shrink-0"
+                >
+                  <FileDown className="mr-1.5 h-4 w-4" />
+                  Download PDF
+                </Button>
+              )}
+            </div>
           </DialogHeader>
           <div className="flex-1 px-6 pb-6 min-h-0">
             {previewInvoiceId && (
