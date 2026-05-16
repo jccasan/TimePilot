@@ -307,9 +307,7 @@ export interface IStorage {
     companyId: string,
     entityType?: string
   ): Promise<CustomFieldDefinition[]>;
-  createCustomFieldDefinition(
-    data: InsertCustomFieldDefinition
-  ): Promise<CustomFieldDefinition>;
+  createCustomFieldDefinition(data: InsertCustomFieldDefinition): Promise<CustomFieldDefinition>;
   updateCustomFieldDefinition(
     id: string,
     companyId: string,
@@ -1392,7 +1390,9 @@ export class DatabaseStorage implements IStorage {
     const [def] = await db
       .update(customFieldDefinitions)
       .set(data)
-      .where(and(eq(customFieldDefinitions.id, id), eq(customFieldDefinitions.companyId, companyId)))
+      .where(
+        and(eq(customFieldDefinitions.id, id), eq(customFieldDefinitions.companyId, companyId))
+      )
       .returning();
     return def;
   }

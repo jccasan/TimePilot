@@ -21,21 +21,17 @@ function slugify(label: string): string {
 }
 
 export function registerCustomFieldsRoutes(app: Express) {
-  app.get(
-    "/api/custom-field-definitions",
-    isAuthenticated,
-    async (req: Request, res: Response) => {
-      try {
-        const { companyId } = await getCompanyContext(req);
-        const entityType =
-          typeof req.query.entityType === "string" ? req.query.entityType : undefined;
-        const defs = await storage.getCustomFieldDefinitions(companyId, entityType);
-        res.json(defs);
-      } catch (err) {
-        handleError(res, err);
-      }
+  app.get("/api/custom-field-definitions", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const entityType =
+        typeof req.query.entityType === "string" ? req.query.entityType : undefined;
+      const defs = await storage.getCustomFieldDefinitions(companyId, entityType);
+      res.json(defs);
+    } catch (err) {
+      handleError(res, err);
     }
-  );
+  });
 
   app.post(
     "/api/custom-field-definitions",

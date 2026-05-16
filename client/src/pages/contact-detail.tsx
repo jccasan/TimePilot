@@ -874,7 +874,9 @@ export default function ContactDetail() {
                     Custom Fields
                   </p>
                   {contactCustomFieldDefs.map((def) => {
-                    const cfValue = (editForm.customFields as Record<string, unknown> | undefined)?.[def.key];
+                    const cfValue = (
+                      editForm.customFields as Record<string, unknown> | undefined
+                    )?.[def.key];
                     return (
                       <div key={def.id}>
                         <label className="text-xs text-muted-foreground">{def.label}</label>
@@ -896,14 +898,23 @@ export default function ContactDetail() {
                           </div>
                         ) : (
                           <Input
-                            type={def.fieldType === "number" ? "number" : def.fieldType === "date" ? "date" : "text"}
+                            type={
+                              def.fieldType === "number"
+                                ? "number"
+                                : def.fieldType === "date"
+                                  ? "date"
+                                  : "text"
+                            }
                             value={cfValue != null ? String(cfValue) : ""}
                             onChange={(e) =>
                               setEditForm({
                                 ...editForm,
                                 customFields: {
                                   ...(editForm.customFields as Record<string, unknown>),
-                                  [def.key]: def.fieldType === "number" ? Number(e.target.value) : e.target.value,
+                                  [def.key]:
+                                    def.fieldType === "number"
+                                      ? Number(e.target.value)
+                                      : e.target.value,
                                 },
                               })
                             }
@@ -999,11 +1010,7 @@ export default function ContactDetail() {
                       return (
                         <p key={def.id} data-testid={`text-cf-${def.key}`}>
                           {def.label}:{" "}
-                          {def.fieldType === "checkbox"
-                            ? val
-                              ? "Yes"
-                              : "No"
-                            : String(val)}
+                          {def.fieldType === "checkbox" ? (val ? "Yes" : "No") : String(val)}
                         </p>
                       );
                     })}

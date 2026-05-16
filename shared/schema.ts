@@ -3492,7 +3492,9 @@ export type InsertDocumentSignature = typeof insertDocumentSignatureSchema._type
 export const customFieldDefinitions = pgTable(
   "custom_field_definitions",
   {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
     companyId: varchar("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
