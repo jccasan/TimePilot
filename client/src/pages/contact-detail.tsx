@@ -893,11 +893,12 @@ export default function ContactDetail() {
               {contact.dogTemperament && (
                 <p data-testid="text-contact-dog-temperament">
                   Dog Temperament:{" "}
-                  {
-                    { friendly: "Friendly", cautious: "Cautious", aggressive: "Aggressive", unknown: "Unknown" }[
-                      contact.dogTemperament
-                    ] || contact.dogTemperament
-                  }
+                  {{
+                    friendly: "Friendly",
+                    cautious: "Cautious",
+                    aggressive: "Aggressive",
+                    unknown: "Unknown",
+                  }[contact.dogTemperament] || contact.dogTemperament}
                 </p>
               )}
               {contact.yardAccess && (
