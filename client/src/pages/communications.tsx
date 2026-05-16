@@ -5,7 +5,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Message, Contact } from "@shared/schema";
+import type { Message, Contact, MessageAttachment } from "@shared/schema";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ import {
   Loader2,
   Paperclip,
   X,
+  Download,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useLocation } from "wouter";
@@ -57,6 +58,14 @@ import {
 } from "@/lib/compress-image";
 
 const EMAIL_ATTACH_MAX_SIZE = 10 * 1024 * 1024;
+
+type MessageWithAttachments = Message & { attachments?: MessageAttachment[] };
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -586,7 +595,7 @@ function EmailThread({
   const emailFileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { data: threadMessages, isLoading } = useQuery<Message[]>({
+  const { data: threadMessages, isLoading } = useQuery<MessageWithAttachments[]>({
     queryKey: ["/api/messages", "email", emailThreadId],
     queryFn: async () => {
       const params = new URLSearchParams({ channel: "email", emailThreadId });
@@ -860,6 +869,27 @@ function EmailThread({
                 </div>
               )}
               <div className="text-sm whitespace-pre-wrap break-all">{msg.body}</div>
+              {msg.attachments && msg.attachments.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {msg.attachments.map((att) => (
+                    <a
+                      key={att.id}
+                      href={`/api/messages/attachments/${att.id}/download`}
+                      download={att.originalFilename || true}
+                      className="flex items-center gap-1.5 rounded border px-2 py-1 text-xs bg-background hover:bg-muted transition-colors max-w-[200px]"
+                      data-testid={`attachment-chip-${att.id}`}
+                    >
+                      <Download className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{att.originalFilename || "attachment"}</span>
+                      {att.originalSizeBytes != null && (
+                        <span className="text-muted-foreground shrink-0">
+                          {formatBytes(att.originalSizeBytes)}
+                        </span>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              )}
               {msg.status === "failed" && msg.errorMessage && (
                 <p className="text-xs text-destructive mt-1">{msg.errorMessage}</p>
               )}

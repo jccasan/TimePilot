@@ -5,7 +5,7 @@ import multer from "multer";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, and } from "drizzle-orm";
-import { messages as messagesTable, type Message } from "@shared/schema";
+import { messages as messagesTable, messageAttachments, type Message } from "@shared/schema";
 import { sendEmail, generateEmailThreadId } from "../services/email";
 import { sendInvoiceEmail } from "../services/invoice-email";
 import { sendSmsForCompany, getFromPhoneForCompany, getCompanySmsConfig } from "../services/sms";
@@ -48,7 +48,12 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
               contactCache.set(m.contactId, contactName);
             }
           }
-          return { ...m, contactName };
+          // Include attachment metadata for email thread messages
+          if (filters.emailThreadId && m.channel === "email") {
+            const attachments = await storage.getMessageAttachments(m.id);
+            return { ...m, contactName, attachments };
+          }
+          return { ...m, contactName, attachments: [] };
         })
       );
       res.json(enriched);
@@ -238,6 +243,53 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
     }
   );
 
+  app.get(
+    "/api/messages/attachments/:attachmentId/download",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const attachmentId = p(req.params.attachmentId);
+
+        const [attachment] = await db
+          .select()
+          .from(messageAttachments)
+          .where(
+            and(
+              eq(messageAttachments.id, attachmentId),
+              eq(messageAttachments.companyId, companyId)
+            )
+          )
+          .limit(1);
+
+        if (!attachment) {
+          return res.status(404).json({ error: "Attachment not found" });
+        }
+
+        const { ObjectStorageService } =
+          await import("../replit_integrations/object_storage/objectStorage");
+        const objStorage = new ObjectStorageService();
+        const objectFile = await objStorage.getObjectEntityFile(attachment.storageUrl);
+
+        if (!objectFile) {
+          return res.status(404).json({ error: "File not found in storage" });
+        }
+
+        if (attachment.originalFilename) {
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${encodeURIComponent(attachment.originalFilename)}"`
+          );
+        }
+        res.setHeader("Content-Type", attachment.mimeType);
+
+        await objStorage.downloadObject(objectFile, res, 0);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
   const emailJsonParser = express.json({ limit: "30mb" });
 
   app.post(
@@ -344,6 +396,49 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
 
         if (result.success) {
           const updated = await storage.updateMessageStatus(msg.id, "sent");
+
+          // Store outbound email attachments in object storage for later retrieval
+          if (safeAttachments && safeAttachments.length > 0) {
+            try {
+              const { ObjectStorageService } =
+                await import("../replit_integrations/object_storage/objectStorage");
+              const objStorage = new ObjectStorageService();
+              for (const attach of safeAttachments as Array<{
+                content: string;
+                filename: string;
+                type: string;
+              }>) {
+                try {
+                  const buffer = Buffer.from(attach.content, "base64");
+                  const uploadURL = await objStorage.getObjectEntityUploadURL();
+                  const storagePath = objStorage.normalizeObjectEntityPath(uploadURL);
+                  const putResp = await fetch(uploadURL, {
+                    method: "PUT",
+                    body: buffer,
+                    headers: { "Content-Type": attach.type },
+                  });
+                  if (putResp.ok) {
+                    await storage.createMessageAttachment({
+                      messageId: msg.id,
+                      companyId,
+                      mimeType: attach.type,
+                      originalFilename: attach.filename,
+                      originalSizeBytes: buffer.length,
+                      compressedSizeBytes: buffer.length,
+                      storageUrl: storagePath,
+                    });
+                  } else {
+                    console.warn("[Email] Failed to upload outbound attachment to storage");
+                  }
+                } catch (attachErr) {
+                  console.error("[Email] Failed to store outbound attachment:", attachErr);
+                }
+              }
+            } catch (storageErr) {
+              console.error("[Email] Attachment storage module load error:", storageErr);
+            }
+          }
+
           res.json(updated);
         } else {
           const updated = await storage.updateMessageStatus(msg.id, "failed", result.error);
