@@ -81,6 +81,19 @@ type MenuItem = {
 
 const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
   {
+    label: "",
+    key: "command",
+    items: [
+      {
+        title: "Command Center",
+        url: "/command-center",
+        icon: Compass,
+        adminOnly: true,
+        requiresSubscription: true,
+      },
+    ],
+  },
+  {
     label: "Run the Business",
     key: "run",
     items: [
