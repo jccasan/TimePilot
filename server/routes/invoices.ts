@@ -1450,4 +1450,104 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
+
+  // ---- TEMPORARY: demo stats seeder (remove after first prod run) ----
+  app.post(
+    "/api/admin/seed-demo-invoice-stats",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+
+        const contacts = await storage.getContacts(companyId);
+        if (contacts.length === 0)
+          return res.status(400).json({ error: "No contacts found" });
+
+        const ids = contacts.slice(0, 4).map((c) => c.id);
+        const now = new Date();
+
+        const daysAgo = (n: number) => {
+          const d = new Date(now);
+          d.setDate(d.getDate() - n);
+          return d;
+        };
+
+        const dateStr = (d: Date) => d.toISOString().split("T")[0];
+
+        const paidRows: Array<{
+          contactId: string;
+          total: string;
+          daysBack: number;
+        }> = [
+          { contactId: ids[0], total: "108.00", daysBack: 1 },
+          { contactId: ids[1], total: "96.00", daysBack: 2 },
+          { contactId: ids[2], total: "132.50", daysBack: 2 },
+          { contactId: ids[3 % ids.length], total: "84.00", daysBack: 3 },
+          { contactId: ids[0], total: "108.00", daysBack: 4 },
+          { contactId: ids[1], total: "72.00", daysBack: 4 },
+          { contactId: ids[2], total: "132.50", daysBack: 5 },
+          { contactId: ids[3 % ids.length], total: "96.00", daysBack: 5 },
+        ];
+
+        const overdueRows: Array<{
+          contactId: string;
+          total: string;
+          dueDaysBack: number;
+        }> = [
+          { contactId: ids[0], total: "64.00", dueDaysBack: 14 },
+          { contactId: ids[1], total: "52.00", dueDaysBack: 21 },
+          { contactId: ids[2], total: "80.00", dueDaysBack: 7 },
+          { contactId: ids[3 % ids.length], total: "45.00", dueDaysBack: 10 },
+          { contactId: ids[0], total: "56.00", dueDaysBack: 28 },
+        ];
+
+        const created: string[] = [];
+
+        for (const row of paidRows) {
+          const num = await storage.getNextInvoiceNumber(companyId);
+          const paidAt = daysAgo(row.daysBack);
+          const due = daysAgo(row.daysBack - 2);
+          await storage.createInvoice({
+            companyId,
+            contactId: row.contactId,
+            invoiceNumber: num,
+            status: "paid",
+            subtotal: row.total,
+            tax: "0",
+            total: row.total,
+            dueDate: dateStr(due),
+            paidAt,
+            source: "manual",
+          });
+          created.push(num);
+        }
+
+        for (const row of overdueRows) {
+          const num = await storage.getNextInvoiceNumber(companyId);
+          const due = daysAgo(row.dueDaysBack);
+          await storage.createInvoice({
+            companyId,
+            contactId: row.contactId,
+            invoiceNumber: num,
+            status: "draft",
+            subtotal: row.total,
+            tax: "0",
+            total: row.total,
+            dueDate: dateStr(due),
+            source: "manual",
+          });
+          created.push(num);
+        }
+
+        res.json({
+          ok: true,
+          seeded: created.length,
+          invoices: created,
+        });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+  // ---- END TEMPORARY ----
 }
