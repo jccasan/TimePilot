@@ -240,7 +240,15 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
   app.post("/api/messages/email", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, userId } = await getCompanyContext(req);
-      const { contactId, to, subject, body, htmlBody, emailThreadId: existingThreadId } = req.body;
+      const {
+        contactId,
+        to,
+        subject,
+        body,
+        htmlBody,
+        emailThreadId: existingThreadId,
+        attachments,
+      } = req.body;
       if (!to || !subject || !body) {
         return res.status(400).json({ error: "to, subject, and body are required" });
       }
@@ -299,6 +307,18 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         emailThreadId,
       });
 
+      const safeAttachments =
+        Array.isArray(attachments) && attachments.length > 0
+          ? attachments.filter(
+              (a: unknown) =>
+                a &&
+                typeof a === "object" &&
+                typeof (a as Record<string, unknown>).content === "string" &&
+                typeof (a as Record<string, unknown>).filename === "string" &&
+                typeof (a as Record<string, unknown>).type === "string"
+            )
+          : undefined;
+
       const result = await sendEmail({
         companyId: companyId,
         contactId: contactId || undefined,
@@ -309,6 +329,7 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         html: htmlBody || body,
         senderName: company?.name || undefined,
         emailThreadId,
+        attachments: safeAttachments,
       });
 
       if (result.success) {

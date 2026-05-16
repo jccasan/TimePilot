@@ -56,6 +56,22 @@ import {
   MAX_ATTACHMENT_SIZE,
 } from "@/lib/compress-image";
 
+const EMAIL_ATTACH_MAX_SIZE = 10 * 1024 * 1024;
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.split(",")[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+type EmailAttachment = { content: string; filename: string; type: string };
+
 const emailFormSchema = z.object({
   contactId: z.string().optional(),
   to: z.string().email("Valid email required"),
@@ -465,25 +481,27 @@ function ConversationThread({
             Compressing image...
           </div>
         )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          className="hidden"
-          onChange={handleFileSelect}
-          data-testid="input-mms-file"
-        />
         <div className="flex gap-2">
           <Button
             variant="outline"
             size="icon"
-            onClick={() => fileInputRef.current?.click()}
+            asChild
             disabled={sendReplyMutation.isPending || isCompressing}
             data-testid="button-attach-image"
             title="Attach image"
           >
-            <Paperclip className="h-4 w-4" />
+            <label className="cursor-pointer">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                className="sr-only"
+                onChange={handleFileSelect}
+                data-testid="input-mms-file"
+              />
+              <Paperclip className="h-4 w-4" />
+            </label>
           </Button>
           <Input
             value={replyText}
@@ -535,6 +553,10 @@ function EmailThread({
 }) {
   const { toast } = useToast();
   const [replyText, setReplyText] = useState("");
+  const [emailAttachFiles, setEmailAttachFiles] = useState<File[]>([]);
+  const [emailAttachMeta, setEmailAttachMeta] = useState<EmailAttachment[]>([]);
+  const [isReadingFiles, setIsReadingFiles] = useState(false);
+  const emailFileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { data: threadMessages, isLoading } = useQuery<Message[]>({
@@ -575,17 +597,87 @@ function EmailThread({
     }
   }, [threadMessages]);
 
+  const handleEmailFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      if (e.target) e.target.value = "";
+
+      const maxFiles = 5;
+      if (emailAttachFiles.length >= maxFiles) {
+        toast({
+          title: "Limit reached",
+          description: `Maximum ${maxFiles} attachments per email.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setIsReadingFiles(true);
+      try {
+        const newFiles: File[] = [];
+        const newMeta: EmailAttachment[] = [];
+        for (
+          let i = 0;
+          i < files.length && emailAttachFiles.length + newFiles.length < maxFiles;
+          i++
+        ) {
+          const file = files[i];
+          if (file.size > EMAIL_ATTACH_MAX_SIZE) {
+            toast({
+              title: "File too large",
+              description: `${file.name}: Maximum 10 MB per attachment.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+          const content = await fileToBase64(file);
+          newFiles.push(file);
+          newMeta.push({
+            content,
+            filename: file.name,
+            type: file.type || "application/octet-stream",
+          });
+        }
+        if (newFiles.length > 0) {
+          setEmailAttachFiles((prev) => [...prev, ...newFiles]);
+          setEmailAttachMeta((prev) => [...prev, ...newMeta]);
+        }
+      } catch {
+        toast({
+          title: "Failed to read file",
+          description: "Could not process the attachment.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsReadingFiles(false);
+      }
+    },
+    [toast, emailAttachFiles.length]
+  );
+
+  const removeEmailAttach = useCallback((index: number) => {
+    setEmailAttachFiles((prev) => prev.filter((_, i) => i !== index));
+    setEmailAttachMeta((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const clearEmailAttachments = useCallback(() => {
+    setEmailAttachFiles([]);
+    setEmailAttachMeta([]);
+  }, []);
+
   const sendReplyMutation = useMutation({
-    mutationFn: async (body: string) => {
+    mutationFn: async ({ body, attachments }: { body: string; attachments: EmailAttachment[] }) => {
       await apiRequest("POST", "/api/messages/email", {
         contactId: contactId || undefined,
         to: emailAddress,
         subject: subject.startsWith("Re: ") ? subject : `Re: ${subject}`,
         body,
         emailThreadId,
+        attachments: attachments.length > 0 ? attachments : undefined,
       });
     },
-    onMutate: async (body) => {
+    onMutate: async ({ body }) => {
       const cacheKey = ["/api/messages", "email", emailThreadId];
       await queryClient.cancelQueries({ queryKey: cacheKey });
       const previous = queryClient.getQueryData<Message[]>(cacheKey);
@@ -624,6 +716,7 @@ function EmailThread({
     },
     onSuccess: () => {
       setReplyText("");
+      clearEmailAttachments();
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
@@ -635,8 +728,8 @@ function EmailThread({
     const trimmed = replyText.trim();
     if (!trimmed) return;
     setReplyText("");
-    sendReplyMutation.mutate(trimmed);
-  }, [replyText, sendReplyMutation]);
+    sendReplyMutation.mutate({ body: trimmed, attachments: emailAttachMeta });
+  }, [replyText, emailAttachMeta, sendReplyMutation]);
 
   const sortedMessages = threadMessages
     ? [...threadMessages].sort(
@@ -674,7 +767,7 @@ function EmailThread({
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -690,23 +783,23 @@ function EmailThread({
           sortedMessages.map((msg) => (
             <div
               key={msg.id}
-              className={`rounded-lg border p-3 ${
+              className={`rounded-lg border p-3 min-w-0 overflow-hidden ${
                 msg.direction === "outbound"
                   ? "ml-8 bg-primary/5 border-primary/20"
                   : "mr-8 bg-muted/50"
               }`}
               data-testid={`email-message-${msg.id}`}
             >
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
                   <DirectionIcon direction={msg.direction} />
-                  <span>
+                  <span className="truncate">
                     {msg.direction === "outbound"
                       ? `To: ${msg.toAddress}`
                       : `From: ${msg.fromAddress}`}
                   </span>
                 </div>
-                <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">
                   {new Date(msg.createdAt).toLocaleString([], {
                     month: "short",
                     day: "numeric",
@@ -716,7 +809,9 @@ function EmailThread({
                 </span>
               </div>
               {msg.subject && msg.subject !== subject && (
-                <p className="text-xs font-medium text-muted-foreground mb-1">{msg.subject}</p>
+                <p className="text-xs font-medium text-muted-foreground mb-1 truncate">
+                  {msg.subject}
+                </p>
               )}
               {msg.mediaUrls && msg.mediaUrls.length > 0 && (
                 <div className="mb-2 flex gap-2 flex-wrap">
@@ -738,7 +833,7 @@ function EmailThread({
                   ))}
                 </div>
               )}
-              <div className="text-sm whitespace-pre-wrap break-words">{msg.body}</div>
+              <div className="text-sm whitespace-pre-wrap break-all">{msg.body}</div>
               {msg.status === "failed" && msg.errorMessage && (
                 <p className="text-xs text-destructive mt-1">{msg.errorMessage}</p>
               )}
@@ -748,7 +843,56 @@ function EmailThread({
       </div>
 
       <div className="p-3 border-t shrink-0 space-y-2">
+        {emailAttachFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1.5" data-testid="email-attachment-list">
+            {emailAttachFiles.map((file, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-1 rounded border px-2 py-1 text-xs bg-muted max-w-[180px]"
+                data-testid={`email-attachment-${idx}`}
+              >
+                <span className="truncate">{file.name}</span>
+                <span className="text-muted-foreground shrink-0">
+                  ({(file.size / 1024).toFixed(0)}KB)
+                </span>
+                <button
+                  onClick={() => removeEmailAttach(idx)}
+                  className="ml-0.5 shrink-0 hover:text-destructive"
+                  data-testid={`button-remove-email-attachment-${idx}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {isReadingFiles && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Processing attachment...
+          </div>
+        )}
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            asChild
+            disabled={sendReplyMutation.isPending || isReadingFiles}
+            data-testid="button-email-attach"
+            title="Attach file"
+          >
+            <label className="cursor-pointer shrink-0">
+              <input
+                ref={emailFileInputRef}
+                type="file"
+                multiple
+                className="sr-only"
+                onChange={handleEmailFileSelect}
+                data-testid="input-email-file"
+              />
+              <Paperclip className="h-4 w-4" />
+            </label>
+          </Button>
           <Textarea
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
@@ -1053,6 +1197,17 @@ export default function Communications() {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [smsDialogOpen, setSmsDialogOpen] = useState(false);
 
+  const [emailDialogFiles, setEmailDialogFiles] = useState<File[]>([]);
+  const [emailDialogMeta, setEmailDialogMeta] = useState<EmailAttachment[]>([]);
+  const [isReadingEmailDialog, setIsReadingEmailDialog] = useState(false);
+  const emailDialogFileRef = useRef<HTMLInputElement>(null);
+
+  const [smsDialogFiles, setSmsDialogFiles] = useState<File[]>([]);
+  const [smsDialogPreviews, setSmsDialogPreviews] = useState<string[]>([]);
+  const [smsDialogOrigSizes, setSmsDialogOrigSizes] = useState<number[]>([]);
+  const [isCompressingSmsDialog, setIsCompressingSmsDialog] = useState(false);
+  const smsDialogFileRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("contactId")) {
@@ -1088,9 +1243,144 @@ export default function Communications() {
     defaultValues: { contactId: "", to: "", body: "" },
   });
 
+  const handleEmailDialogFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      if (e.target) e.target.value = "";
+      const maxFiles = 5;
+      if (emailDialogFiles.length >= maxFiles) {
+        toast({
+          title: "Limit reached",
+          description: `Maximum ${maxFiles} attachments.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      setIsReadingEmailDialog(true);
+      try {
+        const newFiles: File[] = [];
+        const newMeta: EmailAttachment[] = [];
+        for (
+          let i = 0;
+          i < files.length && emailDialogFiles.length + newFiles.length < maxFiles;
+          i++
+        ) {
+          const file = files[i];
+          if (file.size > EMAIL_ATTACH_MAX_SIZE) {
+            toast({
+              title: "File too large",
+              description: `${file.name}: Maximum 10 MB.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+          const content = await fileToBase64(file);
+          newFiles.push(file);
+          newMeta.push({
+            content,
+            filename: file.name,
+            type: file.type || "application/octet-stream",
+          });
+        }
+        if (newFiles.length > 0) {
+          setEmailDialogFiles((prev) => [...prev, ...newFiles]);
+          setEmailDialogMeta((prev) => [...prev, ...newMeta]);
+        }
+      } catch {
+        toast({ title: "Failed to read file", variant: "destructive" });
+      } finally {
+        setIsReadingEmailDialog(false);
+      }
+    },
+    [toast, emailDialogFiles.length]
+  );
+
+  const removeEmailDialogAttach = useCallback((index: number) => {
+    setEmailDialogFiles((prev) => prev.filter((_, i) => i !== index));
+    setEmailDialogMeta((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleSmsDialogFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      if (e.target) e.target.value = "";
+      const maxAttach = 5;
+      if (smsDialogFiles.length >= maxAttach) {
+        toast({
+          title: "Limit reached",
+          description: `Maximum ${maxAttach} images.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      setIsCompressingSmsDialog(true);
+      try {
+        const newFiles: File[] = [];
+        const newPreviews: string[] = [];
+        const newOrigSizes: number[] = [];
+        for (
+          let i = 0;
+          i < files.length && smsDialogFiles.length + newFiles.length < maxAttach;
+          i++
+        ) {
+          const file = files[i];
+          if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+            toast({
+              title: "Unsupported file type",
+              description: `${file.name}: Only JPG, PNG, and WebP images are allowed.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+          if (file.size > MAX_ATTACHMENT_SIZE) {
+            toast({
+              title: "File too large",
+              description: `${file.name}: Maximum 5 MB.`,
+              variant: "destructive",
+            });
+            continue;
+          }
+          const preCompressSize = file.size;
+          const compressed = await compressMessageAttachment(file);
+          newFiles.push(compressed);
+          newPreviews.push(URL.createObjectURL(compressed));
+          newOrigSizes.push(preCompressSize);
+        }
+        if (newFiles.length > 0) {
+          setSmsDialogFiles((prev) => [...prev, ...newFiles]);
+          setSmsDialogPreviews((prev) => [...prev, ...newPreviews]);
+          setSmsDialogOrigSizes((prev) => [...prev, ...newOrigSizes]);
+        }
+      } catch {
+        toast({
+          title: "Compression failed",
+          description: "Could not process the image.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsCompressingSmsDialog(false);
+      }
+    },
+    [toast, smsDialogFiles.length]
+  );
+
+  const removeSmsDialogAttach = useCallback((index: number) => {
+    setSmsDialogPreviews((prev) => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
+    setSmsDialogFiles((prev) => prev.filter((_, i) => i !== index));
+    setSmsDialogOrigSizes((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const sendEmailMutation = useMutation({
     mutationFn: async (data: EmailFormValues) => {
-      await apiRequest("POST", "/api/messages/email", data);
+      await apiRequest("POST", "/api/messages/email", {
+        ...data,
+        attachments: emailDialogMeta.length > 0 ? emailDialogMeta : undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
@@ -1098,6 +1388,8 @@ export default function Communications() {
       toast({ title: "Email sent" });
       setEmailDialogOpen(false);
       emailForm.reset();
+      setEmailDialogFiles([]);
+      setEmailDialogMeta([]);
     },
     onError: (error: Error) => {
       toast({ title: "Failed to send email", description: error.message, variant: "destructive" });
@@ -1106,18 +1398,45 @@ export default function Communications() {
 
   const sendSmsMutation = useMutation({
     mutationFn: async (data: SmsFormValues) => {
+      if (smsDialogFiles.length > 0) {
+        const formData = new FormData();
+        smsDialogFiles.forEach((f) => formData.append("media", f));
+        formData.append("to", data.to);
+        formData.append("body", data.body);
+        if (data.contactId) formData.append("contactId", data.contactId);
+        if (smsDialogOrigSizes.length > 0)
+          formData.append("originalSizes", JSON.stringify(smsDialogOrigSizes));
+        const res = await fetch("/api/messages/mms", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Send failed" }));
+          throw new Error(err.error || "Failed to send MMS");
+        }
+        return res.json();
+      }
       await apiRequest("POST", "/api/messages/sms", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
       queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/messages/unread-sms-count"] });
-      toast({ title: "SMS sent" });
+      toast({ title: smsDialogFiles.length > 0 ? "MMS sent" : "SMS sent" });
       setSmsDialogOpen(false);
       smsForm.reset();
+      smsDialogPreviews.forEach((url) => URL.revokeObjectURL(url));
+      setSmsDialogFiles([]);
+      setSmsDialogPreviews([]);
+      setSmsDialogOrigSizes([]);
     },
     onError: (error: Error) => {
-      toast({ title: "Failed to send SMS", description: error.message, variant: "destructive" });
+      toast({
+        title: "Failed to send message",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -1230,14 +1549,69 @@ export default function Communications() {
                       </FormItem>
                     )}
                   />
-                  <Button
-                    type="submit"
-                    disabled={sendEmailMutation.isPending}
-                    data-testid="button-send-email"
-                  >
-                    <Send className="mr-1 h-4 w-4" />
-                    {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
-                  </Button>
+                  {emailDialogFiles.length > 0 && (
+                    <div
+                      className="flex flex-wrap gap-1.5"
+                      data-testid="email-dialog-attachment-list"
+                    >
+                      {emailDialogFiles.map((file, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-1 rounded border px-2 py-1 text-xs bg-muted max-w-[180px]"
+                          data-testid={`email-dialog-attachment-${idx}`}
+                        >
+                          <span className="truncate">{file.name}</span>
+                          <span className="text-muted-foreground shrink-0">
+                            ({(file.size / 1024).toFixed(0)}KB)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeEmailDialogAttach(idx)}
+                            className="ml-0.5 shrink-0 hover:text-destructive"
+                            data-testid={`button-remove-email-dialog-attachment-${idx}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {isReadingEmailDialog && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Processing attachment...
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      disabled={sendEmailMutation.isPending || isReadingEmailDialog}
+                      data-testid="button-email-dialog-attach"
+                    >
+                      <label className="flex cursor-pointer items-center gap-1.5">
+                        <input
+                          ref={emailDialogFileRef}
+                          type="file"
+                          multiple
+                          className="sr-only"
+                          onChange={handleEmailDialogFileSelect}
+                          data-testid="input-email-dialog-file"
+                        />
+                        <Paperclip className="h-3.5 w-3.5" />
+                        Attach
+                      </label>
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={sendEmailMutation.isPending || isReadingEmailDialog}
+                      data-testid="button-send-email"
+                    >
+                      <Send className="mr-1 h-4 w-4" />
+                      {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
+                    </Button>
+                  </div>
                 </form>
               </Form>
             </DialogContent>
@@ -1323,14 +1697,72 @@ export default function Communications() {
                       </FormItem>
                     )}
                   />
-                  <Button
-                    type="submit"
-                    disabled={sendSmsMutation.isPending}
-                    data-testid="button-send-sms"
-                  >
-                    <Send className="mr-1 h-4 w-4" />
-                    {sendSmsMutation.isPending ? "Sending..." : "Send SMS"}
-                  </Button>
+                  {smsDialogPreviews.length > 0 && (
+                    <div
+                      className="flex gap-2 flex-wrap"
+                      data-testid="sms-dialog-preview-container"
+                    >
+                      {smsDialogPreviews.map((preview, idx) => (
+                        <div key={idx} className="relative inline-block">
+                          <img
+                            src={preview}
+                            alt={`Attached ${idx + 1}`}
+                            className="h-16 w-16 object-cover rounded border"
+                            data-testid={`sms-dialog-preview-${idx}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeSmsDialogAttach(idx)}
+                            className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center"
+                            data-testid={`button-remove-sms-dialog-attachment-${idx}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {isCompressingSmsDialog && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Compressing image...
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      disabled={sendSmsMutation.isPending || isCompressingSmsDialog}
+                      data-testid="button-sms-dialog-attach"
+                    >
+                      <label className="flex cursor-pointer items-center gap-1.5">
+                        <input
+                          ref={smsDialogFileRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          className="sr-only"
+                          onChange={handleSmsDialogFileSelect}
+                          data-testid="input-sms-dialog-file"
+                        />
+                        <Paperclip className="h-3.5 w-3.5" />
+                        Image
+                      </label>
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={sendSmsMutation.isPending || isCompressingSmsDialog}
+                      data-testid="button-send-sms"
+                    >
+                      <Send className="mr-1 h-4 w-4" />
+                      {sendSmsMutation.isPending
+                        ? "Sending..."
+                        : smsDialogFiles.length > 0
+                          ? "Send MMS"
+                          : "Send SMS"}
+                    </Button>
+                  </div>
                 </form>
               </Form>
             </DialogContent>
