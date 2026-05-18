@@ -990,6 +990,19 @@ function TransferTab() {
         </div>
       </div>
 
+      {/* Sample CSV download */}
+      <div className="flex justify-end">
+        <a
+          href="/sample-clients.csv"
+          download="sample-clients.csv"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          data-testid="link-download-sample-csv-transfer"
+        >
+          <FileText className="w-3.5 h-3.5" />
+          Download sample CSV
+        </a>
+      </div>
+
       {/* Error state */}
       {analyzeError && (
         <Alert variant="destructive" data-testid="alert-analyze-error">

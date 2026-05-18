@@ -732,10 +732,21 @@ function MigrationChecklist({
           <Button variant="ghost" onClick={onCancel} data-testid="button-cancel-checklist">
             Cancel
           </Button>
-          <Button onClick={onNext} disabled={!canAdvance} data-testid="button-next-checklist">
-            Continue to Upload
-            <ChevronRight className="w-4 h-4 ml-1" />
-          </Button>
+          <div className="flex items-center gap-4">
+            <a
+              href="/sample-clients.csv"
+              download="sample-clients.csv"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="link-download-sample-csv-checklist"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Download sample CSV
+            </a>
+            <Button onClick={onNext} disabled={!canAdvance} data-testid="button-next-checklist">
+              Continue to Upload
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
