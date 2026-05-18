@@ -2946,7 +2946,7 @@ Respond with exactly one category from the list above and nothing else.`;
       const demoId = await getDemoCompanyId();
       if (!demoId) {
         return res.status(404).json({
-          error: "Demo company not found. No company with slug 'poop-scoop-demo' exists.",
+          error: "Demo company not found. No company associated with demo@scoopilot.com exists.",
         });
       }
       await db.execute(
