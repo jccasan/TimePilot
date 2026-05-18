@@ -1061,10 +1061,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       const retellApiKey = process.env.RETELL_API_KEY;
-      if (!retellApiKey) return res.json({ skipped: true, message: "RETELL_API_KEY not configured — sync skipped" });
+      if (!retellApiKey)
+        return res.json({ skipped: true, message: "RETELL_API_KEY not configured — sync skipped" });
 
       const agentId = company.retellAgentId || process.env.RETELL_AGENT_ID || null;
-      if (!agentId) return res.json({ skipped: true, message: "No Retell agent ID configured — sync skipped" });
+      if (!agentId)
+        return res.json({ skipped: true, message: "No Retell agent ID configured — sync skipped" });
 
       const results: string[] = [];
 
