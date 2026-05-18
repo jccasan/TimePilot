@@ -1057,14 +1057,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
       if (!company.voicePlanStatus || company.voicePlanStatus !== "active") {
-        return res.status(403).json({ error: "Voice plan not active" });
+        return res.json({ skipped: true, message: "Voice plan not active — sync skipped" });
       }
 
       const retellApiKey = process.env.RETELL_API_KEY;
-      if (!retellApiKey) return res.status(400).json({ error: "RETELL_API_KEY not configured" });
+      if (!retellApiKey) return res.json({ skipped: true, message: "RETELL_API_KEY not configured — sync skipped" });
 
       const agentId = company.retellAgentId || process.env.RETELL_AGENT_ID || null;
-      if (!agentId) return res.status(400).json({ error: "No Retell agent ID configured" });
+      if (!agentId) return res.json({ skipped: true, message: "No Retell agent ID configured — sync skipped" });
 
       const results: string[] = [];
 
