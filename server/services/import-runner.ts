@@ -2,7 +2,7 @@ import { anthropic, CLAUDE_FAST_MODEL } from "./claude";
 import { storage } from "../storage";
 import { db } from "../db";
 import { contacts, properties, routes } from "@shared/schema";
-import type { ImportRow, InsertImportRow } from "@shared/schema";
+import type { ImportRow, InsertImportRow, PricingRulesConfig } from "@shared/schema";
 import { geocodeAddress } from "./geocode";
 import { applyTransformations } from "./import-transforms";
 import type { ParsedContact } from "./competitor-import";
@@ -766,6 +766,57 @@ Rules:
   }
 }
 
+/**
+ * Look up the price in cents for a given row using the tenant's pricing matrix.
+ * Returns null when the matrix is unconfigured or the data is insufficient.
+ *
+ * Calculation:
+ *   price = basePrice(freq) + yardSizeSurcharge(yardSizeAcres) + dogSurcharge(dogs)
+ *
+ * All dollar values in PricingRulesConfig are dollars; returned value is cents.
+ */
+function matrixPriceCents(
+  rules: PricingRulesConfig,
+  serviceFrequency: string | null,
+  numberOfDogs: number | null,
+  yardSizeAcres: number | null
+): number | null {
+  const freq = (serviceFrequency || "").toLowerCase().replace(/\s+/g, "");
+  let baseDollars: number | null = null;
+  if (freq === "weekly" || freq === "week") baseDollars = rules.basePrices.weekly;
+  else if (freq === "biweekly" || freq === "bi-weekly" || freq === "everyotherweek")
+    baseDollars = rules.basePrices.biWeekly;
+  else if (freq === "twiceweekly" || freq === "2x/week" || freq === "twice")
+    baseDollars = rules.basePrices.twiceWeekly;
+  else if ((freq === "monthly" || freq === "month") && rules.basePrices.monthly != null)
+    baseDollars = rules.basePrices.monthly!;
+
+  if (baseDollars == null) return null;
+
+  // Yard size surcharge
+  let yardSurchargeDollars = 0;
+  if (yardSizeAcres != null && rules.yardSizeTiers.length > 0) {
+    const sorted = [...rules.yardSizeTiers].sort((a, b) => {
+      if (a.upToAcres == null) return 1;
+      if (b.upToAcres == null) return -1;
+      return a.upToAcres - b.upToAcres;
+    });
+    const match = sorted.find((t) => t.upToAcres == null || yardSizeAcres <= t.upToAcres);
+    if (match) yardSurchargeDollars = match.surcharge;
+  }
+
+  // Per-dog surcharge (beyond incrementDogs threshold)
+  let dogSurchargeDollars = 0;
+  const dogs = numberOfDogs ?? 1;
+  const { incrementDogs, surchargeAmount, maxDogs } = rules.perDogRule;
+  const effectiveDogs = Math.min(dogs, maxDogs);
+  const surchargeSteps = Math.floor((effectiveDogs - 1) / incrementDogs);
+  if (surchargeSteps > 0) dogSurchargeDollars = surchargeSteps * surchargeAmount;
+
+  const totalDollars = baseDollars + yardSurchargeDollars + dogSurchargeDollars;
+  return Math.round(totalDollars * 100);
+}
+
 async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Promise<void> {
   const {
     companyId,
@@ -783,6 +834,14 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
   } = payload;
 
   await storage.updateImportBatch(batchId, { status: "processing" });
+
+  // Fetch company pricing matrix for auto-fill
+  const company = await storage.getCompany(companyId).catch(() => null);
+  const pricingConfig = company?.pricingConfig as
+    | { pricingRules?: PricingRulesConfig }
+    | null
+    | undefined;
+  const pricingRules = pricingConfig?.pricingRules ?? null;
 
   const rows = rawRows.map((row) => [...row]);
   for (const [key, value] of Object.entries(editedCells)) {
@@ -826,7 +885,37 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
     const t = r.transformed as Record<string, unknown>;
     const raw = r.original;
 
-    // Build contact json
+    // Apply any internal-field overrides from editedCells written by the wizard's step-5
+    // panels. These use internal names (e.g. "serviceDay", "streetAddress") rather than raw
+    // CSV column headers, so they are NOT caught by the header-index lookup above and must
+    // be applied here, post-transform, directly on the service/contact values.
+    // IMPORTANT: this block must run BEFORE mappedContactJson is constructed so that
+    // corrected address values are captured in the staged payload.
+    const INTERNAL_FIELD_OVERRIDE_KEYS = [
+      "serviceDay",
+      "serviceFrequency",
+      "streetAddress",
+      "city",
+      "state",
+      "zipCode",
+    ];
+    const internalOverrides: Record<string, string> = {};
+    for (const fieldName of INTERNAL_FIELD_OVERRIDE_KEYS) {
+      const cellKey = `${r.rowIndex}:${fieldName}`;
+      if (Object.prototype.hasOwnProperty.call(editedCells, cellKey)) {
+        internalOverrides[fieldName] = editedCells[cellKey];
+      }
+    }
+
+    // Patch address fields on `t` before building mappedContactJson so the staged row
+    // always reflects the user's corrections, regardless of CSV column naming.
+    if (internalOverrides["streetAddress"] !== undefined)
+      t.streetAddress = internalOverrides["streetAddress"];
+    if (internalOverrides["city"] !== undefined) t.city = internalOverrides["city"];
+    if (internalOverrides["state"] !== undefined) t.state = internalOverrides["state"];
+    if (internalOverrides["zipCode"] !== undefined) t.zipCode = internalOverrides["zipCode"];
+
+    // Build contact json — address fields read from `t` which now includes any overrides.
     const mappedContactJson: Record<string, unknown> = {
       firstName: t.firstName || null,
       lastName: t.lastName || null,
@@ -845,19 +934,6 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
       gateCode: t.gateCode || null,
     };
 
-    // Apply any internal-field overrides from editedCells written by the wizard's step-5
-    // day-reassignment panel. These use internal names ("serviceDay") rather than raw CSV
-    // column headers, so they are NOT caught by the header-index lookup above and must
-    // be applied here, post-transform, directly on the service/contact values.
-    const INTERNAL_FIELD_OVERRIDE_KEYS = ["serviceDay", "serviceFrequency"];
-    const internalOverrides: Record<string, string> = {};
-    for (const fieldName of INTERNAL_FIELD_OVERRIDE_KEYS) {
-      const cellKey = `${r.rowIndex}:${fieldName}`;
-      if (Object.prototype.hasOwnProperty.call(editedCells, cellKey)) {
-        internalOverrides[fieldName] = editedCells[cellKey];
-      }
-    }
-
     // Build service json — routePreference controls how serviceDay is handled:
     // "preserve"  → keep whatever the CSV says (or flag if absent)
     // "rebuild"   → always clear serviceDay so the resolver AI assigns it fresh
@@ -873,6 +949,24 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
       serviceDay: effectiveServiceDay,
     };
 
+    // Auto-fill price from tenant's pricing matrix when the row has enough data.
+    // Requires at minimum a service frequency; yard size and dog count are optional.
+    let matrixFilledPriceCents: number | null = null;
+    if (pricingRules && csvServiceFreq) {
+      const dogs = t.numberOfDogs != null ? Number(t.numberOfDogs) : null;
+      const acres = t.yardSize != null ? Number(t.yardSize) : null;
+      matrixFilledPriceCents = matrixPriceCents(
+        pricingRules,
+        String(csvServiceFreq),
+        Number.isFinite(dogs) ? dogs : null,
+        Number.isFinite(acres) && acres! > 0 ? acres : null
+      );
+      if (matrixFilledPriceCents != null) {
+        mappedServiceJson.priceCents = matrixFilledPriceCents;
+        mappedServiceJson.priceSource = "matrix";
+      }
+    }
+
     // Compute missing service fields
     const missingFields: string[] = [];
     if (!mappedServiceJson.serviceFrequency) missingFields.push("frequency");
@@ -881,8 +975,8 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
     if (!mappedServiceJson.serviceDay || routePreference === "rebuild") {
       missingFields.push("serviceDay");
     }
-    // price and billingRule are not in CSV but tracked as missing
-    missingFields.push("price");
+    // Price: only add as missing if we couldn't auto-fill from matrix
+    if (matrixFilledPriceCents == null) missingFields.push("price");
     missingFields.push("billingRule");
 
     // Validation errors from transform

@@ -1164,11 +1164,11 @@ function RouteAssignmentStep({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <CalendarDays className="w-5 h-5" />
-          Layer 2 — How Should We Assign Service Days?
+          How should we group your customers into routes?
         </CardTitle>
         <CardDescription>
-          Choose how service days are set for the customers you're importing. This determines which
-          route each customer lands on.
+          Each customer needs a service day so they land on the right route. Tell us how to handle
+          that for the customers you're importing.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -1206,9 +1206,10 @@ function RouteAssignmentStep({
 
         <div className="p-3 rounded-md bg-muted/50 border border-border text-xs text-muted-foreground">
           <Info className="w-3.5 h-3.5 inline mr-1 mb-0.5" />
-          Next you'll see a day-distribution preview, then confirm before staging. After staging
-          you'll land in the <strong className="text-foreground">Missing Logic Resolver</strong> to
-          review the Import Health Score and commit.
+          Next you'll see your customers grouped by day on a map so you can spot any misassignments
+          before staging. After that you'll confirm and stage, then land in the{" "}
+          <strong className="text-foreground">Review page</strong> to fill in any remaining service
+          details and commit your contacts to the CRM.
         </div>
 
         <div className="flex items-center justify-between pt-2">
@@ -1254,6 +1255,86 @@ function normalizeDay(raw: unknown): string {
 
 type DayEntry = { rowIndex: number; name: string; weekSlot?: "A" | "B" };
 
+function TransformExplainer() {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="mb-4 rounded-md border border-border bg-muted/30 text-xs overflow-hidden">
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+        onClick={() => setOpen((p) => !p)}
+        data-testid="button-transform-explainer-toggle"
+      >
+        <span className="font-semibold text-foreground">What are transforms?</span>
+        <span className="text-muted-foreground text-[10px] ml-2">{open ? "▲ hide" : "▼ show"}</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-2">
+          <p className="text-muted-foreground">
+            Transforms clean or convert raw CSV values before they're saved. Add one using the "Add
+            transform…" dropdown on any field row.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            <div className="space-y-0.5">
+              <p className="font-medium text-foreground">Normalize Phone</p>
+              <p className="text-muted-foreground">
+                <span className="font-mono bg-muted px-1 rounded">5551234567</span>
+                {" → "}
+                <span className="font-mono bg-muted px-1 rounded">+15551234567</span>
+              </p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="font-medium text-foreground">Trim Whitespace</p>
+              <p className="text-muted-foreground">
+                <span className="font-mono bg-muted px-1 rounded">" John "</span>
+                {" → "}
+                <span className="font-mono bg-muted px-1 rounded">"John"</span>
+              </p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="font-medium text-foreground">Split Full Name</p>
+              <p className="text-muted-foreground">
+                <span className="font-mono bg-muted px-1 rounded">"Jane Doe"</span>
+                {" → "}
+                <span className="font-mono bg-muted px-1 rounded">First: Jane, Last: Doe</span>
+              </p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="font-medium text-foreground">Parse Currency</p>
+              <p className="text-muted-foreground">
+                <span className="font-mono bg-muted px-1 rounded">"$24.99"</span>
+                {" → "}
+                <span className="font-mono bg-muted px-1 rounded">2499 (cents)</span>
+              </p>
+            </div>
+            <div className="space-y-0.5">
+              <p className="font-medium text-foreground">Parse Date</p>
+              <p className="text-muted-foreground">
+                <span className="font-mono bg-muted px-1 rounded">"3/15/24"</span>
+                {" → "}
+                <span className="font-mono bg-muted px-1 rounded">2024-03-15</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function haversineDistanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3958.8;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function RouteDayPreviewStep({
   previewRows,
   skippedRows,
@@ -1262,6 +1343,7 @@ function RouteDayPreviewStep({
   onNext,
   onBack,
   onDayOverride,
+  onAddressOverride,
 }: {
   previewRows: TransformedRow[];
   skippedRows: Set<number>;
@@ -1270,9 +1352,15 @@ function RouteDayPreviewStep({
   onNext: () => void;
   onBack: () => void;
   onDayOverride: (rowIndex: number, newDay: string) => void;
+  onAddressOverride?: (rowIndex: number, field: string, value: string) => void;
 }) {
   const [localOverrides, setLocalOverrides] = useState<Record<number, string>>({});
   const [showMap, setShowMap] = useState(false);
+  const [addressEdits, setAddressEdits] = useState<
+    Record<number, { streetAddress?: string; city?: string; state?: string; zipCode?: string }>
+  >({});
+  const [showSuspiciousPanel, setShowSuspiciousPanel] = useState(false);
+  const [selectedSuspiciousRow, setSelectedSuspiciousRow] = useState<number | null>(null);
 
   const { data: company } = useQuery<{
     startLatitude?: string | null;
@@ -1338,18 +1426,51 @@ function RouteDayPreviewStep({
 
   const unassigned = dayGroups["Unassigned"] || [];
 
+  const companyLat = company?.startLatitude ? parseFloat(company.startLatitude) : null;
+  const companyLng = company?.startLongitude ? parseFloat(company.startLongitude) : null;
+  const SUSPICIOUS_MILES = 75;
+
+  const suspiciousRows = previewRows.filter((r) => {
+    if (skippedRows.has(r.rowIndex)) return false;
+    const pos = geocodedPositions[r.rowIndex];
+    if (!pos || companyLat == null || companyLng == null) return false;
+    return haversineDistanceMiles(companyLat, companyLng, pos.lat, pos.lng) > SUSPICIOUS_MILES;
+  });
+
+  const geocodedCount = Object.keys(geocodedPositions).length;
+  const totalAddressRows = previewRows.filter(
+    (r) => !skippedRows.has(r.rowIndex) && (r.transformed as Record<string, unknown>).streetAddress
+  ).length;
+
+  function getRowName(r: TransformedRow) {
+    const t = r.transformed as Record<string, unknown>;
+    return (
+      [(t.firstName as string) || "", (t.lastName as string) || ""]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || `Row ${r.rowIndex + 1}`
+    );
+  }
+
   return (
     <Card data-testid="step-route-day-preview">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <CalendarDays className="w-5 h-5" />
-          Layer 2 — Route Day Preview
+          Check the route day distribution
         </CardTitle>
         <CardDescription>
-          {total} customers grouped by service day. Use the day dropdown on any customer to reassign
-          them across panels before staging.
+          {total} customer{total !== 1 ? "s" : ""} grouped by service day
           {Object.values(dayGroups).some((g) => g.some((e) => e.weekSlot)) &&
-            " Biweekly customers are split into Week A / Week B."}
+            " — biweekly customers split into Week A / Week B"}
+          . Use the dropdown next to any name to reassign them before staging.
+          {suspiciousRows.length > 0 && (
+            <span className="block mt-1 text-amber-600 dark:text-amber-400">
+              {suspiciousRows.length} address
+              {suspiciousRows.length !== 1 ? "es" : ""} appear more than {SUSPICIOUS_MILES} miles
+              from your service area — see flags below.
+            </span>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -1408,17 +1529,33 @@ function RouteDayPreviewStep({
                         .filter(Boolean)
                         .join(" ")
                         .trim() || `Row ${r.rowIndex + 1}`;
+                    const isSuspicious = suspiciousRows.some((s) => s.rowIndex === r.rowIndex);
                     return {
                       id: String(r.rowIndex),
                       stopNumber: idx + 1,
-                      contactName: name,
+                      contactName: isSuspicious
+                        ? `${name} — address may be wrong, click to correct`
+                        : name,
                       streetAddress: (t.streetAddress as string) || "",
                       latitude: pos.lat,
                       longitude: pos.lng,
-                      routeColor: DAY_COLORS[effectiveDay] ?? "#64748b",
+                      routeColor: isSuspicious
+                        ? "#ef4444"
+                        : (DAY_COLORS[effectiveDay] ?? "#64748b"),
                     };
                   })}
                 routeName="Import Route Preview"
+                selectedStopId={
+                  selectedSuspiciousRow !== null ? String(selectedSuspiciousRow) : undefined
+                }
+                onStopClick={(id) => {
+                  const rowIndex = parseInt(id);
+                  const isSusp = suspiciousRows.some((s) => s.rowIndex === rowIndex);
+                  if (isSusp) {
+                    setSelectedSuspiciousRow((prev) => (prev === rowIndex ? null : rowIndex));
+                    setShowSuspiciousPanel(true);
+                  }
+                }}
                 companyLatitude={
                   company?.startLatitude != null ? parseFloat(company.startLatitude) : null
                 }
@@ -1435,6 +1572,15 @@ function RouteDayPreviewStep({
               </div>
             )}
           </div>
+        )}
+
+        {/* Geocoding count label */}
+        {totalAddressRows > 0 && (
+          <p className="text-xs text-muted-foreground" data-testid="text-geocoding-count">
+            {geocodedCount === 0
+              ? `Locating addresses on the map (${totalAddressRows} total)…`
+              : `Showing sampled ${geocodedCount} of ${totalAddressRows} total addresses`}
+          </p>
         )}
 
         {/* Day panel grid — Mon through Fri (+ Sat/Sun if present) */}
@@ -1569,6 +1715,109 @@ function RouteDayPreviewStep({
           </div>
         )}
 
+        {/* Suspicious address flags */}
+        {suspiciousRows.length > 0 && (
+          <div
+            className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20 p-3 space-y-2"
+            data-testid="suspicious-addresses-panel"
+          >
+            <button
+              type="button"
+              className="w-full flex items-center justify-between text-left"
+              onClick={() => setShowSuspiciousPanel((p) => !p)}
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-600 dark:text-red-400" />
+                <span className="text-xs font-semibold text-red-700 dark:text-red-300">
+                  {suspiciousRows.length} address
+                  {suspiciousRows.length !== 1 ? "es" : ""} more than {SUSPICIOUS_MILES} miles from
+                  your service area — may be typos
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {showSuspiciousPanel ? "▲" : "▼"}
+              </span>
+            </button>
+            {showSuspiciousPanel && (
+              <div className="space-y-3 pt-1">
+                {suspiciousRows.map((r) => {
+                  const t = r.transformed as Record<string, unknown>;
+                  const edit = addressEdits[r.rowIndex] || {};
+                  return (
+                    <div
+                      key={r.rowIndex}
+                      className="space-y-1.5 border-t border-red-200 dark:border-red-800 pt-2"
+                      data-testid={`suspicious-row-${r.rowIndex}`}
+                    >
+                      <p className="text-xs font-medium text-foreground">{getRowName(r)}</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <Input
+                          className="h-7 text-xs col-span-2"
+                          placeholder="Street address"
+                          defaultValue={edit.streetAddress ?? ((t.streetAddress as string) || "")}
+                          onBlur={(e) => {
+                            const newVal = e.target.value;
+                            setAddressEdits((prev) => ({
+                              ...prev,
+                              [r.rowIndex]: { ...(prev[r.rowIndex] || {}), streetAddress: newVal },
+                            }));
+                            onAddressOverride?.(r.rowIndex, "streetAddress", newVal);
+                          }}
+                          data-testid={`input-fix-address-${r.rowIndex}`}
+                        />
+                        <Input
+                          className="h-7 text-xs"
+                          placeholder="City"
+                          defaultValue={edit.city ?? ((t.city as string) || "")}
+                          onBlur={(e) => {
+                            const newVal = e.target.value;
+                            setAddressEdits((prev) => ({
+                              ...prev,
+                              [r.rowIndex]: { ...(prev[r.rowIndex] || {}), city: newVal },
+                            }));
+                            onAddressOverride?.(r.rowIndex, "city", newVal);
+                          }}
+                          data-testid={`input-fix-city-${r.rowIndex}`}
+                        />
+                        <div className="flex gap-1">
+                          <Input
+                            className="h-7 text-xs w-16"
+                            placeholder="ST"
+                            defaultValue={edit.state ?? ((t.state as string) || "")}
+                            onBlur={(e) => {
+                              const newVal = e.target.value;
+                              setAddressEdits((prev) => ({
+                                ...prev,
+                                [r.rowIndex]: { ...(prev[r.rowIndex] || {}), state: newVal },
+                              }));
+                              onAddressOverride?.(r.rowIndex, "state", newVal);
+                            }}
+                            data-testid={`input-fix-state-${r.rowIndex}`}
+                          />
+                          <Input
+                            className="h-7 text-xs flex-1"
+                            placeholder="ZIP"
+                            defaultValue={edit.zipCode ?? ((t.zipCode as string) || "")}
+                            onBlur={(e) => {
+                              const newVal = e.target.value;
+                              setAddressEdits((prev) => ({
+                                ...prev,
+                                [r.rowIndex]: { ...(prev[r.rowIndex] || {}), zipCode: newVal },
+                              }));
+                              onAddressOverride?.(r.rowIndex, "zipCode", newVal);
+                            }}
+                            data-testid={`input-fix-zip-${r.rowIndex}`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="p-3 rounded-md bg-muted/50 border border-border text-xs text-muted-foreground">
           <Info className="w-3.5 h-3.5 inline mr-1 mb-0.5" />
           {modeNote}
@@ -1689,6 +1938,37 @@ export function ImportWizard({
         }
       }
       setGeocodedPositions(positions);
+    },
+  });
+
+  // Single-row re-geocode after suspicious-address correction — merges into existing positions
+  const regeocodeRowMutation = useMutation({
+    mutationFn: async (
+      addresses: Array<{
+        rowIndex: number;
+        streetAddress?: string | null;
+        city?: string | null;
+        state?: string | null;
+        zipCode?: string | null;
+      }>
+    ) => {
+      const res = await apiRequest("POST", "/api/imports/geocode-preview", { addresses });
+      return res.json() as Promise<{
+        results: Array<{ rowIndex: number; latitude: number | null; longitude: number | null }>;
+      }>;
+    },
+    onSuccess: (data) => {
+      setGeocodedPositions((prev) => {
+        const next = { ...prev };
+        for (const r of data.results) {
+          if (r.latitude != null && r.longitude != null) {
+            next[r.rowIndex] = { lat: r.latitude, lng: r.longitude };
+          } else {
+            delete next[r.rowIndex];
+          }
+        }
+        return next;
+      });
     },
   });
 
@@ -1899,9 +2179,11 @@ export function ImportWizard({
           <CardContent className="pt-10 pb-10 flex flex-col items-center gap-4 text-center">
             <XCircle className="w-8 h-8 text-destructive" />
             <div>
-              <p className="font-medium">AI mapping failed</p>
+              <p className="font-medium">Column analysis failed</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Could not analyze your CSV. Check your connection and try again.
+                {aiMapMutation.error instanceof Error
+                  ? aiMapMutation.error.message
+                  : "Could not analyze your CSV columns. Check your connection and try again."}
               </p>
             </div>
             <div className="flex gap-3">
@@ -1936,11 +2218,12 @@ export function ImportWizard({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="w-5 h-5" />
-              Layer 1 — Review & Map Fields
+              Layer 1 — Review &amp; Map Fields
             </CardTitle>
             <CardDescription>
-              AI has suggested column mappings from <strong>{fileName}</strong>. Review each field
-              and adjust if needed — every field has an override option.
+              Columns from <strong>{fileName}</strong> have been matched to ScooPilot fields. Review
+              each mapping and adjust if needed. Add transforms to clean up messy data before it's
+              imported.
               {mappingResult.warnings.length > 0 && (
                 <span className="block mt-1 text-yellow-600 dark:text-yellow-400">
                   {mappingResult.warnings.length} warning(s) detected
@@ -1949,6 +2232,9 @@ export function ImportWizard({
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* Transform explainer — collapsible */}
+            <TransformExplainer />
+
             <div className="space-y-3">
               {targetFields.map((tf) => {
                 const aiMapping = getMappingForField(tf.field);
@@ -2325,7 +2611,7 @@ export function ImportWizard({
             // Trigger batch geocode for map preview before entering step 5
             const addressInputs = previewRows
               .filter((r) => !skippedRows.has(r.rowIndex))
-              .slice(0, 30)
+              .slice(0, 200)
               .map((r) => {
                 const t = r.transformed as Record<string, unknown>;
                 return {
@@ -2357,6 +2643,34 @@ export function ImportWizard({
           onDayOverride={(rowIndex, newDay) =>
             setEditedCells((prev) => ({ ...prev, [`${rowIndex}:serviceDay`]: newDay }))
           }
+          onAddressOverride={(rowIndex, field, value) => {
+            setEditedCells((prev) => {
+              const updated = { ...prev, [`${rowIndex}:${field}`]: value };
+              // Assemble the full address from the preview row + all overrides so far + this change
+              const row = previewRows.find((r) => r.rowIndex === rowIndex);
+              if (row) {
+                const t = row.transformed as Record<string, unknown>;
+                const get = (f: string) =>
+                  f === field ? value : (updated[`${rowIndex}:${f}`] ?? (t[f] as string) ?? null);
+                // Clear stale position first so the map shows it's being refreshed
+                setGeocodedPositions((pos) => {
+                  const next = { ...pos };
+                  delete next[rowIndex];
+                  return next;
+                });
+                regeocodeRowMutation.mutate([
+                  {
+                    rowIndex,
+                    streetAddress: get("streetAddress"),
+                    city: get("city"),
+                    state: get("state"),
+                    zipCode: get("zipCode"),
+                  },
+                ]);
+              }
+              return updated;
+            });
+          }}
         />
       )}
 
@@ -2366,11 +2680,12 @@ export function ImportWizard({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5" />
-              Layer 2 — Confirm & Stage Import
+              Ready to stage — review before you go
             </CardTitle>
             <CardDescription>
-              Review the summary below. Nothing is committed until you hit Stage. You'll land in the
-              Missing Logic Resolver to review and commit.
+              Nothing is saved to your CRM yet. Staging creates a draft that you can review, fix,
+              and then commit. You'll land on the Review page where you can fill in any missing
+              service details before going live.
             </CardDescription>
           </CardHeader>
           <CardContent>

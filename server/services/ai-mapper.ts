@@ -283,7 +283,10 @@ Respond with ONLY valid JSON in this exact format, no markdown or explanation:
   } catch (error) {
     console.error("[AI Mapper] AI mapping failed, falling back to deterministic:", error);
     const fallback = deterministicMap(headers, targetFields);
-    fallback.warnings.push("AI mapping unavailable, using deterministic fallback");
+    const reason = error instanceof Error ? error.message : String(error);
+    fallback.warnings.push(
+      `AI mapping could not complete (${reason}). Field assignments were made using name-matching rules instead — please review each field below before continuing.`
+    );
     mappingCache.set(cacheKey, { result: fallback, timestamp: Date.now() });
     return fallback;
   }

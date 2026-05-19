@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { FileUp, X } from "lucide-react";
+import { Link } from "wouter";
 
 interface ImportModeBannerProps {
   onTurnOff: () => void;
@@ -25,9 +26,23 @@ export function ImportModeBanner({ onTurnOff }: ImportModeBannerProps) {
     >
       <div className="flex items-center gap-2 text-primary font-medium">
         <FileUp className="h-4 w-4 shrink-0" />
-        <span>Import Mode — On</span>
-        <span className="hidden sm:inline text-muted-foreground font-normal">
-          · Upload contacts from a spreadsheet or screenshot
+        <span>Import Mode is active</span>
+        <span className="text-muted-foreground font-normal text-xs sm:text-sm">
+          &mdash;{" "}
+          <span className="hidden sm:inline">
+            Outbound client notifications (welcome emails, service reminders) are paused until you
+            turn this off. This prevents accidental mass messaging during data import.{" "}
+          </span>
+          <span className="sm:hidden">Notifications paused. </span>
+          Turn off from this banner or from{" "}
+          <Link
+            href="/settings"
+            className="underline underline-offset-2 hover:text-primary"
+            data-testid="link-settings-import-mode"
+          >
+            Settings
+          </Link>
+          .
         </span>
       </div>
       <Button

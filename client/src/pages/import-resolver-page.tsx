@@ -118,12 +118,39 @@ function HealthGauge({ score }: { score: number }) {
         ? "bg-yellow-100 dark:bg-yellow-950/40"
         : "bg-red-100 dark:bg-red-950/40";
 
+  const interpretation =
+    score >= 80
+      ? "Most rows are ready to commit. Review any flagged items and you're set."
+      : score >= 60
+        ? "Several rows need attention before committing. Use the tabs below to fix missing fields."
+        : "Many rows are missing required service details. Address the issues below before committing.";
+
   return (
-    <div className={`flex flex-col items-center justify-center rounded-xl p-6 ${bg}`}>
+    <div className={`flex flex-col items-center justify-center rounded-xl p-6 gap-3 ${bg}`}>
       <p className={`text-5xl font-bold ${color}`} data-testid="text-health-score">
         {score}
       </p>
-      <p className="text-sm text-muted-foreground mt-1">Health Score</p>
+      <p className="text-sm text-muted-foreground">Health Score</p>
+      <p
+        className={`text-xs text-center leading-relaxed ${color}`}
+        data-testid="text-health-interpretation"
+      >
+        {interpretation}
+      </p>
+      <div className="flex items-center gap-3 text-xs mt-1" data-testid="health-score-legend">
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" />
+          <span className="text-muted-foreground">80+ Good</span>
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-500" />
+          <span className="text-muted-foreground">60–79 Fair</span>
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500" />
+          <span className="text-muted-foreground">&lt;60 Needs work</span>
+        </span>
+      </div>
     </div>
   );
 }
@@ -387,15 +414,23 @@ export default function ImportResolverPage() {
             <ChevronLeft className="w-4 h-4 mr-1" />
             Back to Migration
           </Button>
-          <h1 className="text-2xl font-bold tracking-tight">Resolve Missing Logic</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Review Staged Import</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            {batch?.fileName || "Import batch"} &mdash; {health.totalRows} rows
+            {batch?.fileName || "Import batch"} &mdash; {health.totalRows} rows staged for review
             {isCommitted && (
               <Badge className="ml-2 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                 Committed
               </Badge>
             )}
           </p>
+          {!isCommitted && (
+            <p className="text-muted-foreground text-xs mt-2 max-w-xl">
+              Your contacts are staged but not yet in your CRM. Fill in any missing service details
+              using the tabs below, then click{" "}
+              <strong className="text-foreground">Commit to Production</strong> to create the
+              contacts and service plans.
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -600,8 +635,47 @@ export default function ImportResolverPage() {
           </div>
         </CardHeader>
 
+        {/* Issue summary breakdown */}
+        {!isCommitted && (
+          <div className="px-6 pb-3">
+            {(() => {
+              const counts = resolverData.missingFieldCounts;
+              const parts: string[] = [];
+              if (counts.price > 0)
+                parts.push(`${counts.price} missing price${counts.price !== 1 ? "s" : ""}`);
+              if (counts.serviceDay > 0)
+                parts.push(
+                  `${counts.serviceDay} missing service day${counts.serviceDay !== 1 ? "s" : ""}`
+                );
+              if (counts.frequency > 0)
+                parts.push(
+                  `${counts.frequency} missing frequenc${counts.frequency !== 1 ? "ies" : "y"}`
+                );
+              if (counts.billingRule > 0)
+                parts.push(
+                  `${counts.billingRule} missing billing rule${counts.billingRule !== 1 ? "s" : ""}`
+                );
+              if (parts.length === 0) {
+                return (
+                  <p
+                    className="text-xs text-green-600 dark:text-green-400"
+                    data-testid="text-issue-summary"
+                  >
+                    All service fields are complete — ready to commit.
+                  </p>
+                );
+              }
+              return (
+                <p className="text-xs text-muted-foreground" data-testid="text-issue-summary">
+                  {parts.join(", ")} — use the tabs below to fix before committing.
+                </p>
+              );
+            })()}
+          </div>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
-          <div className="px-6">
+          <div className="px-6 space-y-2">
             <TabsList className="h-8">
               <TabsTrigger value="all" className="text-xs" data-testid="tab-all">
                 All ({resolverData.rows.length})
@@ -619,6 +693,18 @@ export default function ImportResolverPage() {
                 Billing ({resolverData.missingFieldCounts.billingRule})
               </TabsTrigger>
             </TabsList>
+            <p className="text-xs text-muted-foreground pb-1" data-testid="text-tab-description">
+              {activeTab === "all" &&
+                "All staged contacts — review or filter by a specific missing field using the tabs above."}
+              {activeTab === "frequency" &&
+                "Contacts missing a service frequency (weekly, biweekly, etc.). Set one per row or use bulk-edit to apply the same value to many rows at once."}
+              {activeTab === "serviceDay" &&
+                "Contacts not yet assigned to a route day. Pick a day for each customer here or let the resolver assign them automatically on commit."}
+              {activeTab === "price" &&
+                "Contacts without a confirmed price per visit. Enter a dollar amount per row, or use bulk-edit to apply a standard rate to a group."}
+              {activeTab === "billingRule" &&
+                "Contacts missing a billing rule (per visit, monthly flat, per dog, etc.). This controls how invoices are generated for each customer."}
+            </p>
           </div>
 
           <TabsContent value={activeTab} className="mt-0">

@@ -4,6 +4,7 @@ import { ImportWizard } from "@/components/import-wizard";
 import { ImportJobProgress } from "@/components/import-job-progress";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +57,9 @@ import {
   Sparkles,
   ChevronsUpDown,
   Check,
+  Clock,
+  PlayCircle,
+  RotateCcw,
 } from "lucide-react";
 
 interface ParsedInvoicePreview {
@@ -757,7 +761,7 @@ function MergeSummaryCard({
             ) : (
               <>
                 <Sparkles className="h-4 w-4 mr-2" />
-                Analyze with AI
+                Analyze
               </>
             )}
           </Button>
@@ -771,6 +775,132 @@ function MergeSummaryCard({
             Remove files and start over
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── InProgressBatchesList ─────────────────────────────────────────────────────
+
+interface ImportBatchSummary {
+  id: string;
+  fileName: string;
+  status: string;
+  totalRows: number;
+  stagedRows: number;
+  readyRows: number;
+  createdAt: string;
+}
+
+function InProgressBatchesList() {
+  const [, navigate] = useLocation();
+
+  const { data: batches, isLoading } = useQuery<ImportBatchSummary[]>({
+    queryKey: ["/api/import-batches"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/import-batches");
+      return res.json();
+    },
+    refetchInterval: 5000,
+  });
+
+  const activeBatches = (batches || []).filter((b) => b.status !== "committed");
+
+  if (isLoading) return null;
+  if (activeBatches.length === 0) return null;
+
+  return (
+    <div className="space-y-2" data-testid="in-progress-batches">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        In-Progress Imports
+      </p>
+      <div className="space-y-2">
+        {activeBatches.map((batch) => {
+          const isPending =
+            batch.status === "pending" ||
+            batch.status === "analyzing" ||
+            batch.status === "processing";
+          const isStaged = batch.status === "staged";
+          const isError = batch.status === "error" || batch.status === "failed";
+          return (
+            <div
+              key={batch.id}
+              className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30"
+              data-testid={`batch-card-${batch.id}`}
+            >
+              <div className="shrink-0">
+                {isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                ) : isStaged ? (
+                  <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                ) : isError ? (
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                ) : (
+                  <RotateCcw className="w-4 h-4 text-muted-foreground" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{batch.fileName || "import.csv"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {isPending
+                    ? "Being processed — your import was submitted and is being analyzed. Check back shortly."
+                    : isStaged
+                      ? `${batch.stagedRows ?? batch.totalRows} rows staged — review and fix any missing fields, then commit`
+                      : isError
+                        ? "Import failed — upload the file again to start a new import"
+                        : `${batch.totalRows} rows`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge
+                  variant="secondary"
+                  className={`text-xs ${
+                    isStaged
+                      ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                      : isError
+                        ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                        : ""
+                  }`}
+                >
+                  {batch.status}
+                </Badge>
+                {isPending && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate(`/import/${batch.id}/resolve`)}
+                    data-testid={`button-resume-batch-${batch.id}`}
+                  >
+                    <PlayCircle className="w-3.5 h-3.5 mr-1" />
+                    View Progress
+                  </Button>
+                )}
+                {isStaged && (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => navigate(`/import/${batch.id}/resolve`)}
+                    data-testid={`button-resume-batch-${batch.id}`}
+                  >
+                    <PlayCircle className="w-3.5 h-3.5 mr-1" />
+                    Continue to Review
+                  </Button>
+                )}
+                {isError && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigate("/migrate")}
+                    data-testid={`button-restart-batch-${batch.id}`}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                    Start New Import
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -931,6 +1061,9 @@ function TransferTab() {
 
   return (
     <div className="space-y-5" data-testid="transfer-upload-zone">
+      {/* In-progress and staged imports */}
+      <InProgressBatchesList />
+
       {/* Drop zone */}
       <div
         className={`relative rounded-xl border-2 border-dashed transition-colors cursor-pointer ${

@@ -2407,7 +2407,7 @@ Respond with exactly one category from the list above and nothing else.`;
         requiredFields
       );
 
-      const preview = transformed.slice(0, 50);
+      const preview = transformed.slice(0, 200);
       const validCount = transformed.filter((r) => r.isValid).length;
       const invalidCount = transformed.filter((r) => !r.isValid).length;
       const allErrors = transformed.flatMap((r) => r.errors);
@@ -2438,7 +2438,7 @@ Respond with exactly one category from the list above and nothing else.`;
       if (!Array.isArray(addresses) || addresses.length === 0) {
         return res.json({ results: [] });
       }
-      const sample = addresses.slice(0, 30);
+      const sample = addresses.slice(0, 200);
       const results: Array<{
         rowIndex: number;
         latitude: number | null;
