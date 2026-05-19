@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, Suspense, lazy } from "react";
+import { useState, useCallback, useRef, useEffect, Suspense, lazy } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -1892,8 +1892,32 @@ export function ImportWizard({
 
   // Per-row sequence counter for single-row re-geocode calls — latest-wins guard against races
   const regeocodeSeqRef = useRef<Record<number, number>>({});
+  const regeocodeDebounceRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const regeocodePendingRef = useRef<
+    Record<
+      number,
+      {
+        rowIndex: number;
+        streetAddress: string | null;
+        city: string | null;
+        state: string | null;
+        zipCode: string | null;
+        _seq: number;
+      }
+    >
+  >({});
 
   const targetFields = SCHEMA_FIELDS[targetSchema] || [];
+
+  // Clear any pending debounce timers when the component unmounts to prevent
+  // stale geocode requests from firing after navigation away from the wizard.
+  useEffect(() => {
+    return () => {
+      for (const id of Object.values(regeocodeDebounceRef.current)) {
+        clearTimeout(id);
+      }
+    };
+  }, []);
 
   // ── Mutations ──
 
@@ -2668,22 +2692,35 @@ export function ImportWizard({
                 // newer one it will be discarded by regeocodeRowMutation.onSuccess.
                 const seq = (regeocodeSeqRef.current[rowIndex] ?? 0) + 1;
                 regeocodeSeqRef.current[rowIndex] = seq;
-                // Clear stale position first so the map shows it's being refreshed
+                // Store the latest complete address so the debounced timer always uses it.
+                regeocodePendingRef.current[rowIndex] = {
+                  rowIndex,
+                  streetAddress: get("streetAddress"),
+                  city: get("city"),
+                  state: get("state"),
+                  zipCode: get("zipCode"),
+                  _seq: seq,
+                };
+                // Clear stale position immediately so the map shows it's being refreshed.
                 setGeocodedPositions((pos) => {
                   const next = { ...pos };
                   delete next[rowIndex];
                   return next;
                 });
-                regeocodeRowMutation.mutate([
-                  {
-                    rowIndex,
-                    streetAddress: get("streetAddress"),
-                    city: get("city"),
-                    state: get("state"),
-                    zipCode: get("zipCode"),
-                    _seq: seq,
-                  },
-                ]);
+                // Debounce: cancel any pending timer for this row and schedule a new one so
+                // that tabbing through all four fields only fires a single geocode request
+                // 300 ms after the last field edit settles.
+                if (regeocodeDebounceRef.current[rowIndex] !== undefined) {
+                  clearTimeout(regeocodeDebounceRef.current[rowIndex]);
+                }
+                regeocodeDebounceRef.current[rowIndex] = setTimeout(() => {
+                  delete regeocodeDebounceRef.current[rowIndex];
+                  const pending = regeocodePendingRef.current[rowIndex];
+                  if (pending) {
+                    delete regeocodePendingRef.current[rowIndex];
+                    regeocodeRowMutation.mutate([pending]);
+                  }
+                }, 300);
               }
               return updated;
             });
