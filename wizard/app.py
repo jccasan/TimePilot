@@ -120,6 +120,13 @@ def _check_tenant_key(phone: str, provided: str) -> bool:
 def _is_tenant_or_admin_authed(phone: str) -> bool:
     """Return True if the request has the correct per-tenant key OR valid admin auth.
 
+    This is intentionally scoped to read-only integration endpoints
+    (GET /api/config/<phone> and POST /api/verify-location).  The tenant
+    xApiKey is a machine credential issued to voice agents and third-party
+    services for configuration look-ups only.  It must NOT be used to guard
+    write operations or sensitive artifact downloads; use _is_admin_authed()
+    for those routes instead.
+
     This enforces tenant isolation: a key issued for tenant A cannot be used to
     access or mutate data belonging to tenant B.
 
@@ -540,7 +547,7 @@ def onboard_save(phone: str):
 
 @app.post("/update-agent-types/<phone>")
 def update_agent_types(phone: str):
-    if not _is_tenant_or_admin_authed(phone):
+    if not _is_admin_authed():
         abort(401)
     agent_types = request.json.get("agentTypes", [])
     merge_tenant(phone, {"agentTypes": agent_types})
@@ -645,7 +652,7 @@ def zip_polygons():
 
 @app.post("/upload/<phone>")
 def upload_doc(phone: str):
-    if not _is_tenant_or_admin_authed(phone):
+    if not _is_admin_authed():
         abort(401)
     tenant = get_tenant(phone)
     if not tenant:
@@ -694,7 +701,7 @@ def upload_doc(phone: str):
 
 @app.post("/remove-doc/<phone>")
 def remove_doc(phone: str):
-    if not _is_tenant_or_admin_authed(phone):
+    if not _is_admin_authed():
         abort(401)
     tenant = get_tenant(phone)
     if not tenant:
@@ -715,7 +722,7 @@ def remove_doc(phone: str):
 
 @app.get("/uploads/<phone>/<filename>")
 def serve_upload(phone: str, filename: str):
-    if not _is_tenant_or_admin_authed(phone):
+    if not _is_admin_authed():
         abort(401)
     safe_phone = phone.replace("+", "").replace(" ", "")
     upload_dir = UPLOADS_DIR / safe_phone
@@ -748,7 +755,7 @@ def ready(phone: str):
 
 @app.get("/download/<phone>/<filename>")
 def download_output(phone: str, filename: str):
-    if not _is_tenant_or_admin_authed(phone):
+    if not _is_admin_authed():
         abort(401)
     safe_phone = phone.replace("+", "").replace(" ", "")
     out_dir = OUTPUT_DIR / safe_phone
@@ -763,7 +770,7 @@ def download_output(phone: str, filename: str):
 
 @app.get("/handbook/<phone>")
 def handbook(phone: str):
-    if not _is_tenant_or_admin_authed(phone):
+    if not _is_admin_authed():
         abort(401)
     safe_phone = phone.replace("+", "").replace(" ", "")
     md_path = OUTPUT_DIR / safe_phone / "agent_handbook.md"
