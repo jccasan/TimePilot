@@ -39,7 +39,7 @@ async function fetchUser(): Promise<SafeUser | null> {
   }
 
   if (!response.ok) {
-    throw new Error(`${response.status}: ${response.statusText}`);
+    return null;
   }
 
   return response.json();
