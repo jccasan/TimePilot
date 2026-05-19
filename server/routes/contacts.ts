@@ -706,6 +706,23 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
     }
   });
 
+  // Fields that machine API keys must never be allowed to write. These fields
+  // control portal authentication state, password-reset tokens, and external
+  // billing identifiers. Allowing API keys to set them would let a crm:write
+  // key plant a known reset token and take over a customer's portal account.
+  const API_KEY_BLOCKED_CONTACT_FIELDS = [
+    "hasPortalAccess",
+    "portalPasswordHash",
+    "portalUserId",
+    "resetToken",
+    "resetTokenExpiry",
+    "emailVerificationToken",
+    "emailVerificationExpiry",
+    "pendingEmail",
+    "stripeCustomerId",
+    "qboCustomerId",
+  ] as const;
+
   app.post("/api/contacts", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -728,11 +745,16 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       }
 
       const { suppressNotifications: _sn, ...bodyWithoutFlag } = req.body;
-      const cleanedBody = Object.fromEntries(
+      let cleanedBody = Object.fromEntries(
         Object.entries(bodyWithoutFlag)
           .map(([k, v]) => [k, v === "" ? undefined : v])
           .filter(([, v]) => v !== undefined)
       );
+      if (req._apiKeyAuth) {
+        for (const field of API_KEY_BLOCKED_CONTACT_FIELDS) {
+          delete cleanedBody[field];
+        }
+      }
       const parsed = insertContactSchema.parse({ ...cleanedBody, companyId });
       const contact = await storage.createContact(parsed);
 
@@ -827,6 +849,11 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: "Company name is required for commercial contacts" });
       }
       const { costOverrides: _stripCostOverrides, ...safeBody } = req.body;
+      if (req._apiKeyAuth) {
+        for (const field of API_KEY_BLOCKED_CONTACT_FIELDS) {
+          delete safeBody[field];
+        }
+      }
       const contact = await storage.updateContact(p(req.params.id), companyId, safeBody);
       auditLog(
         companyId,
