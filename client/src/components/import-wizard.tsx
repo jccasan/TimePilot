@@ -1890,6 +1890,9 @@ export function ImportWizard({
     Record<number, { lat: number; lng: number }>
   >({});
 
+  // Per-row sequence counter for single-row re-geocode calls — latest-wins guard against races
+  const regeocodeSeqRef = useRef<Record<number, number>>({});
+
   const targetFields = SCHEMA_FIELDS[targetSchema] || [];
 
   // ── Mutations ──
@@ -1941,7 +1944,9 @@ export function ImportWizard({
     },
   });
 
-  // Single-row re-geocode after suspicious-address correction — merges into existing positions
+  // Single-row re-geocode after suspicious-address correction — merges into existing positions.
+  // _seq is a per-row monotonic counter; onSuccess discards results from stale requests so that
+  // rapid multi-field edits never let an older response overwrite a newer one.
   const regeocodeRowMutation = useMutation({
     mutationFn: async (
       addresses: Array<{
@@ -1950,17 +1955,24 @@ export function ImportWizard({
         city?: string | null;
         state?: string | null;
         zipCode?: string | null;
+        _seq?: number;
       }>
     ) => {
-      const res = await apiRequest("POST", "/api/imports/geocode-preview", { addresses });
+      const res = await apiRequest("POST", "/api/imports/geocode-preview", {
+        addresses: addresses.map(({ _seq: _s, ...a }) => a),
+      });
       return res.json() as Promise<{
         results: Array<{ rowIndex: number; latitude: number | null; longitude: number | null }>;
       }>;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       setGeocodedPositions((prev) => {
         const next = { ...prev };
-        for (const r of data.results) {
+        for (let i = 0; i < data.results.length; i++) {
+          const r = data.results[i];
+          const sentSeq = variables[i]?._seq;
+          const currentSeq = regeocodeSeqRef.current[r.rowIndex];
+          if (sentSeq !== undefined && sentSeq !== currentSeq) continue;
           if (r.latitude != null && r.longitude != null) {
             next[r.rowIndex] = { lat: r.latitude, lng: r.longitude };
           } else {
@@ -2652,6 +2664,10 @@ export function ImportWizard({
                 const t = row.transformed as Record<string, unknown>;
                 const get = (f: string) =>
                   f === field ? value : (updated[`${rowIndex}:${f}`] ?? (t[f] as string) ?? null);
+                // Increment the per-row sequence so that if an older response arrives after a
+                // newer one it will be discarded by regeocodeRowMutation.onSuccess.
+                const seq = (regeocodeSeqRef.current[rowIndex] ?? 0) + 1;
+                regeocodeSeqRef.current[rowIndex] = seq;
                 // Clear stale position first so the map shows it's being refreshed
                 setGeocodedPositions((pos) => {
                   const next = { ...pos };
@@ -2665,6 +2681,7 @@ export function ImportWizard({
                     city: get("city"),
                     state: get("state"),
                     zipCode: get("zipCode"),
+                    _seq: seq,
                   },
                 ]);
               }
