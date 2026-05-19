@@ -39,6 +39,48 @@ import {
 } from "./shared";
 import { dispatchWebhooksForEvent } from "../services/webhook-dispatcher";
 
+const SETUP_TOKEN_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const HMAC_HEX_LENGTH = 64; // sha256 hex digest is always 64 chars
+
+function getSetupTokenSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    throw new Error("SESSION_SECRET is not configured — cannot issue or validate setup tokens");
+  }
+  return secret;
+}
+
+function generateSetupToken(contactId: string): string {
+  const secret = getSetupTokenSecret();
+  const timestamp = Date.now().toString();
+  const hmac = crypto
+    .createHmac("sha256", secret)
+    .update(`${contactId}:${timestamp}`)
+    .digest("hex");
+  return `${timestamp}:${hmac}`;
+}
+
+function validateSetupToken(contactId: string, token: string): boolean {
+  if (!token || typeof token !== "string") return false;
+  const colonIdx = token.indexOf(":");
+  if (colonIdx === -1) return false;
+  const timestamp = token.slice(0, colonIdx);
+  const hmac = token.slice(colonIdx + 1);
+  const ts = parseInt(timestamp, 10);
+  if (isNaN(ts) || Date.now() - ts > SETUP_TOKEN_TTL_MS) return false;
+  if (hmac.length !== HMAC_HEX_LENGTH || !/^[0-9a-f]+$/.test(hmac)) return false;
+  try {
+    const secret = getSetupTokenSecret();
+    const expected = crypto
+      .createHmac("sha256", secret)
+      .update(`${contactId}:${timestamp}`)
+      .digest("hex");
+    return crypto.timingSafeEqual(Buffer.from(hmac, "hex"), Buffer.from(expected, "hex"));
+  } catch {
+    return false;
+  }
+}
+
 export async function registerPublicRoutes(app: Express): Promise<void> {
   // ================ Public Signup Routes (no auth required) ================
   const signupLimiter = (await import("express-rate-limit")).default({
@@ -1485,21 +1527,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
             null;
         }
         if (existing) {
-          contact = await storage.updateContact(existing.id, company.id, {
-            firstName,
-            lastName,
-            email: email || existing.email || null,
-            phone: phone || existing.phone || null,
-            streetAddress: streetAddress || existing.streetAddress || null,
-            city: city || existing.city || null,
-            state: state || existing.state || null,
-            zipCode: zipCode || existing.zipCode || null,
-            numberOfDogs: numberOfDogs ?? existing.numberOfDogs ?? null,
-            yardSize: yardSize || existing.yardSize || null,
-            serviceFrequency: serviceFrequency || existing.serviceFrequency || null,
-            serviceDay: serviceDay || existing.serviceDay || null,
-            notes: notesText || existing.notes || null,
-          });
+          contact = existing;
           isUpsert = true;
         } else {
           contact = await storage.createContact({
@@ -1546,20 +1574,12 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       let propertyId: string | null = null;
 
       if (isUpsert) {
+        // Existing contact matched via dedup — only read existing properties, never create new ones.
+        // Creating a property here with caller-supplied address data would be an unauthorized write
+        // against a real customer record.
         const existingProperties = await storage.getProperties(company.id, contact.id);
         if (existingProperties.length > 0) {
           propertyId = existingProperties[0].id;
-        } else if (hasFullAddress) {
-          const prop = await createPropertyWithGeocode({
-            companyId: company.id,
-            contactId: contact.id,
-            streetAddress: streetAddress!,
-            city,
-            state,
-            zipCode,
-            numberOfDogs,
-          });
-          propertyId = prop.id;
         }
       } else {
         if (hasFullAddress) {
@@ -1701,6 +1721,10 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
       res.status(201).json({
         contactId: contact.id,
+        // Only new contacts receive a setupToken. Dedup-matched existing contacts (isUpsert=true)
+        // do not get a token because the caller has not proved control of that customer account.
+        // Without a valid token the setup-intent billing endpoints will reject the request (403).
+        setupToken: isUpsert ? undefined : generateSetupToken(contact.id),
         quote: {
           recommendedPriceCents: callForQuote ? 0 : quotePriceCents || 0,
           frequency: serviceFrequency,
@@ -1831,12 +1855,15 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
   app.post("/api/public/portal/setup-intent", async (req: Request, res: Response) => {
     try {
-      const { contactId, slug, forceNew } = req.body;
+      const { contactId, slug, forceNew, setupToken } = req.body;
       if (!contactId || typeof contactId !== "string") {
         return res.status(400).json({ error: "contactId is required" });
       }
       if (!slug || typeof slug !== "string") {
         return res.status(400).json({ error: "slug is required" });
+      }
+      if (!setupToken || !validateSetupToken(contactId, setupToken)) {
+        return res.status(403).json({ error: "Invalid or expired setup token" });
       }
 
       if (!isStripeConfigured()) {
@@ -1887,7 +1914,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
   app.post("/api/public/portal/setup-intent/confirm", async (req: Request, res: Response) => {
     try {
-      const { setupIntentId, contactId, slug } = req.body;
+      const { setupIntentId, contactId, slug, setupToken } = req.body;
       if (!setupIntentId || typeof setupIntentId !== "string") {
         return res.status(400).json({ error: "setupIntentId is required" });
       }
@@ -1896,6 +1923,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       }
       if (!slug || typeof slug !== "string") {
         return res.status(400).json({ error: "slug is required" });
+      }
+      if (!setupToken || !validateSetupToken(contactId, setupToken)) {
+        return res.status(403).json({ error: "Invalid or expired setup token" });
       }
 
       if (!isStripeConfigured()) {

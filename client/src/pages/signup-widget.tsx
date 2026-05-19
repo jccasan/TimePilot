@@ -111,6 +111,7 @@ type CompanyInfo = {
 
 type QuoteResult = {
   contactId: string;
+  setupToken?: string;
   quote: {
     recommendedPriceCents: number;
     frequency: string;
@@ -485,6 +486,7 @@ function CardSetupForm({
   brandStyles,
   contactId,
   slug,
+  setupToken,
   onSuccess,
   onBack,
 }: {
@@ -492,6 +494,7 @@ function CardSetupForm({
   brandStyles: ReturnType<typeof getBrandStyles>;
   contactId: string;
   slug: string;
+  setupToken: string | undefined;
   onSuccess: () => void;
   onBack: () => void;
 }) {
@@ -521,7 +524,7 @@ function CardSetupForm({
         const res = await fetch("/api/public/portal/setup-intent/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ setupIntentId: siId, contactId, slug }),
+          body: JSON.stringify({ setupIntentId: siId, contactId, slug, setupToken }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -875,7 +878,7 @@ export default function SignupWidget() {
         fetch("/api/public/portal/setup-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactId: data.contactId, slug }),
+          body: JSON.stringify({ contactId: data.contactId, slug, setupToken: data.setupToken }),
         })
           .then((res) => res.json())
           .then((json) => {
@@ -1218,6 +1221,7 @@ export default function SignupWidget() {
                             contactId: pendingQuoteResult.contactId,
                             slug,
                             forceNew: true,
+                            setupToken: pendingQuoteResult.setupToken,
                           }),
                         })
                           .then((r) => r.json())
@@ -1292,6 +1296,7 @@ export default function SignupWidget() {
                         clientSecret={setupClientSecret}
                         contactId={pendingQuoteResult.contactId}
                         slug={slug}
+                        setupToken={pendingQuoteResult.setupToken}
                         brandStyles={brandStyles}
                         onSuccess={() => {
                           setQuoteResult(pendingQuoteResult);
