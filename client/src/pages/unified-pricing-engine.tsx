@@ -105,7 +105,7 @@ function readTabFromUrl(): string {
   if (typeof window === "undefined") return "costs";
   const params = new URLSearchParams(window.location.search);
   const t = params.get("tab");
-  if (t === "engine" || t === "simulator" || t === "costs") return t;
+  if (t === "engine" || t === "simulator" || t === "costs" || t === "pricing") return t;
   return "costs";
 }
 
@@ -2111,6 +2111,310 @@ function PricingEngineCell({
   );
 }
 
+// ─── My Pricing Tab ───────────────────────────────────────────────────────────
+
+function MyPricingTab() {
+  const { toast } = useToast();
+  const { formatMoney } = useCurrency();
+
+  const { data: pricingConfigData, isLoading } = useQuery<PricingConfig>({
+    queryKey: ["/api/pricing-config"],
+  });
+
+  const config: PricingConfig = pricingConfigData
+    ? { ...DEFAULT_PRICING_CONFIG, ...pricingConfigData }
+    : DEFAULT_PRICING_CONFIG;
+  const pricingRules: PricingRulesConfig = pricingConfigData?.pricingRules ?? DEFAULT_PRICING_RULES;
+
+  const [bases, setBases] = useState<Bases>(() => {
+    const w = pricingRules.basePrices.weekly ?? DEFAULT_PRICING_RULES.basePrices.weekly;
+    const bw = pricingRules.basePrices.biWeekly ?? DEFAULT_PRICING_RULES.basePrices.biWeekly;
+    const wMult = config.weeklyMultiplier || 1;
+    return {
+      weekly: w,
+      biweekly: bw,
+      monthly:
+        pricingRules.basePrices.monthly ??
+        (wMult > 0 ? w * ((config.monthlyMultiplier || 2) / wMult) : bw * 1.5),
+      onetime:
+        pricingRules.basePrices.oneTime ??
+        (wMult > 0 ? w * ((config.oneTimeMultiplier || 3) / wMult) : w * 2.5),
+    };
+  });
+
+  const [yardSizeSurcharges, setYardSizeSurcharges] = useState<number[]>(() =>
+    YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, pricingRules.yardSizeTiers))
+  );
+
+  const [perDogRule, setPerDogRule] = useState<PricingRulesConfig["perDogRule"]>(
+    () => pricingRules.perDogRule ?? DEFAULT_PRICING_RULES.perDogRule
+  );
+
+  const [isDirty, setIsDirty] = useState(false);
+
+  const syncedRef = useRef(false);
+  useEffect(() => {
+    if (pricingConfigData && !syncedRef.current) {
+      syncedRef.current = true;
+      const rules = pricingConfigData.pricingRules ?? DEFAULT_PRICING_RULES;
+      const cfg = { ...DEFAULT_PRICING_CONFIG, ...pricingConfigData };
+      const w = rules.basePrices.weekly ?? DEFAULT_PRICING_RULES.basePrices.weekly;
+      const bw = rules.basePrices.biWeekly ?? DEFAULT_PRICING_RULES.basePrices.biWeekly;
+      const wMult = cfg.weeklyMultiplier || 1;
+      setBases({
+        weekly: w,
+        biweekly: bw,
+        monthly:
+          rules.basePrices.monthly ??
+          (wMult > 0 ? w * ((cfg.monthlyMultiplier || 2) / wMult) : bw * 1.5),
+        onetime:
+          rules.basePrices.oneTime ??
+          (wMult > 0 ? w * ((cfg.oneTimeMultiplier || 3) / wMult) : w * 2.5),
+      });
+      setPerDogRule(rules.perDogRule ?? DEFAULT_PRICING_RULES.perDogRule);
+      setYardSizeSurcharges(
+        YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, rules.yardSizeTiers))
+      );
+    }
+  }, [pricingConfigData]);
+
+  const displayPrice = useCallback(
+    (tierIdx: number, freqKey: BaseKey): number =>
+      (bases[freqKey] ?? 0) + (yardSizeSurcharges[tierIdx] ?? 0),
+    [bases, yardSizeSurcharges]
+  );
+
+  const handleCellChange = (tierIdx: number, freqKey: BaseKey, val: number) => {
+    if (tierIdx === 0) {
+      setBases((prev) => ({ ...prev, [freqKey]: Math.max(0, val) }));
+    } else {
+      const newSurcharge = Math.max(0, val - (bases[freqKey] ?? 0));
+      setYardSizeSurcharges((prev) => {
+        const next = [...prev];
+        next[tierIdx] = newSurcharge;
+        return next;
+      });
+    }
+    setIsDirty(true);
+  };
+
+  const saveRulesMutation = useMutation({
+    mutationFn: async () => {
+      const newBasePrices: PricingRulesConfig["basePrices"] = {
+        weekly: Math.max(0, bases.weekly),
+        biWeekly: Math.max(0, bases.biweekly),
+        twiceWeekly:
+          pricingRules.basePrices.twiceWeekly ?? DEFAULT_PRICING_RULES.basePrices.twiceWeekly,
+        monthly: Math.max(0, bases.monthly),
+        oneTime: Math.max(0, bases.onetime),
+      };
+      const newTiers: PricingRulesConfig["yardSizeTiers"] = YARD_SIZE_TIERS.map((tier, ti) => ({
+        name: tier.label,
+        upToAcres: tier.upToAcres,
+        surcharge: Math.round((yardSizeSurcharges[ti] ?? 0) * 100) / 100,
+      }));
+      await apiRequest("PUT", "/api/pricing-rules", {
+        basePrices: newBasePrices,
+        perDogRule,
+        yardSizeTiers: newTiers,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
+      syncedRef.current = false;
+      setIsDirty(false);
+      toast({ title: "Prices saved", description: "Your pricing rules have been updated." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="my-pricing-tab">
+      {/* Save bar */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          These are the prices used when creating quotes and service agreements.
+        </p>
+        <Button
+          size="sm"
+          onClick={() => saveRulesMutation.mutate()}
+          disabled={saveRulesMutation.isPending || !isDirty}
+          data-testid="button-save-my-pricing"
+        >
+          <Save className="h-3.5 w-3.5 mr-1" />
+          {saveRulesMutation.isPending ? "Saving..." : "Save Prices"}
+        </Button>
+      </div>
+      {isDirty && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 -mt-4" data-testid="text-my-pricing-unsaved">
+          You have unsaved changes.
+        </p>
+      )}
+
+      {/* Price table */}
+      <Card data-testid="card-my-pricing-table">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Your Prices</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Tap any price to edit it. Prices for larger yard sizes adjust their surcharge; the base frequency price stays the same.
+          </p>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-muted/30">
+                <th className="text-left px-4 py-2 font-medium text-muted-foreground w-36">
+                  Yard Size
+                </th>
+                {FREQ_COLUMNS.map((col) => (
+                  <th
+                    key={col.key}
+                    className="text-center px-3 py-2 font-medium text-muted-foreground min-w-[90px]"
+                  >
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {YARD_SIZE_TIERS.map((tier, ti) => (
+                <tr key={ti} className="border-b last:border-0 hover:bg-muted/20">
+                  <td className="px-4 py-3 text-sm font-medium">
+                    {tier.label}
+                    {ti > 0 && (yardSizeSurcharges[ti] ?? 0) > 0 && (
+                      <span className="block text-[10px] text-muted-foreground font-normal mt-0.5">
+                        +{formatMoney(yardSizeSurcharges[ti] ?? 0)} surcharge
+                      </span>
+                    )}
+                  </td>
+                  {FREQ_COLUMNS.map((freq) => (
+                    <td key={freq.key} className="px-3 py-3 text-center">
+                      <PricingEngineCell
+                        value={displayPrice(ti, freq.key)}
+                        onChange={(val) => handleCellChange(ti, freq.key, val)}
+                        testId={`cell-mypricing-${ti}-${freq.key}`}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      {/* Modifiers */}
+      <Card data-testid="card-my-pricing-modifiers">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Modifiers</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            These surcharges are added on top of the base price depending on yard size and number of dogs.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Yard size surcharges */}
+          <div>
+            <p className="text-sm font-medium mb-3">Yard Size Surcharges</p>
+            <div className="space-y-2">
+              {YARD_SIZE_TIERS.map((tier, ti) => (
+                <div key={ti} className="flex items-center gap-3" data-testid={`row-mp-yard-surcharge-${ti}`}>
+                  <span className="text-sm flex-1">{tier.label}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">+$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={yardSizeSurcharges[ti] ?? 0}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseFloat(e.target.value) || 0);
+                        setYardSizeSurcharges((prev) => {
+                          const next = [...prev];
+                          next[ti] = val;
+                          return next;
+                        });
+                        setIsDirty(true);
+                      }}
+                      className="w-20 h-8 text-sm text-right tabular-nums rounded-md border border-input px-2 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      data-testid={`input-mp-yard-surcharge-${ti}`}
+                    />
+                    <span className="text-xs text-muted-foreground">per visit</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Per-dog rule */}
+          <div className="border-t pt-4">
+            <p className="text-sm font-medium mb-1">Per-Dog Surcharge</p>
+            <p className="text-xs text-muted-foreground mb-3">
+              Add ${perDogRule.surchargeAmount.toFixed(2)} for every {perDogRule.incrementDogs} dog(s) beyond the first, up to {perDogRule.maxDogs} dogs.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs">Dogs per increment</Label>
+                <input
+                  type="number"
+                  min={1}
+                  value={perDogRule.incrementDogs}
+                  onChange={(e) => {
+                    setPerDogRule((r) => ({ ...r, incrementDogs: Math.max(1, parseInt(e.target.value) || 1) }));
+                    setIsDirty(true);
+                  }}
+                  className="w-full h-8 text-sm text-right tabular-nums rounded-md border border-input px-2 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  data-testid="input-mp-per-dog-increment"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Surcharge per increment ($)</Label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={perDogRule.surchargeAmount}
+                  onChange={(e) => {
+                    setPerDogRule((r) => ({ ...r, surchargeAmount: Math.max(0, parseFloat(e.target.value) || 0) }));
+                    setIsDirty(true);
+                  }}
+                  className="w-full h-8 text-sm text-right tabular-nums rounded-md border border-input px-2 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  data-testid="input-mp-per-dog-surcharge-amount"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Max dogs</Label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={perDogRule.maxDogs}
+                  onChange={(e) => {
+                    setPerDogRule((r) => ({ ...r, maxDogs: Math.max(1, Math.min(20, parseInt(e.target.value) || 1)) }));
+                    setIsDirty(true);
+                  }}
+                  className="w-full h-8 text-sm text-right tabular-nums rounded-md border border-input px-2 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  data-testid="input-mp-per-dog-max"
+                />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function UnifiedPricingEngine() {
@@ -2122,51 +2426,57 @@ export default function UnifiedPricingEngine() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="p-4 md:p-6 pb-0">
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold" data-testid="text-pricing-page-heading">
-            Pricing
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Configure your costs, set prices based on your margins, and simulate scenarios.
-          </p>
-        </div>
-
-        <Tabs value={tab} onValueChange={handleTabChange} className="flex flex-col h-full">
-          <TabsList
-            className="w-full sm:w-auto grid grid-cols-3 sm:inline-flex"
-            data-testid="tabs-pricing"
-          >
-            <TabsTrigger value="costs" data-testid="tab-costs" className="gap-1.5">
-              <DollarSign className="h-3.5 w-3.5" />
-              Costs
-            </TabsTrigger>
-            <TabsTrigger value="engine" data-testid="tab-engine" className="gap-1.5">
-              <Calculator className="h-3.5 w-3.5" />
-              Pricing Engine
-            </TabsTrigger>
-            <TabsTrigger value="simulator" data-testid="tab-simulator" className="gap-1.5">
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Simulator
-            </TabsTrigger>
-          </TabsList>
-
-          <div className="flex-1 overflow-y-auto mt-4 pb-6">
-            <TabsContent value="costs" className="mt-0">
-              <CostsTab />
-            </TabsContent>
-
-            <TabsContent value="engine" className="mt-0">
-              <PricingEngineTab />
-            </TabsContent>
-
-            <TabsContent value="simulator" className="mt-0 h-full">
-              <AIPricingOptimizer />
-            </TabsContent>
-          </div>
-        </Tabs>
+    <div className="p-4 md:p-6 overflow-auto h-full">
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold" data-testid="text-pricing-page-heading">
+          Pricing
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Configure your costs, set prices based on your margins, and simulate scenarios.
+        </p>
       </div>
+
+      <Tabs value={tab} onValueChange={handleTabChange}>
+        <TabsList
+          className="w-full grid grid-cols-4 sm:inline-flex sm:w-auto"
+          data-testid="tabs-pricing"
+        >
+          <TabsTrigger value="costs" data-testid="tab-costs" className="gap-1 text-xs sm:text-sm sm:gap-1.5">
+            <DollarSign className="h-3.5 w-3.5 shrink-0" />
+            <span>Costs</span>
+          </TabsTrigger>
+          <TabsTrigger value="pricing" data-testid="tab-my-pricing" className="gap-1 text-xs sm:text-sm sm:gap-1.5">
+            <Target className="h-3.5 w-3.5 shrink-0" />
+            <span>My Pricing</span>
+          </TabsTrigger>
+          <TabsTrigger value="engine" data-testid="tab-engine" className="gap-1 text-xs sm:text-sm sm:gap-1.5">
+            <Calculator className="h-3.5 w-3.5 shrink-0" />
+            <span>Engine</span>
+          </TabsTrigger>
+          <TabsTrigger value="simulator" data-testid="tab-simulator" className="gap-1 text-xs sm:text-sm sm:gap-1.5">
+            <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
+            <span>Simulator</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <div className="mt-4 pb-6">
+          <TabsContent value="costs" className="mt-0">
+            <CostsTab />
+          </TabsContent>
+
+          <TabsContent value="pricing" className="mt-0">
+            <MyPricingTab />
+          </TabsContent>
+
+          <TabsContent value="engine" className="mt-0">
+            <PricingEngineTab />
+          </TabsContent>
+
+          <TabsContent value="simulator" className="mt-0">
+            <AIPricingOptimizer />
+          </TabsContent>
+        </div>
+      </Tabs>
     </div>
   );
 }
