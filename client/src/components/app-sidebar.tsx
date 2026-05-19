@@ -140,18 +140,12 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
         requiresSubscription: true,
       },
       {
-        title: "Pricing Tools",
-        url: "/pricing-calculator",
+        title: "Pricing",
+        url: "/pricing",
         icon: Calculator,
         requiresSubscription: true,
       },
       { title: "Reports", url: "/reports", icon: BarChart3, requiresSubscription: true },
-      {
-        title: "Overhead Costs",
-        url: "/overhead-costs",
-        icon: DollarSign,
-        requiresSubscription: true,
-      },
     ],
   },
   {

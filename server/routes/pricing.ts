@@ -536,6 +536,8 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         weekly: z.number().min(0),
         biWeekly: z.number().min(0),
         twiceWeekly: z.number().min(0),
+        monthly: z.number().min(0).optional(),
+        oneTime: z.number().min(0).optional(),
       }),
       perDogRule: z.object({
         incrementDogs: z.number().int().min(1),
@@ -634,6 +636,25 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const merged: PricingConfig = { ...existing, ...updates };
       await storage.updateCompany(companyId, { pricingConfig: merged });
       res.json(merged);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.put("/api/pricing-rules", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      const rules = pricingRulesSchema.unwrap().parse(req.body);
+      const existing: PricingConfig = {
+        ...DEFAULT_PRICING_CONFIG,
+        ...(company.pricingConfig || {}),
+      };
+      const merged: PricingConfig = { ...existing, pricingRules: rules };
+      await storage.updateCompany(companyId, { pricingConfig: merged });
+      res.json(rules);
     } catch (err) {
       handleError(res, err);
     }

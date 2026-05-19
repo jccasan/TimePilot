@@ -118,6 +118,7 @@ export interface PricingRulesConfig {
     biWeekly: number;
     twiceWeekly: number;
     monthly?: number;
+    oneTime?: number;
   };
   perDogRule: {
     incrementDogs: number;

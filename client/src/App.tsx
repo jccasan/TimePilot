@@ -62,6 +62,7 @@ const PortalClient = lazy(() => import("@/pages/portal-client"));
 const PortalQuoteView = lazy(() => import("@/pages/portal-quote-view"));
 const InvoicePayPage = lazy(() => import("@/pages/invoice-pay"));
 const Pricing = lazy(() => import("@/pages/pricing"));
+const UnifiedPricingEngine = lazy(() => import("@/pages/unified-pricing-engine"));
 const Communications = lazy(() => import("@/pages/communications"));
 const Reports = lazy(() => import("@/pages/reports"));
 const AdminDashboard = lazy(() => import("@/pages/admin-dashboard"));
@@ -75,12 +76,10 @@ const AdminSubscriptionPricing = lazy(() => import("@/pages/admin-subscription-p
 const AdminMessaging = lazy(() => import("@/pages/admin-messaging"));
 const AdminErrors = lazy(() => import("@/pages/admin-errors"));
 const Settings = lazy(() => import("@/pages/settings"));
-const PricingCalculator = lazy(() => import("@/pages/pricing-calculator"));
 const Profitability = lazy(() => import("@/pages/profitability"));
 const ProfitabilityDetail = lazy(() => import("@/pages/profitability-detail"));
 const RouteProfitMaps = lazy(() => import("@/pages/route-profit-maps"));
 const FieldView = lazy(() => import("@/pages/field-view"));
-const OverheadCosts = lazy(() => import("@/pages/overhead-costs"));
 const MigrationPage = lazy(() => import("@/pages/migration-page"));
 const CommandCenter = lazy(() => import("@/pages/command-center"));
 const ResetPassword = lazy(() => import("@/pages/reset-password"));
@@ -161,11 +160,14 @@ function Router() {
         </Route>
         <Route path="/api-keys" component={ApiKeysPage} />
         <Route path="/webhooks" component={WebhooksPage} />
-        <Route path="/pricing" component={Pricing} />
-        <Route path="/pricing-calculator">
-          <SubscriptionGate featureName="Pricing Tools">
-            <PricingCalculator />
+        <Route path="/pricing">
+          <SubscriptionGate featureName="Pricing">
+            <UnifiedPricingEngine />
           </SubscriptionGate>
+        </Route>
+        <Route path="/pricing/catalog" component={Pricing} />
+        <Route path="/pricing-calculator">
+          <Redirect to="/pricing" />
         </Route>
         <Route path="/business-overview">
           <SubscriptionGate featureName="Business Overview">
@@ -193,12 +195,10 @@ function Router() {
           </SubscriptionGate>
         </Route>
         <Route path="/ai-pricing-optimizer">
-          <Redirect to="/pricing-calculator?tab=simulator" />
+          <Redirect to="/pricing?tab=simulator" />
         </Route>
         <Route path="/overhead-costs">
-          <SubscriptionGate featureName="Overhead Costs">
-            <OverheadCosts />
-          </SubscriptionGate>
+          <Redirect to="/pricing" />
         </Route>
         <Route path="/communications">
           <SubscriptionGate featureName="Messages">
