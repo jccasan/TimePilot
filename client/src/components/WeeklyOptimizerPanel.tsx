@@ -1174,9 +1174,8 @@ export function WeeklyOptimizerPanel({
                 data-testid="banner-apply-confirm"
               >
                 <span className="text-amber-700 dark:text-amber-400">
-                  This will apply{" "}
-                  <span className="font-semibold">{acceptedWeeks.size}</span>{" "}
-                  week{acceptedWeeks.size !== 1 ? "s" : ""} covering{" "}
+                  This will apply <span className="font-semibold">{acceptedWeeks.size}</span> week
+                  {acceptedWeeks.size !== 1 ? "s" : ""} covering{" "}
                   <span className="font-semibold">{totalAcceptedStops} stop</span>
                   {totalAcceptedStops !== 1 ? "s" : ""} to your routes.
                 </span>

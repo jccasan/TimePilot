@@ -333,9 +333,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
           .from(users)
           .innerJoin(companyUsers, eq(companyUsers.userId, users.id))
           .innerJoin(companies, eq(companies.id, companyUsers.companyId))
-          .where(
-            sql`(${users.lastLoginAt} IS NULL OR ${users.lastLoginAt} < ${cutoff})`
-          );
+          .where(sql`(${users.lastLoginAt} IS NULL OR ${users.lastLoginAt} < ${cutoff})`);
         result[`${days}d`] = rows;
       }
       res.json(result);

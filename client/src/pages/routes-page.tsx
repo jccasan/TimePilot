@@ -3465,10 +3465,7 @@ export default function RoutesPage() {
       />
 
       {showWeeklyOptimizer && (
-        <WeeklyOptimizerPanel
-          open={showWeeklyOptimizer}
-          onOpenChange={setShowWeeklyOptimizer}
-        />
+        <WeeklyOptimizerPanel open={showWeeklyOptimizer} onOpenChange={setShowWeeklyOptimizer} />
       )}
 
       <Dialog
