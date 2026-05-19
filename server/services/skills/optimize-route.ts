@@ -12,7 +12,6 @@ import {
 import { routificOptimize } from "../routific";
 import { geocodeAddress } from "../geocode";
 import { getCompanyToday } from "../../utils/company-date";
-import { getDemoCompanyId } from "../../utils/demo";
 import { registerSkill, type SkillContext, type SkillResult } from "./index";
 
 function computeStopHash(stopIds: string[]): string {
@@ -21,11 +20,7 @@ function computeStopHash(stopIds: string[]): string {
 }
 
 /** Internal helper – optimizes a single route by ID. */
-async function optimizeSingleRoute(
-  routeId: string,
-  companyId: string,
-  skipCreditCharge = false
-): Promise<SkillResult> {
+async function optimizeSingleRoute(routeId: string, companyId: string): Promise<SkillResult> {
   const route = await storage.getRoute(routeId, companyId);
   if (!route) {
     return { success: false, message: `Route not found: ${routeId}`, error: "ROUTE_NOT_FOUND" };
@@ -58,19 +53,7 @@ async function optimizeSingleRoute(
     };
   }
 
-  const creditsRequired = routePlans.length <= 30 ? 1 : 2;
   const company = await storage.getCompany(companyId);
-  const currentCredits = company?.routeCredits ?? 0;
-  const isDemoCompanyForCredits = (await getDemoCompanyId()) === companyId;
-
-  if (!skipCreditCharge && !isDemoCompanyForCredits && currentCredits < creditsRequired) {
-    return {
-      success: false,
-      message: `Not enough route credits (need ${creditsRequired}, have ${currentCredits}).`,
-      error: "INSUFFICIENT_CREDITS",
-      data: { creditsRequired, creditsAvailable: currentCredits },
-    };
-  }
 
   const allProperties = await storage.getProperties(companyId);
   let propertyMap = new Map(allProperties.map((p) => [p.id, p]));
@@ -190,10 +173,6 @@ async function optimizeSingleRoute(
     });
   }
 
-  if (!skipCreditCharge && !isDemoCompanyForCredits) {
-    await storage.updateCompany(companyId, { routeCredits: currentCredits - creditsRequired });
-  }
-
   const optimizedMapbox = await getMapboxRouteMetrics(optimizedStops, startPoint);
   const optimizedDistance =
     optimizedMapbox?.distance ??
@@ -254,8 +233,6 @@ async function optimizeSingleRoute(
       stopCount: routePlans.length,
       geocodedCount: stops.length,
       hasStartPoint: !!startPoint,
-      creditsUsed: isDemoCompanyForCredits ? 0 : creditsRequired,
-      creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - creditsRequired,
       routingEngine,
       lastOptimizedAt: new Date().toISOString(),
       optimizedStopHash: stopHash,
@@ -285,30 +262,9 @@ registerSkill({
         return { success: false, message: "No routes found to optimize.", error: "NO_ROUTES" };
       }
 
-      // Charge once for the whole batch (capped at 3 credits) rather than per route.
-      const batchCreditsRequired = Math.min(allRoutes.length, 3);
-      const batchCompany = await storage.getCompany(companyId);
-      const batchCurrentCredits = batchCompany?.routeCredits ?? 0;
-      const batchIsDemoCompany = (await getDemoCompanyId()) === companyId;
-
-      if (!batchIsDemoCompany && batchCurrentCredits < batchCreditsRequired) {
-        return {
-          success: false,
-          message: `Not enough route credits to optimize all routes (need ${batchCreditsRequired}, have ${batchCurrentCredits}).`,
-          error: "INSUFFICIENT_CREDITS",
-          data: { creditsRequired: batchCreditsRequired, creditsAvailable: batchCurrentCredits },
-        };
-      }
-
       const results: SkillResult[] = [];
       for (const r of allRoutes) {
-        results.push(await optimizeSingleRoute(r.id, companyId, true));
-      }
-
-      if (!batchIsDemoCompany) {
-        await storage.updateCompany(companyId, {
-          routeCredits: batchCurrentCredits - batchCreditsRequired,
-        });
+        results.push(await optimizeSingleRoute(r.id, companyId));
       }
 
       const succeeded = results.filter((r) => r.success);
@@ -324,10 +280,6 @@ registerSkill({
           total: results.length,
           succeeded: succeeded.length,
           failed: failed.length,
-          creditsUsed: batchIsDemoCompany ? 0 : batchCreditsRequired,
-          creditsRemaining: batchIsDemoCompany
-            ? 999999
-            : batchCurrentCredits - batchCreditsRequired,
         },
       };
     }

@@ -89,9 +89,6 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
           sanitized.roverAiEnabled = true;
           sanitized.remindersEnabled = true;
           sanitized.aiImportMappingEnabled = true;
-          sanitized.routeCredits = (company as Record<string, unknown>).demoUnlimitedCredits
-            ? 999999
-            : sanitized.routeCredits;
         }
       }
       res.json(sanitized);
@@ -578,7 +575,6 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       res.json({
         isDemo: true,
         settings: {
-          unlimitedCredits: !!(company as Record<string, unknown>).demoUnlimitedCredits,
           bypassLimits: !!(company as Record<string, unknown>).demoBypassLimits,
           autoCompleteToday: !!(company as Record<string, unknown>).demoAutoCompleteToday,
           autoPayInvoices: !!(company as Record<string, unknown>).demoAutoPayInvoices,
@@ -596,14 +592,12 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       const demoId = await getDemoCompanyId();
       if (demoId !== companyId) return res.status(403).json({ error: "Not a demo account" });
       const allowed = [
-        "unlimitedCredits",
         "bypassLimits",
         "autoCompleteToday",
         "autoPayInvoices",
         "livePlaybackEnabled",
       ];
       const keyMap: Record<string, string> = {
-        unlimitedCredits: "demoUnlimitedCredits",
         bypassLimits: "demoBypassLimits",
         autoCompleteToday: "demoAutoCompleteToday",
         autoPayInvoices: "demoAutoPayInvoices",

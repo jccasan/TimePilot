@@ -3,10 +3,9 @@ import crypto from "crypto";
 import { storage } from "../storage";
 import { z } from "zod";
 import { getCompanyToday, getCompanyWeekStart } from "../utils/company-date";
-import { createCustomerSession } from "../services/stripe";
 import { getRouteMetricsWithLegs } from "../services/route-optimizer";
 import { geocodeAddress } from "../services/geocode";
-import { TIER_CONFIG, insertRouteSchema, type InsertRoute } from "@shared/schema";
+import { insertRouteSchema, type InsertRoute } from "@shared/schema";
 
 import {
   isAuthenticated,
@@ -15,7 +14,6 @@ import {
   handleError,
   p,
   clearRouteOptimizationState,
-  getDemoCompanyId,
 } from "./shared";
 
 export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
@@ -229,62 +227,6 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.get("/api/route-credits", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId } = await getCompanyContext(req);
-      const company = await storage.getCompany(companyId);
-      const demoUnlimited =
-        !!(company as Record<string, unknown>).demoUnlimitedCredits &&
-        (await getDemoCompanyId()) === companyId;
-      const tier = (company?.subscriptionTier ?? "tier_1") as keyof typeof TIER_CONFIG;
-      const monthlyAllowance = TIER_CONFIG[tier]?.monthlyOptimizerCredits ?? 20;
-      res.json({
-        credits: demoUnlimited ? 999999 : (company?.routeCredits ?? 0),
-        monthlyAllowance: demoUnlimited ? 999999 : monthlyAllowance,
-      });
-    } catch (err) {
-      handleError(res, err);
-    }
-  });
-
-  app.post("/api/route-credits/add", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const { companyId, role } = await getCompanyContext(req);
-      if (role !== "owner" && role !== "admin")
-        return res.status(403).json({ error: "Only owners/admins can add credits" });
-      const { amount } = req.body;
-      if (!amount || typeof amount !== "number" || amount < 1)
-        return res.status(400).json({ error: "Invalid amount" });
-      const company = await storage.getCompany(companyId);
-      const currentCredits = company?.routeCredits ?? 0;
-      const updated = await storage.updateCompany(companyId, {
-        routeCredits: currentCredits + amount,
-      });
-      res.json({ credits: updated.routeCredits });
-    } catch (err) {
-      handleError(res, err);
-    }
-  });
-
-  app.post(
-    "/api/route-credits/customer-session",
-    isAuthenticated,
-    async (req: Request, res: Response) => {
-      try {
-        const { companyId, role } = await getCompanyContext(req);
-        if (role !== "owner" && role !== "admin")
-          return res.status(403).json({ error: "Only owners/admins can purchase credits" });
-        const company = await storage.getCompany(companyId);
-        if (!company) return res.status(404).json({ error: "Company not found" });
-        if (!company.stripeCustomerId) return res.json({ clientSecret: null });
-        const clientSecret = await createCustomerSession(company.stripeCustomerId);
-        res.json({ clientSecret });
-      } catch (err) {
-        handleError(res, err);
-      }
-    }
-  );
-
   app.patch("/api/routes/:id/lock", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
@@ -316,8 +258,6 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
 
       if (!result.success) {
         if (result.error === "LOCKED") return res.status(409).json({ error: result.message });
-        if (result.error === "INSUFFICIENT_CREDITS")
-          return res.status(402).json({ error: result.message, ...result.data });
         if (result.error === "TOO_MANY_STOPS")
           return res.status(400).json({ error: result.message });
         if (result.error === "INSUFFICIENT_STOPS") {
@@ -375,7 +315,6 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const { runSkill } = await import("../services/skills/index");
       const result = await runSkill(skillName, params ?? {}, { companyId, userId, role });
       if (!result.success) {
-        if (result.error === "INSUFFICIENT_CREDITS") return res.status(402).json(result);
         if (result.error === "LOCKED") return res.status(409).json(result);
         if (result.error === "ROUTE_NOT_FOUND") return res.status(404).json(result);
         return res.status(400).json(result);
@@ -1465,12 +1404,6 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         const company = await storage.getCompany(companyId);
         if (!company) return res.status(404).json({ error: "Company not found" });
 
-        // Demo unlimited-credits bypass (mirrors /api/routes/:id/optimize)
-        const isDemoCompanyForCredits = (await getDemoCompanyId()) === companyId;
-
-        const tier = (company.subscriptionTier ?? "tier_1") as keyof typeof TIER_CONFIG;
-        const monthlyAllowance = TIER_CONFIG[tier]?.monthlyOptimizerCredits ?? 20;
-
         const daysToApply: DayPlan[] =
           acceptedDays && Array.isArray(acceptedDays)
             ? typedDays.filter((d) => acceptedDays.includes(d.day))
@@ -1498,19 +1431,6 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
 
         if (totalRoutes === 0) {
           return res.status(400).json({ error: "No valid stops to apply" });
-        }
-
-        // Monthly optimizer costs 1 credit per day applied (not per route).
-        const creditsToCharge = daysToApply.length;
-        const currentCredits = company.routeCredits ?? 0;
-        if (!isDemoCompanyForCredits && currentCredits < creditsToCharge) {
-          return res.status(402).json({
-            error: "Insufficient route credits",
-            creditsRequired: creditsToCharge,
-            creditsAvailable: currentCredits,
-            monthlyAllowance,
-            topUpNeeded: creditsToCharge - currentCredits,
-          });
         }
 
         const existingRoutes = await storage.getRoutes(companyId);
@@ -1617,12 +1537,6 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           }
         }
 
-        if (!isDemoCompanyForCredits) {
-          await storage.updateCompany(companyId, {
-            routeCredits: currentCredits - creditsToCharge,
-          });
-        }
-
         // Respond immediately — visit regeneration runs in the background so the
         // HTTP request doesn't time out on large route sets.
         res.json({
@@ -1630,10 +1544,6 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           routesCreated,
           routesRemoved,
           stopsUpdated,
-          creditsUsed: isDemoCompanyForCredits ? 0 : creditsToCharge,
-          creditsRemaining: isDemoCompanyForCredits ? 999999 : currentCredits - creditsToCharge,
-          creditsPerRoute: 1,
-          monthlyAllowance,
         });
 
         // Background: delete stale visits and regenerate for the next 6 months.

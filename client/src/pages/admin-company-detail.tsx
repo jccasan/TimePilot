@@ -48,7 +48,6 @@ import {
   Database,
   FlaskConical,
   XCircle,
-  CreditCard,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { useState } from "react";
@@ -125,7 +124,6 @@ export default function AdminCompanyDetail() {
     email: "",
     phone: "",
     address: "",
-    routeCredits: "0",
   });
 
   const [editUserOpen, setEditUserOpen] = useState(false);
@@ -464,7 +462,6 @@ export default function AdminCompanyDetail() {
       email: company?.email || "",
       phone: company?.phone || "",
       address: company?.address || "",
-      routeCredits: String(company?.routeCredits ?? 0),
     });
     setEditingCompany(true);
   };
@@ -475,10 +472,6 @@ export default function AdminCompanyDetail() {
     if (companyForm.email !== (company?.email || "")) updates.email = companyForm.email;
     if (companyForm.phone !== (company?.phone || "")) updates.phone = companyForm.phone;
     if (companyForm.address !== (company?.address || "")) updates.address = companyForm.address;
-    const parsedCredits = parseInt(companyForm.routeCredits, 10);
-    if (!isNaN(parsedCredits) && parsedCredits !== (company?.routeCredits ?? 0)) {
-      updates.routeCredits = parsedCredits;
-    }
     if (Object.keys(updates).length === 0) {
       setEditingCompany(false);
       return;
@@ -860,18 +853,6 @@ export default function AdminCompanyDetail() {
                         data-testid="input-company-address"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Route Credits</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={companyForm.routeCredits}
-                        onChange={(e) =>
-                          setCompanyForm({ ...companyForm, routeCredits: e.target.value })
-                        }
-                        data-testid="input-route-credits"
-                      />
-                    </div>
                   </>
                 ) : (
                   <>
@@ -1036,14 +1017,6 @@ export default function AdminCompanyDetail() {
                         <span className="text-sm text-right max-w-[200px]">{company.address}</span>
                       </div>
                     )}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm text-muted-foreground flex items-center gap-1">
-                        <CreditCard className="h-3.5 w-3.5" /> Route Credits
-                      </span>
-                      <Badge variant="secondary" data-testid="badge-route-credits">
-                        {company.routeCredits ?? 0}
-                      </Badge>
-                    </div>
                   </>
                 )}
               </CardContent>

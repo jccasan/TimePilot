@@ -964,57 +964,6 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           }
         }
 
-        // Route credit purchase via Stripe Pricing Table
-        // Products in the pricing table must have metadata: { type: "route_credits", credits: "N" }
-        // The pricing table element sets client-reference-id to the company ID
-        const refCompanyId = session.client_reference_id as string | null;
-        if (refCompanyId && !meta.invoiceId && meta.checkout_type !== "voice_addon") {
-          try {
-            const { default: StripeLib } = await import("stripe");
-            const stripeLib = new StripeLib(process.env.STRIPE_SECRET_KEY!, {
-              apiVersion: "2026-01-28.clover" as Stripe.LatestApiVersion,
-            });
-            const fullSession = await stripeLib.checkout.sessions.retrieve(session.id, {
-              expand: ["line_items.data.price.product"],
-            });
-            let creditsToAdd = 0;
-            for (const item of fullSession.line_items?.data ?? []) {
-              const product = (item.price as Stripe.Price & { product?: unknown })?.product;
-              const stripeProduct = product as
-                | Stripe.Product
-                | Stripe.DeletedProduct
-                | null
-                | undefined;
-              if (
-                stripeProduct &&
-                !("deleted" in stripeProduct) &&
-                stripeProduct.metadata?.type === "route_credits"
-              ) {
-                const credits = parseInt(stripeProduct.metadata.credits ?? "0", 10);
-                creditsToAdd += credits * (item.quantity ?? 1);
-              }
-            }
-            if (creditsToAdd > 0) {
-              const company = await storage.getCompany(refCompanyId);
-              if (company) {
-                const newTotal = (company.routeCredits ?? 0) + creditsToAdd;
-                await storage.updateCompany(refCompanyId, { routeCredits: newTotal });
-                console.log(
-                  `[Stripe Credits] Added ${creditsToAdd} route credits to company "${company.name}" (${refCompanyId}). New total: ${newTotal}`
-                );
-              } else {
-                console.warn(
-                  `[Stripe Credits] checkout.session.completed: company ${refCompanyId} not found (session ${session.id})`
-                );
-              }
-            }
-          } catch (creditErr: unknown) {
-            console.error(
-              `[Stripe Credits] Failed to process route credit purchase (session ${session.id}): ${creditErr instanceof Error ? creditErr.message : String(creditErr)}`
-            );
-          }
-        }
-
         // Auto-set account locale from subscription checkout currency.
         // Only applies to subscription checkouts (plan_tier in metadata) for an existing tenant.
         if (

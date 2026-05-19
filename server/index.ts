@@ -1466,8 +1466,8 @@ async function seedDemoCompany() {
     const userId = userRes.rows[0].id;
 
     const compRes = await pool.query(
-      `INSERT INTO companies (name, slug, timezone, subscription_tier, subscription_status, charge_timing, mrr_cents, route_credits, reminders_enabled, auto_visits_enabled, ai_import_mapping_enabled, rover_ai_enabled, sms_provider)
-       VALUES ('Clean Paws Fredericksburg', 'clean-paws-fredericksburg', 'America/New_York', 'tier_1_3', 'active', 'day_before', 0, 10, true, true, true, true, 'telnyx')
+      `INSERT INTO companies (name, slug, timezone, subscription_tier, subscription_status, charge_timing, mrr_cents, reminders_enabled, auto_visits_enabled, ai_import_mapping_enabled, rover_ai_enabled, sms_provider)
+       VALUES ('Clean Paws Fredericksburg', 'clean-paws-fredericksburg', 'America/New_York', 'tier_1_3', 'active', 'day_before', 0, true, true, true, true, 'telnyx')
        RETURNING id`
     );
     const companyId = compRes.rows[0].id;
@@ -2836,10 +2836,10 @@ async function seedLakeErieScoopersAccount() {
 
     const compRes = await pool.query(`
       INSERT INTO companies (name, slug, timezone, subscription_tier, subscription_status,
-        charge_timing, route_credits, reminders_enabled, auto_visits_enabled,
+        charge_timing, reminders_enabled, auto_visits_enabled,
         ai_import_mapping_enabled, rover_ai_enabled, sms_provider, max_stops_per_route)
       VALUES ('Lake Erie Scoopers', 'lake-erie-scoopers', 'America/New_York', 'tier_1_3',
-        'active', 'day_before', 30, true, true, true, true, 'telnyx', 50)
+        'active', 'day_before', true, true, true, true, 'telnyx', 50)
       RETURNING id
     `);
     const companyId = compRes.rows[0].id;

@@ -232,7 +232,6 @@ export const TIER_CONFIG = {
     price: 0,
     additionalUserPrice: 7,
     visible: true,
-    monthlyOptimizerCredits: 5,
   },
   tier_starter: {
     name: "Bootstrap",
@@ -241,7 +240,6 @@ export const TIER_CONFIG = {
     price: 10,
     additionalUserPrice: 7,
     visible: true,
-    monthlyOptimizerCredits: 5,
   },
   tier_1: {
     name: "Solo",
@@ -250,7 +248,6 @@ export const TIER_CONFIG = {
     price: 29,
     additionalUserPrice: 7,
     visible: true,
-    monthlyOptimizerCredits: 20,
   },
   tier_1_3: {
     name: "Crew",
@@ -259,7 +256,6 @@ export const TIER_CONFIG = {
     price: 49,
     additionalUserPrice: 7,
     visible: true,
-    monthlyOptimizerCredits: 60,
   },
   tier_3_5: {
     name: "Team",
@@ -268,7 +264,6 @@ export const TIER_CONFIG = {
     price: 99,
     additionalUserPrice: 7,
     visible: true,
-    monthlyOptimizerCredits: 120,
   },
   tier_6_10: {
     name: "Agency",
@@ -277,7 +272,6 @@ export const TIER_CONFIG = {
     price: 149,
     additionalUserPrice: 7,
     visible: true,
-    monthlyOptimizerCredits: 240,
   },
   tier_10_plus: {
     name: "Enterprise",
@@ -286,7 +280,6 @@ export const TIER_CONFIG = {
     price: 599,
     additionalUserPrice: 7,
     visible: false,
-    monthlyOptimizerCredits: 240,
   },
 } as const;
 
@@ -335,7 +328,6 @@ export const companies = pgTable("companies", {
   chargeTiming: chargeTimingEnum("charge_timing").notNull().default("day_before"),
   invoiceTheme: text("invoice_theme"),
   mrrCents: integer("mrr_cents").notNull().default(0),
-  routeCredits: integer("route_credits").notNull().default(10),
   remindersEnabled: boolean("reminders_enabled").notNull().default(false),
   reminderSettings: jsonb("reminder_settings").$type<ReminderRule[]>(),
   invoiceReminderSettings: jsonb("invoice_reminder_settings").$type<InvoiceReminderSettings>(),
@@ -409,7 +401,6 @@ export const companies = pgTable("companies", {
   country: varchar("country", { length: 5 }).notNull().default("us"),
   currency: varchar("currency", { length: 5 }).notNull().default("usd"),
   taxRatePercent: decimal("tax_rate_percent", { precision: 5, scale: 2 }),
-  demoUnlimitedCredits: boolean("demo_unlimited_credits").notNull().default(false),
   demoBypassLimits: boolean("demo_bypass_limits").notNull().default(false),
   demoAutoCompleteToday: boolean("demo_auto_complete_today").notNull().default(false),
   demoAutoPayInvoices: boolean("demo_auto_pay_invoices").notNull().default(false),

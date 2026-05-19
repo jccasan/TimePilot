@@ -283,15 +283,9 @@ function weekLabel(week: PlannerWeek): string {
 export function WeeklyOptimizerPanel({
   open,
   onOpenChange,
-  credits: _credits,
-  monthlyAllowance: _monthlyAllowance = 20,
-  onNeedCredits: _onNeedCredits,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  credits: number;
-  monthlyAllowance?: number;
-  onNeedCredits: (topUpNeeded: number) => void;
 }) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -533,7 +527,6 @@ export function WeeklyOptimizerPanel({
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
       setApplyConfirmPending(false);
       setSuccessData({
         routesCreated: data.appliedRouteCount.created,
@@ -1178,13 +1171,11 @@ export function WeeklyOptimizerPanel({
             {applyConfirmPending && (
               <div
                 className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-2.5 text-sm flex items-center gap-2"
-                data-testid="banner-credit-confirm"
+                data-testid="banner-apply-confirm"
               >
                 <span className="text-amber-700 dark:text-amber-400">
                   This will apply{" "}
-                  <span className="font-semibold" data-testid="text-confirm-credits-cost">
-                    {acceptedWeeks.size}
-                  </span>{" "}
+                  <span className="font-semibold">{acceptedWeeks.size}</span>{" "}
                   week{acceptedWeeks.size !== 1 ? "s" : ""} covering{" "}
                   <span className="font-semibold">{totalAcceptedStops} stop</span>
                   {totalAcceptedStops !== 1 ? "s" : ""} to your routes.

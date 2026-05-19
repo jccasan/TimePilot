@@ -794,11 +794,6 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
     setInterval(() => runNightlyRollup().catch(console.error), 24 * 60 * 60 * 1000);
   });
 
-  import("../jobs/monthly-credits").then(({ runMonthlyCreditReplenishment }) => {
-    setTimeout(() => runMonthlyCreditReplenishment().catch(console.error), 60000);
-    setInterval(() => runMonthlyCreditReplenishment().catch(console.error), 24 * 60 * 60 * 1000);
-  });
-
   setTimeout(() => {
     const retellAgentId = process.env.RETELL_AGENT_ID;
     const retellApiKey = process.env.RETELL_API_KEY;

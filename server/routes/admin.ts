@@ -334,10 +334,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
           .innerJoin(companyUsers, eq(companyUsers.userId, users.id))
           .innerJoin(companies, eq(companies.id, companyUsers.companyId))
           .where(
-            and(
-              sql`(${users.lastLoginAt} IS NULL OR ${users.lastLoginAt} < ${cutoff})`,
-              eq(companies.demoUnlimitedCredits, false)
-            )
+            sql`(${users.lastLoginAt} IS NULL OR ${users.lastLoginAt} < ${cutoff})`
           );
         result[`${days}d`] = rows;
       }
@@ -1299,7 +1296,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
-      const { name, email, phone, address, routeCredits, voiceNumberPortingStatus } = req.body;
+      const { name, email, phone, address, voiceNumberPortingStatus } = req.body;
       const updates: Record<string, unknown> = {};
       if (name !== undefined) {
         if (typeof name !== "string" || name.trim().length < 2)
@@ -1318,13 +1315,6 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       }
       if (phone !== undefined) updates.phone = phone?.trim() || null;
       if (address !== undefined) updates.address = address?.trim() || null;
-      if (routeCredits !== undefined) {
-        const creditsStr = String(routeCredits);
-        const credits = parseInt(creditsStr, 10);
-        if (isNaN(credits) || credits < 0 || String(credits) !== creditsStr.trim())
-          return res.status(400).json({ error: "Route credits must be a non-negative integer" });
-        updates.routeCredits = credits;
-      }
       if (voiceNumberPortingStatus !== undefined) {
         const validPortingStatuses = ["pending", "in_progress", "complete", null, ""];
         if (!validPortingStatuses.includes(voiceNumberPortingStatus)) {
@@ -1340,37 +1330,6 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
 
       const { companies: companiesTable } = await import("@shared/schema");
       await db.update(companiesTable).set(updates).where(eq(companiesTable.id, companyId));
-
-      if (updates.routeCredits !== undefined) {
-        const adminEmail = req.adminUser?.email || "unknown";
-        await db
-          .insert(auditTrail)
-          .values({
-            companyId,
-            userId: null,
-            entityType: "company",
-            entityId: companyId,
-            action: "update",
-            changes: {
-              old: { routeCredits: company.routeCredits ?? 0 },
-              new: { routeCredits: updates.routeCredits },
-            },
-            ipAddress: req.ip || null,
-          })
-          .catch(() => {});
-        await db
-          .insert(adminAuditLogs)
-          .values({
-            adminUserId: req.adminUser?.userId || null,
-            adminEmail,
-            action: "update_route_credits",
-            resourceType: "company",
-            resourceId: companyId,
-            details: { old: company.routeCredits ?? 0, new: updates.routeCredits },
-            ipAddress: req.ip || null,
-          })
-          .catch(() => {});
-      }
 
       console.log(
         `[Admin] Company ${companyId} updated by ${req.adminUser?.email}: ${JSON.stringify(updates)}`

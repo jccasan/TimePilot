@@ -69,10 +69,8 @@ import {
   Search,
   Loader2,
   Send,
-  Coins,
   TrendingDown,
   Clock,
-  ShoppingCart,
   RotateCcw,
   Map as MapIcon,
   List,
@@ -102,7 +100,6 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { WeeklyOptimizerPanel } from "@/components/WeeklyOptimizerPanel";
-import { useAuth } from "@/hooks/use-auth";
 import { Link } from "wouter";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
@@ -141,10 +138,6 @@ declare module "react" {
     }
   }
 }
-
-const STRIPE_PRICING_TABLE_ID = "prctbl_1TRXCrGVMaTr43jX0eJZMaLt";
-const STRIPE_PUBLISHABLE_KEY =
-  "pk_live_51T15sMGVMaTr43jX4fB9ug4zBSlaiVqyszuuCW6wbIqHxFMXfizszb9g938KPPAspd1PpjyrAqlJdVh3LC7cqWil00ZtXS9t6F";
 
 const DAYS = [
   "monday",
@@ -230,8 +223,6 @@ type OptimizeResult = {
   milesSaved: number;
   minutesSaved: number;
   stopCount: number;
-  creditsUsed: number;
-  creditsRemaining: number;
   message?: string;
   geocodeFailure?: boolean;
   failedStops?: FailedStop[];
@@ -622,7 +613,6 @@ function RouteCard({
   properties,
   team,
   isOverThis,
-  credits,
   onEdit,
   onDelete,
   onOptimize,
@@ -655,7 +645,6 @@ function RouteCard({
   properties: Property[];
   team: TeamMember[];
   isOverThis: boolean;
-  credits: number;
   onEdit: (route: Route) => void;
   onDelete: (route: Route) => void;
   onOptimize: (routeId: string, stopCount: number) => void;
@@ -698,7 +687,6 @@ function RouteCard({
       }).length
     : 0;
   const hasVisits = routeVisitCount > 0;
-  const creditsNeeded = stopCount <= 30 ? 1 : 2;
   const isOverLimit = stopCount > 30;
   const isOverMax = stopCount > 60;
 
@@ -872,12 +860,7 @@ function RouteCard({
               variant="outline"
               className={`flex-1 text-xs ${route.isLocked ? "opacity-50" : ""}`}
               onClick={() => onOptimize(route.id, stopCount)}
-              disabled={
-                isOptimizing ||
-                stopCount < 2 ||
-                isOverMax ||
-                (credits < 999999 && credits < creditsNeeded)
-              }
+              disabled={isOptimizing || stopCount < 2 || isOverMax}
               data-testid={`button-optimize-${route.id}`}
             >
               {isOptimizing ? (
@@ -887,7 +870,7 @@ function RouteCard({
               ) : (
                 <Navigation className="h-3 w-3 mr-1" />
               )}
-              Optimize ({creditsNeeded} {creditsNeeded === 1 ? "Credit" : "Credits"})
+              Optimize
             </Button>
           )}
           <Button
@@ -1534,10 +1517,6 @@ function SavingsSummaryDialog({
               <span>Stops optimized:</span>
               <span className="font-medium text-foreground">{result.stopCount}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Credits used:</span>
-              <span className="font-medium text-foreground">{result.creditsUsed}</span>
-            </div>
           </div>
         </div>
         <DialogFooter>
@@ -1550,127 +1529,9 @@ function SavingsSummaryDialog({
   );
 }
 
-function StripePricingTableDialog({
-  open,
-  onOpenChange,
-  companyId,
-  topUpNeeded = 0,
-  initialCredits = 0,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  companyId: string | null | undefined;
-  topUpNeeded?: number;
-  initialCredits?: number;
-}) {
-  const { toast } = useToast();
-  const [customerSecret, setCustomerSecret] = useState<string | null>(null);
-  const [scriptLoaded, setScriptLoaded] = useState(false);
-  const creditsAtOpenRef = useRef(initialCredits);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (document.querySelector('script[src*="pricing-table"]')) {
-      setScriptLoaded(true);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://js.stripe.com/v3/pricing-table.js";
-    script.async = true;
-    script.onload = () => setScriptLoaded(true);
-    document.head.appendChild(script);
-  }, []);
-
-  useEffect(() => {
-    if (!open) {
-      setCustomerSecret(null);
-      creditsAtOpenRef.current = initialCredits;
-      return;
-    }
-    creditsAtOpenRef.current = initialCredits;
-    apiRequest("POST", "/api/route-credits/customer-session")
-      .then((r) => r.json())
-      .then((data) => setCustomerSecret(data.clientSecret ?? null))
-      .catch(() => setCustomerSecret(null));
-  }, [open, initialCredits]);
-
-  const { data: pollData } = useQuery<{ credits: number; monthlyAllowance: number }>({
-    queryKey: ["/api/route-credits"],
-    refetchInterval: open ? 5000 : false,
-    enabled: open,
-  });
-
-  useEffect(() => {
-    if (!open || pollData === undefined) return;
-    const current = pollData.credits ?? 0;
-    const baseline = creditsAtOpenRef.current;
-    if (current > baseline && baseline >= 0) {
-      const added = current - baseline;
-      queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
-      toast({
-        title: "Credits added!",
-        description: `${added} route credit${added !== 1 ? "s" : ""} added to your account.`,
-      });
-      onOpenChange(false);
-    }
-  }, [pollData?.credits, open]);
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl" data-testid="dialog-purchase-credits">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5" />
-            Purchase Route Credits
-          </DialogTitle>
-          <DialogDescription>
-            {topUpNeeded > 0
-              ? `The Weekly Optimizer costs 1 credit per route. You need ${topUpNeeded} more credit${topUpNeeded !== 1 ? "s" : ""} to proceed.`
-              : "Each credit optimizes one route of up to 30 stops. Routes with 31-60 stops require 2 credits."}
-          </DialogDescription>
-        </DialogHeader>
-        {topUpNeeded > 0 && (
-          <div
-            className="rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
-            data-testid="text-topup-notice"
-          >
-            Top up at least{" "}
-            <span className="font-semibold">
-              {topUpNeeded} credit{topUpNeeded !== 1 ? "s" : ""}
-            </span>{" "}
-            to unlock the Weekly Optimizer.
-          </div>
-        )}
-        <div className="min-h-[300px] flex items-center justify-center">
-          {!scriptLoaded ? (
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          ) : (
-            <stripe-pricing-table
-              pricing-table-id={STRIPE_PRICING_TABLE_ID}
-              publishable-key={STRIPE_PUBLISHABLE_KEY}
-              client-reference-id={companyId ?? undefined}
-              customer-session-client-secret={customerSecret ?? undefined}
-            />
-          )}
-        </div>
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            data-testid="button-close-purchase"
-          >
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export default function RoutesPage() {
   const tz = useCompanyTimezone();
   const { toast } = useToast();
-  const { user } = useAuth();
   const { startTutorial, isTutorialCompleted } = useTutorialContext();
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(() => {
     const today = new Date()
@@ -1693,8 +1554,6 @@ export default function RoutesPage() {
   } | null>(null);
   const [savingsResult, setSavingsResult] = useState<OptimizeResult | null>(null);
   const [showSavings, setShowSavings] = useState(false);
-  const [showPurchase, setShowPurchase] = useState(false);
-  const [purchaseTopUpNeeded, setPurchaseTopUpNeeded] = useState(0);
   const [unassigningRouteId, setUnassigningRouteId] = useState<string | null>(null);
   const [confirmUnassignAll, setConfirmUnassignAll] = useState<string | null>(null);
   const [moveToDayRouteId, setMoveToDayRouteId] = useState<string | null>(null);
@@ -1761,11 +1620,6 @@ export default function RoutesPage() {
   });
   const { data: properties = [] } = useQuery<Property[]>({ queryKey: ["/api/properties"] });
   const { data: team = [] } = useQuery<TeamMember[]>({ queryKey: ["/api/company/team"] });
-  const { data: creditData } = useQuery<{ credits: number; monthlyAllowance: number }>({
-    queryKey: ["/api/route-credits"],
-  });
-  const credits = creditData?.credits ?? 0;
-  const monthlyAllowance = creditData?.monthlyAllowance ?? 20;
   const { data: company } = useQuery<{
     name: string;
     maxStopsPerRoute?: number | null;
@@ -2428,7 +2282,6 @@ export default function RoutesPage() {
     onSuccess: (data, routeId) => {
       setOptimizingRouteId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       setRouteMetrics((prev) => {
         const next = { ...prev };
@@ -2455,11 +2308,7 @@ export default function RoutesPage() {
     },
     onError: (err: Error) => {
       setOptimizingRouteId(null);
-      if (err.message.includes("Insufficient")) {
-        setShowPurchase(true);
-      } else {
-        toast({ title: "Optimization failed", description: err.message, variant: "destructive" });
-      }
+      toast({ title: "Optimization failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -2471,7 +2320,6 @@ export default function RoutesPage() {
     },
     onSuccess: (data, routeId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/route-credits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       setRouteMetrics((prev) => {
         const next = { ...prev };
@@ -2733,11 +2581,6 @@ export default function RoutesPage() {
       });
       return;
     }
-    const hasUnlimited = credits >= 999999;
-    if (!hasUnlimited && credits < (stopCount <= 30 ? 1 : 2)) {
-      setShowPurchase(true);
-      return;
-    }
     setConfirmOptimize({ routeId, stopCount });
   }
 
@@ -2760,13 +2603,6 @@ export default function RoutesPage() {
               onStart={startTutorial}
               isCompleted={isTutorialCompleted("tutorial_route_builder")}
             />
-            <span
-              className="flex items-center gap-1 text-xs text-muted-foreground"
-              data-testid="badge-credits"
-            >
-              <Coins className="h-3.5 w-3.5" />
-              Optimization Credits: {credits >= 999999 ? "∞" : credits} remaining this month
-            </span>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -2798,14 +2634,6 @@ export default function RoutesPage() {
               data-testid="button-monthly-optimizer"
             >
               <Sparkles className="h-4 w-4 mr-1" /> Optimize All Routes
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPurchase(true)}
-              data-testid="button-buy-credits"
-            >
-              <ShoppingCart className="h-4 w-4 mr-1" /> Buy Credits
             </Button>
             {isLivePlaybackEnabled && (
               <Button
@@ -3309,7 +3137,6 @@ export default function RoutesPage() {
                           properties={properties}
                           team={team}
                           isOverThis={overContainerId === `route-${route.id}`}
-                          credits={credits}
                           onEdit={(r) => {
                             setEditingRoute(r);
                             setDialogOpen(true);
@@ -3477,11 +3304,7 @@ export default function RoutesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Route Optimization</AlertDialogTitle>
             <AlertDialogDescription>
-              This will use{" "}
-              {confirmOptimize && confirmOptimize.stopCount <= 30
-                ? "1 Route Credit"
-                : "2 Route Credits"}{" "}
-              to optimize this route. You currently have {credits} credits available. Continue?
+              This will re-order stops on this route to minimize total drive distance. Continue?
             </AlertDialogDescription>
           </AlertDialogHeader>
           {(!company?.startLatitude || !company?.startLongitude) && (
@@ -3620,14 +3443,6 @@ export default function RoutesPage() {
         onOpenChange={setShowSavings}
         result={savingsResult}
       />
-      <StripePricingTableDialog
-        open={showPurchase}
-        onOpenChange={setShowPurchase}
-        companyId={user?.companyId}
-        topUpNeeded={purchaseTopUpNeeded}
-        initialCredits={credits}
-      />
-
       <RouteVisitDetailSheet
         visit={detailVisit}
         servicePlan={detailPlan}
@@ -3653,12 +3468,6 @@ export default function RoutesPage() {
         <WeeklyOptimizerPanel
           open={showWeeklyOptimizer}
           onOpenChange={setShowWeeklyOptimizer}
-          credits={credits}
-          monthlyAllowance={monthlyAllowance}
-          onNeedCredits={(topUpNeeded) => {
-            setPurchaseTopUpNeeded(topUpNeeded);
-            setShowPurchase(true);
-          }}
         />
       )}
 

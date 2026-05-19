@@ -6164,7 +6164,6 @@ function ReminderSettingsSection({
 }
 
 type DemoSettings = {
-  unlimitedCredits: boolean;
   bypassLimits: boolean;
   autoCompleteToday: boolean;
   autoPayInvoices: boolean;
@@ -6240,12 +6239,6 @@ function DemoModeSection() {
     onAction?: () => void;
     actionPending?: boolean;
   }[] = [
-    {
-      key: "unlimitedCredits",
-      icon: Zap,
-      label: "Unlimited Route Credits",
-      description: "Skip credit deduction when optimizing routes",
-    },
     {
       key: "bypassLimits",
       icon: Shield,

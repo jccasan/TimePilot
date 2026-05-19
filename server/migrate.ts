@@ -53,42 +53,19 @@ export async function runStartupMigrations(): Promise<void> {
          OR max_stops_per_route IS NULL
     `);
 
-    // One-time data fix: add 25 route credits to Lake Erie Scoopers (production only)
-    // Confirmed pre-fix value: 5. Target: 30. WHERE guard makes this idempotent.
-    // Remove this block after the next production deploy confirms route_credits = 30.
-    if (process.env.NODE_ENV === "production") {
-      const lakeErieResult = await client.query(`
-        UPDATE companies
-          SET route_credits = route_credits + 25
-        WHERE id = '8089c512-bec6-47e1-9678-ec3e3eda4e95'
-          AND route_credits = 5
-      `);
-      if (lakeErieResult.rowCount && lakeErieResult.rowCount > 0) {
-        console.log("[Migrate] Applied +25 route credits to Lake Erie Scoopers (now 30)");
-      }
-    }
-
     await client.query(`
       ALTER TABLE users
         ADD COLUMN IF NOT EXISTS import_mode BOOLEAN NOT NULL DEFAULT FALSE
     `);
     console.log("[Migration] users import_mode column verified");
 
-    // Ensure the demo account always has unlimited credits enabled.
-    // This is idempotent — it only updates when the flag is currently false.
+    // Drop route credits columns — optimization is now always free
     await client.query(`
-      UPDATE companies
-        SET demo_unlimited_credits = TRUE
-      WHERE demo_unlimited_credits = FALSE
-        AND id IN (
-          SELECT cu.company_id
-          FROM users u
-          JOIN company_users cu ON cu.user_id = u.id
-          WHERE u.email = 'demo@scoopilot.com'
-          LIMIT 1
-        )
+      ALTER TABLE companies
+        DROP COLUMN IF EXISTS route_credits,
+        DROP COLUMN IF EXISTS demo_unlimited_credits
     `);
-    console.log("[Migration] Demo account demo_unlimited_credits flag verified");
+    console.log("[Migration] Dropped route_credits and demo_unlimited_credits columns");
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS system_health_checks (
