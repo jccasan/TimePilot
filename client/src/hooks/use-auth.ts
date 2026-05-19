@@ -73,7 +73,7 @@ export function useAuth() {
     },
     onSuccess: () => {
       localStorage.removeItem("sessionToken");
-      queryClient.setQueryData(["/api/auth/user"], null);
+      queryClient.clear();
       clearUserContext();
     },
   });
