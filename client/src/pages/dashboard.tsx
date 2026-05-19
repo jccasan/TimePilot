@@ -139,6 +139,7 @@ import {
   Bot,
   Wifi,
   WifiOff,
+  Upload,
 } from "lucide-react";
 import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -3137,6 +3138,9 @@ export default function Dashboard() {
   const { toast } = useToast();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [importBannerDismissed, setImportBannerDismissed] = useState(
+    () => sessionStorage.getItem("dashboard.importBannerDismissed") === "1"
+  );
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -3156,6 +3160,15 @@ export default function Dashboard() {
   const { data: company } = useQuery<CompanyData>({
     queryKey: ["/api/company"],
   });
+
+  const { data: importBatches } = useQuery<
+    { id: string; status: string; fileName: string | null; createdAt: string }[]
+  >({
+    queryKey: ["/api/import-batches"],
+  });
+
+  const pendingImportBatches =
+    importBatches?.filter((b) => b.status === "staged" || b.status === "processing") ?? [];
 
   const {
     data: pipeline,
@@ -3756,6 +3769,40 @@ export default function Dashboard() {
       </div>
 
       {onboarding && !onboarding.isComplete && <GuidedSetup onboarding={onboarding} />}
+
+      {!importBannerDismissed && pendingImportBatches.length > 0 && (
+        <div
+          className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-4 py-3"
+          data-testid="import-in-progress-banner"
+        >
+          <div className="flex items-center gap-3">
+            <Upload className="h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              {pendingImportBatches.length === 1
+                ? "You have an import in progress."
+                : `You have ${pendingImportBatches.length} imports in progress.`}{" "}
+              <Link
+                href="/migration"
+                className="font-medium underline underline-offset-2 hover:no-underline"
+                data-testid="link-resume-import"
+              >
+                Resume on Migration page
+              </Link>
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              sessionStorage.setItem("dashboard.importBannerDismissed", "1");
+              setImportBannerDismissed(true);
+            }}
+            className="flex-shrink-0 rounded-md p-1 text-amber-600 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/50 transition-colors"
+            aria-label="Dismiss"
+            data-testid="button-dismiss-import-banner"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {pipelineLoading ? (
         <div className="space-y-2" data-testid="loading-pipeline">
