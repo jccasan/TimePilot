@@ -78,6 +78,7 @@ export default function AuthPage() {
         setMode("change-password");
         return;
       }
+      queryClient.clear();
       queryClient.setQueryData(["/api/auth/user"], data);
     },
     onError: (error: Error) => {
