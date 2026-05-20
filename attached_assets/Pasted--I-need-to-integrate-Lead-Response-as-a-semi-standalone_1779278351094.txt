@@ -1,0 +1,238 @@
+
+I need to integrate Lead Response as a semi-standalone product within ScooPilot. It should work as a feature add-on for existing SP subscribers and as a standalone product for operators who only purchase Lead Response. Here are all the changes needed:
+
+1. New Stripe Product
+Create a new Stripe product and price:
+
+Product name: Lead Response
+Price: $19.00/month recurring
+Price ID: store as LEAD_RESPONSE_PRICE_ID in secrets
+
+When this product is purchased, set a flag on the company record: leadResponseActive: true
+When an SP subscription is active, Lead Response is included at no extra charge. Set the same flag automatically for all active SP subscribers.
+
+2. New Role: Lead Response Operator
+Create a new user role called lead_response_operator with the following access:
+CAN access:
+
+Lead Response dashboard (new, see section 4)
+Contacts -- read only, limited to leads created through Lead Response flow only
+SMS inbox -- limited to their leads only
+Company settings -- limited to: business name, phone number, service area zip codes, out of area message, pricing tiers, per dog adder, first time cleanup fee, deposit percent, billing mode, scheduling platform, Telnyx number
+Billing management
+
+CANNOT access:
+
+Routes and scheduling calendar
+Invoicing and payments
+Full CRM
+Analytics and business intelligence
+Rover AI assistant
+QuickBooks integration
+Team management
+Profitability tools
+Any other SP feature not listed above
+
+When a company only has Lead Response active (no SP subscription), all users on that account are automatically assigned the lead_response_operator role. Full SP subscribers who activate Lead Response keep their existing role and see Lead Response as an additional feature.
+
+3. Stripped Down UI for Stand-Alone Operators
+When a user with lead_response_operator role logs in, show a simplified navigation with only:
+
+Lead Response (dashboard)
+Contacts
+Messages
+Settings
+Billing
+
+Hide all other navigation items. The UI should feel clean and purpose-built, not like a locked-down version of a bigger product. Do not show locked/greyed out nav items -- just don't show them at all.
+
+4. Lead Response Dashboard
+Create a new dashboard page at /lead-response accessible from the main left navigation for any operator with Lead Response active.
+Show these widgets:
+Summary cards:
+
+New leads today
+Estimate sent (last 30 days)
+Deposit pending count (with total dollar value)
+Deposit paid this month (with total dollar value)
+Scheduled this month
+Dead leads this month (no deposit after reminders)
+
+Recent leads table:
+Columns: Name, Phone, Address, Yard Size, Dogs, Estimate, Deposit, Status, Submitted At
+Sortable by status and date.
+Click any row to open the contact record.
+Lead funnel chart:
+Simple horizontal bar or funnel showing drop-off at each stage:
+New → Estimate Sent → Deposit Pending → Deposit Paid → Scheduled
+
+5. Company Settings -- Lead Response Config
+Add a new "Lead Response" section to the company settings page. This section is visible to operators with Lead Response active.
+Fields:
+
+Telnyx Number -- display only, shows their provisioned number. Button: "Request number change"
+Billing Mode -- single select: Pre-service / Post-service
+Deposit Percent -- number field, default 50, only shown if billing mode is Pre-service
+Scheduling Platform -- single select: ScooPilot / HousecallPro / Manual
+HousecallPro API Key -- text field, only shown if scheduling platform is HousecallPro. Include inline instructions:
+
+Log into HousecallPro as an Admin user (requires MAX plan)
+Go to your App Store from the main menu
+Find the "API" app card and click "View Details"
+Copy your API key and paste it below
+
+
+Service Zip Codes -- long text field, comma separated. Label: "Enter the zip codes you service, separated by commas"
+Out of Area Message -- long text field, pre-filled with default message, operator can customize. Show character count.
+
+On save, push all Lead Response config fields to Airtable Operator Config via the Airtable API. Use the company's unique ID as the OperatorID. Create the row if it doesn't exist, update if it does. Store the Airtable API key and base ID in secrets as AIRTABLE_API_KEY and AIRTABLE_BASE_ID.
+
+6. Pricing Tiers -- Expand Existing Pricing Step
+Expand the existing pricing configuration to support the tier system without breaking existing operator data.
+Add up to 6 pricing tiers. Tiers 1-3 are required, 4-6 are optional.
+Each tier has:
+
+Label -- operator-defined text shown on the signup widget (e.g. "Small", "Under 0.25 acres")
+Price per visit -- currency field
+
+The signup widget transmits tier values as tier_1 through tier_6 in the webhook payload regardless of what the operator names them. Only render tiers on the widget that have both a label and a price configured.
+Also add to the pricing configuration:
+
+Per dog adder -- currency, price added per additional dog beyond the first
+First time cleanup fee -- currency, applied when lastCleanup is "never" or "3_4_months"
+Deposit percent -- number, default 50, only shown if Lead Response is active and billing mode is Pre-service
+
+Validate that tiers 1, 2, and 3 have both a label and a price before allowing save. Show inline validation errors if not.
+Do not remove or break any existing pricing fields for current operators. Map existing yard size options (small, medium, large, extra-large) to tier_1 through tier_4 automatically for any operator that already has pricing configured.
+
+7. Onboarding Wizard -- New Steps
+Add new steps to the existing 5-step onboarding wizard. New steps appear after Step 4 (Stripe Connect) and before Step 5 (Launch). Steps only appear if the operator has the corresponding product active.
+Step 4a: Pricing Tiers (all operators)
+Use the expanded pricing tier UI from section 6. This replaces the existing pricing step for new operators. Existing operators keep their data.
+Step 4b: Lead Response Setup (Lead Response operators only)
+Sub-step 1 -- Phone number:
+
+Ask: "Would you like us to provision a new dedicated phone number, or are you porting an existing number?"
+Option A: New number -- provision a Telnyx number automatically using the area code from their business phone collected in Step 1. If unavailable, prompt them to enter a preferred area code manually.
+Option B: Port existing number -- collect their current number, flag the account with portingRequested: true, notify the SP admin portal, show message: "We'll reach out within 1 business day to complete your number transfer. You can continue setup in the meantime."
+
+Sub-step 2 -- Service area:
+
+Service zip codes (comma separated)
+Out of area message (pre-filled with default, editable)
+
+Sub-step 3 -- Scheduling platform:
+
+Single select: ScooPilot / HousecallPro / Manual
+If HousecallPro: show API key field with step by step instructions (see section 5)
+If ScooPilot: show message "Leads will flow directly into your ScooPilot schedule"
+If Manual: show message "We'll text you the lead details when a deposit is received"
+
+Sub-step 4 -- Billing mode:
+
+Pre-service or Post-service
+If Pre-service: confirm Stripe Connect is active from Step 4. If not, re-launch Stripe Connect flow.
+If Post-service: no Stripe needed, skip.
+
+On completion of Step 4b, push all config to Airtable Operator Config (same as section 5 save behavior).
+Step 4c: Voice Agent Setup (Voice Agent operators only)
+Use company name, service descriptions, pricing tiers, and service area already collected in previous steps to configure the Retell AI agent automatically under the SP master account.
+If service area wasn't collected (Lead Response not active), collect zip codes here.
+Show confirmation: "Your AI voice agent is being configured. This takes about 2 minutes. You'll receive a text at [business phone] when it's ready."
+Step 5: Launch (all operators)
+Update launch screen to show active product status:
+
+ScooPilot Core: Active / Not subscribed
+Lead Response: Active / Setup incomplete / Not subscribed
+Voice Agent: Configuring / Active / Not subscribed
+
+
+8. Signup Widget Updates
+The existing signup widget needs these backend changes:
+
+Transmit companyId in the contact.created webhook payload (already specced, confirm it's implemented)
+Transmit tier values as tier_1 through tier_6 based on operator's tier configuration
+Only render tiers that have both a label and a price configured
+Render the operator's custom tier labels on the form
+Require tiers 1-3 to be configured before the widget is active for any operator
+
+
+9. Webhook Updates
+The contact.created webhook payload must include all of these fields:
+json{
+  "companyId": "",
+  "type": "contact.created",
+  "contactId": "",
+  "propertyId": "",
+  "firstName": "",
+  "lastName": "",
+  "email": "",
+  "phone": "",
+  "streetAddress": "",
+  "city": "",
+  "state": "",
+  "zipCode": "",
+  "numberOfDogs": 0,
+  "yardSize": "tier_1",
+  "serviceFrequency": "",
+  "serviceDay": "",
+  "lastCleanup": "",
+  "notes": "",
+  "smsOptIn": true,
+  "submittedAt": ""
+}
+Confirm all fields are present and populated correctly on widget submission.
+
+10. Admin Portal -- Lead Response Visibility
+In the SP platform admin dashboard, add a Lead Response section showing:
+
+All operators with Lead Response active
+Their provisioned Telnyx number
+Porting requests flagged for manual processing
+Lead volume per operator (last 30 days)
+Deposit conversion rate per operator
+
+Zapier & Airtable Integration Details
+Airtable:
+
+API key: stored in secrets as AIRTABLE_API_KEY
+Base ID: stored in secrets as AIRTABLE_BASE_ID
+Operator Config table name: Operators
+Table ID: store in secrets as AIRTABLE_OPERATOR_TABLE_ID
+
+When pushing operator config to Airtable on Step 4b completion or settings save, write these fields:
+SP FieldAirtable Fieldcompany unique IDOperatorIDcompany nameOperatorNameprovisioned Telnyx numberTelnyxNumberTelnyx API key (from SP secrets)TelnyxAPIKeycompany websiteCompanyURLservice zip codesServiceZipCodesout of area messageOutOfAreaMessageStripe Connect account IDStripeAccountIDStripe API key (operator's)StripeAPIKeyscheduling platformSchedulingPlatformbilling modeBillingModedeposit percentDepositPercenttier 1 priceTier1Pricetier 1 labelTier1Labeltier 2 priceTier2Pricetier 2 labelTier2Labeltier 3 priceTier3Pricetier 3 labelTier3Labeltier 4 priceTier4Pricetier 4 labelTier4Labeltier 5 priceTier5Pricetier 5 labelTier5Labeltier 6 priceTier6Pricetier 6 labelTier6Labelper dog adderPricePerDogAdderfirst time cleanup feeFirstTimeCleanupFeereminder timing 1ReminderTiming1reminder timing 2ReminderTiming2HousecallPro API keyHousecallProAPIKeyoperator phoneOperatorPhoneoperator emailOperatorEmail
+Default values on row creation:
+
+ReminderTiming1: 48
+ReminderTiming2: 24
+Status: Active
+SetupComplete: false (set to true when Step 4b is fully completed)
+
+Use PATCH if the OperatorID row already exists, POST if it doesn't. Match on OperatorID.
+
+Zapier:
+ScooPilot does not call Zapier directly. Zapier listens for the contact.created webhook that SP fires on widget submission. No direct Zapier API calls are needed from SP.
+The one exception: when a new operator completes Step 4b onboarding, SP should fire a webhook to the URL stored in secrets as LEAD_RESPONSE_ONBOARDING_WEBHOOK with this payload:
+json{
+  "event": "operator.onboarded",
+  "companyId": "",
+  "operatorName": "",
+  "telnyxNumber": "",
+  "billingMode": "",
+  "schedulingPlatform": "",
+  "onboardedAt": ""
+}
+This allows a Zapier onboarding Zap to be triggered when a new Lead Response operator goes live -- useful for sending a welcome SMS, notifying your team, or any other onboarding automation you want to add later.
+Store the webhook URL in secrets as LEAD_RESPONSE_ONBOARDING_WEBHOOK.
+
+
+After building, confirm:
+
+A new Lead Response only account can sign up, complete onboarding, and reach the Lead Response dashboard without seeing any full SP features
+An existing SP subscriber can activate Lead Response and sees the new nav item and settings section
+Tier pricing saves correctly and the widget transmits tier_1 through tier_6
+Telnyx number provisioning works for a test area code
+Airtable Operator Config row is created on Step 4b completion with all fields populated
+The contact.created webhook fires with the full payload on widget submission
+The launch screen shows correct product status for all three products

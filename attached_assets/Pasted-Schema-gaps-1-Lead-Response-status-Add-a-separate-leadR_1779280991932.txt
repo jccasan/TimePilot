@@ -1,0 +1,57 @@
+Schema gaps:
+1. Lead Response status
+Add a separate leadResponseStatus column to the contacts table. Do not extend the existing leadStatusEnum -- keep the two status systems completely independent. Values for leadResponseStatus: new, estimate_sent, deposit_pending, deposit_paid, scheduled, dead.
+2. Deposit tracking
+Add two columns to the contacts table: depositAmount (decimal) and depositPaidAt (timestamp). Stripe is the source of truth for payment but SP needs local copies for dashboard queries.
+3. Lead source tagging
+Add leadSource column to contacts table. Value for Lead Response leads: lead_response. This is how the LR dashboard filters contacts and how the LR-only role restricts the contacts view.
+4. Company-level fields
+Create a new lead_response_config table linked to companies by companyId. Do not add these fields to the existing companies table. Schema:
+
+companyId (foreign key)
+leadResponseActive (boolean, default false)
+leadResponseActiveUntil (timestamp, nullable)
+telnyxNumberReleaseDate (timestamp, nullable)
+portingRequested (boolean, default false)
+billingMode (enum: pre_service, post_service)
+depositPercent (integer, default 50)
+schedulingPlatform (enum: scoopilot, housecall_pro, manual)
+hcpApiKey (varchar, encrypted at rest)
+telnyxNumber (varchar)
+serviceZipCodes (text)
+outOfAreaMessage (text)
+stripeSubscriptionId (varchar)
+setupComplete (boolean, default false)
+createdAt, updatedAt
+
+
+Process gaps:
+1. Standalone operator signup
+Same /register page as SP. On registration, if they came from a Lead Response Stripe checkout link, set leadResponseActive to true and assign lead_response_operator role automatically. Add a query parameter ?product=lead_response to the registration URL that triggers this. The Stripe checkout link for Lead Response includes this parameter in the success redirect URL.
+2. Subscription cancellation
+When the $19/month subscription is cancelled, do not deactivate immediately. Set leadResponseActiveUntil on the lead_response_config record equal to the end of the current billing period pulled from the Stripe subscription's current_period_end field in the cancellation webhook.
+Keep leadResponseActive as true until that timestamp passes. Run a nightly job that checks for expired leadResponseActiveUntil dates and sets leadResponseActive to false for any that have passed.
+On cancellation, retain the operator's Telnyx number for 30 days past leadResponseActiveUntil. Store the number release date as telnyxNumberReleaseDate on lead_response_config. The nightly job that checks for expired subscriptions should also check for expired telnyxNumberReleaseDate values and trigger a Telnyx number release API call for those records. Notify the SP admin portal when a number is released.
+If the operator reactivates before telnyxNumberReleaseDate, clear the release date and keep the number assigned to them.
+On cancellation, send the operator an email confirming their access runs until the end of the billing period with the exact date. Include a reactivation link.
+3. SP subscriber downgrade
+If an SP subscriber cancels their SP plan, do not auto-convert to Lead Response standalone. Lead Response is deactivated along with everything else following the same leadResponseActiveUntil logic above. They get a cancellation email that mentions they can reactivate Lead Response separately for $19/month. Do not auto-bill them.
+4. Estimate generation
+SP does not send the estimate. SP fires the contact.created webhook and Zapier handles the estimate calculation and SMS downstream. SP just needs to store the leadResponseStatus as estimate_sent when the webhook fires successfully. Add a callback endpoint POST /api/lead-response/status that Zapier can call to update leadResponseStatus on any contact by contactId.
+5. Dead lead automation
+Zapier and Airtable handle the reminder timing and dead lead marking. SP needs one thing: the callback endpoint from answer 4 above. Zapier calls it to update status to dead after reminders expire. SP does not run any scheduled jobs for this.
+6. HousecallPro API key
+SP collects and stores it encrypted. SP does not use it directly -- it gets pushed to Airtable Operator Config on save so Zapier can use it. No HCP integration logic needed inside SP itself.
+7. Request number change button
+Creates a flag in the SP admin portal (portingRequested: true on the lead_response_config record) and sends an email to the SP admin email address stored in secrets as ADMIN_EMAIL. No automated porting flow. Just a notification and a flag.
+
+Existing system conflicts:
+1. Pricing model
+There are two scenarios:
+Scenario A: Operator is an SP subscriber activating Lead Response.
+Pre-populate their Lead Response tiers from their existing SP pricing as a starting point. Map small → tier_1, medium → tier_2, large → tier_3, extra-large → tier_4. Pre-fill labels and prices but do not auto-save. Show them the pre-populated tiers in the onboarding step and let them review and edit before saving. Only write to lead_response_config on explicit save.
+Scenario B: Standalone Lead Response operator with no SP subscription.
+No existing pricing to pull from. Show empty tier fields in onboarding. They fill in their own labels and prices from scratch. Tiers 1-3 required before they can proceed.
+In both scenarios, Lead Response tier pricing lives in lead_response_config, not the existing pricing tables. The existing SP pricing matrix is never touched.
+2. submittedAt missing from webhook
+Add submittedAt (ISO timestamp of webhook fire time) to the contact.created webhook payload.
