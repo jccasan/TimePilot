@@ -117,6 +117,7 @@ import {
   Sparkles,
   Users,
   Download,
+  Pencil,
 } from "lucide-react";
 import {
   compressMessageAttachment,
@@ -125,6 +126,7 @@ import {
 } from "@/lib/compress-image";
 import { Switch } from "@/components/ui/switch";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
+import { EditJobPanel } from "@/components/edit-job-panel";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { StreetViewImage } from "@/components/street-view-image";
 import { SatelliteImage } from "@/components/satellite-image";
@@ -1867,7 +1869,7 @@ export default function ContactDetail() {
 
       <RouteAssignmentCard servicePlans={servicePlansForPricing} routes={allRoutes} />
 
-      <ServicePlansCard contactId={id!} properties={properties || []} />
+      <ServicePlansCard contactId={id!} properties={properties || []} contact={contact} />
 
       <Card>
         <CardHeader>
@@ -4639,15 +4641,19 @@ function RouteAssignmentCard({
 function ServicePlansCard({
   contactId,
   properties,
+  contact,
 }: {
   contactId: string;
   properties: Property[];
+  contact?: Contact | null;
 }) {
   const tz = useCompanyTimezone();
   const { toast } = useToast();
   const { formatMoney } = useCurrency();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<ServicePlan | null>(null);
+
+  const [editJobOpen, setEditJobOpen] = useState(false);
 
   const { data: servicePlans } = useQuery<
     (ServicePlan & {
@@ -4669,9 +4675,7 @@ function ServicePlansCard({
   });
 
   const [createSelectedAddOns, setCreateSelectedAddOns] = useState<string[]>([]);
-  const [editSelectedAddOns, setEditSelectedAddOns] = useState<string[]>([]);
   const [createTemplateId, setCreateTemplateId] = useState<string>("");
-  const [editTemplateId, setEditTemplateId] = useState<string>("");
 
   const basePricingForFreq = useCallback(
     (freq: string) => {
@@ -4751,10 +4755,8 @@ function ServicePlansCard({
         endDate: editingPlan.endDate || "",
         isStopOnly: editingPlan.isStopOnly || false,
       });
-      const planWithAddOns = servicePlans?.find((sp) => sp.id === editingPlan.id);
-      setEditSelectedAddOns(planWithAddOns?.addOns?.map((a) => a.servicePricingId) || []);
     }
-  }, [editingPlan, editForm, servicePlans]);
+  }, [editingPlan, editForm]);
 
   const buildAddOnsPayload = (selectedIds: string[]) => {
     return selectedIds.map((id) => {
@@ -4804,35 +4806,6 @@ function ServicePlansCard({
       setCreateDialogOpen(false);
       createForm.reset();
       setCreateSelectedAddOns([]);
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: ServicePlanFormValues }) => {
-      const normalized = normalizeJobPayload(data);
-      await apiRequest("PATCH", `/api/service-plans/${id}`, {
-        ...normalized,
-        addOns: buildAddOnsPayload(editSelectedAddOns),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/service-plans" + `?contactId=${contactId}`],
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
-      queryClient.invalidateQueries({
-        predicate: (query) =>
-          Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
-      toast({ title: "Job updated" });
-      setEditingPlan(null);
-      setEditSelectedAddOns([]);
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -4934,12 +4907,7 @@ function ServicePlansCard({
     createPrice,
     properties
   );
-  const { calcResult: editCalcResult, calcLoading: editCalcLoading } = useInlinePriceCalc(
-    editPropertyId,
-    editFrequency,
-    editPrice,
-    properties
-  );
+  useInlinePriceCalc(editPropertyId, editFrequency, editPrice, properties);
 
   const prevCreateFrequencyRef = useRef(createFrequency);
   useEffect(() => {
@@ -5641,7 +5609,10 @@ function ServicePlansCard({
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => setEditingPlan(plan)}
+                              onClick={() => {
+                                setEditingPlan(plan);
+                                setEditJobOpen(true);
+                              }}
                               data-testid={`button-edit-plan-${plan.id}`}
                             >
                               <Edit2 className="h-4 w-4" />
@@ -5736,6 +5707,17 @@ function ServicePlansCard({
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge variant="destructive">Cancelled</Badge>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setEditingPlan(plan);
+                                setEditJobOpen(true);
+                              }}
+                              data-testid={`button-edit-cancelled-plan-${plan.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
@@ -5778,32 +5760,27 @@ function ServicePlansCard({
           <p className="text-sm text-muted-foreground">No jobs yet.</p>
         )}
 
-        <Dialog
-          open={!!editingPlan}
-          onOpenChange={(open) => {
-            if (!open) setEditingPlan(null);
+        <EditJobPanel
+          open={editJobOpen}
+          onOpenChange={(o) => {
+            setEditJobOpen(o);
+            if (!o) setEditingPlan(null);
           }}
-        >
-          <DialogContent className="max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Edit Job</DialogTitle>
-            </DialogHeader>
-            {editingPlan &&
-              renderPlanForm(
-                editForm,
-                (v) => updateMutation.mutate({ id: editingPlan.id, data: v }),
-                updateMutation.isPending,
-                "Save Job",
-                true,
-                editCalcResult,
-                editCalcLoading,
-                editSelectedAddOns,
-                setEditSelectedAddOns,
-                editTemplateId,
-                setEditTemplateId
-              )}
-          </DialogContent>
-        </Dialog>
+          servicePlan={editingPlan}
+          property={
+            editingPlan ? (properties.find((p) => p.id === editingPlan.propertyId) ?? null) : null
+          }
+          contact={contact}
+          contactId={contactId}
+          team={team}
+          extraInvalidateKeys={[
+            ["/api/service-plans" + `?contactId=${contactId}`],
+            ["/api/jobs"],
+            ["/api/company/stats"],
+            ["/api/company/pipeline"],
+            ["/api/profitability/customer", contactId],
+          ]}
+        />
       </CardContent>
     </Card>
   );

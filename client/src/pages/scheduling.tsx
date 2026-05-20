@@ -78,6 +78,7 @@ import {
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { GenerateInvoiceDialog } from "@/components/generate-invoice-dialog";
+import { EditJobPanel } from "@/components/edit-job-panel";
 import {
   DndContext,
   DragOverlay,
@@ -1712,6 +1713,7 @@ function VisitDetailSheet({
   const [editRouteId, setEditRouteId] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [enlargedPhoto, setEnlargedPhoto] = useState<string | null>(null);
+  const [editJobOpen, setEditJobOpen] = useState(false);
 
   useEffect(() => {
     if (visit && editing) {
@@ -1979,16 +1981,28 @@ function VisitDetailSheet({
                 {visitStatusLabels[visit.status] || visit.status}
               </Badge>
               {isEditable && !editing && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto"
-                  onClick={() => setEditing(true)}
-                  data-testid="button-edit-visit"
-                >
-                  <Pencil className="h-4 w-4 mr-1" />
-                  Edit
-                </Button>
+                <div className="ml-auto flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(true)}
+                    data-testid="button-edit-visit"
+                  >
+                    <Pencil className="h-4 w-4 mr-1" />
+                    Edit Visit
+                  </Button>
+                  {plan && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEditJobOpen(true)}
+                      data-testid="button-edit-job"
+                    >
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit Job
+                    </Button>
+                  )}
+                </div>
               )}
               {visit.status === "completed" && !visit.invoiceId && (
                 <Badge
@@ -2435,6 +2449,22 @@ function VisitDetailSheet({
           </div>
         </SheetContent>
       </Sheet>
+      <EditJobPanel
+        open={editJobOpen}
+        onOpenChange={(o) => {
+          setEditJobOpen(o);
+        }}
+        servicePlan={plan || null}
+        property={property || null}
+        contact={contact || null}
+        contactId={contact?.id}
+        team={_team}
+        extraInvalidateKeys={[
+          [`/api/visits/range?start=${startStr}&end=${endStr}`],
+          ["/api/company/pipeline"],
+          ["/api/company/stats"],
+        ]}
+      />
     </>
   );
 }
