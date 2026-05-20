@@ -2257,7 +2257,10 @@ function MyPricingTab() {
         </Button>
       </div>
       {isDirty && (
-        <p className="text-xs text-amber-600 dark:text-amber-400 -mt-4" data-testid="text-my-pricing-unsaved">
+        <p
+          className="text-xs text-amber-600 dark:text-amber-400 -mt-4"
+          data-testid="text-my-pricing-unsaved"
+        >
           You have unsaved changes.
         </p>
       )}
@@ -2267,7 +2270,8 @@ function MyPricingTab() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Your Prices</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Tap any price to edit it. Prices for larger yard sizes adjust their surcharge; the base frequency price stays the same.
+            Tap any price to edit it. Prices for larger yard sizes adjust their surcharge; the base
+            frequency price stays the same.
           </p>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
@@ -2319,7 +2323,8 @@ function MyPricingTab() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Modifiers</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            These surcharges are added on top of the base price depending on yard size and number of dogs.
+            These surcharges are added on top of the base price depending on yard size and number of
+            dogs.
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -2328,7 +2333,11 @@ function MyPricingTab() {
             <p className="text-sm font-medium mb-3">Yard Size Surcharges</p>
             <div className="space-y-2">
               {YARD_SIZE_TIERS.map((tier, ti) => (
-                <div key={ti} className="flex items-center gap-3" data-testid={`row-mp-yard-surcharge-${ti}`}>
+                <div
+                  key={ti}
+                  className="flex items-center gap-3"
+                  data-testid={`row-mp-yard-surcharge-${ti}`}
+                >
                   <span className="text-sm flex-1">{tier.label}</span>
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-muted-foreground">+$</span>
@@ -2360,7 +2369,8 @@ function MyPricingTab() {
           <div className="border-t pt-4">
             <p className="text-sm font-medium mb-1">Per-Dog Surcharge</p>
             <p className="text-xs text-muted-foreground mb-3">
-              Add ${perDogRule.surchargeAmount.toFixed(2)} for every {perDogRule.incrementDogs} dog(s) beyond the first, up to {perDogRule.maxDogs} dogs.
+              Add ${perDogRule.surchargeAmount.toFixed(2)} for every {perDogRule.incrementDogs}{" "}
+              dog(s) beyond the first, up to {perDogRule.maxDogs} dogs.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1">
@@ -2370,7 +2380,10 @@ function MyPricingTab() {
                   min={1}
                   value={perDogRule.incrementDogs}
                   onChange={(e) => {
-                    setPerDogRule((r) => ({ ...r, incrementDogs: Math.max(1, parseInt(e.target.value) || 1) }));
+                    setPerDogRule((r) => ({
+                      ...r,
+                      incrementDogs: Math.max(1, parseInt(e.target.value) || 1),
+                    }));
                     setIsDirty(true);
                   }}
                   className="w-full h-8 text-sm text-right tabular-nums rounded-md border border-input px-2 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -2385,7 +2398,10 @@ function MyPricingTab() {
                   step="0.01"
                   value={perDogRule.surchargeAmount}
                   onChange={(e) => {
-                    setPerDogRule((r) => ({ ...r, surchargeAmount: Math.max(0, parseFloat(e.target.value) || 0) }));
+                    setPerDogRule((r) => ({
+                      ...r,
+                      surchargeAmount: Math.max(0, parseFloat(e.target.value) || 0),
+                    }));
                     setIsDirty(true);
                   }}
                   className="w-full h-8 text-sm text-right tabular-nums rounded-md border border-input px-2 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -2400,7 +2416,10 @@ function MyPricingTab() {
                   max={20}
                   value={perDogRule.maxDogs}
                   onChange={(e) => {
-                    setPerDogRule((r) => ({ ...r, maxDogs: Math.max(1, Math.min(20, parseInt(e.target.value) || 1)) }));
+                    setPerDogRule((r) => ({
+                      ...r,
+                      maxDogs: Math.max(1, Math.min(20, parseInt(e.target.value) || 1)),
+                    }));
                     setIsDirty(true);
                   }}
                   className="w-full h-8 text-sm text-right tabular-nums rounded-md border border-input px-2 bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -2441,19 +2460,35 @@ export default function UnifiedPricingEngine() {
           className="w-full grid grid-cols-4 sm:inline-flex sm:w-auto"
           data-testid="tabs-pricing"
         >
-          <TabsTrigger value="costs" data-testid="tab-costs" className="gap-1 text-xs sm:text-sm sm:gap-1.5">
+          <TabsTrigger
+            value="costs"
+            data-testid="tab-costs"
+            className="gap-1 text-xs sm:text-sm sm:gap-1.5"
+          >
             <DollarSign className="h-3.5 w-3.5 shrink-0" />
             <span>Costs</span>
           </TabsTrigger>
-          <TabsTrigger value="pricing" data-testid="tab-my-pricing" className="gap-1 text-xs sm:text-sm sm:gap-1.5">
+          <TabsTrigger
+            value="pricing"
+            data-testid="tab-my-pricing"
+            className="gap-1 text-xs sm:text-sm sm:gap-1.5"
+          >
             <Target className="h-3.5 w-3.5 shrink-0" />
             <span>My Pricing</span>
           </TabsTrigger>
-          <TabsTrigger value="engine" data-testid="tab-engine" className="gap-1 text-xs sm:text-sm sm:gap-1.5">
+          <TabsTrigger
+            value="engine"
+            data-testid="tab-engine"
+            className="gap-1 text-xs sm:text-sm sm:gap-1.5"
+          >
             <Calculator className="h-3.5 w-3.5 shrink-0" />
             <span>Engine</span>
           </TabsTrigger>
-          <TabsTrigger value="simulator" data-testid="tab-simulator" className="gap-1 text-xs sm:text-sm sm:gap-1.5">
+          <TabsTrigger
+            value="simulator"
+            data-testid="tab-simulator"
+            className="gap-1 text-xs sm:text-sm sm:gap-1.5"
+          >
             <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
             <span>Simulator</span>
           </TabsTrigger>
