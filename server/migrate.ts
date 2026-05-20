@@ -944,7 +944,9 @@ export async function runStartupMigrations(): Promise<void> {
           AND variable_flat_cents > 0
           AND cost_driver_type IS NULL
     `);
-    console.log("[Migration] overhead_costs cost_driver_type / driver_rate columns ensured and back-filled");
+    console.log(
+      "[Migration] overhead_costs cost_driver_type / driver_rate columns ensured and back-filled"
+    );
 
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {

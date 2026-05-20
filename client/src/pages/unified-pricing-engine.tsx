@@ -206,9 +206,7 @@ function CostItemRow({
   const lastSavedCents = useRef(item.monthlyCostCents);
 
   const isFormulaMode =
-    item.type === "variable" &&
-    item.costDriverType !== null &&
-    item.costDriverType !== undefined;
+    item.type === "variable" && item.costDriverType !== null && item.costDriverType !== undefined;
 
   useEffect(() => {
     if (!isFormulaMode && inputRef.current && document.activeElement !== inputRef.current) {
@@ -284,8 +282,12 @@ function CostItemRow({
           </p>
         )}
         {isFormulaMode && (
-          <p className="text-[10px] text-muted-foreground mt-0.5" data-testid={`text-formula-source-${item.id}`}>
-            {item.costDriverType === "pct_revenue" ? "% of revenue" : "per stop"} · based on last 90 days
+          <p
+            className="text-[10px] text-muted-foreground mt-0.5"
+            data-testid={`text-formula-source-${item.id}`}
+          >
+            {item.costDriverType === "pct_revenue" ? "% of revenue" : "per stop"} · based on last 90
+            days
           </p>
         )}
       </div>
@@ -1224,11 +1226,15 @@ function CostsTab() {
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const [newItemType, setNewItemType] = useState<"fixed" | "variable">("fixed");
-  const [newItemDriverType, setNewItemDriverType] = useState<"pct_revenue" | "per_stop">("pct_revenue");
+  const [newItemDriverType, setNewItemDriverType] = useState<"pct_revenue" | "per_stop">(
+    "pct_revenue"
+  );
   const [newItemDriverRate, setNewItemDriverRate] = useState("");
 
   const [editingFormulaItem, setEditingFormulaItem] = useState<OverheadCostItem | null>(null);
-  const [formulaDriverType, setFormulaDriverType] = useState<"pct_revenue" | "per_stop">("pct_revenue");
+  const [formulaDriverType, setFormulaDriverType] = useState<"pct_revenue" | "per_stop">(
+    "pct_revenue"
+  );
   const [formulaDriverRate, setFormulaDriverRate] = useState("");
 
   const { data, isLoading } = useQuery<OverheadData>({ queryKey: ["/api/overhead-costs"] });
@@ -1560,7 +1566,10 @@ function CostsTab() {
                           ? "bg-violet-600 text-white"
                           : "bg-transparent text-muted-foreground hover:bg-violet-100 dark:hover:bg-violet-900"
                       }`}
-                      onClick={() => { setNewItemDriverType("pct_revenue"); setNewItemDriverRate(""); }}
+                      onClick={() => {
+                        setNewItemDriverType("pct_revenue");
+                        setNewItemDriverRate("");
+                      }}
                       data-testid="button-new-driver-pct-revenue"
                     >
                       % of revenue
@@ -1572,7 +1581,10 @@ function CostsTab() {
                           ? "bg-violet-600 text-white"
                           : "bg-transparent text-muted-foreground hover:bg-violet-100 dark:hover:bg-violet-900"
                       }`}
-                      onClick={() => { setNewItemDriverType("per_stop"); setNewItemDriverRate(""); }}
+                      onClick={() => {
+                        setNewItemDriverType("per_stop");
+                        setNewItemDriverRate("");
+                      }}
                       data-testid="button-new-driver-per-stop"
                     >
                       per stop
@@ -1691,7 +1703,10 @@ function CostsTab() {
                           ? "bg-violet-600 text-white"
                           : "bg-transparent text-muted-foreground hover:bg-violet-50 dark:hover:bg-violet-950"
                       }`}
-                      onClick={() => { setFormulaDriverType("pct_revenue"); setFormulaDriverRate(""); }}
+                      onClick={() => {
+                        setFormulaDriverType("pct_revenue");
+                        setFormulaDriverRate("");
+                      }}
                       data-testid="button-formula-driver-pct-revenue"
                     >
                       % of revenue
@@ -1703,7 +1718,10 @@ function CostsTab() {
                           ? "bg-violet-600 text-white"
                           : "bg-transparent text-muted-foreground hover:bg-violet-50 dark:hover:bg-violet-950"
                       }`}
-                      onClick={() => { setFormulaDriverType("per_stop"); setFormulaDriverRate(""); }}
+                      onClick={() => {
+                        setFormulaDriverType("per_stop");
+                        setFormulaDriverRate("");
+                      }}
                       data-testid="button-formula-driver-per-stop"
                     >
                       per stop

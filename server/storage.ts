@@ -4451,13 +4451,23 @@ export class DatabaseStorage implements IStorage {
       .select({ total: sql<number>`COUNT(*)::int` })
       .from(visits)
       .where(
-        and(eq(visits.companyId, companyId), eq(visits.status, "completed"), gte(visits.completedAt, ninety))
+        and(
+          eq(visits.companyId, companyId),
+          eq(visits.status, "completed"),
+          gte(visits.completedAt, ninety)
+        )
       );
 
     const [revenueRow] = await db
       .select({ total: sql<string>`COALESCE(SUM(${invoices.total}), 0)` })
       .from(invoices)
-      .where(and(eq(invoices.companyId, companyId), eq(invoices.status, "paid"), gte(invoices.paidAt, ninety)));
+      .where(
+        and(
+          eq(invoices.companyId, companyId),
+          eq(invoices.status, "paid"),
+          gte(invoices.paidAt, ninety)
+        )
+      );
 
     const totalStops = Number(stopsRow?.total ?? 0);
     const totalRevenueDollars = Number(revenueRow?.total ?? 0);

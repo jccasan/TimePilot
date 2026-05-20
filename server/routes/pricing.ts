@@ -2289,7 +2289,10 @@ Rules:
         return item;
       });
 
-      const totalMonthlyOverheadCents = enrichedItems.reduce((sum, i) => sum + i.monthlyCostCents, 0);
+      const totalMonthlyOverheadCents = enrichedItems.reduce(
+        (sum, i) => sum + i.monthlyCostCents,
+        0
+      );
       res.json({
         items: enrichedItems,
         totalMonthlyOverheadCents,
