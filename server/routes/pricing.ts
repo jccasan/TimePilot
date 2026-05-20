@@ -2332,6 +2332,8 @@ Rules:
         sortOrder: typeof sortOrder === "number" ? sortOrder : 0,
         costDriverType: parsedDriverType,
         driverRate: parsedDriverRate,
+        variableRatePct: null,
+        variableFlatCents: null,
       });
       res.json(item);
     } catch (err) {
@@ -2357,6 +2359,9 @@ Rules:
           req.body.costDriverType === "pct_revenue" || req.body.costDriverType === "per_stop"
             ? req.body.costDriverType
             : null;
+        // Always null legacy columns when touching driver fields
+        updates.variableRatePct = null;
+        updates.variableFlatCents = null;
       }
       if ("driverRate" in req.body) {
         updates.driverRate =

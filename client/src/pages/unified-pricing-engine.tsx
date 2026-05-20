@@ -193,6 +193,7 @@ function CostItemRow({
   isPending,
   isAutoCalculated,
   autoFuelMiles,
+  dataSource,
 }: {
   item: OverheadCostItem;
   onUpdateCost: (id: string, cents: number) => void;
@@ -201,6 +202,7 @@ function CostItemRow({
   isPending: boolean;
   isAutoCalculated?: boolean;
   autoFuelMiles?: number;
+  dataSource?: "trailing_90d" | "estimated";
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const lastSavedCents = useRef(item.monthlyCostCents);
@@ -286,8 +288,8 @@ function CostItemRow({
             className="text-[10px] text-muted-foreground mt-0.5"
             data-testid={`text-formula-source-${item.id}`}
           >
-            {item.costDriverType === "pct_revenue" ? "% of revenue" : "per stop"} · based on last 90
-            days
+            {item.costDriverType === "pct_revenue" ? "% of revenue" : "per stop"} &middot;{" "}
+            {dataSource === "trailing_90d" ? "based on last 90 days" : "based on estimate"}
           </p>
         )}
       </div>
@@ -369,6 +371,7 @@ function CategorySection({
   onEditFormula,
   isPending,
   autoFuelMiles,
+  dataSource,
 }: {
   category: string;
   items: OverheadCostItem[];
@@ -378,6 +381,7 @@ function CategorySection({
   onEditFormula: (item: OverheadCostItem) => void;
   isPending: boolean;
   autoFuelMiles?: number;
+  dataSource?: "trailing_90d" | "estimated";
 }) {
   const [isOpen, setIsOpen] = useState(true);
   const categoryTotal = items.reduce((s, i) => s + i.monthlyCostCents, 0);
@@ -443,6 +447,7 @@ function CategorySection({
                   isPending={isPending}
                   isAutoCalculated={isAutoFuel}
                   autoFuelMiles={isAutoFuel ? autoFuelMiles : undefined}
+                  dataSource={dataSource}
                 />
               );
             })}
@@ -1544,6 +1549,7 @@ function CostsTab() {
                     ? (monthlyFuelData?.totalMiles ?? 0)
                     : undefined
                 }
+                dataSource={data?.dataSource}
               />
             );
           })}

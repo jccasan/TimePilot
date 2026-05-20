@@ -4464,7 +4464,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(invoices.companyId, companyId),
-          eq(invoices.status, "paid"),
+          sql`${invoices.status} IN ('paid', 'posted')`,
           gte(invoices.paidAt, ninety)
         )
       );
