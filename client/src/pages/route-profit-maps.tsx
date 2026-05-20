@@ -908,6 +908,12 @@ export default function RouteProfitMaps() {
                               {route.avgMarginPct.toFixed(1)}%
                             </span>
                           </div>
+                          <div className="col-span-2">
+                            <p className="text-[10px] text-muted-foreground italic">
+                              * Direct-cost margin (labor + vehicle). Does not include overhead —
+                              not comparable to fully-loaded customer profitability margin.
+                            </p>
+                          </div>
                         </div>
                         <div className="px-3 pb-2">
                           <p className="text-[11px] font-medium text-muted-foreground mb-1">

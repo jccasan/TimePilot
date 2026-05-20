@@ -18,6 +18,7 @@ export interface PriceBreakdown {
   adjustedTravelMinutes: number;
   densityMultiplier: number;
   laborCostCents: number;
+  travelLaborCostCents: number;
   travelCostCents: number;
   adjustedTravelCostCents: number;
   equipmentCostCents: number;
@@ -39,6 +40,7 @@ export interface PriceDerived {
 
 export interface PriceCalculatorResult {
   minimumPriceCents: number;
+  totalCostPerVisitCentsUnrounded: number;
   recommendedPriceCents: number;
   premiumPriceCents: number;
   inputsUsed: PriceCalculatorInputs & { configSnapshot: Partial<PricingConfig> };
@@ -140,8 +142,7 @@ export function calculatePrice(
     travelMinutes = (inputs.distanceFromNearestStopMiles / config.driveSpeedAverageMph) * 60;
     densityMultiplier = 1.0;
     if (inputs.routeStopsPerMile && inputs.routeStopsPerMile > 0) {
-      const baselineStopsPerMile =
-        config.estimatedMonthlyStops > 0 ? config.estimatedMonthlyStops / 30 : 3;
+      const baselineStopsPerMile = config.baselineStopsPerMile ?? 3.0;
       densityMultiplier = baselineStopsPerMile / Math.max(inputs.routeStopsPerMile, SMALL_EPSILON);
       densityMultiplier = Math.max(0.6, Math.min(1.8, densityMultiplier));
     }
@@ -159,8 +160,10 @@ export function calculatePrice(
 
   const fullyBurdenedRateCentsPerHour = config.techHourlyWageCents * config.burdenMultiplier;
   const jobMinutes = serviceMinutes + adjustedTravelMinutes;
-  // Labor covers yard service time only; travel labor is absorbed at the route level
+  // Labor covers yard service time only
   const laborCostCents = (serviceMinutes / 60) * fullyBurdenedRateCentsPerHour;
+  // Travel labor: technician time driving to/from the stop (separate from vehicle cost)
+  const travelLaborCostCents = (adjustedTravelMinutes / 60) * fullyBurdenedRateCentsPerHour;
 
   // Disinfectant/Deodorizer: flat $0.01/stop for standard use
   const disinfectantCostCents = 1;
@@ -191,7 +194,11 @@ export function calculatePrice(
   }
 
   const totalCostPerVisitCents =
-    laborCostCents + adjustedTravelCostCents + equipmentCostCents + overheadPerVisitCents;
+    laborCostCents +
+    travelLaborCostCents +
+    adjustedTravelCostCents +
+    equipmentCostCents +
+    overheadPerVisitCents;
 
   const targetMargin = getTargetMarginForMode(config) / 100;
   const minimumPriceCents = totalCostPerVisitCents;
@@ -244,6 +251,7 @@ export function calculatePrice(
     adjustedTravelMinutes: Math.round(adjustedTravelMinutes * 100) / 100,
     densityMultiplier: Math.round(densityMultiplier * 1000) / 1000,
     laborCostCents: Math.round(laborCostCents),
+    travelLaborCostCents: Math.round(travelLaborCostCents),
     travelCostCents: Math.round(travelCostCents),
     adjustedTravelCostCents: Math.round(adjustedTravelCostCents),
     equipmentCostCents: Math.round(equipmentCostCents),
@@ -265,6 +273,7 @@ export function calculatePrice(
 
   const result: PriceCalculatorResult = {
     minimumPriceCents: roundedMinimum,
+    totalCostPerVisitCentsUnrounded: totalCostPerVisitCents,
     recommendedPriceCents: roundedRecommended,
     premiumPriceCents: roundedPremium,
     inputsUsed: { ...inputs, configSnapshot: config },

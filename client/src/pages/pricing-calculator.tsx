@@ -113,6 +113,7 @@ const pricingConfigSchema = z.object({
   clusterDiscountPct2: z.coerce.number().min(0).max(100),
   estimatedMonthlyStops: z.coerce.number().min(1),
   standardTravelMinutesPerStop: z.coerce.number().min(0).max(30),
+  baselineStopsPerMile: z.coerce.number().min(0.1).max(20),
 });
 
 function configToFormValues(config: PricingConfig) {
@@ -151,6 +152,8 @@ function configToFormValues(config: PricingConfig) {
     clusterDiscountPct2: config.clusterDiscountPct2,
     estimatedMonthlyStops: config.estimatedMonthlyStops,
     standardTravelMinutesPerStop: config.standardTravelMinutesPerStop ?? 3,
+    baselineStopsPerMile:
+      config.baselineStopsPerMile ?? DEFAULT_PRICING_CONFIG.baselineStopsPerMile,
   };
 }
 
@@ -192,6 +195,7 @@ function formValuesToConfig(values: z.infer<typeof pricingConfigSchema>): Pricin
     clusterDiscountPct2: values.clusterDiscountPct2,
     estimatedMonthlyStops: values.estimatedMonthlyStops,
     standardTravelMinutesPerStop: values.standardTravelMinutesPerStop,
+    baselineStopsPerMile: values.baselineStopsPerMile,
   };
 }
 

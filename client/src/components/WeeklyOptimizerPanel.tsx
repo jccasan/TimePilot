@@ -1055,9 +1055,12 @@ export function WeeklyOptimizerPanel({
                                     <DollarSign className="h-3 w-3" />
                                     {formatCurrency(route.revenue)}
                                   </span>
-                                  <span className="flex items-center gap-1">
+                                  <span
+                                    className="flex items-center gap-1"
+                                    title="Direct-cost margin only — does not include overhead. Not comparable to fully-loaded customer profitability margin."
+                                  >
                                     <TrendingUp className="h-3 w-3" />
-                                    {Math.round(route.profitMargin * 100)}% margin
+                                    {Math.round(route.profitMargin * 100)}% margin*
                                   </span>
                                 </div>
                               </div>

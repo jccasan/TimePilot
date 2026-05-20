@@ -186,6 +186,7 @@ export interface PricingConfig {
   clusterDiscountPct2: number;
   estimatedMonthlyStops: number;
   standardTravelMinutesPerStop: number;
+  baselineStopsPerMile: number;
 }
 
 export const DEFAULT_PRICING_CONFIG: PricingConfig = {
@@ -223,6 +224,7 @@ export const DEFAULT_PRICING_CONFIG: PricingConfig = {
   clusterDiscountPct2: 15,
   estimatedMonthlyStops: 100,
   standardTravelMinutesPerStop: 3,
+  baselineStopsPerMile: 3.0,
 };
 
 export const TIER_CONFIG = {

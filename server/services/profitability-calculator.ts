@@ -30,6 +30,7 @@ export interface CustomerPropertyProfitability {
   recommendedPriceCents: number;
   costBreakdown: {
     laborCostCents: number;
+    travelLaborCostCents: number;
     travelCostCents: number;
     equipmentCostCents: number;
     overheadCostCents: number;
@@ -138,9 +139,12 @@ function getFrequencyVisitsPerMonth(frequency: string): number {
   }
 }
 
-function determineProfitabilityStatus(marginPct: number): ProfitabilityStatus {
+function determineProfitabilityStatus(
+  marginPct: number,
+  targetMarginPct = 30
+): ProfitabilityStatus {
   if (marginPct < 0) return "unprofitable";
-  if (marginPct <= 15) return "marginal";
+  if (marginPct <= targetMarginPct * 0.5) return "marginal";
   return "profitable";
 }
 
@@ -179,6 +183,7 @@ export async function calculateCustomerProfitability(
   const propertyMap = new Map(properties.map((p) => [p.id, p]));
 
   const pricingConfig = company.pricingConfig as Partial<PricingConfig> | null;
+  const companyFullConfig = getEffectivePricingConfig(pricingConfig);
 
   const overheadTotal = await storage.getTotalMonthlyOverheadCents(companyId);
   const overrideOverhead = overheadTotal > 0 ? overheadTotal : undefined;
@@ -264,14 +269,14 @@ export async function calculateCustomerProfitability(
     );
 
     const revenuePerVisitCents = totalPerVisitCents;
-    const costPerVisitCents = result.minimumPriceCents;
+    const costPerVisitCents = result.totalCostPerVisitCentsUnrounded;
     const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;
     const profitMarginPct =
       revenuePerVisitCents > 0 ? (profitPerVisitCents / revenuePerVisitCents) * 100 : 0;
     const jobMinutes = result.derived.jobMinutes;
     const profitPerHourCents = jobMinutes > 0 ? (profitPerVisitCents / jobMinutes) * 60 : 0;
 
-    const jobCostPerVisitCents = jobResult.minimumPriceCents;
+    const jobCostPerVisitCents = jobResult.totalCostPerVisitCentsUnrounded;
     const jobProfitPerVisitCents = revenuePerVisitCents - jobCostPerVisitCents;
     const jobProfitMarginPct =
       revenuePerVisitCents > 0 ? (jobProfitPerVisitCents / revenuePerVisitCents) * 100 : 0;
@@ -309,6 +314,7 @@ export async function calculateCustomerProfitability(
       recommendedPriceCents: result.recommendedPriceCents,
       costBreakdown: {
         laborCostCents: result.breakdown.laborCostCents,
+        travelLaborCostCents: result.breakdown.travelLaborCostCents,
         travelCostCents: result.breakdown.adjustedTravelCostCents,
         equipmentCostCents: result.breakdown.equipmentCostCents,
         overheadCostCents: result.breakdown.overheadPerVisitCents,
@@ -353,7 +359,7 @@ export async function calculateCustomerProfitability(
     totalCostPerVisitCents,
     totalProfitPerVisitCents,
     profitMarginPct: Math.round(overallMarginPct * 100) / 100,
-    status: determineProfitabilityStatus(overallMarginPct),
+    status: determineProfitabilityStatus(overallMarginPct, companyFullConfig.targetProfitMarginPct),
     properties: propertyResults,
     monthlyRevenueCents,
     monthlyCostCents,
@@ -376,6 +382,8 @@ export async function calculateAllCustomerProfitability(
   if (!company || contacts.length === 0) return [];
 
   const pricingConfig = company.pricingConfig as Partial<PricingConfig> | null;
+  const baseConfig = getEffectivePricingConfig(pricingConfig);
+  const companyTargetMarginPct = baseConfig.targetProfitMarginPct;
   const overheadTotal = await storage.getTotalMonthlyOverheadCents(companyId);
   const overrideOverhead = overheadTotal > 0 ? overheadTotal : undefined;
 
@@ -479,14 +487,14 @@ export async function calculateAllCustomerProfitability(
       );
 
       const revenuePerVisitCents = totalPerVisitCents;
-      const costPerVisitCents = result.minimumPriceCents;
+      const costPerVisitCents = result.totalCostPerVisitCentsUnrounded;
       const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;
       const profitMarginPct =
         revenuePerVisitCents > 0 ? (profitPerVisitCents / revenuePerVisitCents) * 100 : 0;
       const jobMinutes = result.derived.jobMinutes;
       const profitPerHourCents = jobMinutes > 0 ? (profitPerVisitCents / jobMinutes) * 60 : 0;
 
-      const contactJobCostPerVisitCents = contactJobResult.minimumPriceCents;
+      const contactJobCostPerVisitCents = contactJobResult.totalCostPerVisitCentsUnrounded;
       const contactJobProfitPerVisitCents = revenuePerVisitCents - contactJobCostPerVisitCents;
       const contactJobProfitMarginPct =
         revenuePerVisitCents > 0 ? (contactJobProfitPerVisitCents / revenuePerVisitCents) * 100 : 0;
@@ -526,6 +534,7 @@ export async function calculateAllCustomerProfitability(
         recommendedPriceCents: result.recommendedPriceCents,
         costBreakdown: {
           laborCostCents: result.breakdown.laborCostCents,
+          travelLaborCostCents: result.breakdown.travelLaborCostCents,
           travelCostCents: result.breakdown.adjustedTravelCostCents,
           equipmentCostCents: result.breakdown.equipmentCostCents,
           overheadCostCents: result.breakdown.overheadPerVisitCents,
@@ -571,7 +580,7 @@ export async function calculateAllCustomerProfitability(
       totalCostPerVisitCents,
       totalProfitPerVisitCents,
       profitMarginPct: Math.round(overallMarginPct * 100) / 100,
-      status: determineProfitabilityStatus(overallMarginPct),
+      status: determineProfitabilityStatus(overallMarginPct, companyTargetMarginPct),
       properties: propertyResults,
       monthlyRevenueCents,
       monthlyCostCents,
@@ -586,7 +595,13 @@ export async function generateProfitabilitySnapshots(
   companyId: string,
   config?: ProfitabilityConfig
 ): Promise<number> {
-  const allProfitability = await calculateAllCustomerProfitability(companyId, config);
+  const [allProfitability, company] = await Promise.all([
+    calculateAllCustomerProfitability(companyId, config),
+    storage.getCompany(companyId),
+  ]);
+  const companyTargetMarginPct = getEffectivePricingConfig(
+    (company?.pricingConfig as Partial<PricingConfig> | null) ?? null
+  ).targetProfitMarginPct;
   const snapshotDate = new Date().toISOString().split("T")[0];
   let count = 0;
 
@@ -606,9 +621,10 @@ export async function generateProfitabilitySnapshots(
         visitCount: Math.round(visitsPerMonth),
         avgRevenuePerVisitCents: prop.revenuePerVisitCents,
         avgCostPerVisitCents: prop.costPerVisitCents,
-        status: determineProfitabilityStatus(prop.profitMarginPct),
+        status: determineProfitabilityStatus(prop.profitMarginPct, companyTargetMarginPct),
         breakdownJson: {
           laborCostCents: prop.costBreakdown.laborCostCents,
+          travelLaborCostCents: prop.costBreakdown.travelLaborCostCents,
           travelCostCents: prop.costBreakdown.travelCostCents,
           equipmentCostCents: prop.costBreakdown.equipmentCostCents,
           overheadCostCents: prop.costBreakdown.overheadCostCents,
