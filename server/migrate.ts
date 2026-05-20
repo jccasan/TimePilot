@@ -948,6 +948,19 @@ export async function runStartupMigrations(): Promise<void> {
       "[Migration] overhead_costs cost_driver_type / driver_rate columns ensured and back-filled"
     );
 
+    // ── Cost driver v2 (Task #908): expand enum + add driver_params ──────────
+    // ADD VALUE IF NOT EXISTS is idempotent; each must be a separate statement
+    await client.query(`ALTER TYPE cost_driver_type ADD VALUE IF NOT EXISTS 'per_mile'`);
+    await client.query(`ALTER TYPE cost_driver_type ADD VALUE IF NOT EXISTS 'fuel'`);
+    await client.query(`ALTER TYPE cost_driver_type ADD VALUE IF NOT EXISTS 'payment_processing'`);
+    await client.query(`ALTER TYPE cost_driver_type ADD VALUE IF NOT EXISTS 'pct_expense'`);
+    await client.query(`ALTER TYPE cost_driver_type ADD VALUE IF NOT EXISTS 'per_unit'`);
+    await client.query(`ALTER TYPE cost_driver_type ADD VALUE IF NOT EXISTS 'manual'`);
+    await client.query(`ALTER TABLE overhead_costs ADD COLUMN IF NOT EXISTS driver_params JSONB`);
+    console.log(
+      "[Migration] overhead_costs driver_params + expanded cost_driver_type enum ensured"
+    );
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

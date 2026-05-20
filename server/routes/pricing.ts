@@ -2260,7 +2260,8 @@ Rules:
 
       // Get trailing 90-day actuals; falls back to "estimated" when no real data exists
       const actuals = await storage.getOverheadTrailingActuals(companyId);
-      let { trailingMonthlyStops, trailingMonthlyRevenueCents } = actuals;
+      let { trailingMonthlyStops, trailingMonthlyRevenueCents, trailingMonthlyTransactions } =
+        actuals;
       const { dataSource } = actuals;
 
       // For new accounts with no activity yet, fall back to pricing config estimates
@@ -2272,21 +2273,129 @@ Rules:
         const basePrices = (pricingRules.basePrices ?? {}) as Record<string, number>;
         const weeklyBasePriceCents = Math.round((basePrices.weekly ?? 25) * 100);
         trailingMonthlyRevenueCents = trailingMonthlyStops * weeklyBasePriceCents;
+        trailingMonthlyTransactions = Math.round(trailingMonthlyStops / 4);
       }
 
-      const enrichedItems = items.map((item) => {
-        if (item.type === "variable" && item.costDriverType) {
-          const rate = Number(item.driverRate ?? 0);
-          let computedCents = 0;
-          if (item.costDriverType === "pct_revenue") {
-            computedCents = Math.round((rate / 100) * trailingMonthlyRevenueCents);
-          } else if (item.costDriverType === "per_stop") {
-            // driverRate is stored in dollars per stop
-            computedCents = Math.round(rate * trailingMonthlyStops * 100);
+      // Compute monthly route miles (used by per_mile and fuel drivers) — best-effort
+      let trailingMonthlyMiles = 0;
+      const hasMileDrivers = items.some(
+        (i) =>
+          i.type === "variable" && (i.costDriverType === "per_mile" || i.costDriverType === "fuel")
+      );
+      if (hasMileDrivers) {
+        try {
+          const allRoutes = await storage.getRoutes(companyId);
+          if (allRoutes.length > 0) {
+            const [allPlans, allProperties, company] = await Promise.all([
+              storage.getServicePlans(companyId, { isActive: true }),
+              storage.getProperties(companyId),
+              storage.getCompany(companyId),
+            ]);
+            const propMap = new Map(allProperties.map((pr) => [pr.id, pr]));
+            const startPoint =
+              company?.startLatitude && company?.startLongitude
+                ? {
+                    latitude: Number(company.startLatitude),
+                    longitude: Number(company.startLongitude),
+                  }
+                : undefined;
+            let weeklyMiles = 0;
+            for (const route of allRoutes) {
+              const routePlans = (
+                allPlans as { routeId: string; stopOrder: number; propertyId: string; id: string }[]
+              )
+                .filter((sp) => sp.routeId === route.id)
+                .sort((a, b) => a.stopOrder - b.stopOrder);
+              if (routePlans.length < 2) continue;
+              const stops: { id: string; latitude: number; longitude: number }[] = [];
+              for (const sp of routePlans) {
+                const prop = propMap.get(sp.propertyId);
+                if (prop?.latitude && prop?.longitude) {
+                  stops.push({
+                    id: sp.id,
+                    latitude: Number(prop.latitude),
+                    longitude: Number(prop.longitude),
+                  });
+                }
+              }
+              if (stops.length < 2) continue;
+              const metrics = await getRouteMetricsWithLegs(stops, startPoint);
+              weeklyMiles += metrics
+                ? metrics.totalDistance
+                : calculateTotalDistance(stops, startPoint);
+            }
+            trailingMonthlyMiles = Math.round(weeklyMiles * 4.33 * 10) / 10;
           }
-          return { ...item, monthlyCostCents: computedCents };
+        } catch {
+          // Miles computation is best-effort; fall back to 0
         }
-        return item;
+      }
+
+      // First pass: compute all non-pct_expense variable items
+      const firstPassMap = new Map<string, number>();
+      for (const item of items) {
+        if (
+          item.type === "variable" &&
+          item.costDriverType &&
+          item.costDriverType !== "pct_expense"
+        ) {
+          const rate = Number(item.driverRate ?? 0);
+          const params = item.driverParams as Record<string, unknown> | null;
+          let computedCents = item.monthlyCostCents;
+          switch (item.costDriverType) {
+            case "pct_revenue":
+              computedCents = Math.round((rate / 100) * trailingMonthlyRevenueCents);
+              break;
+            case "per_stop":
+              computedCents = Math.round(rate * trailingMonthlyStops * 100);
+              break;
+            case "per_mile":
+              computedCents = Math.round(rate * trailingMonthlyMiles * 100);
+              break;
+            case "fuel": {
+              const mpg = Number(params?.mpg ?? 18);
+              const gasPrice = Number(params?.gasPricePerGallon ?? 4.0);
+              computedCents =
+                mpg > 0 && trailingMonthlyMiles > 0
+                  ? Math.round((trailingMonthlyMiles / mpg) * gasPrice * 100)
+                  : 0;
+              break;
+            }
+            case "payment_processing": {
+              const ratePct = Number(params?.ratePct ?? 2.9);
+              const flatFeeCents = Number(params?.flatFeeCents ?? 30);
+              computedCents =
+                Math.round((trailingMonthlyRevenueCents * ratePct) / 100) +
+                Math.round(flatFeeCents * trailingMonthlyTransactions);
+              break;
+            }
+            case "per_unit": {
+              const qty = Number(params?.quantityPerMonth ?? 1);
+              computedCents = Math.round(rate * qty * 100);
+              break;
+            }
+            case "manual":
+              computedCents = item.monthlyCostCents;
+              break;
+          }
+          firstPassMap.set(item.id, computedCents);
+        } else {
+          firstPassMap.set(item.id, item.monthlyCostCents);
+        }
+      }
+
+      // Second pass: resolve pct_expense items (reference must be in firstPassMap)
+      const enrichedItems = items.map((item) => {
+        if (item.type !== "variable" || !item.costDriverType) return item;
+        if (item.costDriverType === "pct_expense") {
+          const rate = Number(item.driverRate ?? 0);
+          const params = item.driverParams as Record<string, unknown> | null;
+          const refId = params?.referenceItemId as string | undefined;
+          const refCents = refId ? (firstPassMap.get(refId) ?? 0) : 0;
+          return { ...item, monthlyCostCents: Math.round((rate / 100) * refCents) };
+        }
+        const computed = firstPassMap.get(item.id);
+        return computed !== undefined ? { ...item, monthlyCostCents: computed } : item;
       });
 
       const totalMonthlyOverheadCents = enrichedItems.reduce(
@@ -2298,6 +2407,8 @@ Rules:
         totalMonthlyOverheadCents,
         trailingMonthlyStops,
         trailingMonthlyRevenueCents,
+        trailingMonthlyMiles,
+        trailingMonthlyTransactions,
         dataSource,
       });
     } catch (err) {
@@ -2308,8 +2419,16 @@ Rules:
   app.post("/api/overhead-costs", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { category, name, monthlyCostCents, type, sortOrder, costDriverType, driverRate } =
-        req.body;
+      const {
+        category,
+        name,
+        monthlyCostCents,
+        type,
+        sortOrder,
+        costDriverType,
+        driverRate,
+        driverParams,
+      } = req.body;
       if (!category || typeof category !== "string" || !name || typeof name !== "string") {
         return res.status(400).json({ error: "category and name are required strings" });
       }
@@ -2318,10 +2437,23 @@ Rules:
           ? Math.round(monthlyCostCents)
           : 0;
       const validType = type === "variable" ? "variable" : "fixed";
-      const parsedDriverType =
-        costDriverType === "pct_revenue" || costDriverType === "per_stop" ? costDriverType : null;
+      const VALID_DRIVER_TYPES = [
+        "pct_revenue",
+        "per_stop",
+        "per_mile",
+        "fuel",
+        "payment_processing",
+        "pct_expense",
+        "per_unit",
+        "manual",
+      ];
+      const parsedDriverType = VALID_DRIVER_TYPES.includes(costDriverType) ? costDriverType : null;
       const parsedDriverRate =
         typeof driverRate === "number" && driverRate > 0 ? String(driverRate) : null;
+      const parsedDriverParams =
+        driverParams && typeof driverParams === "object" && !Array.isArray(driverParams)
+          ? (driverParams as Record<string, unknown>)
+          : null;
       const item = await storage.createOverheadCost({
         companyId,
         category: category.trim(),
@@ -2332,6 +2464,7 @@ Rules:
         sortOrder: typeof sortOrder === "number" ? sortOrder : 0,
         costDriverType: parsedDriverType,
         driverRate: parsedDriverRate,
+        driverParams: parsedDriverParams,
         variableRatePct: null,
         variableFlatCents: null,
       });
@@ -2355,10 +2488,19 @@ Rules:
       if (typeof req.body.sortOrder === "number") updates.sortOrder = req.body.sortOrder;
       // Driver fields — allow explicit null to clear the cost driver
       if ("costDriverType" in req.body) {
-        updates.costDriverType =
-          req.body.costDriverType === "pct_revenue" || req.body.costDriverType === "per_stop"
-            ? req.body.costDriverType
-            : null;
+        const VALID_DRIVER_TYPES = [
+          "pct_revenue",
+          "per_stop",
+          "per_mile",
+          "fuel",
+          "payment_processing",
+          "pct_expense",
+          "per_unit",
+          "manual",
+        ];
+        updates.costDriverType = VALID_DRIVER_TYPES.includes(req.body.costDriverType)
+          ? req.body.costDriverType
+          : null;
         // Always null legacy columns when touching driver fields
         updates.variableRatePct = null;
         updates.variableFlatCents = null;
@@ -2367,6 +2509,14 @@ Rules:
         updates.driverRate =
           typeof req.body.driverRate === "number" && req.body.driverRate > 0
             ? String(req.body.driverRate)
+            : null;
+      }
+      if ("driverParams" in req.body) {
+        updates.driverParams =
+          req.body.driverParams &&
+          typeof req.body.driverParams === "object" &&
+          !Array.isArray(req.body.driverParams)
+            ? (req.body.driverParams as Record<string, unknown>)
             : null;
       }
       if (Object.keys(updates).length === 0)
@@ -2415,6 +2565,9 @@ Rules:
           type: "fixed" | "variable";
           sortOrder: number;
           monthlyCostCents?: number;
+          costDriverType?: string;
+          driverRate?: number;
+          driverParams?: Record<string, unknown>;
         }> = [
           {
             category: "Office + Admin",
@@ -2451,6 +2604,8 @@ Rules:
             name: "Payment processing fees",
             type: "variable",
             sortOrder: 5,
+            costDriverType: "payment_processing",
+            driverParams: { ratePct: 2.9, flatFeeCents: 30 },
           },
           { category: "Office + Admin", name: "Business insurance", type: "fixed", sortOrder: 6 },
           { category: "Office + Admin", name: "Licenses and permits", type: "fixed", sortOrder: 7 },
@@ -2462,10 +2617,11 @@ Rules:
             sortOrder: 9,
             monthlyCostCents: subscriptionPriceCents,
           },
-          { category: "Marketing", name: "Google Ads", type: "variable", sortOrder: 0 },
-          { category: "Marketing", name: "Facebook/Instagram ads", type: "variable", sortOrder: 1 },
-          { category: "Marketing", name: "Yard signs", type: "variable", sortOrder: 2 },
-          { category: "Marketing", name: "Flyers/door hangers", type: "variable", sortOrder: 3 },
+          // Marketing items — flipped to fixed (budget items that don't vary per-stop/revenue)
+          { category: "Marketing", name: "Google Ads", type: "fixed", sortOrder: 0 },
+          { category: "Marketing", name: "Facebook/Instagram ads", type: "fixed", sortOrder: 1 },
+          { category: "Marketing", name: "Yard signs", type: "fixed", sortOrder: 2 },
+          { category: "Marketing", name: "Flyers/door hangers", type: "fixed", sortOrder: 3 },
           { category: "Marketing", name: "Vehicle magnets or wraps", type: "fixed", sortOrder: 4 },
           { category: "Marketing", name: "Referral rewards", type: "variable", sortOrder: 5 },
           {
@@ -2474,7 +2630,14 @@ Rules:
             type: "variable",
             sortOrder: 6,
           },
-          { category: "Vehicles + Transportation", name: "Fuel", type: "variable", sortOrder: 0 },
+          {
+            category: "Vehicles + Transportation",
+            name: "Fuel",
+            type: "variable",
+            sortOrder: 0,
+            costDriverType: "fuel",
+            driverParams: { mpg: 18, gasPricePerGallon: 4.0 },
+          },
           {
             category: "Vehicles + Transportation",
             name: "Vehicle payment or lease",
@@ -2492,6 +2655,8 @@ Rules:
             name: "Repairs and maintenance",
             type: "variable",
             sortOrder: 3,
+            costDriverType: "per_mile",
+            driverRate: 0.2,
           },
           { category: "Vehicles + Transportation", name: "Tires", type: "variable", sortOrder: 4 },
           {
@@ -2538,6 +2703,7 @@ Rules:
             sortOrder: 5,
           },
           { category: "Labor", name: "Employee wages", type: "variable", sortOrder: 0 },
+          // Payroll taxes — pct_expense driver assigned in second pass after insert
           { category: "Labor", name: "Payroll taxes", type: "variable", sortOrder: 1 },
           { category: "Labor", name: "Workers' comp", type: "fixed", sortOrder: 2 },
           { category: "Labor", name: "Training time", type: "variable", sortOrder: 3 },
@@ -2565,23 +2731,20 @@ Rules:
             sortOrder: 4,
           },
           { category: "Financial Overhead", name: "Bank fees", type: "fixed", sortOrder: 0 },
-          {
-            category: "Financial Overhead",
-            name: "Merchant service fees",
-            type: "variable",
-            sortOrder: 1,
-          },
+          // "Merchant service fees" removed — replaced by "Payment processing fees" above
           {
             category: "Financial Overhead",
             name: "Bad debt/unpaid invoices",
             type: "variable",
-            sortOrder: 2,
+            sortOrder: 1,
+            costDriverType: "pct_revenue",
+            driverRate: 2,
           },
           {
             category: "Financial Overhead",
             name: "Refunds or service credits",
             type: "variable",
-            sortOrder: 3,
+            sortOrder: 2,
           },
         ];
 
@@ -2594,6 +2757,28 @@ Rules:
             type: item.type,
             isDefault: true,
             sortOrder: item.sortOrder,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            costDriverType: (item.costDriverType as any) ?? null,
+            driverRate: item.driverRate != null ? String(item.driverRate) : null,
+            driverParams: item.driverParams ?? null,
+            variableRatePct: null,
+            variableFlatCents: null,
+          });
+        }
+
+        // Second pass: wire Payroll taxes → Employee wages as pct_expense (7.65% FICA)
+        const seededItems = await storage.getOverheadCosts(companyId);
+        const wagesItem = seededItems.find(
+          (i) => i.name === "Employee wages" && i.category === "Labor"
+        );
+        const payrollItem = seededItems.find(
+          (i) => i.name === "Payroll taxes" && i.category === "Labor"
+        );
+        if (wagesItem && payrollItem) {
+          await storage.updateOverheadCost(payrollItem.id, companyId, {
+            costDriverType: "pct_expense",
+            driverRate: "7.65",
+            driverParams: { referenceItemId: wagesItem.id },
           });
         }
 

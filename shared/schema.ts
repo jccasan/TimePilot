@@ -2536,7 +2536,16 @@ export const profitabilitySnapshotRelations = relations(profitabilitySnapshots, 
 }));
 
 export const overheadCostTypeEnum = pgEnum("overhead_cost_type", ["fixed", "variable"]);
-export const costDriverTypeEnum = pgEnum("cost_driver_type", ["pct_revenue", "per_stop"]);
+export const costDriverTypeEnum = pgEnum("cost_driver_type", [
+  "pct_revenue",
+  "per_stop",
+  "per_mile",
+  "fuel",
+  "payment_processing",
+  "pct_expense",
+  "per_unit",
+  "manual",
+]);
 
 export const overheadCosts = pgTable("overhead_costs", {
   id: varchar("id")
@@ -2555,6 +2564,7 @@ export const overheadCosts = pgTable("overhead_costs", {
   variableFlatCents: integer("variable_flat_cents"),
   costDriverType: costDriverTypeEnum("cost_driver_type"),
   driverRate: decimal("driver_rate", { precision: 10, scale: 4 }),
+  driverParams: jsonb("driver_params").$type<Record<string, unknown>>(),
 });
 
 export const insertOverheadCostSchema = createInsertSchema(overheadCosts).omit({ id: true });

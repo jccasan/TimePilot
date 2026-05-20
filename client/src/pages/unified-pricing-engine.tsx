@@ -72,6 +72,36 @@ import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type CostDriverType =
+  | "pct_revenue"
+  | "per_stop"
+  | "per_mile"
+  | "fuel"
+  | "payment_processing"
+  | "pct_expense"
+  | "per_unit"
+  | "manual";
+
+type FormulaParamsState = {
+  mpg: string;
+  gasPricePerGallon: string;
+  ratePct: string;
+  flatFeePerTxn: string;
+  referenceItemId: string;
+  unitLabel: string;
+  quantityPerMonth: string;
+};
+
+const DEFAULT_FORMULA_PARAMS: FormulaParamsState = {
+  mpg: "18",
+  gasPricePerGallon: "4.00",
+  ratePct: "2.9",
+  flatFeePerTxn: "0.30",
+  referenceItemId: "",
+  unitLabel: "",
+  quantityPerMonth: "1",
+};
+
 type OverheadCostItem = {
   id: string;
   companyId: string;
@@ -81,8 +111,9 @@ type OverheadCostItem = {
   type: "fixed" | "variable";
   isDefault: boolean;
   sortOrder: number;
-  costDriverType: "pct_revenue" | "per_stop" | null;
+  costDriverType: CostDriverType | null;
   driverRate: string | null;
+  driverParams: Record<string, unknown> | null;
 };
 
 type OverheadData = {
@@ -90,6 +121,8 @@ type OverheadData = {
   totalMonthlyOverheadCents: number;
   trailingMonthlyStops: number;
   trailingMonthlyRevenueCents: number;
+  trailingMonthlyMiles: number;
+  trailingMonthlyTransactions: number;
   dataSource: "trailing_90d" | "estimated";
 };
 
@@ -177,12 +210,407 @@ const CATEGORY_ORDER = [
   "Financial Overhead",
 ];
 
-function formulaLabel(item: OverheadCostItem): string {
-  if (!item.costDriverType || !item.driverRate) return "";
-  const rate = Number(item.driverRate);
-  if (item.costDriverType === "pct_revenue") return `${rate}% of rev`;
-  if (item.costDriverType === "per_stop") return `$${rate.toFixed(2)}/stop`;
-  return "";
+function driverTypeLabel(dt: CostDriverType): string {
+  switch (dt) {
+    case "pct_revenue":
+      return "% of revenue";
+    case "per_stop":
+      return "per stop";
+    case "per_mile":
+      return "per mile";
+    case "fuel":
+      return "fuel formula";
+    case "payment_processing":
+      return "payment processing";
+    case "pct_expense":
+      return "% of expense";
+    case "per_unit":
+      return "per unit";
+    case "manual":
+      return "manual override";
+    default:
+      return String(dt);
+  }
+}
+
+function formatDriverBadge(item: OverheadCostItem, allItems?: OverheadCostItem[]): string {
+  if (!item.costDriverType) return "";
+  const rate = Number(item.driverRate ?? 0);
+  const p = (item.driverParams ?? {}) as Record<string, unknown>;
+  switch (item.costDriverType) {
+    case "pct_revenue":
+      return `${rate}% of rev`;
+    case "per_stop":
+      return `$${rate.toFixed(2)}/stop`;
+    case "per_mile":
+      return `$${rate.toFixed(3)}/mi`;
+    case "fuel": {
+      const mpg = Number(p.mpg ?? 18);
+      const gas = Number(p.gasPricePerGallon ?? 4.0);
+      return `${mpg}mpg·$${gas.toFixed(2)}/gal`;
+    }
+    case "payment_processing": {
+      const pct = Number(p.ratePct ?? 2.9);
+      const flat = Number(p.flatFeeCents ?? 30);
+      return `${pct}%+$${(flat / 100).toFixed(2)}/txn`;
+    }
+    case "pct_expense": {
+      const refId = p.referenceItemId as string | undefined;
+      if (refId && allItems) {
+        const ref = allItems.find((i) => i.id === refId);
+        if (ref) return `${rate}% of ${ref.name}`;
+      }
+      return `${rate}% of expense`;
+    }
+    case "per_unit": {
+      const label = (p.unitLabel as string) || "unit";
+      const qty = Number(p.quantityPerMonth ?? 1);
+      return `$${rate.toFixed(2)}×${qty} ${label}`;
+    }
+    case "manual":
+      return "manual";
+    default:
+      return "";
+  }
+}
+
+function buildDriverPayload(
+  driverType: CostDriverType,
+  rate: string,
+  params: FormulaParamsState
+): {
+  costDriverType: CostDriverType | null;
+  driverRate: number | null;
+  driverParams: Record<string, unknown> | null;
+} {
+  const parsedRate = parseFloat(rate);
+  const hasRate = !isNaN(parsedRate) && parsedRate > 0;
+  switch (driverType) {
+    case "pct_revenue":
+    case "per_stop":
+    case "per_mile":
+      return {
+        costDriverType: driverType,
+        driverRate: hasRate ? parsedRate : null,
+        driverParams: null,
+      };
+    case "fuel":
+      return {
+        costDriverType: "fuel",
+        driverRate: null,
+        driverParams: {
+          mpg: parseFloat(params.mpg) || 18,
+          gasPricePerGallon: parseFloat(params.gasPricePerGallon) || 4.0,
+        },
+      };
+    case "payment_processing":
+      return {
+        costDriverType: "payment_processing",
+        driverRate: null,
+        driverParams: {
+          ratePct: parseFloat(params.ratePct) || 2.9,
+          flatFeeCents: Math.round((parseFloat(params.flatFeePerTxn) || 0.3) * 100),
+        },
+      };
+    case "pct_expense":
+      return {
+        costDriverType: "pct_expense",
+        driverRate: hasRate ? parsedRate : null,
+        driverParams: params.referenceItemId ? { referenceItemId: params.referenceItemId } : null,
+      };
+    case "per_unit":
+      return {
+        costDriverType: "per_unit",
+        driverRate: hasRate ? parsedRate : null,
+        driverParams: {
+          unitLabel: params.unitLabel || "unit",
+          quantityPerMonth: parseFloat(params.quantityPerMonth) || 1,
+        },
+      };
+    case "manual":
+      return { costDriverType: "manual", driverRate: null, driverParams: null };
+    default:
+      return { costDriverType: null, driverRate: null, driverParams: null };
+  }
+}
+
+function DriverInputPanel({
+  driverType,
+  rate,
+  params,
+  onRateChange,
+  onParamChange,
+  allItems,
+  currentItemId,
+}: {
+  driverType: CostDriverType;
+  rate: string;
+  params: FormulaParamsState;
+  onRateChange: (v: string) => void;
+  onParamChange: (k: keyof FormulaParamsState, v: string) => void;
+  allItems?: OverheadCostItem[];
+  currentItemId?: string;
+}) {
+  switch (driverType) {
+    case "pct_revenue":
+      return (
+        <div className="relative">
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            placeholder="e.g. 2.9"
+            value={rate}
+            onChange={(e) => onRateChange(e.target.value)}
+            className="h-8 text-sm pr-6"
+            data-testid="input-driver-rate"
+            autoFocus
+          />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+            %
+          </span>
+        </div>
+      );
+    case "per_stop":
+      return (
+        <div className="relative">
+          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+            $
+          </span>
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="e.g. 0.30"
+            value={rate}
+            onChange={(e) => onRateChange(e.target.value)}
+            className="h-8 text-sm pl-5 pr-12"
+            data-testid="input-driver-rate"
+            autoFocus
+          />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+            /stop
+          </span>
+        </div>
+      );
+    case "per_mile":
+      return (
+        <div className="relative">
+          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+            $
+          </span>
+          <Input
+            type="number"
+            min="0"
+            step="0.001"
+            placeholder="e.g. 0.20"
+            value={rate}
+            onChange={(e) => onRateChange(e.target.value)}
+            className="h-8 text-sm pl-5 pr-8"
+            data-testid="input-driver-rate"
+            autoFocus
+          />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+            /mi
+          </span>
+        </div>
+      );
+    case "fuel":
+      return (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">MPG</label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="18"
+                value={params.mpg}
+                onChange={(e) => onParamChange("mpg", e.target.value)}
+                className="h-8 text-sm"
+                data-testid="input-driver-mpg"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Gas ($/gal)</label>
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  $
+                </span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="4.00"
+                  value={params.gasPricePerGallon}
+                  onChange={(e) => onParamChange("gasPricePerGallon", e.target.value)}
+                  className="h-8 text-sm pl-5"
+                  data-testid="input-driver-gas-price"
+                />
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Computed from monthly route miles</p>
+        </div>
+      );
+    case "payment_processing":
+      return (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Rate (%)</label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  placeholder="2.9"
+                  value={params.ratePct}
+                  onChange={(e) => onParamChange("ratePct", e.target.value)}
+                  className="h-8 text-sm pr-5"
+                  data-testid="input-driver-rate-pct"
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  %
+                </span>
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Flat fee/txn</label>
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  $
+                </span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.30"
+                  value={params.flatFeePerTxn}
+                  onChange={(e) => onParamChange("flatFeePerTxn", e.target.value)}
+                  className="h-8 text-sm pl-5"
+                  data-testid="input-driver-flat-fee"
+                />
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Applied to monthly revenue and transaction count
+          </p>
+        </div>
+      );
+    case "pct_expense": {
+      const otherItems = (allItems ?? []).filter(
+        (i) => i.id !== currentItemId && i.type !== "fixed"
+      );
+      return (
+        <div className="space-y-2">
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">Reference item</label>
+            <Select
+              value={params.referenceItemId}
+              onValueChange={(v) => onParamChange("referenceItemId", v)}
+            >
+              <SelectTrigger className="h-8 text-xs" data-testid="select-reference-item">
+                <SelectValue placeholder="Select expense item..." />
+              </SelectTrigger>
+              <SelectContent>
+                {otherItems.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">Rate (%)</label>
+            <div className="relative">
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                placeholder="e.g. 7.65"
+                value={rate}
+                onChange={(e) => onRateChange(e.target.value)}
+                className="h-8 text-sm pr-5"
+                data-testid="input-driver-rate"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                %
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    case "per_unit":
+      return (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Unit label</label>
+              <Input
+                type="text"
+                placeholder="e.g. bag"
+                value={params.unitLabel}
+                onChange={(e) => onParamChange("unitLabel", e.target.value)}
+                className="h-8 text-sm"
+                data-testid="input-driver-unit-label"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-muted-foreground mb-1 block">Qty/month</label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                placeholder="100"
+                value={params.quantityPerMonth}
+                onChange={(e) => onParamChange("quantityPerMonth", e.target.value)}
+                className="h-8 text-sm"
+                data-testid="input-driver-quantity"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground mb-1 block">
+              Rate ($ per unit)
+            </label>
+            <div className="relative">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                $
+              </span>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 0.25"
+                value={rate}
+                onChange={(e) => onRateChange(e.target.value)}
+                className="h-8 text-sm pl-5 pr-10"
+                data-testid="input-driver-rate"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                /unit
+              </span>
+            </div>
+          </div>
+        </div>
+      );
+    case "manual":
+      return (
+        <p className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+          Set the dollar amount directly on the ledger row. No formula is applied.
+        </p>
+      );
+    default:
+      return null;
+  }
 }
 
 function CostItemRow({
@@ -194,6 +622,7 @@ function CostItemRow({
   isAutoCalculated,
   autoFuelMiles,
   dataSource,
+  allItems,
 }: {
   item: OverheadCostItem;
   onUpdateCost: (id: string, cents: number) => void;
@@ -203,6 +632,7 @@ function CostItemRow({
   isAutoCalculated?: boolean;
   autoFuelMiles?: number;
   dataSource?: "trailing_90d" | "estimated";
+  allItems?: OverheadCostItem[];
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const lastSavedCents = useRef(item.monthlyCostCents);
@@ -272,7 +702,7 @@ function CostItemRow({
               className="text-[10px] px-1 py-0 shrink-0 border-violet-200 text-violet-600 dark:border-violet-800 dark:text-violet-400 font-mono"
               data-testid={`badge-formula-${item.id}`}
             >
-              {formulaLabel(item)}
+              {formatDriverBadge(item, allItems)}
             </Badge>
           )}
         </div>
@@ -283,13 +713,17 @@ function CostItemRow({
               : "No routes this month · auto-calculated"}
           </p>
         )}
-        {isFormulaMode && (
+        {isFormulaMode && item.costDriverType && (
           <p
             className="text-[10px] text-muted-foreground mt-0.5"
             data-testid={`text-formula-source-${item.id}`}
           >
-            {item.costDriverType === "pct_revenue" ? "% of revenue" : "per stop"} &middot;{" "}
-            {dataSource === "trailing_90d" ? "based on last 90 days" : "based on estimate"}
+            {driverTypeLabel(item.costDriverType)} &middot;{" "}
+            {item.costDriverType === "manual"
+              ? "manually set"
+              : dataSource === "trailing_90d"
+                ? "based on last 90 days"
+                : "based on estimate"}
           </p>
         )}
       </div>
@@ -372,6 +806,7 @@ function CategorySection({
   isPending,
   autoFuelMiles,
   dataSource,
+  allItems,
 }: {
   category: string;
   items: OverheadCostItem[];
@@ -382,6 +817,7 @@ function CategorySection({
   isPending: boolean;
   autoFuelMiles?: number;
   dataSource?: "trailing_90d" | "estimated";
+  allItems?: OverheadCostItem[];
 }) {
   const [isOpen, setIsOpen] = useState(true);
   const categoryTotal = items.reduce((s, i) => s + i.monthlyCostCents, 0);
@@ -448,6 +884,7 @@ function CategorySection({
                   isAutoCalculated={isAutoFuel}
                   autoFuelMiles={isAutoFuel ? autoFuelMiles : undefined}
                   dataSource={dataSource}
+                  allItems={allItems}
                 />
               );
             })}
@@ -1269,16 +1706,15 @@ function CostsTab() {
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const [newItemType, setNewItemType] = useState<"fixed" | "variable">("fixed");
-  const [newItemDriverType, setNewItemDriverType] = useState<"pct_revenue" | "per_stop">(
-    "pct_revenue"
-  );
+  const [newItemDriverType, setNewItemDriverType] = useState<CostDriverType>("pct_revenue");
   const [newItemDriverRate, setNewItemDriverRate] = useState("");
+  const [newItemDriverParams, setNewItemDriverParams] =
+    useState<FormulaParamsState>(DEFAULT_FORMULA_PARAMS);
 
   const [editingFormulaItem, setEditingFormulaItem] = useState<OverheadCostItem | null>(null);
-  const [formulaDriverType, setFormulaDriverType] = useState<"pct_revenue" | "per_stop">(
-    "pct_revenue"
-  );
+  const [formulaDriverType, setFormulaDriverType] = useState<CostDriverType>("pct_revenue");
   const [formulaDriverRate, setFormulaDriverRate] = useState("");
+  const [formulaParams, setFormulaParams] = useState<FormulaParamsState>(DEFAULT_FORMULA_PARAMS);
 
   const { data, isLoading } = useQuery<OverheadData>({ queryKey: ["/api/overhead-costs"] });
   const { data: pricingConfigData, isLoading: configLoading } = useQuery<PricingConfigResponse>({
@@ -1354,8 +1790,9 @@ function CostsTab() {
       category: string;
       name: string;
       type: "fixed" | "variable";
-      costDriverType?: "pct_revenue" | "per_stop";
+      costDriverType?: CostDriverType;
       driverRate?: number;
+      driverParams?: Record<string, unknown>;
     }) => apiRequest("POST", "/api/overhead-costs", d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs"] });
@@ -1365,6 +1802,7 @@ function CostsTab() {
       setNewItemType("fixed");
       setNewItemDriverType("pct_revenue");
       setNewItemDriverRate("");
+      setNewItemDriverParams(DEFAULT_FORMULA_PARAMS);
       toast({ title: "Item added" });
     },
   });
@@ -1374,16 +1812,24 @@ function CostsTab() {
       id,
       costDriverType,
       driverRate,
+      driverParams,
     }: {
       id: string;
-      costDriverType: "pct_revenue" | "per_stop" | null;
+      costDriverType: CostDriverType | null;
       driverRate: number | null;
-    }) => apiRequest("PATCH", `/api/overhead-costs/${id}`, { costDriverType, driverRate }),
+      driverParams?: Record<string, unknown> | null;
+    }) =>
+      apiRequest("PATCH", `/api/overhead-costs/${id}`, {
+        costDriverType,
+        driverRate,
+        driverParams,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs/total"] });
       setEditingFormulaItem(null);
       setFormulaDriverRate("");
+      setFormulaParams(DEFAULT_FORMULA_PARAMS);
     },
     onError: () => {
       toast({ title: "Failed to save formula", variant: "destructive" });
@@ -1394,6 +1840,18 @@ function CostsTab() {
     setEditingFormulaItem(item);
     setFormulaDriverType(item.costDriverType ?? "pct_revenue");
     setFormulaDriverRate(item.driverRate ? String(Number(item.driverRate)) : "");
+    const p = (item.driverParams ?? {}) as Record<string, unknown>;
+    setFormulaParams({
+      mpg: String(p.mpg ?? "18"),
+      gasPricePerGallon: String(p.gasPricePerGallon ?? "4.00"),
+      ratePct: String(p.ratePct ?? "2.9"),
+      flatFeePerTxn: String(
+        p.flatFeeCents != null ? (Number(p.flatFeeCents) / 100).toFixed(2) : "0.30"
+      ),
+      referenceItemId: String(p.referenceItemId ?? ""),
+      unitLabel: String(p.unitLabel ?? ""),
+      quantityPerMonth: String(p.quantityPerMonth ?? "1"),
+    });
   };
 
   const autoFuelCostCents = monthlyFuelData?.fuelCostCents ?? 0;
@@ -1405,6 +1863,8 @@ function CostsTab() {
       (i) => i.name === "Fuel" && i.category === "Vehicles + Transportation" && i.isDefault
     );
     if (!fuelItem) return;
+    // Skip legacy sync when item has a formula driver (server-side computation handles cost)
+    if (fuelItem.costDriverType) return;
     if (fuelItem.monthlyCostCents !== autoFuelCostCents) {
       updateMutation.mutate({ id: fuelItem.id, monthlyCostCents: autoFuelCostCents });
     }
@@ -1533,6 +1993,7 @@ function CostsTab() {
                 key={category}
                 category={category}
                 items={catItems}
+                allItems={data?.items ?? []}
                 onUpdateCost={(id, cents) => updateMutation.mutate({ id, monthlyCostCents: cents })}
                 onDelete={(id) => deleteMutation.mutate(id)}
                 onAdd={(cat) => {
@@ -1541,6 +2002,7 @@ function CostsTab() {
                   setNewItemType("fixed");
                   setNewItemDriverType("pct_revenue");
                   setNewItemDriverRate("");
+                  setNewItemDriverParams(DEFAULT_FORMULA_PARAMS);
                 }}
                 onEditFormula={handleEditFormula}
                 isPending={updateMutation.isPending || deleteMutation.isPending}
@@ -1602,74 +2064,41 @@ function CostsTab() {
                     Monthly cost is computed from your last 90 days of activity. Leave blank to
                     enter a manual dollar amount after adding.
                   </p>
-                  <div className="flex rounded-md overflow-hidden border border-violet-200 dark:border-violet-800">
-                    <button
-                      type="button"
-                      className={`flex-1 h-8 text-xs font-medium transition-colors ${
-                        newItemDriverType === "pct_revenue"
-                          ? "bg-violet-600 text-white"
-                          : "bg-transparent text-muted-foreground hover:bg-violet-100 dark:hover:bg-violet-900"
-                      }`}
-                      onClick={() => {
-                        setNewItemDriverType("pct_revenue");
-                        setNewItemDriverRate("");
-                      }}
-                      data-testid="button-new-driver-pct-revenue"
+                  <Select
+                    value={newItemDriverType}
+                    onValueChange={(v) => {
+                      setNewItemDriverType(v as CostDriverType);
+                      setNewItemDriverRate("");
+                      setNewItemDriverParams(DEFAULT_FORMULA_PARAMS);
+                    }}
+                  >
+                    <SelectTrigger
+                      className="h-8 text-xs"
+                      data-testid="select-new-item-driver-type"
                     >
-                      % of revenue
-                    </button>
-                    <button
-                      type="button"
-                      className={`flex-1 h-8 text-xs font-medium transition-colors ${
-                        newItemDriverType === "per_stop"
-                          ? "bg-violet-600 text-white"
-                          : "bg-transparent text-muted-foreground hover:bg-violet-100 dark:hover:bg-violet-900"
-                      }`}
-                      onClick={() => {
-                        setNewItemDriverType("per_stop");
-                        setNewItemDriverRate("");
-                      }}
-                      data-testid="button-new-driver-per-stop"
-                    >
-                      per stop
-                    </button>
-                  </div>
-                  <div className="relative">
-                    {newItemDriverType === "pct_revenue" ? (
-                      <>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          placeholder="e.g. 2.9"
-                          value={newItemDriverRate}
-                          onChange={(e) => setNewItemDriverRate(e.target.value)}
-                          className="h-8 text-sm pr-6"
-                          data-testid="input-new-item-driver-rate"
-                        />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                          %
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                          $
-                        </span>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="e.g. 0.30"
-                          value={newItemDriverRate}
-                          onChange={(e) => setNewItemDriverRate(e.target.value)}
-                          className="h-8 text-sm pl-5"
-                          data-testid="input-new-item-driver-rate"
-                        />
-                      </>
-                    )}
-                  </div>
+                      <SelectValue placeholder="Select driver type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pct_revenue">% of revenue</SelectItem>
+                      <SelectItem value="per_stop">Per stop</SelectItem>
+                      <SelectItem value="per_mile">Per mile</SelectItem>
+                      <SelectItem value="fuel">Fuel formula</SelectItem>
+                      <SelectItem value="payment_processing">Payment processing</SelectItem>
+                      <SelectItem value="pct_expense">% of expense</SelectItem>
+                      <SelectItem value="per_unit">Per unit</SelectItem>
+                      <SelectItem value="manual">Manual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <DriverInputPanel
+                    driverType={newItemDriverType}
+                    rate={newItemDriverRate}
+                    params={newItemDriverParams}
+                    onRateChange={setNewItemDriverRate}
+                    onParamChange={(k, v) =>
+                      setNewItemDriverParams((prev) => ({ ...prev, [k]: v }))
+                    }
+                    allItems={data?.items ?? []}
+                  />
                 </div>
               )}
               <div className="flex gap-2 justify-end">
@@ -1685,13 +2114,28 @@ function CostsTab() {
                   size="sm"
                   onClick={() => {
                     if (!addingCategory || !newItemName.trim()) return;
-                    const driverRate = parseFloat(newItemDriverRate);
+                    const driverPayload =
+                      newItemType === "variable"
+                        ? buildDriverPayload(
+                            newItemDriverType,
+                            newItemDriverRate,
+                            newItemDriverParams
+                          )
+                        : { costDriverType: null, driverRate: null, driverParams: null };
                     createMutation.mutate({
                       category: addingCategory,
                       name: newItemName.trim(),
                       type: newItemType,
-                      ...(newItemType === "variable" && !isNaN(driverRate) && driverRate > 0
-                        ? { costDriverType: newItemDriverType, driverRate }
+                      ...(newItemType === "variable" && driverPayload.costDriverType
+                        ? {
+                            costDriverType: driverPayload.costDriverType,
+                            ...(driverPayload.driverRate != null
+                              ? { driverRate: driverPayload.driverRate }
+                              : {}),
+                            ...(driverPayload.driverParams != null
+                              ? { driverParams: driverPayload.driverParams }
+                              : {}),
+                          }
                         : {}),
                     });
                   }}
@@ -1739,82 +2183,38 @@ function CostsTab() {
               <div className="space-y-3">
                 <div>
                   <label className="text-xs font-medium block mb-1.5">Driver type</label>
-                  <div className="flex rounded-md overflow-hidden border border-input">
-                    <button
-                      type="button"
-                      className={`flex-1 h-9 text-xs font-medium transition-colors ${
-                        formulaDriverType === "pct_revenue"
-                          ? "bg-violet-600 text-white"
-                          : "bg-transparent text-muted-foreground hover:bg-violet-50 dark:hover:bg-violet-950"
-                      }`}
-                      onClick={() => {
-                        setFormulaDriverType("pct_revenue");
-                        setFormulaDriverRate("");
-                      }}
-                      data-testid="button-formula-driver-pct-revenue"
-                    >
-                      % of revenue
-                    </button>
-                    <button
-                      type="button"
-                      className={`flex-1 h-9 text-xs font-medium transition-colors ${
-                        formulaDriverType === "per_stop"
-                          ? "bg-violet-600 text-white"
-                          : "bg-transparent text-muted-foreground hover:bg-violet-50 dark:hover:bg-violet-950"
-                      }`}
-                      onClick={() => {
-                        setFormulaDriverType("per_stop");
-                        setFormulaDriverRate("");
-                      }}
-                      data-testid="button-formula-driver-per-stop"
-                    >
-                      per stop
-                    </button>
-                  </div>
+                  <Select
+                    value={formulaDriverType}
+                    onValueChange={(v) => {
+                      setFormulaDriverType(v as CostDriverType);
+                      setFormulaDriverRate("");
+                      setFormulaParams(DEFAULT_FORMULA_PARAMS);
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-sm" data-testid="select-formula-driver-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pct_revenue">% of revenue</SelectItem>
+                      <SelectItem value="per_stop">Per stop</SelectItem>
+                      <SelectItem value="per_mile">Per mile</SelectItem>
+                      <SelectItem value="fuel">Fuel formula</SelectItem>
+                      <SelectItem value="payment_processing">Payment processing</SelectItem>
+                      <SelectItem value="pct_expense">% of expense</SelectItem>
+                      <SelectItem value="per_unit">Per unit</SelectItem>
+                      <SelectItem value="manual">Manual</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div>
-                  <label className="text-xs font-medium block mb-1.5">
-                    {formulaDriverType === "pct_revenue" ? "Rate (%)" : "Rate ($ per stop)"}
-                  </label>
-                  <div className="relative">
-                    {formulaDriverType === "pct_revenue" ? (
-                      <>
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          placeholder="e.g. 2.9"
-                          value={formulaDriverRate}
-                          onChange={(e) => setFormulaDriverRate(e.target.value)}
-                          className="h-9 text-sm pr-6"
-                          data-testid="input-formula-driver-rate"
-                          autoFocus
-                        />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                          %
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                          $
-                        </span>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="e.g. 0.30"
-                          value={formulaDriverRate}
-                          onChange={(e) => setFormulaDriverRate(e.target.value)}
-                          className="h-9 text-sm pl-5"
-                          data-testid="input-formula-driver-rate"
-                          autoFocus
-                        />
-                      </>
-                    )}
-                  </div>
-                </div>
+                <DriverInputPanel
+                  driverType={formulaDriverType}
+                  rate={formulaDriverRate}
+                  params={formulaParams}
+                  onRateChange={setFormulaDriverRate}
+                  onParamChange={(k, v) => setFormulaParams((prev) => ({ ...prev, [k]: v }))}
+                  allItems={data?.items ?? []}
+                  currentItemId={editingFormulaItem?.id}
+                />
               </div>
               <div className="flex items-center justify-between pt-1">
                 <Button
@@ -1826,6 +2226,7 @@ function CostsTab() {
                       id: editingFormulaItem.id,
                       costDriverType: null,
                       driverRate: null,
+                      driverParams: null,
                     });
                   }}
                   disabled={updateFormulaMutation.isPending}
@@ -1846,11 +2247,16 @@ function CostsTab() {
                     size="sm"
                     className="gap-1"
                     onClick={() => {
-                      const rate = parseFloat(formulaDriverRate);
+                      const payload = buildDriverPayload(
+                        formulaDriverType,
+                        formulaDriverRate,
+                        formulaParams
+                      );
                       updateFormulaMutation.mutate({
                         id: editingFormulaItem.id,
-                        costDriverType: !isNaN(rate) && rate > 0 ? formulaDriverType : null,
-                        driverRate: !isNaN(rate) && rate > 0 ? rate : null,
+                        costDriverType: payload.costDriverType,
+                        driverRate: payload.driverRate,
+                        driverParams: payload.driverParams,
                       });
                     }}
                     disabled={updateFormulaMutation.isPending}

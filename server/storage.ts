@@ -845,6 +845,7 @@ export interface IStorage {
   getOverheadTrailingActuals(companyId: string): Promise<{
     trailingMonthlyStops: number;
     trailingMonthlyRevenueCents: number;
+    trailingMonthlyTransactions: number;
     dataSource: "trailing_90d" | "estimated";
   }>;
 
@@ -4442,6 +4443,7 @@ export class DatabaseStorage implements IStorage {
   async getOverheadTrailingActuals(companyId: string): Promise<{
     trailingMonthlyStops: number;
     trailingMonthlyRevenueCents: number;
+    trailingMonthlyTransactions: number;
     dataSource: "trailing_90d" | "estimated";
   }> {
     const ninety = new Date();
@@ -4469,16 +4471,34 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
+    const [txnRow] = await db
+      .select({ total: sql<number>`COUNT(*)::int` })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.companyId, companyId),
+          sql`${invoices.status} IN ('paid', 'posted')`,
+          gte(invoices.paidAt, ninety)
+        )
+      );
+
     const totalStops = Number(stopsRow?.total ?? 0);
     const totalRevenueDollars = Number(revenueRow?.total ?? 0);
+    const totalTransactions = Number(txnRow?.total ?? 0);
 
     if (totalStops === 0 && totalRevenueDollars === 0) {
-      return { trailingMonthlyStops: 0, trailingMonthlyRevenueCents: 0, dataSource: "estimated" };
+      return {
+        trailingMonthlyStops: 0,
+        trailingMonthlyRevenueCents: 0,
+        trailingMonthlyTransactions: 0,
+        dataSource: "estimated",
+      };
     }
 
     return {
       trailingMonthlyStops: Math.round(totalStops / 3),
       trailingMonthlyRevenueCents: Math.round((totalRevenueDollars / 3) * 100),
+      trailingMonthlyTransactions: Math.round(totalTransactions / 3),
       dataSource: "trailing_90d",
     };
   }
