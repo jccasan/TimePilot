@@ -42,6 +42,7 @@ import { registerSmsAgentRoutes } from "./sms-agent";
 import { registerCrmRoutes } from "./crm";
 import { registerDocumentsRoutes } from "./documents";
 import { registerCustomFieldsRoutes } from "./custom-fields";
+import { registerLeadResponseRoutes, blockLeadResponseOperator } from "./lead-response";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Object file download route — registered before registerObjectStorageRoutes so this
@@ -216,6 +217,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   };
 
   app.use("/api", subscriptionGate);
+  app.use("/api", blockLeadResponseOperator);
 
   await registerBillingRoutes(app);
   await registerAuthRoutes(app);
@@ -245,6 +247,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   await registerCrmRoutes(app);
   await registerDocumentsRoutes(app);
   registerCustomFieldsRoutes(app);
+  await registerLeadResponseRoutes(app);
 
   return httpServer;
 }

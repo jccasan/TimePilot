@@ -546,10 +546,18 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         return res.json(match ? [match] : []);
       }
 
-      const filters: { status?: string; search?: string; contactType?: string } = {};
+      const filters: {
+        status?: string;
+        search?: string;
+        contactType?: string;
+        leadSource?: string;
+      } = {};
       if (req.query.status) filters.status = req.query.status as string;
       if (req.query.search) filters.search = (req.query.search as string).replace(/\0/g, "");
       if (req.query.contactType) filters.contactType = req.query.contactType as string;
+      // Lead Response operators are hard-scoped to their own leads
+      if (req._isLeadResponseOperator) filters.leadSource = "lead_response";
+      else if (req.query.leadSource) filters.leadSource = req.query.leadSource as string;
 
       const rawPage = parseInt(req.query.page as string);
       const rawLimit = parseInt(req.query.limit as string);

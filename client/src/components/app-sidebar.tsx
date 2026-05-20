@@ -42,6 +42,8 @@ import {
   Kanban,
   Mail,
   GitBranch,
+  PhoneIncoming,
+  CreditCard,
 } from "lucide-react";
 import {
   Sidebar,
@@ -78,6 +80,19 @@ type MenuItem = {
   requiresSubscription?: boolean;
   requiresVoice?: boolean;
 };
+
+// Nav items accessible to lead_response_operator role
+const LR_OPERATOR_NAV: {
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { title: "Lead Response", url: "/lead-response", icon: PhoneIncoming },
+  { title: "Contacts", url: "/contacts?leadSource=lead_response", icon: ContactRound },
+  { title: "Messages", url: "/communications", icon: MessageSquare },
+  { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Billing", url: "/billing", icon: CreditCard },
+];
 
 const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
   {
@@ -222,6 +237,7 @@ export function AppSidebar({
   const { collapsed, toggle } = useSectionCollapse();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
+  const isLeadResponseOperator = user?.role === "lead_response_operator";
 
   // Determine plan access
   const subscriptionStatus = user?.subscriptionStatus;
@@ -367,104 +383,148 @@ export function AppSidebar({
           <GlobalSearch />
         </div>
 
-        {menuSections.map((section) => {
-          const isCollapsed = section.label ? (collapsed[section.key] ?? false) : false;
+        {isLeadResponseOperator ? (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {LR_OPERATOR_NAV.map((item) => {
+                  const isActive =
+                    location === item.url ||
+                    location.startsWith(item.url.split("?")[0] + "/") ||
+                    location.startsWith(item.url.split("?")[0] + "?");
+                  return (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild data-active={isActive} tooltip={item.title}>
+                        <Link
+                          href={item.url}
+                          data-testid={`link-${item.title.toLowerCase().replace(/[\s/&]/g, "-")}`}
+                          onClick={handleNavClick}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                          {item.title === "Messages" && unreadSmsCount > 0 && (
+                            <Badge
+                              variant="default"
+                              className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px]"
+                              data-testid="badge-sidebar-unread-sms"
+                            >
+                              {unreadSmsCount > 99 ? "99+" : unreadSmsCount}
+                            </Badge>
+                          )}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : (
+          <>
+            {menuSections.map((section) => {
+              const isCollapsed = section.label ? (collapsed[section.key] ?? false) : false;
 
-          return (
-            <SidebarGroup key={section.key}>
-              {section.label && (
-                <button
-                  onClick={() => toggle(section.key)}
-                  className="flex items-center justify-between w-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-                  data-testid={`button-collapse-${section.key}`}
-                >
-                  <span>{section.label}</span>
-                  {isCollapsed ? (
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                  ) : (
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+              return (
+                <SidebarGroup key={section.key}>
+                  {section.label && (
+                    <button
+                      onClick={() => toggle(section.key)}
+                      className="flex items-center justify-between w-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                      data-testid={`button-collapse-${section.key}`}
+                    >
+                      <span>{section.label}</span>
+                      {isCollapsed ? (
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                    </button>
                   )}
-                </button>
-              )}
 
-              {!isCollapsed && (
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {section.items
-                      .filter((item) => !(item as any).adminOnly || isAdmin)
-                      .map((item) => {
-                        const isActive =
-                          item.url === "/"
-                            ? location === "/"
-                            : location === item.url ||
-                              location.startsWith(item.url + "/") ||
-                              location.startsWith(item.url + "?");
+                  {!isCollapsed && (
+                    <SidebarGroupContent>
+                      <SidebarMenu>
+                        {section.items
+                          .filter((item) => !(item as any).adminOnly || isAdmin)
+                          .map((item) => {
+                            const isActive =
+                              item.url === "/"
+                                ? location === "/"
+                                : location === item.url ||
+                                  location.startsWith(item.url + "/") ||
+                                  location.startsWith(item.url + "?");
 
-                        const locked = isItemLocked(item);
+                            const locked = isItemLocked(item);
 
-                        if (locked) {
-                          return (
-                            <SidebarMenuItem key={item.title}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <SidebarMenuButton
+                            if (locked) {
+                              return (
+                                <SidebarMenuItem key={item.title}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <SidebarMenuButton
+                                        data-testid={`link-${item.title.toLowerCase().replace(/[\s/&]/g, "-")}`}
+                                        data-locked="true"
+                                        className="opacity-60 cursor-pointer"
+                                        onClick={handleLockedClick}
+                                      >
+                                        <item.icon className="h-4 w-4" />
+                                        <span>{item.title}</span>
+                                        <Lock className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                      </SidebarMenuButton>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" className="max-w-[200px]">
+                                      {getLockTooltip(item)}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </SidebarMenuItem>
+                              );
+                            }
+
+                            return (
+                              <SidebarMenuItem key={item.title}>
+                                <SidebarMenuButton
+                                  asChild
+                                  data-active={isActive}
+                                  tooltip={item.title}
+                                >
+                                  <Link
+                                    href={item.url}
                                     data-testid={`link-${item.title.toLowerCase().replace(/[\s/&]/g, "-")}`}
-                                    data-locked="true"
-                                    className="opacity-60 cursor-pointer"
-                                    onClick={handleLockedClick}
+                                    onClick={handleNavClick}
                                   >
-                                    <item.icon className="h-4 w-4" />
+                                    <item.icon />
                                     <span>{item.title}</span>
-                                    <Lock className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                  </SidebarMenuButton>
-                                </TooltipTrigger>
-                                <TooltipContent side="right" className="max-w-[200px]">
-                                  {getLockTooltip(item)}
-                                </TooltipContent>
-                              </Tooltip>
-                            </SidebarMenuItem>
-                          );
-                        }
-
-                        return (
-                          <SidebarMenuItem key={item.title}>
-                            <SidebarMenuButton asChild data-active={isActive} tooltip={item.title}>
-                              <Link
-                                href={item.url}
-                                data-testid={`link-${item.title.toLowerCase().replace(/[\s/&]/g, "-")}`}
-                                onClick={handleNavClick}
-                              >
-                                <item.icon />
-                                <span>{item.title}</span>
-                                {item.title === "Messages" && unreadSmsCount > 0 && (
-                                  <Badge
-                                    variant="default"
-                                    className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px]"
-                                    data-testid="badge-sidebar-unread-sms"
-                                  >
-                                    {unreadSmsCount > 99 ? "99+" : unreadSmsCount}
-                                  </Badge>
-                                )}
-                                {item.title === "Invoices" && uninvoicedCount > 0 && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"
-                                    data-testid="badge-sidebar-uninvoiced"
-                                  >
-                                    {uninvoicedCount > 99 ? "99+" : uninvoicedCount}
-                                  </Badge>
-                                )}
-                              </Link>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        );
-                      })}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              )}
-            </SidebarGroup>
-          );
-        })}
+                                    {item.title === "Messages" && unreadSmsCount > 0 && (
+                                      <Badge
+                                        variant="default"
+                                        className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px]"
+                                        data-testid="badge-sidebar-unread-sms"
+                                      >
+                                        {unreadSmsCount > 99 ? "99+" : unreadSmsCount}
+                                      </Badge>
+                                    )}
+                                    {item.title === "Invoices" && uninvoicedCount > 0 && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px] bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300"
+                                        data-testid="badge-sidebar-uninvoiced"
+                                      >
+                                        {uninvoicedCount > 99 ? "99+" : uninvoicedCount}
+                                      </Badge>
+                                    )}
+                                  </Link>
+                                </SidebarMenuButton>
+                              </SidebarMenuItem>
+                            );
+                          })}
+                      </SidebarMenu>
+                    </SidebarGroupContent>
+                  )}
+                </SidebarGroup>
+              );
+            })}
+          </>
+        )}
       </SidebarContent>
 
       <SidebarFooter>

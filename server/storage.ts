@@ -15,6 +15,7 @@ import {
   isNotNull,
 } from "drizzle-orm";
 import { db } from "./db";
+import { encryptHcpApiKey, decryptHcpApiKey } from "./utils/hcp-crypto";
 import {
   companies,
   companyUsers,
@@ -214,6 +215,9 @@ import {
   type InsertDocumentSignature,
   type CustomFieldDefinition,
   type InsertCustomFieldDefinition,
+  leadResponseConfig,
+  type LeadResponseConfig,
+  type InsertLeadResponseConfig,
 } from "@shared/schema";
 
 export interface CustomerProfitabilityEntry {
@@ -277,11 +281,11 @@ export interface IStorage {
   getContact(id: string, companyId: string): Promise<Contact | undefined>;
   getContacts(
     companyId: string,
-    filters?: { status?: string; search?: string; contactType?: string }
+    filters?: { status?: string; search?: string; contactType?: string; leadSource?: string }
   ): Promise<Contact[]>;
   getContactsPage(
     companyId: string,
-    filters?: { status?: string; search?: string; contactType?: string },
+    filters?: { status?: string; search?: string; contactType?: string; leadSource?: string },
     page?: number,
     limit?: number
   ): Promise<{ data: Contact[]; total: number }>;
@@ -314,6 +318,13 @@ export interface IStorage {
     data: Partial<InsertCustomFieldDefinition>
   ): Promise<CustomFieldDefinition>;
   deleteCustomFieldDefinition(id: string, companyId: string): Promise<void>;
+
+  // Lead Response Config
+  getLeadResponseConfig(companyId: string): Promise<LeadResponseConfig | undefined>;
+  upsertLeadResponseConfig(
+    companyId: string,
+    data: Partial<InsertLeadResponseConfig>
+  ): Promise<LeadResponseConfig>;
 
   // Properties
   getProperty(id: string, companyId: string): Promise<Property | undefined>;
@@ -1173,7 +1184,11 @@ export class DatabaseStorage implements IStorage {
   async addUserToCompany(userId: string, companyId: string, role: string): Promise<CompanyUser> {
     const [cu] = await db
       .insert(companyUsers)
-      .values({ userId, companyId, role: role as "owner" | "admin" | "tech" })
+      .values({
+        userId,
+        companyId,
+        role: role as "owner" | "admin" | "tech" | "lead_response_operator",
+      })
       .returning();
     return cu;
   }
@@ -1206,7 +1221,7 @@ export class DatabaseStorage implements IStorage {
 
   async getContacts(
     companyId: string,
-    filters?: { status?: string; search?: string; contactType?: string }
+    filters?: { status?: string; search?: string; contactType?: string; leadSource?: string }
   ): Promise<Contact[]> {
     const conditions = [eq(contacts.companyId, companyId)];
     if (filters?.status)
@@ -1220,6 +1235,7 @@ export class DatabaseStorage implements IStorage {
           filters.contactType as (typeof contacts.$inferSelect)["contactType"]
         )
       );
+    if (filters?.leadSource) conditions.push(eq(contacts.leadSource, filters.leadSource));
     if (filters?.search) {
       conditions.push(
         or(
@@ -1239,7 +1255,7 @@ export class DatabaseStorage implements IStorage {
 
   async getContactsPage(
     companyId: string,
-    filters?: { status?: string; search?: string; contactType?: string },
+    filters?: { status?: string; search?: string; contactType?: string; leadSource?: string },
     page: number = 1,
     limit: number = 50
   ): Promise<{ data: Contact[]; total: number }> {
@@ -1255,6 +1271,7 @@ export class DatabaseStorage implements IStorage {
           filters.contactType as (typeof contacts.$inferSelect)["contactType"]
         )
       );
+    if (filters?.leadSource) conditions.push(eq(contacts.leadSource, filters.leadSource));
     if (filters?.search) {
       conditions.push(
         or(
@@ -5454,6 +5471,73 @@ export class DatabaseStorage implements IStorage {
       .where(eq(retellWebhookRepairs.companyId, companyId))
       .orderBy(desc(retellWebhookRepairs.repairedAt))
       .limit(limit);
+  }
+
+  // ============================================================
+  // Lead Response Config
+  // ============================================================
+  async getLeadResponseConfig(companyId: string): Promise<LeadResponseConfig | undefined> {
+    const [row] = await db
+      .select()
+      .from(leadResponseConfig)
+      .where(eq(leadResponseConfig.companyId, companyId))
+      .limit(1);
+    if (!row) return undefined;
+    // Decrypt hcpApiKey on read
+    if (row.hcpApiKey) {
+      try {
+        row.hcpApiKey = decryptHcpApiKey(row.hcpApiKey);
+      } catch {
+        // leave as-is if decryption fails (e.g. pre-encryption rows)
+      }
+    }
+    return row;
+  }
+
+  async upsertLeadResponseConfig(
+    companyId: string,
+    data: Partial<InsertLeadResponseConfig>
+  ): Promise<LeadResponseConfig> {
+    // Encrypt hcpApiKey before writing
+    const writeData = { ...data };
+    if (writeData.hcpApiKey) {
+      writeData.hcpApiKey = encryptHcpApiKey(writeData.hcpApiKey);
+    }
+    const existing = await db
+      .select()
+      .from(leadResponseConfig)
+      .where(eq(leadResponseConfig.companyId, companyId))
+      .limit(1);
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(leadResponseConfig)
+        .set({ ...writeData, updatedAt: new Date() })
+        .where(eq(leadResponseConfig.companyId, companyId))
+        .returning();
+      // Decrypt on return
+      if (updated.hcpApiKey) {
+        try {
+          updated.hcpApiKey = decryptHcpApiKey(updated.hcpApiKey);
+        } catch {
+          /* leave */
+        }
+      }
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(leadResponseConfig)
+        .values({ companyId, ...writeData })
+        .returning();
+      // Decrypt on return
+      if (created.hcpApiKey) {
+        try {
+          created.hcpApiKey = decryptHcpApiKey(created.hcpApiKey);
+        } catch {
+          /* leave */
+        }
+      }
+      return created;
+    }
   }
 }
 

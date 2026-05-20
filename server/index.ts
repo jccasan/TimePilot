@@ -2137,6 +2137,54 @@ async function seedPoopScoopDemoData() {
   }
 }
 
+async function backfillSpSubscriberLeadResponse() {
+  try {
+    const { pool: pgPool } = await import("pg").then(({ Pool }) => {
+      return { pool: new Pool({ connectionString: process.env.DATABASE_URL }) };
+    });
+    // Advisory lock — only one instance runs this at a time
+    const lockRes = await pgPool.query(
+      `SELECT pg_try_advisory_lock(hashtext('lr_sp_backfill')) AS acquired`
+    );
+    if (!lockRes.rows[0]?.acquired) {
+      console.log("[LR Backfill] Another instance is running — skipping");
+      await pgPool.end();
+      return;
+    }
+    try {
+      // Find all companies with an active SP subscription
+      const res = await pgPool.query(
+        `SELECT id FROM companies WHERE subscription_status IN ('active','trialing') AND stripe_subscription_id IS NOT NULL`
+      );
+      if (res.rows.length === 0) {
+        console.log("[LR Backfill] No active SP subscribers found");
+        return;
+      }
+      let upserted = 0;
+      for (const row of res.rows) {
+        const companyId: string = row.id;
+        await pgPool.query(
+          `INSERT INTO lead_response_config (id, company_id, lead_response_active, updated_at)
+           VALUES (gen_random_uuid(), $1, true, NOW())
+           ON CONFLICT (company_id) DO UPDATE
+           SET lead_response_active = true, updated_at = NOW()
+           WHERE lead_response_config.lead_response_active = false`,
+          [companyId]
+        );
+        upserted++;
+      }
+      console.log(
+        `[LR Backfill] Completed — set leadResponseActive=true for ${upserted} SP subscribers`
+      );
+    } finally {
+      await pgPool.query(`SELECT pg_advisory_unlock(hashtext('lr_sp_backfill'))`);
+      await pgPool.end();
+    }
+  } catch (err) {
+    console.error("[LR Backfill] Error:", err instanceof Error ? err.message : String(err));
+  }
+}
+
 async function backfillPropertyCoordinates() {
   const { Pool } = await import("pg");
   const { geocodeAddress } = await import("./services/geocode");
@@ -2975,6 +3023,10 @@ async function seedLakeErieScoopersAccount() {
 
       backfillPropertyCoordinates().catch((err) =>
         console.error("[Geocode Backfill] Unexpected error:", err)
+      );
+
+      backfillSpSubscriberLeadResponse().catch((err) =>
+        console.error("[LR Backfill] Unexpected error:", err)
       );
 
       auditRetellWebhooks().catch((err) => console.error("[RetellAudit] Unexpected error:", err));

@@ -95,6 +95,7 @@ const ReviewRouter = lazy(() => import("@/pages/review-router"));
 const ImportResolverPage = lazy(() => import("@/pages/import-resolver-page"));
 const CrmRouter = lazy(() => import("@/pages/crm/index"));
 const SignDocumentsPage = lazy(() => import("@/pages/sign-documents-page"));
+const LeadResponseRegisterPage = lazy(() => import("@/pages/lead-response-register"));
 
 function PageLoader() {
   return (
@@ -894,6 +895,16 @@ function AppContent() {
 
   const isReviewPath =
     typeof window !== "undefined" && window.location.pathname.startsWith("/review/");
+
+  const isRegisterPath = typeof window !== "undefined" && window.location.pathname === "/register";
+
+  if (isRegisterPath) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <LeadResponseRegisterPage />
+      </Suspense>
+    );
+  }
 
   if (isSignPath) {
     return (

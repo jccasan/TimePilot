@@ -889,4 +889,9 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
       24 * 60 * 60 * 1000
     );
   });
+
+  import("../jobs/lead-response-expiration").then(({ runLeadResponseExpirationJob }) => {
+    setTimeout(() => runLeadResponseExpirationJob().catch(console.error), 210000);
+    setInterval(() => runLeadResponseExpirationJob().catch(console.error), 24 * 60 * 60 * 1000);
+  });
 }

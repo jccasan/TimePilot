@@ -1963,4 +1963,176 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
+
+  /**
+   * POST /api/public/lead-response/complete-registration
+   * Called by the /register frontend page when product=lead_response&session_id=...
+   * Verifies the Stripe checkout session, creates user + company + LR config.
+   */
+  app.post(
+    "/api/public/lead-response/complete-registration",
+    async (req: Request, res: Response) => {
+      try {
+        if (!isStripeConfigured()) {
+          return res.status(503).json({ error: "Stripe is not configured" });
+        }
+
+        const { sessionId, email, firstName, lastName, companyName, phone } = req.body;
+
+        if (!sessionId || typeof sessionId !== "string") {
+          return res.status(400).json({ error: "sessionId is required" });
+        }
+        if (!email || typeof email !== "string") {
+          return res.status(400).json({ error: "email is required" });
+        }
+        if (!firstName || typeof firstName !== "string") {
+          return res.status(400).json({ error: "firstName is required" });
+        }
+
+        // Verify the Stripe checkout session
+        let session: {
+          id: string;
+          status: string | null;
+          payment_status: string;
+          customer_email?: string | null;
+          metadata?: Record<string, string> | null;
+          line_items?: {
+            data: Array<{ price: { id: string } | null }>;
+          } | null;
+        };
+        try {
+          const StripeLib = (await import("stripe")).default;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const stripe = new StripeLib(process.env.STRIPE_SECRET_KEY!, {
+            apiVersion: "2026-01-28.clover",
+          } as any);
+          // Expand line_items so we can validate the purchased price ID
+          session = await stripe.checkout.sessions.retrieve(sessionId, {
+            expand: ["line_items"],
+          });
+        } catch (stripeErr) {
+          console.error("[LR Register] Stripe session retrieval failed:", stripeErr);
+          return res.status(400).json({
+            error: "We couldn't verify your payment. Please contact support.",
+          });
+        }
+
+        if (session.status !== "complete" || session.payment_status !== "paid") {
+          console.warn(
+            `[LR Register] Session ${sessionId} not complete: status=${session.status} payment_status=${session.payment_status}`
+          );
+          return res.status(400).json({
+            error: "We couldn't verify your payment. Please contact support.",
+          });
+        }
+
+        // Validate the session contains the Lead Response price
+        const lrPriceId = process.env.LEAD_RESPONSE_PRICE_ID;
+        if (lrPriceId) {
+          const lineItems = session.line_items?.data ?? [];
+          const hasLrPrice = lineItems.some((item) => item.price?.id === lrPriceId);
+          if (!hasLrPrice) {
+            console.warn(
+              `[LR Register] Session ${sessionId} does not contain LEAD_RESPONSE_PRICE_ID (${lrPriceId})`
+            );
+            return res.status(400).json({
+              error: "We couldn't verify your payment. Please contact support.",
+            });
+          }
+        }
+
+        const safeEmail = email.toLowerCase().trim();
+        const safeFirstName = firstName.trim();
+        const safeLastName = (lastName || "").trim();
+        const safeCompanyName = (companyName || `${safeFirstName}'s Company`).trim();
+        const safePhone = (phone || "").trim();
+
+        // Check if a user with this email already has an LR account
+        const existingUser = await getUserByEmail(safeEmail);
+        if (existingUser) {
+          return res.status(409).json({
+            error: "An account with this email already exists. Please log in instead.",
+          });
+        }
+
+        const tempPassword = crypto.randomBytes(6).toString("base64url");
+        const newUser = await createUserWithTempPassword(
+          safeEmail,
+          safeFirstName,
+          safeLastName,
+          tempPassword
+        );
+
+        const baseSlug =
+          safeCompanyName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "") || "company";
+        let slug = baseSlug;
+        let slugSuffix = 1;
+        while (true) {
+          const existingSlug = await storage.getCompanyBySlug(slug);
+          if (!existingSlug) break;
+          slug = `${baseSlug}-${slugSuffix++}`;
+        }
+
+        const newCompany = await storage.createCompany({
+          name: safeCompanyName,
+          email: safeEmail,
+          phone: safePhone || null,
+          slug,
+          subscriptionTier: "free_trial",
+          subscriptionStatus: "active",
+          country: "us",
+          currency: "usd",
+        } as Parameters<typeof storage.createCompany>[0]);
+
+        await storage.addUserToCompany(newUser.id, newCompany.id, "lead_response_operator");
+
+        await storage.upsertLeadResponseConfig(newCompany.id, {
+          leadResponseActive: true,
+          stripeSessionId: sessionId,
+        });
+
+        const host = req.headers.host || "localhost:5000";
+        const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
+        const appUrl = `${isLocalhost ? "http" : "https"}://${host}`;
+
+        await sendEmail({
+          companyId: newCompany.id,
+          to: safeEmail,
+          subject: "Welcome to ScooPilot Lead Response",
+          text: `Hi ${safeFirstName},\n\nYour Lead Response account is ready!\n\nLogin: ${appUrl}\nEmail: ${safeEmail}\nTemporary Password: ${tempPassword}\n\nYou will be asked to set a new password on first login.`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+            <div style="background-color:#2d8a5e;padding:20px;text-align:center"><h1 style="color:white;margin:0">ScooPilot</h1></div>
+            <div style="padding:30px 20px">
+              <h2 style="margin-top:0">Welcome to Lead Response</h2>
+              <p>Hi ${safeFirstName},</p>
+              <p>Your Lead Response account for <strong>${safeCompanyName}</strong> is ready.</p>
+              <div style="background-color:#f3f4f6;padding:16px;border-radius:8px;margin:20px 0">
+                <p style="margin:4px 0"><strong>Email:</strong> ${safeEmail}</p>
+                <p style="margin:4px 0"><strong>Temporary Password:</strong> ${tempPassword}</p>
+              </div>
+              <div style="text-align:center;margin:24px 0">
+                <a href="${appUrl}" style="background-color:#2d8a5e;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold">Log In Now</a>
+              </div>
+            </div>
+          </div>`,
+        }).catch((err) => console.error("[LR Register] Welcome email failed:", err));
+
+        console.log(
+          `[LR Register] Created Lead Response account for ${maskEmail(safeEmail)} — company ${newCompany.id}`
+        );
+
+        return res.json({
+          success: true,
+          message: "Account created successfully. Check your email for login credentials.",
+          loginUrl: appUrl,
+        });
+      } catch (err) {
+        console.error("[LR Register] Error:", err);
+        handleError(res, err);
+      }
+    }
+  );
 }

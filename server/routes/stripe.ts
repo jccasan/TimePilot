@@ -1115,9 +1115,40 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           currency?: string;
           metadata: Record<string, string>;
           trial_end?: number | null;
-          items?: { data?: Array<{ id: string }> };
+          current_period_end?: number;
+          items?: { data?: Array<{ id: string; price?: { id: string } }> };
         };
         const meta = subscription.metadata || {};
+
+        // ── Lead Response standalone subscription ─────────────────────
+        {
+          const lrPriceId = process.env.LEAD_RESPONSE_PRICE_ID;
+          const subFirstPriceId = subscription.items?.data?.[0]?.price?.id;
+          if (lrPriceId && subFirstPriceId === lrPriceId) {
+            const lrCompanyId = meta.company_id;
+            if (lrCompanyId) {
+              await storage
+                .upsertLeadResponseConfig(lrCompanyId, {
+                  leadResponseActive: true,
+                  stripeSubscriptionId: subscription.id,
+                  leadResponseActiveUntil: null,
+                  telnyxNumberReleaseDate: null,
+                })
+                .catch((err) =>
+                  console.error(`[LR Subscription] Failed to activate LR for ${lrCompanyId}:`, err)
+                );
+              console.log(
+                `[LR Subscription] Activated Lead Response for company ${lrCompanyId} (sub: ${subscription.id}) — cleared activeUntil and releaseDate`
+              );
+            }
+            await db
+              .insert(stripeEvents)
+              .values({ id: event.id, eventType: event.type })
+              .onConflictDoNothing();
+            res.json({ received: true });
+            return;
+          }
+        }
 
         if (meta.checkout_type === "voice_addon") {
           const tenantId = meta.tenant_id;
@@ -1202,6 +1233,16 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             console.log(
               `[Stripe Subscription] Updated company "${company.name}" via tenant_id (${company.id}) status=${subStatus}`
             );
+            // SP subscriber also gets Lead Response access; clear any pending deactivation dates
+            await storage
+              .upsertLeadResponseConfig(company.id, {
+                leadResponseActive: true,
+                leadResponseActiveUntil: null,
+                telnyxNumberReleaseDate: null,
+              })
+              .catch((err) =>
+                console.error(`[LR] Failed to upsert LR config for SP company ${company.id}:`, err)
+              );
             await db
               .insert(stripeEvents)
               .values({ id: event.id, eventType: event.type })
@@ -1472,7 +1513,12 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       }
 
       if (event.type === "customer.subscription.deleted") {
-        const subscription = event.data.object as { id: string; metadata?: Record<string, string> };
+        const subscription = event.data.object as {
+          id: string;
+          metadata?: Record<string, string>;
+          current_period_end?: number;
+          items?: { data?: Array<{ id: string; price?: { id: string } }> };
+        };
         const stripeSubId = subscription.id;
         const allCompanies = await storage.listCompanies();
         let handled = false;
@@ -1490,6 +1536,39 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             break;
           }
         }
+        // ── Check if this is a Lead Response standalone subscription deletion ──
+        if (!handled) {
+          const lrDelPriceId = process.env.LEAD_RESPONSE_PRICE_ID;
+          const lrDelFirstPriceId = subscription.items?.data?.[0]?.price?.id;
+          if (lrDelPriceId && lrDelFirstPriceId === lrDelPriceId) {
+            for (const company of allCompanies) {
+              const lrConfig = await storage.getLeadResponseConfig(company.id);
+              if (lrConfig?.stripeSubscriptionId === stripeSubId) {
+                const periodEnd = subscription.current_period_end
+                  ? new Date(subscription.current_period_end * 1000)
+                  : new Date();
+                const releaseDate = new Date(periodEnd.getTime() + 30 * 24 * 60 * 60 * 1000);
+                await storage.upsertLeadResponseConfig(company.id, {
+                  leadResponseActiveUntil: periodEnd,
+                  telnyxNumberReleaseDate: releaseDate,
+                });
+                // Send cancellation email
+                const { sendLeadResponseCancellationEmail } =
+                  await import("../jobs/lead-response-expiration");
+                await sendLeadResponseCancellationEmail(company.id, periodEnd).catch(
+                  (err: unknown) =>
+                    console.error(`[LR Subscription] Failed to send cancellation email:`, err)
+                );
+                console.log(
+                  `[LR Subscription] Cancelled Lead Response for company "${company.name}" — active until ${periodEnd.toISOString()}`
+                );
+                handled = true;
+                break;
+              }
+            }
+          }
+        }
+
         if (!handled) {
           for (const company of allCompanies) {
             if (company.stripeSubscriptionId === stripeSubId) {
@@ -1506,6 +1585,35 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 cancelAtPeriodEnd: false,
                 cancelAt: null,
               } as Partial<typeof companies.$inferInsert>);
+              // Apply LR active-until logic when SP subscription is cancelled
+              const lrConfig = await storage.getLeadResponseConfig(company.id);
+              if (lrConfig?.leadResponseActive) {
+                const periodEnd = subscription.current_period_end
+                  ? new Date(subscription.current_period_end * 1000)
+                  : new Date();
+                const releaseDate = new Date(periodEnd.getTime() + 30 * 24 * 60 * 60 * 1000);
+                await storage
+                  .upsertLeadResponseConfig(company.id, {
+                    leadResponseActiveUntil: periodEnd,
+                    telnyxNumberReleaseDate: releaseDate,
+                  })
+                  .catch((err) =>
+                    console.error(`[LR] Failed to set LR active-until for ${company.id}:`, err)
+                  );
+                console.log(
+                  `[LR] SP cancellation — Lead Response access set to ${periodEnd.toISOString()} for company "${company.name}"`
+                );
+                // Send LR cancellation email with access-end date and reactivation link
+                const { sendLeadResponseCancellationEmail } =
+                  await import("../jobs/lead-response-expiration");
+                await sendLeadResponseCancellationEmail(company.id, periodEnd).catch(
+                  (err: unknown) =>
+                    console.error(
+                      `[LR] Failed to send SP-cancellation LR email for ${company.id}:`,
+                      err
+                    )
+                );
+              }
               console.log(
                 `[Stripe Subscription] Company "${company.name}" subscription cancelled (period end reached)`
               );

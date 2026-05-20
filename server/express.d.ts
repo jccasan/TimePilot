@@ -14,6 +14,7 @@ declare global {
       adminUser?: { userId: string; email: string };
       _apiKeyAuth?: { companyId: string; scopes: string[]; keyId: string };
       crmCompanyId?: string;
+      _isLeadResponseOperator?: boolean;
     }
   }
 }

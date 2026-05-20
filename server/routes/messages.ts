@@ -117,7 +117,11 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
     try {
       const { companyId } = await getCompanyContext(req);
       const channelFilter = req.query.channel as string | undefined;
-      const contacts = await storage.getContacts(companyId);
+      // Lead Response operators see only conversations tied to their LR-sourced contacts
+      const contactFilters = req._isLeadResponseOperator
+        ? { leadSource: "lead_response" }
+        : undefined;
+      const contacts = await storage.getContacts(companyId, contactFilters);
       const contactMap = new Map(contacts.map((c) => [c.id, c]));
       const company = await storage.getCompany(companyId);
       const retentionDays = company?.messageRetentionDays ?? 30;

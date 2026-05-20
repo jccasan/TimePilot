@@ -1,0 +1,150 @@
+import type { Express, Request, Response, NextFunction } from "express";
+import { storage } from "../storage";
+import { isAuthenticated, getCompanyContext, handleError } from "./shared";
+import { API_KEY_ALLOWED_ROUTES } from "./shared";
+
+/**
+ * Routes that lead_response_operator users are permitted to access.
+ * All other /api/* routes return 403 for this role.
+ */
+const LR_OPERATOR_PERMITTED_PATTERNS = [
+  /^\/api\/lead-response\//,
+  /^\/api\/contacts($|\?|\/)/,
+  /^\/api\/conversations($|\?|\/)/,
+  /^\/api\/messages($|\?|\/)/,
+  /^\/api\/company\/settings/,
+  /^\/api\/billing/,
+  /^\/api\/auth\//,
+];
+
+export async function blockLeadResponseOperator(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const userId = req.session?.userId;
+  if (!userId) return next();
+  try {
+    const memberships = await storage.getCompaniesForUser(userId as string);
+    if (!memberships.length) return next();
+    const role = memberships[0].role;
+    if (role !== "lead_response_operator") return next();
+    req._isLeadResponseOperator = true;
+    const path = req.path;
+    const permitted = LR_OPERATOR_PERMITTED_PATTERNS.some((pattern) => pattern.test(path));
+    if (!permitted) {
+      res.status(403).json({ error: "Access restricted for Lead Response accounts." });
+      return;
+    }
+  } catch {
+    // Don't block on lookup error — let downstream handlers deal with auth
+  }
+  next();
+}
+
+const VALID_LR_STATUS = [
+  "new",
+  "estimate_sent",
+  "deposit_pending",
+  "deposit_paid",
+  "scheduled",
+  "dead",
+] as const;
+type LeadResponseStatusValue = (typeof VALID_LR_STATUS)[number];
+
+export async function registerLeadResponseRoutes(app: Express): Promise<void> {
+  /**
+   * POST /api/lead-response/status
+   * Auth: API key (existing SP API key pattern)
+   * Body: { contactId, leadResponseStatus, depositAmount?, depositPaidAt? }
+   *
+   * Updates leadResponseStatus, depositAmount, and depositPaidAt on a contact.
+   * Used by external lead response platforms and AI agents.
+   */
+  app.post("/api/lead-response/status", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const { contactId, leadResponseStatus, depositAmount, depositPaidAt } = req.body;
+
+      if (!contactId || typeof contactId !== "string") {
+        return res.status(400).json({ error: "contactId is required" });
+      }
+
+      if (!leadResponseStatus || typeof leadResponseStatus !== "string") {
+        return res.status(400).json({ error: "leadResponseStatus is required" });
+      }
+
+      if (!(VALID_LR_STATUS as readonly string[]).includes(leadResponseStatus)) {
+        return res.status(400).json({
+          error: `Invalid leadResponseStatus. Must be one of: ${VALID_LR_STATUS.join(", ")}`,
+        });
+      }
+
+      const contact = await storage.getContact(contactId, companyId);
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+
+      const updates: Record<string, unknown> = {
+        leadResponseStatus: leadResponseStatus as LeadResponseStatusValue,
+      };
+
+      if (depositAmount !== undefined && depositAmount !== null) {
+        const parsed = parseFloat(String(depositAmount));
+        if (isNaN(parsed) || parsed < 0) {
+          return res.status(400).json({ error: "depositAmount must be a non-negative number" });
+        }
+        updates.depositAmount = String(parsed.toFixed(2));
+      }
+
+      if (depositPaidAt !== undefined && depositPaidAt !== null) {
+        const parsed = new Date(depositPaidAt);
+        if (isNaN(parsed.getTime())) {
+          return res.status(400).json({ error: "depositPaidAt must be a valid date string" });
+        }
+        updates.depositPaidAt = parsed;
+      }
+
+      await storage.updateContact(
+        contactId,
+        companyId,
+        updates as Parameters<typeof storage.updateContact>[2]
+      );
+
+      console.log(
+        `[LR Status] Updated contact ${contactId} — status=${leadResponseStatus}` +
+          (updates.depositAmount ? ` deposit=$${updates.depositAmount}` : "") +
+          (updates.depositPaidAt ? ` paidAt=${updates.depositPaidAt}` : "")
+      );
+
+      return res.json({
+        success: true,
+        contactId,
+        status: leadResponseStatus,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
+   * GET /api/lead-response/config
+   * Auth: user session (owner/admin)
+   * Returns the Lead Response config for the current company.
+   */
+  app.get("/api/lead-response/config", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const config = await storage.getLeadResponseConfig(companyId);
+      return res.json(config || { leadResponseActive: false });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+}
+
+// Register the POST /api/lead-response/status route as API-key accessible
+API_KEY_ALLOWED_ROUTES.push({
+  method: "POST",
+  pathRegex: /^\/api\/lead-response\/status\/?$/,
+});

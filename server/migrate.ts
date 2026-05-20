@@ -961,6 +961,42 @@ export async function runStartupMigrations(): Promise<void> {
       "[Migration] overhead_costs driver_params + expanded cost_driver_type enum ensured"
     );
 
+    // ── Lead Response Foundation (Task #909) ─────────────────────────────────
+    // 1. Add lead_response_operator to the user_role enum
+    await client.query(`ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'lead_response_operator'`);
+    console.log("[Migration] lead_response_operator role added to user_role enum");
+
+    // 2. Add Lead Response columns to contacts
+    await client.query(`
+      ALTER TABLE contacts
+        ADD COLUMN IF NOT EXISTS lead_response_status VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS deposit_amount      NUMERIC(10,2),
+        ADD COLUMN IF NOT EXISTS deposit_paid_at     TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS lead_source         VARCHAR(50)
+    `);
+    console.log("[Migration] contacts lead_response columns ensured");
+
+    // 3. Create lead_response_config table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lead_response_config (
+        id                         VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id                 VARCHAR NOT NULL UNIQUE REFERENCES companies(id) ON DELETE CASCADE,
+        lead_response_active       BOOLEAN NOT NULL DEFAULT FALSE,
+        lead_response_active_until TIMESTAMP,
+        telnyx_number_release_date TIMESTAMP,
+        stripe_subscription_id     VARCHAR(255),
+        stripe_session_id          VARCHAR(255),
+        hcp_api_key                VARCHAR(1024),
+        created_at                 TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at                 TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_lead_response_config_company
+        ON lead_response_config (company_id)
+    `);
+    console.log("[Migration] lead_response_config table ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

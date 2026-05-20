@@ -22,7 +22,12 @@ export { sessions, users, passwordResetTokens, emailVerificationTokens } from ".
 export type { User, UpsertUser } from "./models/auth";
 import { users } from "./models/auth";
 
-export const userRoleEnum = pgEnum("user_role", ["owner", "admin", "tech"]);
+export const userRoleEnum = pgEnum("user_role", [
+  "owner",
+  "admin",
+  "tech",
+  "lead_response_operator",
+]);
 export const leadStatusEnum = pgEnum("lead_status", [
   "lead",
   "estimate",
@@ -525,6 +530,9 @@ export const contacts = pgTable(
       .default(sql`'[]'::jsonb`),
     contactType: contactTypeEnum("contact_type").notNull().default("residential"),
     companyName: varchar("company_name", { length: 255 }),
+    leadResponseStatus: varchar("lead_response_status", { length: 50 }),
+    depositAmount: decimal("deposit_amount", { precision: 10, scale: 2 }),
+    depositPaidAt: timestamp("deposit_paid_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -3517,6 +3525,35 @@ export const customFieldDefinitions = pgTable(
   },
   (table) => [index("idx_custom_field_defs_company").on(table.companyId)]
 );
+
+// ============================================================
+// Lead Response Config
+// ============================================================
+export const leadResponseConfig = pgTable("lead_response_config", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id")
+    .notNull()
+    .unique()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  leadResponseActive: boolean("lead_response_active").notNull().default(false),
+  leadResponseActiveUntil: timestamp("lead_response_active_until"),
+  telnyxNumberReleaseDate: timestamp("telnyx_number_release_date"),
+  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
+  stripeSessionId: varchar("stripe_session_id", { length: 255 }),
+  hcpApiKey: varchar("hcp_api_key", { length: 1024 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertLeadResponseConfigSchema = createInsertSchema(leadResponseConfig).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type LeadResponseConfig = typeof leadResponseConfig.$inferSelect;
+export type InsertLeadResponseConfig = typeof insertLeadResponseConfigSchema._type;
 
 export const insertCustomFieldDefinitionSchema = createInsertSchema(customFieldDefinitions).omit({
   id: true,
