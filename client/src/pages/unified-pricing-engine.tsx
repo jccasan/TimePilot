@@ -734,6 +734,44 @@ function LaborSettingsPanel({ config, onSaved }: { config: PricingConfig; onSave
                   )}
                 />
               </div>
+              {(() => {
+                const wage = parseFloat(String(form.watch("techHourlyWageDollars") ?? ""));
+                const burden = parseFloat(String(form.watch("burdenMultiplier") ?? ""));
+                const validWage = !isNaN(wage) && wage > 0;
+                const validBurden = !isNaN(burden) && burden >= 1;
+                if (!validWage || !validBurden) return null;
+                const burdenedRate = wage * burden;
+                const costPerMinute = burdenedRate / 60;
+                return (
+                  <div className="mt-3 pt-3 border-t flex flex-wrap gap-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-0.5">Burdened Rate</p>
+                      <p
+                        className="text-lg font-bold tabular-nums text-primary"
+                        data-testid="text-burdened-rate"
+                      >
+                        ${burdenedRate.toFixed(2)}
+                        <span className="text-xs font-normal text-muted-foreground ml-1">/hr</span>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-0.5">Cost Per Minute</p>
+                      <p
+                        className="text-lg font-bold tabular-nums text-primary"
+                        data-testid="text-cost-per-minute"
+                      >
+                        ${costPerMinute.toFixed(3)}
+                        <span className="text-xs font-normal text-muted-foreground ml-1">/min</span>
+                      </p>
+                    </div>
+                    <div className="self-end pb-1">
+                      <p className="text-[10px] text-muted-foreground">
+                        Used in route optimizer &amp; pricing engine
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
             </AccordionContent>
           </AccordionItem>
 
