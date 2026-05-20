@@ -3,8 +3,13 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { sql, eq, and, gte, inArray, desc, asc } from "drizzle-orm";
 import { contacts, quotes } from "@shared/schema";
-import { isAuthenticated, getCompanyContext, handleError } from "./shared";
-import { API_KEY_ALLOWED_ROUTES } from "./shared";
+import {
+  isAuthenticated,
+  getCompanyContext,
+  requireRole,
+  handleError,
+  API_KEY_ALLOWED_ROUTES,
+} from "./shared";
 import { syncLeadResponseConfigToAirtable } from "../services/airtable";
 import { sendEmail } from "../services/email";
 
@@ -492,6 +497,62 @@ export async function registerLeadResponseRoutes(app: Express): Promise<void> {
         }
 
         return res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  /**
+   * POST /api/lead-response/provision-number
+   * Auth: session (owner/admin)
+   * Body: { areaCode: string, companyId?: string }
+   *
+   * Provisions a Telnyx phone number for the Lead Response product.
+   * Currently runs in TEST MODE — no real Telnyx API calls or number purchases are made.
+   * The provisioned number is saved to lead_response_config.lrPhoneNumber.
+   *
+   * TODO: SWITCH TO LIVE MODE — replace the test simulation block below with
+   * a real Telnyx API call to search & order a number in the given area code.
+   * See: https://developers.telnyx.com/api/numbers/get-available-phone-numbers
+   */
+  app.post(
+    "/api/lead-response/provision-number",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+
+        const { areaCode } = req.body;
+        if (!areaCode || typeof areaCode !== "string") {
+          return res.status(400).json({ error: "areaCode is required" });
+        }
+        const cleanCode = areaCode.replace(/\D/g, "").slice(0, 3);
+        if (cleanCode.length !== 3) {
+          return res.status(400).json({ error: "areaCode must be a 3-digit number" });
+        }
+
+        // ── TEST MODE SIMULATION ──────────────────────────────────────────────
+        // TODO: SWITCH TO LIVE MODE — replace this block with a real Telnyx API call.
+        // Real implementation should:
+        //   1. GET https://api.telnyx.com/v2/available_phone_numbers?filter[national_destination_code]=${cleanCode}&filter[features][]=sms
+        //   2. Pick the first available number from the response
+        //   3. POST https://api.telnyx.com/v2/number_orders to purchase it
+        //   4. Return the purchased number
+        // If no numbers are available in the area code, return a 409 with error message.
+        const simulatedNumber = `+1${cleanCode}5550${Math.floor(1000 + Math.random() * 9000)}`;
+        // ── END TEST MODE ─────────────────────────────────────────────────────
+
+        await storage.upsertLeadResponseConfig(companyId, {
+          lrPhoneNumber: simulatedNumber,
+        });
+
+        console.log(
+          `[LR Provision] TEST MODE: Simulated number ${simulatedNumber} for company ${companyId} (area code ${cleanCode})`
+        );
+
+        return res.json({ success: true, phoneNumber: simulatedNumber, testMode: true });
       } catch (err) {
         handleError(res, err);
       }

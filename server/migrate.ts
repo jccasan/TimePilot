@@ -1014,6 +1014,13 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] lead_response_config settings columns ensured");
 
+    // ── Lead Response Setup Complete flag (Task #912) ──────────────────────────
+    await client.query(`
+      ALTER TABLE lead_response_config
+        ADD COLUMN IF NOT EXISTS setup_complete BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    console.log("[Migration] lead_response_config setup_complete column ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

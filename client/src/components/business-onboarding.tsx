@@ -55,7 +55,16 @@ import {
   PhoneCall,
   Wand2,
   Clock,
+  MapPin,
+  Key,
+  Phone,
+  Info,
 } from "lucide-react";
+import {
+  PricingTiersEditor,
+  validatePricingTiers,
+  type PricingTier,
+} from "@/components/PricingTiersEditor";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 
 type BusinessOnboardingStatus = {
@@ -74,6 +83,10 @@ type BusinessOnboardingStatus = {
     stripeConnectAccountId: string | null;
     stripeConnectOnboarded: boolean;
     voicePlanStatus: string | null;
+    subscriptionTier: string | null;
+    leadResponseActive: boolean;
+    setupComplete: boolean;
+    lrPhoneNumber: string | null;
   };
 };
 
@@ -92,22 +105,35 @@ type WebsiteInsights = {
   suggestedPricingMode: "aggressive" | "standard" | "premium";
 };
 
-const BASE_STEPS = [
-  { key: "profile", label: "Company Profile", icon: Building2 },
-  { key: "intelligence", label: "Business Intelligence", icon: Globe },
-  { key: "pricing", label: "Pricing Setup", icon: DollarSign },
-  { key: "payments", label: "Payment Processing", icon: CreditCard },
-  { key: "voice", label: "Voice Agent", icon: PhoneCall },
-  { key: "launch", label: "Review & Launch", icon: Rocket },
-];
+function buildSteps(hasVoicePlan: boolean, hasLeadResponse: boolean) {
+  const steps: { key: string; label: string; icon: React.ElementType }[] = [
+    { key: "profile", label: "Company Profile", icon: Building2 },
+    { key: "intelligence", label: "Business Intelligence", icon: Globe },
+    { key: "pricing", label: "Pricing Setup", icon: DollarSign },
+    { key: "payments", label: "Payment Processing", icon: CreditCard },
+    { key: "pricingTiers", label: "LR Pricing Tiers", icon: DollarSign },
+  ];
+  if (hasLeadResponse) {
+    steps.push({ key: "leadResponse", label: "Lead Response Setup", icon: PhoneCall });
+  }
+  if (hasVoicePlan) {
+    steps.push({ key: "voice", label: "Voice Agent", icon: PhoneCall });
+  }
+  steps.push({ key: "launch", label: "Review & Launch", icon: Rocket });
+  return steps;
+}
 
-const NON_VOICE_STEPS = [
-  { key: "profile", label: "Company Profile", icon: Building2 },
-  { key: "intelligence", label: "Business Intelligence", icon: Globe },
-  { key: "pricing", label: "Pricing Setup", icon: DollarSign },
-  { key: "payments", label: "Payment Processing", icon: CreditCard },
-  { key: "launch", label: "Review & Launch", icon: Rocket },
-];
+function getLaunchStepIdx(hasVoicePlan: boolean, hasLeadResponse: boolean) {
+  // 4 (base) + 1 (pricingTiers always) + optional LR + optional voice
+  return 4 + (hasLeadResponse ? 1 : 0) + (hasVoicePlan ? 1 : 0) + 1;
+}
+
+function getVoiceStepIdx(hasLeadResponse: boolean) {
+  return hasLeadResponse ? 6 : 5;
+}
+
+const LR_STEP_IDX = 5;
+const PRICING_TIERS_STEP_IDX = 4;
 
 const profileSchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -155,7 +181,7 @@ function StepIndicator({
 }: {
   currentStep: number;
   completedSteps: number[];
-  steps: typeof BASE_STEPS;
+  steps: Array<{ key: string; label: string; icon: React.ElementType }>;
 }) {
   return (
     <div className="flex items-center gap-1 w-full mb-8" data-testid="stepper-indicator">
@@ -1330,6 +1356,613 @@ function PaymentProcessingStep({
   );
 }
 
+function PricingTiersStep({
+  companyData,
+  onNext,
+  onBack,
+  isPending,
+}: {
+  companyData: BusinessOnboardingStatus["companyData"];
+  onNext: (data: {
+    tiers: PricingTier[];
+    perDogAdder: number | null;
+    firstTimeCleanupFee: number | null;
+    depositPercent: number | null;
+  }) => void;
+  onBack: () => void;
+  isPending: boolean;
+}) {
+  const isSPSubscriber = !!companyData.pricingConfig;
+  const { toast } = useToast();
+
+  function buildInitialTiers(): PricingTier[] {
+    if (isSPSubscriber && companyData.pricingConfig?.pricingRules?.basePrices) {
+      const bp = companyData.pricingConfig.pricingRules.basePrices;
+      return [
+        { label: "Weekly Service", pricePerVisit: bp.weekly ?? null },
+        { label: "Bi-Weekly Service", pricePerVisit: bp.biWeekly ?? null },
+        { label: "Monthly Service", pricePerVisit: bp.monthly ?? null },
+        { label: "", pricePerVisit: null },
+        { label: "", pricePerVisit: null },
+        { label: "", pricePerVisit: null },
+      ];
+    }
+    return Array.from({ length: 6 }, () => ({ label: "", pricePerVisit: null }));
+  }
+
+  const [tiers, setTiers] = useState<PricingTier[]>(buildInitialTiers);
+  const [perDogAdder, setPerDogAdder] = useState<number | null>(null);
+  const [firstTimeCleanupFee, setFirstTimeCleanupFee] = useState<number | null>(null);
+  const [depositPercent, setDepositPercent] = useState<number | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const handleNext = () => {
+    const errs = validatePricingTiers(tiers);
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      toast({
+        title: "Pricing tiers incomplete",
+        description: "Please fill in labels and prices for tiers 1–3.",
+        variant: "destructive",
+      });
+      return;
+    }
+    onNext({ tiers, perDogAdder, firstTimeCleanupFee, depositPercent });
+  };
+
+  return (
+    <div className="max-w-xl mx-auto">
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold" data-testid="text-step-title">
+          Lead Response Pricing Tiers
+        </h2>
+        <p className="text-muted-foreground mt-1">
+          Set your pricing tiers for the Lead Response product. Tiers 1–3 are required.
+        </p>
+      </div>
+
+      {isSPSubscriber && (
+        <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm flex items-start gap-2">
+          <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+          <span>Pre-filled from your existing ScooPilot pricing. Review and adjust as needed.</span>
+        </div>
+      )}
+
+      <Card>
+        <CardContent className="pt-6">
+          <PricingTiersEditor
+            value={tiers}
+            onChange={setTiers}
+            perDogAdder={perDogAdder}
+            onPerDogAdderChange={setPerDogAdder}
+            firstTimeCleanupFee={firstTimeCleanupFee}
+            onFirstTimeCleanupFeeChange={setFirstTimeCleanupFee}
+            depositPercent={depositPercent}
+            onDepositPercentChange={setDepositPercent}
+            showDepositPercent
+            errors={errors}
+          />
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between pt-6">
+        <Button variant="ghost" onClick={onBack} data-testid="button-back-step">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
+        <Button onClick={handleNext} disabled={isPending} data-testid="button-next-step">
+          {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+          Continue
+          <ArrowRight className="h-4 w-4 ml-2" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+type LRSubStep = 1 | 2 | 3 | 4;
+
+function LeadResponseSetupStep({
+  companyData,
+  stripeConnected,
+  onNext,
+  onBack,
+  isPending,
+}: {
+  companyData: BusinessOnboardingStatus["companyData"];
+  stripeConnected: boolean;
+  onNext: (data: {
+    lrPhoneNumber: string;
+    portingRequested: boolean;
+    serviceZipCodes: string;
+    outOfAreaMessage: string;
+    schedulingPlatform: string;
+    hcpApiKey: string;
+    billingMode: string;
+    depositPercent: number | null;
+  }) => void;
+  onBack: () => void;
+  isPending: boolean;
+}) {
+  const { toast } = useToast();
+  const [subStep, setSubStep] = useState<LRSubStep>(1);
+
+  const phoneAreaCode = companyData.phone?.replace(/\D/g, "").slice(0, 3) ?? "";
+
+  const [phoneMode, setPhoneMode] = useState<"new" | "port">("new");
+  const [manualAreaCode, setManualAreaCode] = useState(phoneAreaCode);
+  const [provisionedNumber, setProvisionedNumber] = useState(companyData.lrPhoneNumber ?? "");
+  const [portingNumber, setPortingNumber] = useState("");
+  const [isProvisioning, setIsProvisioning] = useState(false);
+
+  const [serviceZipCodes, setServiceZipCodes] = useState("");
+  const [outOfAreaMessage, setOutOfAreaMessage] = useState(
+    "Thank you for reaching out! Unfortunately, we don't currently service your area. We hope to expand soon!"
+  );
+
+  const [schedulingPlatform, setSchedulingPlatform] = useState<
+    "scoopilot" | "housecallpro" | "manual"
+  >("scoopilot");
+  const [hcpApiKey, setHcpApiKey] = useState("");
+
+  const [billingMode, setBillingMode] = useState<"pre_service" | "post_service">("post_service");
+  const [depositPercent, setDepositPercent] = useState<number | null>(null);
+
+  const stripeOnboardMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/stripe-connect/onboard", {
+        context: "onboarding",
+      });
+      return res.json();
+    },
+    onSuccess: (data: { url: string }) => {
+      window.location.href = data.url;
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to start Stripe onboarding.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const provisionNumber = async () => {
+    const code = manualAreaCode.replace(/\D/g, "").slice(0, 3);
+    if (code.length !== 3) {
+      toast({
+        title: "Area code required",
+        description: "Enter a 3-digit area code.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setIsProvisioning(true);
+    try {
+      const res = await apiRequest("POST", "/api/lead-response/provision-number", {
+        areaCode: code,
+      });
+      const data = await res.json();
+      if (res.ok && data.phoneNumber) {
+        setProvisionedNumber(data.phoneNumber);
+        toast({
+          title: "Number provisioned",
+          description: `Your Lead Response number: ${data.phoneNumber}`,
+        });
+      } else {
+        throw new Error(data.error || "Failed to provision number");
+      }
+    } catch (err: any) {
+      toast({ title: "Provisioning failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsProvisioning(false);
+    }
+  };
+
+  const handleSubStepNext = () => {
+    if (subStep === 1) {
+      if (phoneMode === "new" && !provisionedNumber) {
+        toast({
+          title: "Number required",
+          description: "Provision a number before continuing.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (phoneMode === "port" && !portingNumber) {
+        toast({
+          title: "Number required",
+          description: "Enter your existing number to port.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSubStep(2);
+    } else if (subStep === 2) {
+      setSubStep(3);
+    } else if (subStep === 3) {
+      setSubStep(4);
+    } else if (subStep === 4) {
+      if (billingMode === "pre_service" && !stripeConnected) {
+        stripeOnboardMutation.mutate();
+        return;
+      }
+      onNext({
+        lrPhoneNumber: phoneMode === "new" ? provisionedNumber : portingNumber,
+        portingRequested: phoneMode === "port",
+        serviceZipCodes,
+        outOfAreaMessage,
+        schedulingPlatform,
+        hcpApiKey: schedulingPlatform === "housecallpro" ? hcpApiKey : "",
+        billingMode,
+        depositPercent: billingMode === "pre_service" ? depositPercent : null,
+      });
+    }
+  };
+
+  const subStepLabels = ["Phone Number", "Service Area", "Scheduling Platform", "Billing Mode"];
+
+  return (
+    <div className="max-w-xl mx-auto">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold" data-testid="text-step-title">
+          Lead Response Setup
+        </h2>
+        <p className="text-muted-foreground mt-1">
+          Configure your Lead Response phone line and settings.
+        </p>
+      </div>
+
+      {/* Sub-step progress */}
+      <div className="flex gap-2 mb-6">
+        {subStepLabels.map((label, i) => {
+          const idx = (i + 1) as LRSubStep;
+          return (
+            <div key={label} className="flex-1 flex flex-col items-center">
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                  idx < subStep
+                    ? "bg-green-500 text-white"
+                    : idx === subStep
+                      ? "bg-primary text-primary-foreground ring-4 ring-primary/20"
+                      : "bg-muted text-muted-foreground"
+                }`}
+                data-testid={`lr-substep-indicator-${idx}`}
+              >
+                {idx < subStep ? <CheckCircle2 className="h-3 w-3" /> : idx}
+              </div>
+              <span className="text-[10px] text-center mt-1 text-muted-foreground leading-tight">
+                {label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <Card>
+        <CardContent className="pt-6 space-y-4">
+          {/* Sub-step 1: Phone number */}
+          {subStep === 1 && (
+            <div className="space-y-4" data-testid="lr-substep-1">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPhoneMode("new")}
+                  className={`p-3 rounded-lg border-2 text-left transition-all ${phoneMode === "new" ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
+                  data-testid="button-phone-mode-new"
+                >
+                  <Phone className="h-4 w-4 text-primary mb-1" />
+                  <div className="font-medium text-sm">New Number</div>
+                  <div className="text-xs text-muted-foreground">
+                    Provision a fresh Telnyx number
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPhoneMode("port")}
+                  className={`p-3 rounded-lg border-2 text-left transition-all ${phoneMode === "port" ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
+                  data-testid="button-phone-mode-port"
+                >
+                  <ArrowRight className="h-4 w-4 text-primary mb-1" />
+                  <div className="font-medium text-sm">Port Existing</div>
+                  <div className="text-xs text-muted-foreground">Transfer your current number</div>
+                </button>
+              </div>
+
+              {phoneMode === "new" && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label>Area Code</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={manualAreaCode}
+                        onChange={(e) =>
+                          setManualAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))
+                        }
+                        placeholder="e.g. 415"
+                        maxLength={3}
+                        className="w-28"
+                        data-testid="input-lr-area-code"
+                      />
+                      <Button
+                        type="button"
+                        onClick={provisionNumber}
+                        disabled={isProvisioning || manualAreaCode.length !== 3}
+                        variant="outline"
+                        data-testid="button-lr-provision-number"
+                      >
+                        {isProvisioning ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            Searching...
+                          </>
+                        ) : (
+                          <>Get Number</>
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Pre-filled from your business phone. We'll find an available number in this
+                      area code.
+                    </p>
+                  </div>
+                  {provisionedNumber && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Number reserved</p>
+                        <p className="text-sm text-muted-foreground">{provisionedNumber}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {phoneMode === "port" && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label>Your Existing Number</Label>
+                    <Input
+                      value={portingNumber}
+                      onChange={(e) => setPortingNumber(e.target.value)}
+                      placeholder="(555) 123-4567"
+                      data-testid="input-lr-porting-number"
+                    />
+                  </div>
+                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-sm">
+                    <p className="font-medium text-amber-800 dark:text-amber-200">
+                      Porting takes time
+                    </p>
+                    <p className="text-amber-700 dark:text-amber-300 text-xs mt-1">
+                      We'll reach out within 1 business day to begin the porting process. Your
+                      current service will continue uninterrupted.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sub-step 2: Service zip codes */}
+          {subStep === 2 && (
+            <div className="space-y-4" data-testid="lr-substep-2">
+              <div className="space-y-1">
+                <Label htmlFor="lr-zip-codes" className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4" />
+                  Service ZIP Codes
+                </Label>
+                <Textarea
+                  id="lr-zip-codes"
+                  value={serviceZipCodes}
+                  onChange={(e) => setServiceZipCodes(e.target.value)}
+                  placeholder="e.g. 94102, 94103, 94105"
+                  rows={3}
+                  data-testid="input-lr-zip-codes"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter the ZIP codes your Lead Response service covers, separated by commas.
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="lr-out-of-area">Out-of-Area Message</Label>
+                <Textarea
+                  id="lr-out-of-area"
+                  value={outOfAreaMessage}
+                  onChange={(e) => setOutOfAreaMessage(e.target.value)}
+                  rows={3}
+                  data-testid="input-lr-out-of-area-message"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Sent when a caller is outside your service area.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Sub-step 3: Scheduling platform */}
+          {subStep === 3 && (
+            <div className="space-y-4" data-testid="lr-substep-3">
+              <p className="text-sm font-medium">Which platform do you use for scheduling?</p>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { key: "scoopilot" as const, label: "ScooPilot", desc: "This platform" },
+                  { key: "housecallpro" as const, label: "HousecallPro", desc: "API integration" },
+                  { key: "manual" as const, label: "Manual", desc: "No integration" },
+                ].map(({ key, label, desc }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setSchedulingPlatform(key)}
+                    className={`p-3 rounded-lg border-2 text-left transition-all ${schedulingPlatform === key ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
+                    data-testid={`button-platform-${key}`}
+                  >
+                    <div className="font-medium text-sm">{label}</div>
+                    <div className="text-xs text-muted-foreground">{desc}</div>
+                  </button>
+                ))}
+              </div>
+
+              {schedulingPlatform === "housecallpro" && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="hcp-api-key" className="flex items-center gap-1.5">
+                      <Key className="h-4 w-4" />
+                      HousecallPro API Key
+                    </Label>
+                    <Input
+                      id="hcp-api-key"
+                      type="password"
+                      value={hcpApiKey}
+                      onChange={(e) => setHcpApiKey(e.target.value)}
+                      placeholder="Enter your HCP API key"
+                      data-testid="input-hcp-api-key"
+                    />
+                  </div>
+                  <div className="p-3 rounded-lg bg-muted/50 text-xs space-y-1">
+                    <p className="font-medium">How to find your HousecallPro API key:</p>
+                    <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
+                      <li>Log in to HousecallPro</li>
+                      <li>Go to Settings → Integrations → API</li>
+                      <li>Copy your API key and paste it above</li>
+                    </ol>
+                  </div>
+                </div>
+              )}
+
+              {schedulingPlatform === "scoopilot" && (
+                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm flex items-start gap-2">
+                  <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <span>
+                    Lead Response will pull scheduling data directly from your ScooPilot account. No
+                    extra setup needed.
+                  </span>
+                </div>
+              )}
+
+              {schedulingPlatform === "manual" && (
+                <div className="p-3 rounded-lg bg-muted/50 text-sm flex items-start gap-2">
+                  <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <span>
+                    No scheduling integration. Lead data will be captured and you can schedule
+                    manually in your preferred tool.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sub-step 4: Billing mode */}
+          {subStep === 4 && (
+            <div className="space-y-4" data-testid="lr-substep-4">
+              <p className="text-sm font-medium">When do you collect payment?</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setBillingMode("pre_service")}
+                  className={`p-3 rounded-lg border-2 text-left transition-all ${billingMode === "pre_service" ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
+                  data-testid="button-billing-pre-service"
+                >
+                  <div className="font-medium text-sm">Pre-service</div>
+                  <div className="text-xs text-muted-foreground">
+                    Collect deposit before first visit
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingMode("post_service")}
+                  className={`p-3 rounded-lg border-2 text-left transition-all ${billingMode === "post_service" ? "border-primary bg-primary/5" : "border-muted hover:border-muted-foreground/30"}`}
+                  data-testid="button-billing-post-service"
+                >
+                  <div className="font-medium text-sm">Post-service</div>
+                  <div className="text-xs text-muted-foreground">Invoice after each visit</div>
+                </button>
+              </div>
+
+              {billingMode === "pre_service" && !stripeConnected && (
+                <div className="flex flex-col gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-sm">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-amber-800 dark:text-amber-200">
+                        Stripe not connected
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                        Pre-service billing requires Stripe Connect. Connect now to continue, or
+                        choose Post-service billing.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => stripeOnboardMutation.mutate()}
+                    disabled={stripeOnboardMutation.isPending}
+                    className="w-full border-amber-300 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                    data-testid="button-lr-connect-stripe"
+                  >
+                    {stripeOnboardMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-4 w-4 mr-2" />
+                    )}
+                    Connect Stripe Now
+                  </Button>
+                </div>
+              )}
+
+              {billingMode === "pre_service" && stripeConnected && (
+                <div className="space-y-1">
+                  <Label htmlFor="lr-deposit-percent">Deposit Percentage</Label>
+                  <div className="relative max-w-32">
+                    <Input
+                      id="lr-deposit-percent"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={depositPercent != null ? String(depositPercent) : ""}
+                      onChange={(e) => {
+                        const n = parseFloat(e.target.value);
+                        setDepositPercent(isNaN(n) ? null : Math.min(100, Math.max(0, n)));
+                      }}
+                      placeholder="e.g. 25"
+                      className="pr-7"
+                      data-testid="input-lr-deposit-percent"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                      %
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between pt-6">
+        <Button
+          variant="ghost"
+          onClick={() => {
+            if (subStep > 1) setSubStep((s) => (s - 1) as LRSubStep);
+            else onBack();
+          }}
+          data-testid="button-back-step"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
+        <Button onClick={handleSubStepNext} disabled={isPending} data-testid="button-next-step">
+          {isPending && subStep === 4 ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+          {subStep === 4 ? "Complete Setup" : "Continue"}
+          <ArrowRight className="h-4 w-4 ml-2" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ReviewLaunchStep({
   companyData,
   onComplete,
@@ -1341,13 +1974,56 @@ function ReviewLaunchStep({
   onBack: () => void;
   isPending: boolean;
 }) {
-  const checkItems = [
+  const lrStatus = (() => {
+    if (!companyData.leadResponseActive) return "not_subscribed";
+    if (companyData.setupComplete) return "active";
+    return "setup_incomplete";
+  })();
+
+  const voiceStatus = companyData.voicePlanStatus === "active" ? "active" : "not_subscribed";
+
+  const productRows = [
+    {
+      label: "ScooPilot Core",
+      icon: Rocket,
+      done: !!(companyData.name && companyData.email),
+      badge: companyData.name && companyData.email ? "Active" : "Skipped",
+      badgeVariant: (companyData.name && companyData.email ? "active" : "skipped") as
+        | "active"
+        | "skipped",
+    },
+    {
+      label: "Lead Response",
+      icon: PhoneCall,
+      done: lrStatus === "active",
+      badge:
+        lrStatus === "active"
+          ? "Active"
+          : lrStatus === "setup_incomplete"
+            ? "Setup incomplete"
+            : "Not subscribed",
+      badgeVariant: (lrStatus === "active"
+        ? "active"
+        : lrStatus === "setup_incomplete"
+          ? "warn"
+          : "secondary") as "active" | "warn" | "secondary",
+    },
+    {
+      label: "Voice Agent",
+      icon: Phone,
+      done: voiceStatus === "active",
+      badge: voiceStatus === "active" ? "Active" : "Not subscribed",
+      badgeVariant: (voiceStatus === "active" ? "active" : "secondary") as "active" | "secondary",
+    },
+  ];
+
+  const coreItems = [
     { label: "Company profile", done: !!(companyData.name && companyData.email), icon: Building2 },
     { label: "Pricing strategy", done: !!companyData.pricingConfig, icon: DollarSign },
     { label: "Payment processing", done: companyData.stripeConnectOnboarded, icon: CreditCard },
   ];
 
-  const doneCount = checkItems.filter((c) => c.done).length;
+  const doneCount = coreItems.filter((c) => c.done).length;
 
   return (
     <div className="max-w-xl mx-auto">
@@ -1359,10 +2035,42 @@ function ReviewLaunchStep({
         <p className="text-muted-foreground mt-1">Review your setup and launch your dashboard.</p>
       </div>
 
+      {/* Product status rows */}
+      <Card className="mb-4">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Product Status</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {productRows.map((row) => (
+            <div
+              key={row.label}
+              className="flex items-center gap-3 p-3 rounded-lg bg-muted/50"
+              data-testid={`product-row-${row.label.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <row.icon className="h-5 w-5 text-muted-foreground shrink-0" />
+              <span className="flex-1 text-sm font-medium">{row.label}</span>
+              {row.badgeVariant === "active" ? (
+                <Badge variant="default" className="bg-green-500">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  {row.badge}
+                </Badge>
+              ) : row.badgeVariant === "warn" ? (
+                <Badge variant="outline" className="text-amber-600 border-amber-300">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  {row.badge}
+                </Badge>
+              ) : (
+                <Badge variant="secondary">{row.badge}</Badge>
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardContent className="pt-6 space-y-4">
           <div className="space-y-3">
-            {checkItems.map((item) => (
+            {coreItems.map((item) => (
               <div key={item.label} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                 <item.icon className="h-5 w-5 text-muted-foreground shrink-0" />
                 <span className="flex-1 text-sm font-medium">{item.label}</span>
@@ -1383,7 +2091,7 @@ function ReviewLaunchStep({
 
           <div className="pt-2 text-center">
             <p className="text-sm text-muted-foreground">
-              {doneCount === checkItems.length
+              {doneCount === coreItems.length
                 ? "Everything looks great! Launch your dashboard to get started."
                 : "You can complete any skipped items later from Settings."}
             </p>
@@ -1815,24 +2523,22 @@ export default function BusinessOnboarding({
   });
 
   const hasVoicePlan = status?.companyData?.voicePlanStatus === "active";
-  const STEPS = hasVoicePlan ? BASE_STEPS : NON_VOICE_STEPS;
-  const VOICE_STEP_IDX = 4;
-  const LAUNCH_STEP_IDX = hasVoicePlan ? 5 : 4;
+  const hasLeadResponse = status?.companyData?.leadResponseActive ?? false;
+  const STEPS = buildSteps(hasVoicePlan, hasLeadResponse);
+  const VOICE_STEP_IDX = getVoiceStepIdx(hasLeadResponse);
+  const LAUNCH_STEP_IDX = getLaunchStepIdx(hasVoicePlan, hasLeadResponse);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
 
   useEffect(() => {
     if (status) {
-      let step = Math.min(status.currentStep, hasVoicePlan ? 5 : 4);
-      // If non-voice user lands on voice step (4), redirect to launch (4 mapped to 4 for non-voice = launch)
-      if (!hasVoicePlan && step >= 4) {
-        step = 4;
-      }
+      const maxStep = LAUNCH_STEP_IDX;
+      const step = Math.min(status.currentStep, maxStep);
       setCurrentStep(step);
       setCompletedSteps(Array.from({ length: step }, (_, i) => i));
     }
-  }, [status, hasVoicePlan]);
+  }, [status, LAUNCH_STEP_IDX]);
 
   const STEP_DRAFT_KEYS: Record<number, string> = {
     0: DRAFT_KEYS.profile,
@@ -1842,8 +2548,20 @@ export default function BusinessOnboarding({
   };
 
   const stepMutation = useMutation({
-    mutationFn: async ({ step, data }: { step: number; data?: Record<string, unknown> }) => {
-      const res = await apiRequest("POST", "/api/onboarding/business-step", { step, data });
+    mutationFn: async ({
+      step,
+      stepType,
+      data,
+    }: {
+      step: number;
+      stepType?: string;
+      data?: Record<string, unknown>;
+    }) => {
+      const res = await apiRequest("POST", "/api/onboarding/business-step", {
+        step,
+        stepType,
+        data,
+      });
       return res.json();
     },
     onSuccess: (data) => {
@@ -1977,10 +2695,43 @@ export default function BusinessOnboarding({
             />
           )}
 
+          {currentStep === PRICING_TIERS_STEP_IDX && (
+            <PricingTiersStep
+              companyData={status.companyData}
+              onNext={(data) =>
+                stepMutation.mutate({
+                  step: PRICING_TIERS_STEP_IDX,
+                  stepType: "pricingTiers",
+                  data: data as Record<string, unknown>,
+                })
+              }
+              onBack={handleBack}
+              isPending={stepMutation.isPending}
+            />
+          )}
+
+          {currentStep === LR_STEP_IDX && hasLeadResponse && (
+            <LeadResponseSetupStep
+              companyData={status.companyData}
+              stripeConnected={status.companyData.stripeConnectOnboarded}
+              onNext={(data) =>
+                stepMutation.mutate({
+                  step: LR_STEP_IDX,
+                  stepType: "leadResponseSetup",
+                  data: data as Record<string, unknown>,
+                })
+              }
+              onBack={handleBack}
+              isPending={stepMutation.isPending}
+            />
+          )}
+
           {currentStep === VOICE_STEP_IDX && hasVoicePlan && (
             <VoiceAgentSetupStep
               companyData={status.companyData}
-              onNext={(data) => stepMutation.mutate({ step: VOICE_STEP_IDX, data })}
+              onNext={(data) =>
+                stepMutation.mutate({ step: VOICE_STEP_IDX, stepType: "voice", data })
+              }
               onBack={handleBack}
               onSkip={handleSkip}
               isPending={stepMutation.isPending}

@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { getUserByEmail, createUserWithTempPassword } from "../services/app-auth";
 import { sendEmail } from "../services/email";
 import { reportMeteredUsageSet } from "../services/stripe";
+import { syncLeadResponseConfigToAirtable } from "../services/airtable";
 
 import {
   isAuthenticated,
@@ -15,6 +16,46 @@ import {
   getDemoCompanyId,
   ensureCompanySetup,
 } from "./shared";
+
+async function fireLeadResponseOnboardingWebhook(payload: {
+  companyId: string;
+  operatorName: string;
+  telnyxNumber: string;
+  billingMode: string;
+  schedulingPlatform: string;
+}): Promise<void> {
+  const webhookUrl = process.env.LEAD_RESPONSE_ONBOARDING_WEBHOOK;
+  if (!webhookUrl) {
+    console.log(
+      "[LR Onboarding Webhook] LEAD_RESPONSE_ONBOARDING_WEBHOOK not configured — skipping"
+    );
+    return;
+  }
+  const body = {
+    event: "operator.onboarded",
+    companyId: payload.companyId,
+    operatorName: payload.operatorName,
+    telnyxNumber: payload.telnyxNumber,
+    billingMode: payload.billingMode,
+    schedulingPlatform: payload.schedulingPlatform,
+    onboardedAt: new Date().toISOString(),
+  };
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error(`[LR Onboarding Webhook] POST failed: ${res.status} ${text}`);
+    } else {
+      console.log(`[LR Onboarding Webhook] Fired for company ${payload.companyId}`);
+    }
+  } catch (err) {
+    console.error("[LR Onboarding Webhook] Error:", err instanceof Error ? err.message : err);
+  }
+}
 
 export async function registerOnboardingRoutes(app: Express): Promise<void> {
   // ================ Setup / Onboarding ================
@@ -124,7 +165,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
         const demoId = await getDemoCompanyId();
         const isDemo = demoId && demoId === companyId;
         const result = await db.execute(
-          sql`SELECT name, email, phone, address, logo_url, website_url, business_description, service_area_description, pricing_config, stripe_connect_account_id, stripe_connect_onboarded, business_onboarding_step, business_onboarding_complete, voice_plan_status FROM companies WHERE id = ${companyId}`
+          sql`SELECT name, email, phone, address, logo_url, website_url, business_description, service_area_description, pricing_config, stripe_connect_account_id, stripe_connect_onboarded, business_onboarding_step, business_onboarding_complete, voice_plan_status, subscription_tier FROM companies WHERE id = ${companyId}`
         );
         const rows = result.rows as Record<string, unknown>[];
         if (!rows || rows.length === 0) return res.status(404).json({ error: "Company not found" });
@@ -148,6 +189,21 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
           hasCompletedContactImport = false;
         }
 
+        // Fetch lead response config for wizard context
+        let leadResponseActive = false;
+        let setupComplete = false;
+        let lrPhoneNumber: string | null = null;
+        try {
+          const lrConfig = await storage.getLeadResponseConfig(companyId);
+          if (lrConfig) {
+            leadResponseActive = lrConfig.leadResponseActive;
+            setupComplete = lrConfig.setupComplete;
+            lrPhoneNumber = lrConfig.lrPhoneNumber ?? null;
+          }
+        } catch {
+          // non-fatal — defaults remain false
+        }
+
         res.json({
           currentStep: step,
           isComplete: isDemo ? false : ((row.business_onboarding_complete as boolean) ?? false),
@@ -167,6 +223,10 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
             stripeConnectAccountId: row.stripe_connect_account_id,
             stripeConnectOnboarded: row.stripe_connect_onboarded,
             voicePlanStatus: row.voice_plan_status,
+            subscriptionTier: row.subscription_tier,
+            leadResponseActive,
+            setupComplete,
+            lrPhoneNumber,
           },
         });
       } catch (err) {
@@ -182,7 +242,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
       try {
         const { companyId, role } = await getCompanyContext(req);
         requireRole(role, ["owner", "admin"]);
-        const { step, data, resetWizard, goingBack } = req.body;
+        const { step, stepType, data, resetWizard, goingBack } = req.body;
 
         if (resetWizard) {
           await db.execute(
@@ -191,7 +251,7 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
           return res.json({ success: true, nextStep: 0 });
         }
 
-        if (typeof step !== "number" || step < 0 || step > 5) {
+        if (typeof step !== "number" || step < 0 || step > 7) {
           return res.status(400).json({ error: "Invalid step number" });
         }
 
@@ -220,7 +280,113 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
           await db.execute(
             sql`UPDATE companies SET pricing_config = ${JSON.stringify(data.pricingConfig)}::jsonb, business_onboarding_step = ${step + 1} WHERE id = ${companyId}`
           );
-        } else if (step === 4 && data) {
+        } else if (stepType === "pricingTiers" && data) {
+          // Step 4a: Save pricing tiers to lead_response_config only
+          const tiersData = data.tiers as
+            | Array<{ label: string; pricePerVisit: number | null }>
+            | undefined;
+          const perDogAdder = data.perDogAdder != null ? String(data.perDogAdder) : undefined;
+          const firstTimeCleanupFee =
+            data.firstTimeCleanupFee != null ? String(data.firstTimeCleanupFee) : undefined;
+          const depositPercent =
+            data.depositPercent != null ? String(data.depositPercent) : undefined;
+          await storage.upsertLeadResponseConfig(companyId, {
+            ...(tiersData ? { pricingTiers: tiersData } : {}),
+            ...(perDogAdder !== undefined ? { perDogAdder } : {}),
+            ...(firstTimeCleanupFee !== undefined ? { firstTimeCleanupFee } : {}),
+            ...(depositPercent !== undefined ? { depositPercent } : {}),
+          });
+          await db.execute(
+            sql`UPDATE companies SET business_onboarding_step = ${step + 1} WHERE id = ${companyId}`
+          );
+        } else if (stepType === "leadResponseSetup" && data) {
+          // Step 4b: Save full LR config, fire webhook, mark setupComplete
+          const lrUpdates: Record<string, unknown> = {
+            setupComplete: true,
+          };
+          if (data.lrPhoneNumber !== undefined)
+            lrUpdates.lrPhoneNumber = data.lrPhoneNumber || null;
+          if (data.portingRequested !== undefined)
+            lrUpdates.portingRequested = !!data.portingRequested;
+          if (data.serviceZipCodes !== undefined)
+            lrUpdates.serviceZipCodes = data.serviceZipCodes || null;
+          if (data.outOfAreaMessage !== undefined)
+            lrUpdates.outOfAreaMessage = data.outOfAreaMessage || null;
+          if (data.schedulingPlatform !== undefined)
+            lrUpdates.schedulingPlatform = data.schedulingPlatform || null;
+          if (data.hcpApiKey !== undefined) lrUpdates.hcpApiKey = data.hcpApiKey || null;
+          if (data.billingMode !== undefined) lrUpdates.billingMode = data.billingMode || null;
+          if (data.depositPercent !== undefined)
+            lrUpdates.depositPercent =
+              data.depositPercent != null ? String(data.depositPercent) : null;
+
+          const updatedConfig = await storage.upsertLeadResponseConfig(
+            companyId,
+            lrUpdates as Parameters<typeof storage.upsertLeadResponseConfig>[1]
+          );
+
+          // Sync to Airtable with SetupComplete = true
+          try {
+            const companyRow = await storage.getCompany(companyId);
+            if (companyRow) {
+              const airtableConfig = { ...updatedConfig, setupComplete: true };
+              const airtableId = await syncLeadResponseConfigToAirtable(
+                {
+                  id: companyRow.id,
+                  name: companyRow.name,
+                  email: companyRow.email,
+                  phone: companyRow.phone,
+                },
+                airtableConfig,
+                updatedConfig.airtableOperatorId
+              );
+              if (airtableId && airtableId !== updatedConfig.airtableOperatorId) {
+                await storage.upsertLeadResponseConfig(companyId, {
+                  airtableOperatorId: airtableId,
+                });
+              }
+              // Update Airtable SetupComplete field explicitly
+              await syncLeadResponseConfigToAirtable(
+                {
+                  id: companyRow.id,
+                  name: companyRow.name,
+                  email: companyRow.email,
+                  phone: companyRow.phone,
+                },
+                { ...airtableConfig, setupComplete: true },
+                airtableId ?? updatedConfig.airtableOperatorId
+              );
+            }
+          } catch (airtableErr) {
+            console.error(
+              "[Onboarding] Airtable sync failed (non-fatal):",
+              airtableErr instanceof Error ? airtableErr.message : airtableErr
+            );
+          }
+
+          // Fire onboarding webhook
+          try {
+            const companyRow = await storage.getCompany(companyId);
+            await fireLeadResponseOnboardingWebhook({
+              companyId,
+              operatorName: companyRow?.name ?? "",
+              telnyxNumber: (data.lrPhoneNumber as string) ?? updatedConfig.lrPhoneNumber ?? "",
+              billingMode: (data.billingMode as string) ?? updatedConfig.billingMode ?? "",
+              schedulingPlatform:
+                (data.schedulingPlatform as string) ?? updatedConfig.schedulingPlatform ?? "",
+            });
+          } catch (webhookErr) {
+            console.error(
+              "[Onboarding] Webhook fire failed (non-fatal):",
+              webhookErr instanceof Error ? webhookErr.message : webhookErr
+            );
+          }
+
+          await db.execute(
+            sql`UPDATE companies SET business_onboarding_step = ${step + 1} WHERE id = ${companyId}`
+          );
+        } else if (stepType === "voice" && data) {
+          // Voice Agent step (may be at index 5 or 6 depending on LR status)
           const areaCode = (data.voiceAreaCodePreference as string) || null;
           const websiteUrl = (data.websiteUrl as string) || null;
           await db.execute(

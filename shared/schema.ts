@@ -3559,6 +3559,7 @@ export const leadResponseConfig = pgTable("lead_response_config", {
   perDogAdder: decimal("per_dog_adder", { precision: 8, scale: 2 }),
   firstTimeCleanupFee: decimal("first_time_cleanup_fee", { precision: 8, scale: 2 }),
   airtableOperatorId: varchar("airtable_operator_id", { length: 255 }),
+  setupComplete: boolean("setup_complete").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
