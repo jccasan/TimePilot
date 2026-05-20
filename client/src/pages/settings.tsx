@@ -119,6 +119,342 @@ import { Separator } from "@/components/ui/separator";
 import { Link } from "wouter";
 import { UpgradeWall } from "@/components/upgrade-wall";
 
+import { PricingTiersEditor, validatePricingTiers } from "@/components/PricingTiersEditor";
+import type { PricingTier } from "@/components/PricingTiersEditor";
+
+type LrConfig = {
+  leadResponseActive: boolean;
+  lrPhoneNumber?: string | null;
+  portingRequested?: boolean;
+  billingMode?: string | null;
+  depositPercent?: string | number | null;
+  schedulingPlatform?: string | null;
+  hcpApiKey?: string | null;
+  serviceZipCodes?: string | null;
+  outOfAreaMessage?: string | null;
+  pricingTiers?: PricingTier[] | null;
+  perDogAdder?: string | number | null;
+  firstTimeCleanupFee?: string | number | null;
+};
+
+function LeadResponseSection(_props: { company: Company | null }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: lrConfig, isLoading: lrLoading } = useQuery<LrConfig>({
+    queryKey: ["/api/lead-response/config"],
+  });
+
+  const { data: spPricing } = useQuery<
+    { id: string; name: string; basePrice: string; category: string }[]
+  >({
+    queryKey: ["/api/service-pricing"],
+  });
+
+  const toNum = (v: string | number | null | undefined): number | null => {
+    if (v == null || v === "") return null;
+    const n = parseFloat(String(v));
+    return isNaN(n) ? null : n;
+  };
+
+  const initialTiersFromSP = (): PricingTier[] => {
+    if (!spPricing) return [];
+    const sizeMap: Record<string, number> = { small: 0, medium: 1, large: 2, "extra-large": 3 };
+    const result: PricingTier[] = [
+      { label: "", pricePerVisit: null },
+      { label: "", pricePerVisit: null },
+      { label: "", pricePerVisit: null },
+      { label: "", pricePerVisit: null },
+    ];
+    const weekly = spPricing.filter(
+      (p) => p.category === "recurring_service" && p.name.toLowerCase().includes("weekly")
+    );
+    for (const item of weekly) {
+      const lower = item.name.toLowerCase();
+      for (const [size, idx] of Object.entries(sizeMap)) {
+        if (lower.includes(size) && result[idx].pricePerVisit === null) {
+          result[idx] = { label: item.name, pricePerVisit: parseFloat(item.basePrice) || null };
+        }
+      }
+    }
+    return result;
+  };
+
+  const isScenarioA = (): boolean => {
+    if (!spPricing) return false;
+    return spPricing.some((p) => p.category === "recurring_service");
+  };
+
+  const [billingMode, setBillingMode] = useState(lrConfig?.billingMode ?? "post_service");
+  const [depositPercent, setDepositPercent] = useState<number | null>(
+    toNum(lrConfig?.depositPercent)
+  );
+  const [schedulingPlatform, setSchedulingPlatform] = useState(
+    lrConfig?.schedulingPlatform ?? "scoopilot"
+  );
+  const [hcpApiKey, setHcpApiKey] = useState(lrConfig?.hcpApiKey ?? "");
+  const [serviceZipCodes, setServiceZipCodes] = useState(lrConfig?.serviceZipCodes ?? "");
+  const [outOfAreaMessage, setOutOfAreaMessage] = useState(lrConfig?.outOfAreaMessage ?? "");
+  const [pricingTiers, setPricingTiers] = useState<PricingTier[]>(lrConfig?.pricingTiers ?? []);
+  const [perDogAdder, setPerDogAdder] = useState<number | null>(toNum(lrConfig?.perDogAdder));
+  const [firstTimeCleanupFee, setFirstTimeCleanupFee] = useState<number | null>(
+    toNum(lrConfig?.firstTimeCleanupFee)
+  );
+  const [tierErrors, setTierErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (lrConfig) {
+      setBillingMode(lrConfig.billingMode ?? "post_service");
+      setDepositPercent(toNum(lrConfig.depositPercent));
+      setSchedulingPlatform(lrConfig.schedulingPlatform ?? "scoopilot");
+      setHcpApiKey(lrConfig.hcpApiKey ?? "");
+      setServiceZipCodes(lrConfig.serviceZipCodes ?? "");
+      setOutOfAreaMessage(lrConfig.outOfAreaMessage ?? "");
+      setPricingTiers(lrConfig.pricingTiers ?? []);
+      setPerDogAdder(toNum(lrConfig.perDogAdder));
+      setFirstTimeCleanupFee(toNum(lrConfig.firstTimeCleanupFee));
+    }
+  }, [lrConfig]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      // For Scenario A: if user hasn't edited tiers yet (state is empty),
+      // fall back to the SP-prefilled tiers so reviewing and clicking Save works.
+      const effectiveTiers =
+        pricingTiers.length > 0 ? pricingTiers : isScenarioA() ? initialTiersFromSP() : [];
+
+      const errs = validatePricingTiers(effectiveTiers);
+      if (Object.keys(errs).length > 0) {
+        setTierErrors(errs);
+        throw new Error("Tier validation failed");
+      }
+      setTierErrors({});
+      const res = await apiRequest("PATCH", "/api/lead-response/config", {
+        billingMode,
+        depositPercent: billingMode === "pre_service" ? depositPercent : null,
+        schedulingPlatform,
+        hcpApiKey: schedulingPlatform === "housecall_pro" ? hcpApiKey : undefined,
+        serviceZipCodes,
+        outOfAreaMessage,
+        pricingTiers: effectiveTiers,
+        perDogAdder,
+        firstTimeCleanupFee,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/lead-response/config"] });
+      toast({ title: "Lead Response settings saved" });
+    },
+    onError: (err: Error) => {
+      if (err.message !== "Tier validation failed") {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
+    },
+  });
+
+  const requestNumberChangeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/lead-response/request-number-change", {});
+      if (!res.ok) throw new Error("Failed to submit request");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/lead-response/config"] });
+      toast({ title: "Number change requested", description: "Our team will be in touch." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to submit request.", variant: "destructive" });
+    },
+  });
+
+  if (lrLoading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-8 w-full" />
+      </div>
+    );
+  }
+
+  if (!lrConfig?.leadResponseActive) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+        <PhoneCall className="h-8 w-8 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground">
+          Lead Response is not active on this account.
+        </p>
+      </div>
+    );
+  }
+
+  const outOfAreaLen = outOfAreaMessage.length;
+
+  return (
+    <div className="space-y-5" data-testid="section-lead-response">
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium">Telnyx Number</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            value={lrConfig.lrPhoneNumber ?? "Not yet assigned"}
+            readOnly
+            className="bg-muted text-muted-foreground flex-1"
+            data-testid="input-lr-phone-number"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => requestNumberChangeMutation.mutate()}
+            disabled={requestNumberChangeMutation.isPending || !!lrConfig.portingRequested}
+            data-testid="button-request-number-change"
+          >
+            {lrConfig.portingRequested ? "Request submitted" : "Request number change"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium">Billing Mode</Label>
+        <Select value={billingMode} onValueChange={setBillingMode}>
+          <SelectTrigger data-testid="select-lr-billing-mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="post_service">Post-service</SelectItem>
+            <SelectItem value="pre_service">Pre-service (deposit required)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {billingMode === "pre_service" && (
+        <div className="space-y-1.5">
+          <Label className="text-sm font-medium">Deposit Percent</Label>
+          <div className="relative max-w-36">
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={depositPercent != null ? String(depositPercent) : ""}
+              onChange={(e) => {
+                const n = parseFloat(e.target.value);
+                setDepositPercent(isNaN(n) ? null : Math.min(100, Math.max(0, n)));
+              }}
+              placeholder="0"
+              className="pr-7"
+              data-testid="input-lr-deposit-percent"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+              %
+            </span>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium">Scheduling Platform</Label>
+        <Select value={schedulingPlatform} onValueChange={setSchedulingPlatform}>
+          <SelectTrigger data-testid="select-lr-scheduling-platform">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="scoopilot">ScooPilot</SelectItem>
+            <SelectItem value="housecall_pro">HouseCall Pro</SelectItem>
+            <SelectItem value="other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {schedulingPlatform === "housecall_pro" && (
+        <div className="space-y-2 rounded-lg border p-3 bg-muted/30">
+          <Label className="text-sm font-medium">HouseCall Pro API Key</Label>
+          <p className="text-xs text-muted-foreground">
+            To find your API key: log in to HouseCall Pro, go to{" "}
+            <strong>Settings &rarr; Integrations &rarr; API</strong>, and copy your key.
+          </p>
+          <Input
+            type="password"
+            value={hcpApiKey}
+            onChange={(e) => setHcpApiKey(e.target.value)}
+            placeholder="hcp_..."
+            data-testid="input-lr-hcp-api-key"
+          />
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium">Service ZIP Codes</Label>
+        <p className="text-xs text-muted-foreground">
+          Comma-separated list of ZIP codes you serve (e.g. 30301, 30302, 30303)
+        </p>
+        <Input
+          value={serviceZipCodes}
+          onChange={(e) => setServiceZipCodes(e.target.value)}
+          placeholder="30301, 30302, 30303"
+          data-testid="input-lr-service-zip-codes"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Out of Area Message</Label>
+          <span
+            className={`text-xs ${outOfAreaLen > 160 ? "text-red-500" : "text-muted-foreground"}`}
+          >
+            {outOfAreaLen} / 160
+          </span>
+        </div>
+        <Textarea
+          value={outOfAreaMessage}
+          onChange={(e) => setOutOfAreaMessage(e.target.value)}
+          placeholder="Sorry, we don't currently service your area..."
+          rows={2}
+          maxLength={160}
+          data-testid="input-lr-out-of-area-message"
+        />
+      </div>
+
+      <div className="border-t pt-4 space-y-3">
+        <div>
+          <p className="text-sm font-medium">Pricing Tiers</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {isScenarioA()
+              ? "Tiers 1–4 are pre-filled from your SP pricing. Review and adjust before saving."
+              : "Define up to 6 pricing tiers. Tiers 1–3 are required."}
+          </p>
+        </div>
+        <PricingTiersEditor
+          value={pricingTiers}
+          onChange={setPricingTiers}
+          perDogAdder={perDogAdder}
+          onPerDogAdderChange={setPerDogAdder}
+          firstTimeCleanupFee={firstTimeCleanupFee}
+          onFirstTimeCleanupFeeChange={setFirstTimeCleanupFee}
+          depositPercent={billingMode === "pre_service" ? depositPercent : null}
+          onDepositPercentChange={setDepositPercent}
+          showDepositPercent={false}
+          initialTiers={isScenarioA() ? initialTiersFromSP() : undefined}
+          errors={tierErrors}
+        />
+      </div>
+
+      <Button
+        onClick={() => saveMutation.mutate()}
+        disabled={saveMutation.isPending}
+        data-testid="button-save-lead-response"
+      >
+        <Save className="h-4 w-4 mr-2" />
+        {saveMutation.isPending ? "Saving..." : "Save Lead Response Settings"}
+      </Button>
+    </div>
+  );
+}
+
 const companyFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
   email: z.string().email("Invalid email").or(z.literal("")).optional(),
@@ -270,6 +606,7 @@ const SETTINGS_BLOCK_DEFS: {
   { id: "voice_agent", label: "Voice Agent", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "document_signing", label: "Document Signing", defaultW: 6, defaultH: 6, minW: 4, minH: 5 },
   { id: "custom_fields", label: "Custom Fields", defaultW: 6, defaultH: 7, minW: 4, minH: 5 },
+  { id: "lead_response", label: "Lead Response", defaultW: 6, defaultH: 12, minW: 4, minH: 8 },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -301,6 +638,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "portal_api_docs",
   "document_signing",
   "custom_fields",
+  "lead_response",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -6522,9 +6860,19 @@ export default function Settings() {
   });
   const isDemo = !!demoStatusData?.isDemo;
 
+  const { data: lrStatusData } = useQuery<{ leadResponseActive?: boolean }>({
+    queryKey: ["/api/lead-response/config"],
+  });
+  const isLrActive = !!lrStatusData?.leadResponseActive;
+
   const availableSettingsBlockIds = useMemo(
-    () => DEFAULT_SETTINGS_BLOCK_IDS.filter((id) => isDemo || id !== "demo_mode"),
-    [isDemo]
+    () =>
+      DEFAULT_SETTINGS_BLOCK_IDS.filter((id) => {
+        if (id === "demo_mode") return isDemo;
+        if (id === "lead_response") return isLrActive;
+        return true;
+      }),
+    [isDemo, isLrActive]
   );
 
   const addLeadSourceMutation = useMutation({
@@ -8206,6 +8554,23 @@ export default function Settings() {
               onCompanyUpdate={() => queryClient.invalidateQueries({ queryKey: ["/api/company"] })}
             />
           </div>
+        );
+      case "lead_response":
+        return (
+          <Card className="h-full overflow-auto">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <PhoneCall className="h-5 w-5" />
+                Lead Response
+              </CardTitle>
+              <CardDescription>
+                Configure your Lead Response phone line, pricing tiers, and booking settings.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LeadResponseSection company={company ?? null} />
+            </CardContent>
+          </Card>
         );
       default:
         return null;

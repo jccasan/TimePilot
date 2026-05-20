@@ -997,6 +997,23 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] lead_response_config table ensured");
 
+    // ── Lead Response Settings fields (Task #911) ─────────────────────────────
+    await client.query(`
+      ALTER TABLE lead_response_config
+        ADD COLUMN IF NOT EXISTS lr_phone_number          VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS porting_requested        BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS billing_mode             VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS deposit_percent          NUMERIC(5,2),
+        ADD COLUMN IF NOT EXISTS scheduling_platform      VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS service_zip_codes        TEXT,
+        ADD COLUMN IF NOT EXISTS out_of_area_message      TEXT,
+        ADD COLUMN IF NOT EXISTS pricing_tiers            JSONB,
+        ADD COLUMN IF NOT EXISTS per_dog_adder            NUMERIC(8,2),
+        ADD COLUMN IF NOT EXISTS first_time_cleanup_fee   NUMERIC(8,2),
+        ADD COLUMN IF NOT EXISTS airtable_operator_id     VARCHAR(255)
+    `);
+    console.log("[Migration] lead_response_config settings columns ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

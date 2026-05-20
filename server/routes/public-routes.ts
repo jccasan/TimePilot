@@ -629,6 +629,14 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         } catch {}
       }
 
+      const lrConfig = await storage.getLeadResponseConfig(company.id);
+      const lrPricingTiers =
+        lrConfig?.leadResponseActive && Array.isArray(lrConfig.pricingTiers)
+          ? (lrConfig.pricingTiers as { label: string; pricePerVisit: number | null }[]).filter(
+              (t) => t.label?.trim() && t.pricePerVisit != null
+            )
+          : null;
+
       res.json({
         name: company.name,
         logoUrl: company.logoUrl,
@@ -639,6 +647,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         requireCardOnSignup: company.requireCardOnSignup ?? true,
         widgetFieldConfig: company.widgetFieldConfig ?? null,
         yardSizeTierConfig: company.yardSizeTierConfig ?? null,
+        lrPricingTiers: lrPricingTiers ?? null,
         stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
         stripeConnectOnboarded: company.stripeConnectOnboarded || false,
         stripeConnectAccountId: company.stripeConnectAccountId || null,
@@ -1627,6 +1636,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         lastCleanup: lastCleanup ?? null,
         notes: contact.notes ?? null,
         smsOptIn: smsOptIn ?? false,
+        submittedAt: new Date().toISOString(),
       };
 
       if (isUpsert) {
@@ -2003,11 +2013,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         try {
           const StripeLib = (await import("stripe")).default;
 
-          /* eslint-disable @typescript-eslint/no-explicit-any */
           const stripe = new StripeLib(process.env.STRIPE_SECRET_KEY!, {
             apiVersion: "2026-01-28.clover",
-          } as any);
-          /* eslint-enable @typescript-eslint/no-explicit-any */
+          });
           // Expand line_items so we can validate the purchased price ID
           session = await stripe.checkout.sessions.retrieve(sessionId, {
             expand: ["line_items"],

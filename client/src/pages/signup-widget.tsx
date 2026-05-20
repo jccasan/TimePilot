@@ -95,6 +95,11 @@ type YardSizeTierConfig = {
   tier6?: YardSizeTierEntry;
 };
 
+type LrPricingTier = {
+  label: string;
+  pricePerVisit: number | null;
+};
+
 type CompanyInfo = {
   name: string;
   logoUrl: string | null;
@@ -107,6 +112,7 @@ type CompanyInfo = {
   stripeConnectAccountId: string | null;
   widgetFieldConfig: WidgetFieldConfig | null;
   yardSizeTierConfig: YardSizeTierConfig | null;
+  lrPricingTiers: LrPricingTier[] | null;
 };
 
 type QuoteResult = {
@@ -921,6 +927,14 @@ export default function SignupWidget() {
   const hasLotAddons = parsed && parsed.lotAddons.length > 0;
 
   const yardSizeTiers = useMemo(() => {
+    // LR tiers take priority over SP yardSizeTierConfig when present
+    if (company?.lrPricingTiers && company.lrPricingTiers.length > 0) {
+      return company.lrPricingTiers.map((t, i) => ({
+        value: `tier_${i + 1}`,
+        label: t.label.trim(),
+        price: t.pricePerVisit ?? 0,
+      }));
+    }
     const config = company?.yardSizeTierConfig;
     if (!config) return [];
     const result: { value: string; label: string; price: number }[] = [];
@@ -932,9 +946,15 @@ export default function SignupWidget() {
       }
     }
     return result;
-  }, [company?.yardSizeTierConfig]);
+  }, [company?.lrPricingTiers, company?.yardSizeTierConfig]);
 
   const hasYardSizeTiers = yardSizeTiers.length > 0;
+
+  // When LR tiers are configured but fewer than 3 are valid, block the form
+  const lrTiersInactive =
+    company?.lrPricingTiers !== undefined &&
+    company.lrPricingTiers !== null &&
+    yardSizeTiers.length < 3;
 
   const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!lastCleanup;
 
@@ -995,6 +1015,30 @@ export default function SignupWidget() {
             </h2>
             <p className="text-muted-foreground">
               This signup page is not available. Please check the link and try again.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (lrTiersInactive) {
+    return (
+      <div
+        className={
+          isEmbed
+            ? ""
+            : "min-h-screen bg-gradient-to-b from-gray-50 to-white flex items-center justify-center p-4"
+        }
+      >
+        <Card className={`w-full ${isEmbed ? "shadow-none border-0" : "max-w-lg shadow-xl"}`}>
+          <CardContent className="p-8 text-center">
+            <Dog className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h2 className="text-xl font-semibold mb-2" data-testid="text-form-not-active">
+              This form is not yet active
+            </h2>
+            <p className="text-muted-foreground">
+              Pricing is still being configured. Please check back soon.
             </p>
           </CardContent>
         </Card>

@@ -5,6 +5,8 @@ import { sql, eq, and, gte, inArray, desc, asc } from "drizzle-orm";
 import { contacts, quotes } from "@shared/schema";
 import { isAuthenticated, getCompanyContext, handleError } from "./shared";
 import { API_KEY_ALLOWED_ROUTES } from "./shared";
+import { syncLeadResponseConfigToAirtable } from "../services/airtable";
+import { sendEmail } from "../services/email";
 
 /**
  * Routes that lead_response_operator users are permitted to access.
@@ -351,6 +353,75 @@ export async function registerLeadResponseRoutes(app: Express): Promise<void> {
   });
 
   /**
+   * PATCH /api/lead-response/config
+   * Auth: user session (owner/admin)
+   * Save Lead Response settings. Syncs to Airtable after save.
+   */
+  app.patch("/api/lead-response/config", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      if (role !== "owner" && role !== "admin") {
+        return res
+          .status(403)
+          .json({ error: "Only owners and admins can update Lead Response settings" });
+      }
+
+      const {
+        billingMode,
+        depositPercent,
+        schedulingPlatform,
+        hcpApiKey,
+        serviceZipCodes,
+        outOfAreaMessage,
+        pricingTiers,
+        perDogAdder,
+        firstTimeCleanupFee,
+      } = req.body;
+
+      const updates: Record<string, unknown> = {};
+      if (billingMode !== undefined) updates.billingMode = billingMode;
+      if (depositPercent !== undefined) updates.depositPercent = depositPercent;
+      if (schedulingPlatform !== undefined) updates.schedulingPlatform = schedulingPlatform;
+      if (hcpApiKey !== undefined) updates.hcpApiKey = hcpApiKey;
+      if (serviceZipCodes !== undefined) updates.serviceZipCodes = serviceZipCodes;
+      if (outOfAreaMessage !== undefined) updates.outOfAreaMessage = outOfAreaMessage;
+      if (pricingTiers !== undefined) updates.pricingTiers = pricingTiers;
+      if (perDogAdder !== undefined) updates.perDogAdder = perDogAdder;
+      if (firstTimeCleanupFee !== undefined) updates.firstTimeCleanupFee = firstTimeCleanupFee;
+
+      const saved = await storage.upsertLeadResponseConfig(
+        companyId,
+        updates as Parameters<typeof storage.upsertLeadResponseConfig>[1]
+      );
+
+      // Airtable sync — fire-and-forget, don't block the response
+      const company = await storage.getCompany(companyId);
+      if (company) {
+        syncLeadResponseConfigToAirtable(
+          {
+            id: company.id,
+            name: company.name,
+            email: company.email ?? null,
+            phone: company.phone ?? null,
+          },
+          saved,
+          saved.airtableOperatorId
+        )
+          .then(async (airtableId) => {
+            if (airtableId && airtableId !== saved.airtableOperatorId) {
+              await storage.upsertLeadResponseConfig(companyId, { airtableOperatorId: airtableId });
+            }
+          })
+          .catch((err) => console.error("[LR Settings] Airtable sync failed:", err));
+      }
+
+      return res.json(saved);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
    * GET /api/lead-response/funnel
    * Auth: user session
    * Returns counts for each funnel stage for the calling company.
@@ -388,6 +459,44 @@ export async function registerLeadResponseRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
+
+  /**
+   * POST /api/lead-response/request-number-change
+   * Auth: user session (owner/admin)
+   * Sets portingRequested=true and notifies admin.
+   */
+  app.post(
+    "/api/lead-response/request-number-change",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        if (role !== "owner" && role !== "admin") {
+          return res
+            .status(403)
+            .json({ error: "Only owners and admins can request a number change" });
+        }
+
+        const saved = await storage.upsertLeadResponseConfig(companyId, {
+          portingRequested: true,
+        });
+
+        const adminEmail = process.env.ADMIN_EMAIL;
+        if (adminEmail) {
+          const company = await storage.getCompany(companyId);
+          sendEmail({
+            to: adminEmail,
+            subject: `[Lead Response] Number change requested — ${company?.name ?? companyId}`,
+            text: `Company ${company?.name ?? companyId} (ID: ${companyId}) has requested a Lead Response phone number change.\n\nCurrent number: ${saved.lrPhoneNumber ?? "none"}\n\nPlease review and process the request.`,
+          }).catch((err) => console.error("[LR] Failed to send number-change admin email:", err));
+        }
+
+        return res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 }
 
 // Register the POST /api/lead-response/status route as API-key accessible

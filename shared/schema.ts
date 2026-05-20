@@ -3529,6 +3529,11 @@ export const customFieldDefinitions = pgTable(
 // ============================================================
 // Lead Response Config
 // ============================================================
+export interface LrPricingTier {
+  label: string;
+  pricePerVisit: number | null;
+}
+
 export const leadResponseConfig = pgTable("lead_response_config", {
   id: varchar("id")
     .primaryKey()
@@ -3543,6 +3548,17 @@ export const leadResponseConfig = pgTable("lead_response_config", {
   stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
   stripeSessionId: varchar("stripe_session_id", { length: 255 }),
   hcpApiKey: varchar("hcp_api_key", { length: 1024 }),
+  lrPhoneNumber: varchar("lr_phone_number", { length: 20 }),
+  portingRequested: boolean("porting_requested").notNull().default(false),
+  billingMode: varchar("billing_mode", { length: 20 }),
+  depositPercent: decimal("deposit_percent", { precision: 5, scale: 2 }),
+  schedulingPlatform: varchar("scheduling_platform", { length: 50 }),
+  serviceZipCodes: text("service_zip_codes"),
+  outOfAreaMessage: text("out_of_area_message"),
+  pricingTiers: jsonb("pricing_tiers").$type<LrPricingTier[]>(),
+  perDogAdder: decimal("per_dog_adder", { precision: 8, scale: 2 }),
+  firstTimeCleanupFee: decimal("first_time_cleanup_fee", { precision: 8, scale: 2 }),
+  airtableOperatorId: varchar("airtable_operator_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
