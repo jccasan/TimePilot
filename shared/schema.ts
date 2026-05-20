@@ -2550,6 +2550,8 @@ export const overheadCosts = pgTable("overhead_costs", {
   type: overheadCostTypeEnum("type").notNull().default("fixed"),
   isDefault: boolean("is_default").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
+  variableRatePct: decimal("variable_rate_pct", { precision: 8, scale: 4 }),
+  variableFlatCents: integer("variable_flat_cents"),
 });
 
 export const insertOverheadCostSchema = createInsertSchema(overheadCosts).omit({ id: true });

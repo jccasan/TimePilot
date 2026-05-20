@@ -904,6 +904,13 @@ export async function runStartupMigrations(): Promise<void> {
     );
     console.log("[Migration] companies yard_size_tier_config column ensured");
 
+    await client.query(`
+      ALTER TABLE overhead_costs
+        ADD COLUMN IF NOT EXISTS variable_rate_pct  NUMERIC(8,4),
+        ADD COLUMN IF NOT EXISTS variable_flat_cents INTEGER
+    `);
+    console.log("[Migration] overhead_costs variable formula columns ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

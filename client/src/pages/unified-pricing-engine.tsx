@@ -63,6 +63,10 @@ import {
   Package,
   RefreshCw,
   Info,
+  Pencil,
+  Check,
+  X as XIcon,
+  Percent,
 } from "lucide-react";
 import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
 
@@ -77,11 +81,14 @@ type OverheadCostItem = {
   type: "fixed" | "variable";
   isDefault: boolean;
   sortOrder: number;
+  variableRatePct: string | null;
+  variableFlatCents: number | null;
 };
 
 type OverheadData = {
   items: OverheadCostItem[];
   totalMonthlyOverheadCents: number;
+  estimatedMonthlyRevenueCents?: number;
 };
 
 type MonthlyFuelData = {
@@ -168,10 +175,20 @@ const CATEGORY_ORDER = [
   "Financial Overhead",
 ];
 
+function formulaLabel(item: OverheadCostItem): string {
+  const rate = item.variableRatePct !== null ? Number(item.variableRatePct) : null;
+  const flat = item.variableFlatCents;
+  const parts: string[] = [];
+  if (rate !== null && rate > 0) parts.push(`${rate}% of rev`);
+  if (flat !== null && flat > 0) parts.push(`$${(flat / 100).toFixed(2)}/stop`);
+  return parts.length > 0 ? parts.join(" + ") : "";
+}
+
 function CostItemRow({
   item,
   onUpdateCost,
   onDelete,
+  onEditFormula,
   isPending,
   isAutoCalculated,
   autoFuelMiles,
@@ -179,6 +196,7 @@ function CostItemRow({
   item: OverheadCostItem;
   onUpdateCost: (id: string, cents: number) => void;
   onDelete: (id: string) => void;
+  onEditFormula: (item: OverheadCostItem) => void;
   isPending: boolean;
   isAutoCalculated?: boolean;
   autoFuelMiles?: number;
@@ -186,12 +204,17 @@ function CostItemRow({
   const inputRef = useRef<HTMLInputElement>(null);
   const lastSavedCents = useRef(item.monthlyCostCents);
 
+  const isFormulaMode =
+    item.type === "variable" &&
+    item.variableRatePct !== null &&
+    item.variableRatePct !== undefined;
+
   useEffect(() => {
-    if (inputRef.current && document.activeElement !== inputRef.current) {
+    if (!isFormulaMode && inputRef.current && document.activeElement !== inputRef.current) {
       inputRef.current.value = (item.monthlyCostCents / 100).toFixed(2);
       lastSavedCents.current = item.monthlyCostCents;
     }
-  }, [item.monthlyCostCents]);
+  }, [item.monthlyCostCents, isFormulaMode]);
 
   const handleBlur = useCallback(() => {
     const el = inputRef.current;
@@ -226,7 +249,7 @@ function CostItemRow({
       data-testid={`cost-item-${item.id}`}
     >
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-sm truncate" data-testid={`text-item-name-${item.id}`}>
             {isAutoCalculated ? "Fuel (from routes)" : item.name}
           </span>
@@ -242,6 +265,15 @@ function CostItemRow({
           >
             {item.type}
           </Badge>
+          {isFormulaMode && (
+            <Badge
+              variant="outline"
+              className="text-[10px] px-1 py-0 shrink-0 border-violet-200 text-violet-600 dark:border-violet-800 dark:text-violet-400 font-mono"
+              data-testid={`badge-formula-${item.id}`}
+            >
+              {formulaLabel(item)}
+            </Badge>
+          )}
         </div>
         {isAutoCalculated && (
           <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -250,23 +282,66 @@ function CostItemRow({
               : "No routes this month · auto-calculated"}
           </p>
         )}
+        {isFormulaMode && (
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            estimated from pricing config
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-xs text-muted-foreground">$</span>
-        <input
-          ref={inputRef}
-          type="number"
-          min="0"
-          step="0.01"
-          defaultValue={(item.monthlyCostCents / 100).toFixed(2)}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          disabled={isPending || isAutoCalculated}
-          readOnly={isAutoCalculated}
-          className={`w-24 h-7 text-sm text-right tabular-nums rounded-md border border-input px-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${isAutoCalculated ? "bg-muted/50 text-muted-foreground cursor-default" : "bg-background"}`}
-          data-testid={`input-cost-${item.id}`}
-        />
-        <span className="text-xs text-muted-foreground">/mo</span>
+        {isFormulaMode ? (
+          <>
+            <span
+              className="text-sm font-medium tabular-nums text-violet-600 dark:text-violet-400"
+              data-testid={`text-formula-cost-${item.id}`}
+            >
+              ~{formatDollars(item.monthlyCostCents)}/mo
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+              onClick={() => onEditFormula(item)}
+              disabled={isPending}
+              data-testid={`button-edit-formula-${item.id}`}
+              title="Edit formula"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        ) : (
+          <>
+            {item.type === "variable" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-[10px] gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity text-violet-500 hover:text-violet-700 hover:bg-violet-50 dark:hover:bg-violet-950"
+                onClick={() => onEditFormula(item)}
+                disabled={isPending}
+                data-testid={`button-add-formula-${item.id}`}
+                title="Add formula"
+              >
+                <Percent className="h-2.5 w-2.5" />
+                formula
+              </Button>
+            )}
+            <span className="text-xs text-muted-foreground">$</span>
+            <input
+              ref={inputRef}
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={(item.monthlyCostCents / 100).toFixed(2)}
+              onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
+              disabled={isPending || isAutoCalculated}
+              readOnly={isAutoCalculated}
+              className={`w-24 h-7 text-sm text-right tabular-nums rounded-md border border-input px-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${isAutoCalculated ? "bg-muted/50 text-muted-foreground cursor-default" : "bg-background"}`}
+              data-testid={`input-cost-${item.id}`}
+            />
+            <span className="text-xs text-muted-foreground">/mo</span>
+          </>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -288,6 +363,7 @@ function CategorySection({
   onUpdateCost,
   onDelete,
   onAdd,
+  onEditFormula,
   isPending,
   autoFuelMiles,
 }: {
@@ -296,6 +372,7 @@ function CategorySection({
   onUpdateCost: (id: string, cents: number) => void;
   onDelete: (id: string) => void;
   onAdd: (category: string) => void;
+  onEditFormula: (item: OverheadCostItem) => void;
   isPending: boolean;
   autoFuelMiles?: number;
 }) {
@@ -359,6 +436,7 @@ function CategorySection({
                   item={item}
                   onUpdateCost={onUpdateCost}
                   onDelete={onDelete}
+                  onEditFormula={onEditFormula}
                   isPending={isPending}
                   isAutoCalculated={isAutoFuel}
                   autoFuelMiles={isAutoFuel ? autoFuelMiles : undefined}
@@ -1145,6 +1223,12 @@ function CostsTab() {
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const [newItemType, setNewItemType] = useState<"fixed" | "variable">("fixed");
+  const [newItemRatePct, setNewItemRatePct] = useState("");
+  const [newItemFlatDollars, setNewItemFlatDollars] = useState("");
+
+  const [editingFormulaItem, setEditingFormulaItem] = useState<OverheadCostItem | null>(null);
+  const [formulaRatePct, setFormulaRatePct] = useState("");
+  const [formulaFlatDollars, setFormulaFlatDollars] = useState("");
 
   const { data, isLoading } = useQuery<OverheadData>({ queryKey: ["/api/overhead-costs"] });
   const { data: pricingConfigData, isLoading: configLoading } = useQuery<PricingConfigResponse>({
@@ -1215,17 +1299,54 @@ function CostsTab() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (d: { category: string; name: string; type: "fixed" | "variable" }) =>
-      apiRequest("POST", "/api/overhead-costs", d),
+    mutationFn: (d: {
+      category: string;
+      name: string;
+      type: "fixed" | "variable";
+      variableRatePct?: number;
+      variableFlatCents?: number;
+    }) => apiRequest("POST", "/api/overhead-costs", d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs/total"] });
       setAddingCategory(null);
       setNewItemName("");
       setNewItemType("fixed");
+      setNewItemRatePct("");
+      setNewItemFlatDollars("");
       toast({ title: "Item added" });
     },
   });
+
+  const updateFormulaMutation = useMutation({
+    mutationFn: ({
+      id,
+      variableRatePct,
+      variableFlatCents,
+    }: {
+      id: string;
+      variableRatePct: number | null;
+      variableFlatCents: number | null;
+    }) => apiRequest("PATCH", `/api/overhead-costs/${id}`, { variableRatePct, variableFlatCents }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs/total"] });
+      setEditingFormulaItem(null);
+      setFormulaRatePct("");
+      setFormulaFlatDollars("");
+    },
+    onError: () => {
+      toast({ title: "Failed to save formula", variant: "destructive" });
+    },
+  });
+
+  const handleEditFormula = (item: OverheadCostItem) => {
+    setEditingFormulaItem(item);
+    setFormulaRatePct(item.variableRatePct ? String(Number(item.variableRatePct)) : "");
+    setFormulaFlatDollars(
+      item.variableFlatCents != null ? (item.variableFlatCents / 100).toFixed(2) : ""
+    );
+  };
 
   const autoFuelCostCents = monthlyFuelData?.fuelCostCents ?? 0;
 
@@ -1370,7 +1491,10 @@ function CostsTab() {
                   setAddingCategory(cat);
                   setNewItemName("");
                   setNewItemType("fixed");
+                  setNewItemRatePct("");
+                  setNewItemFlatDollars("");
                 }}
+                onEditFormula={handleEditFormula}
                 isPending={updateMutation.isPending || deleteMutation.isPending}
                 autoFuelMiles={
                   category === "Vehicles + Transportation"
@@ -1399,20 +1523,17 @@ function CostsTab() {
                 onChange={(e) => setNewItemName(e.target.value)}
                 autoFocus
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && newItemName.trim()) {
-                    createMutation.mutate({
-                      category: addingCategory,
-                      name: newItemName.trim(),
-                      type: newItemType,
-                    });
-                  }
                   if (e.key === "Escape") setAddingCategory(null);
                 }}
                 data-testid="input-new-item-name"
               />
               <Select
                 value={newItemType}
-                onValueChange={(v) => setNewItemType(v as "fixed" | "variable")}
+                onValueChange={(v) => {
+                  setNewItemType(v as "fixed" | "variable");
+                  setNewItemRatePct("");
+                  setNewItemFlatDollars("");
+                }}
               >
                 <SelectTrigger className="h-9" data-testid="select-new-item-type">
                   <SelectValue />
@@ -1422,6 +1543,61 @@ function CostsTab() {
                   <SelectItem value="variable">Variable cost</SelectItem>
                 </SelectContent>
               </Select>
+              {newItemType === "variable" && (
+                <div className="rounded-md border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 p-3 space-y-2">
+                  <p className="text-xs font-medium text-violet-700 dark:text-violet-300 flex items-center gap-1">
+                    <Percent className="h-3 w-3" />
+                    Formula (optional)
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Estimated monthly cost is computed from your pricing config. Leave blank to enter
+                    a manual dollar amount after adding.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground block mb-1">
+                        % of revenue
+                      </label>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          placeholder="e.g. 2.9"
+                          value={newItemRatePct}
+                          onChange={(e) => setNewItemRatePct(e.target.value)}
+                          className="h-8 text-sm pr-6"
+                          data-testid="input-new-item-rate-pct"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          %
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground block mb-1">
+                        Flat per stop
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          $
+                        </span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="e.g. 0.30"
+                          value={newItemFlatDollars}
+                          onChange={(e) => setNewItemFlatDollars(e.target.value)}
+                          className="h-8 text-sm pl-5"
+                          data-testid="input-new-item-flat-dollars"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="flex gap-2 justify-end">
                 <Button
                   variant="ghost"
@@ -1435,10 +1611,18 @@ function CostsTab() {
                   size="sm"
                   onClick={() => {
                     if (!addingCategory || !newItemName.trim()) return;
+                    const ratePct = parseFloat(newItemRatePct);
+                    const flatDollars = parseFloat(newItemFlatDollars);
                     createMutation.mutate({
                       category: addingCategory,
                       name: newItemName.trim(),
                       type: newItemType,
+                      ...(newItemType === "variable" && !isNaN(ratePct) && ratePct > 0
+                        ? { variableRatePct: ratePct }
+                        : {}),
+                      ...(newItemType === "variable" && !isNaN(flatDollars) && flatDollars >= 0
+                        ? { variableFlatCents: Math.round(flatDollars * 100) }
+                        : {}),
                     });
                   }}
                   disabled={!newItemName.trim() || createMutation.isPending}
@@ -1446,6 +1630,132 @@ function CostsTab() {
                 >
                   Add
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {editingFormulaItem && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          data-testid="modal-edit-formula"
+        >
+          <Card className="w-full max-w-sm mx-4">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <Percent className="h-4 w-4 text-violet-500" />
+                  Variable cost formula
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => setEditingFormulaItem(null)}
+                  data-testid="button-close-formula-modal"
+                >
+                  <XIcon className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{editingFormulaItem.name}</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                The estimated monthly cost is computed as{" "}
+                <span className="font-medium">
+                  (rate % &times; est. monthly revenue) + (flat &times; est. monthly stops)
+                </span>
+                . Revenue is derived from your pricing config.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium block mb-1.5">% of revenue</label>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      placeholder="e.g. 2.9"
+                      value={formulaRatePct}
+                      onChange={(e) => setFormulaRatePct(e.target.value)}
+                      className="h-8 text-sm pr-6"
+                      data-testid="input-formula-rate-pct"
+                      autoFocus
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                      %
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium block mb-1.5">Flat per stop</label>
+                  <div className="relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                      $
+                    </span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="e.g. 0.30"
+                      value={formulaFlatDollars}
+                      onChange={(e) => setFormulaFlatDollars(e.target.value)}
+                      className="h-8 text-sm pl-5"
+                      data-testid="input-formula-flat-dollars"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground hover:text-destructive px-2"
+                  onClick={() => {
+                    updateFormulaMutation.mutate({
+                      id: editingFormulaItem.id,
+                      variableRatePct: null,
+                      variableFlatCents: null,
+                    });
+                  }}
+                  disabled={updateFormulaMutation.isPending}
+                  data-testid="button-clear-formula"
+                >
+                  Clear formula
+                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingFormulaItem(null)}
+                    data-testid="button-cancel-formula"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="gap-1"
+                    onClick={() => {
+                      const ratePct = parseFloat(formulaRatePct);
+                      const flatDollars = parseFloat(formulaFlatDollars);
+                      updateFormulaMutation.mutate({
+                        id: editingFormulaItem.id,
+                        variableRatePct: !isNaN(ratePct) && ratePct > 0 ? ratePct : null,
+                        variableFlatCents:
+                          !isNaN(flatDollars) && flatDollars >= 0
+                            ? Math.round(flatDollars * 100)
+                            : null,
+                      });
+                    }}
+                    disabled={updateFormulaMutation.isPending}
+                    data-testid="button-save-formula"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Save
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -2257,8 +2257,38 @@ Rules:
     try {
       const { companyId } = await getCompanyContext(req);
       const items = await storage.getOverheadCosts(companyId);
-      const totalMonthlyOverheadCents = items.reduce((sum, i) => sum + i.monthlyCostCents, 0);
-      res.json({ items, totalMonthlyOverheadCents });
+
+      // Compute formula-based variable item costs from estimated revenue
+      const company = await storage.getCompany(companyId);
+      const pricingCfg = (company?.pricingConfig ?? {}) as Record<string, unknown>;
+      const estimatedMonthlyStops = Number(pricingCfg.estimatedMonthlyStops ?? 100);
+      const pricingRules = (pricingCfg.pricingRules ?? {}) as Record<string, unknown>;
+      const basePrices = (pricingRules.basePrices ?? {}) as Record<string, number>;
+      const weeklyBasePriceCents = Math.round((basePrices.weekly ?? 25) * 100);
+      const estimatedMonthlyRevenueCents = estimatedMonthlyStops * weeklyBasePriceCents;
+
+      const enrichedItems = items.map((item) => {
+        if (
+          item.type === "variable" &&
+          item.variableRatePct !== null &&
+          item.variableRatePct !== undefined
+        ) {
+          const ratePct = Number(item.variableRatePct);
+          const flatCents = item.variableFlatCents ?? 0;
+          const computedCents = Math.round(
+            (ratePct / 100) * estimatedMonthlyRevenueCents +
+              flatCents * estimatedMonthlyStops
+          );
+          return { ...item, monthlyCostCents: computedCents };
+        }
+        return item;
+      });
+
+      const totalMonthlyOverheadCents = enrichedItems.reduce(
+        (sum, i) => sum + i.monthlyCostCents,
+        0
+      );
+      res.json({ items: enrichedItems, totalMonthlyOverheadCents, estimatedMonthlyRevenueCents });
     } catch (err) {
       handleError(res, err);
     }
@@ -2267,7 +2297,7 @@ Rules:
   app.post("/api/overhead-costs", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { category, name, monthlyCostCents, type, sortOrder } = req.body;
+      const { category, name, monthlyCostCents, type, sortOrder, variableRatePct, variableFlatCents } = req.body;
       if (!category || typeof category !== "string" || !name || typeof name !== "string") {
         return res.status(400).json({ error: "category and name are required strings" });
       }
@@ -2276,6 +2306,14 @@ Rules:
           ? Math.round(monthlyCostCents)
           : 0;
       const validType = type === "variable" ? "variable" : "fixed";
+      const parsedRatePct =
+        typeof variableRatePct === "number" && variableRatePct > 0
+          ? String(variableRatePct)
+          : null;
+      const parsedFlatCents =
+        typeof variableFlatCents === "number" && variableFlatCents >= 0
+          ? Math.round(variableFlatCents)
+          : null;
       const item = await storage.createOverheadCost({
         companyId,
         category: category.trim(),
@@ -2284,6 +2322,8 @@ Rules:
         type: validType,
         isDefault: false,
         sortOrder: typeof sortOrder === "number" ? sortOrder : 0,
+        variableRatePct: parsedRatePct,
+        variableFlatCents: parsedFlatCents,
       });
       res.json(item);
     } catch (err) {
@@ -2303,6 +2343,19 @@ Rules:
       if (req.body.type === "fixed" || req.body.type === "variable") updates.type = req.body.type;
       if (typeof req.body.category === "string") updates.category = req.body.category.trim();
       if (typeof req.body.sortOrder === "number") updates.sortOrder = req.body.sortOrder;
+      // Formula fields — allow explicit null to clear the formula
+      if ("variableRatePct" in req.body) {
+        updates.variableRatePct =
+          typeof req.body.variableRatePct === "number" && req.body.variableRatePct > 0
+            ? String(req.body.variableRatePct)
+            : null;
+      }
+      if ("variableFlatCents" in req.body) {
+        updates.variableFlatCents =
+          typeof req.body.variableFlatCents === "number" && req.body.variableFlatCents >= 0
+            ? Math.round(req.body.variableFlatCents)
+            : null;
+      }
       if (Object.keys(updates).length === 0)
         return res.status(400).json({ error: "No valid fields to update" });
       const item = await storage.updateOverheadCost(id, companyId, updates);
