@@ -2002,10 +2002,12 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         };
         try {
           const StripeLib = (await import("stripe")).default;
-           
+
+          /* eslint-disable @typescript-eslint/no-explicit-any */
           const stripe = new StripeLib(process.env.STRIPE_SECRET_KEY!, {
             apiVersion: "2026-01-28.clover",
           } as any);
+          /* eslint-enable @typescript-eslint/no-explicit-any */
           // Expand line_items so we can validate the purchased price ID
           session = await stripe.checkout.sessions.retrieve(sessionId, {
             expand: ["line_items"],

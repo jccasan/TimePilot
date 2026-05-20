@@ -96,6 +96,7 @@ const ImportResolverPage = lazy(() => import("@/pages/import-resolver-page"));
 const CrmRouter = lazy(() => import("@/pages/crm/index"));
 const SignDocumentsPage = lazy(() => import("@/pages/sign-documents-page"));
 const LeadResponseRegisterPage = lazy(() => import("@/pages/lead-response-register"));
+const LeadResponseDashboard = lazy(() => import("@/pages/lead-response-dashboard"));
 
 function PageLoader() {
   return (
@@ -232,6 +233,7 @@ function Router() {
         <Route path="/command-center" component={CommandCenter} />
         <Route path="/crm/:rest*" component={CrmRouter} />
         <Route path="/crm" component={CrmRouter} />
+        <Route path="/lead-response" component={LeadResponseDashboard} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

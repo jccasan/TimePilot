@@ -38,6 +38,7 @@ import {
   ChevronUp,
   Info,
   RotateCcw,
+  PhoneIncoming,
 } from "lucide-react";
 import { BarChart, Bar, Tooltip, ResponsiveContainer, XAxis } from "recharts";
 import { TIER_CONFIG } from "@shared/schema";
@@ -543,6 +544,24 @@ export default function AdminDashboard() {
     refetchInterval: 300000,
   });
 
+  const { data: lrOperators, isLoading: lrLoading } = useQuery<
+    {
+      companyId: string;
+      companyName: string;
+      telnyxPhoneNumber: string | null;
+      portingRequested: boolean;
+      portingPhoneNumber: string | null;
+      portingStatus: string | null;
+      leadCountLast30: number;
+      depositConversionRate: number;
+      leadResponseActiveUntil: string | null;
+    }[]
+  >({
+    queryKey: ["/api/admin/lead-response/operators"],
+    queryFn: adminFetchFn("/api/admin/lead-response/operators"),
+    refetchInterval: 300000,
+  });
+
   const { data: healthChecks, isLoading: healthLoading } = useQuery<
     {
       checkName: string;
@@ -1008,6 +1027,121 @@ export default function AdminDashboard() {
           onClose={() => setDrillDown(null)}
         />
       )}
+
+      <div data-testid="section-lead-response-operators">
+        <div className="flex items-center gap-2 mb-3">
+          <PhoneIncoming className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-lg font-semibold">Lead Response Operators</h2>
+        </div>
+        {lrLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-12 bg-muted rounded animate-pulse" />
+            ))}
+          </div>
+        ) : !lrOperators || lrOperators.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-center text-muted-foreground">
+              <PhoneIncoming className="h-6 w-6 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No active Lead Response operators</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="table-lr-operators">
+                  <thead>
+                    <tr className="border-b text-left bg-muted/30">
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">Operator</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">
+                        Telnyx Number
+                      </th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">Porting</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">
+                        Leads (30d)
+                      </th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">
+                        Deposit Conv.
+                      </th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">
+                        Active Until
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lrOperators.map((op) => (
+                      <tr
+                        key={op.companyId}
+                        className="border-b last:border-0 hover:bg-muted/40 transition-colors"
+                        data-testid={`row-lr-operator-${op.companyId}`}
+                      >
+                        <td className="px-4 py-3">
+                          <Link href={`/admin/companies/${op.companyId}`}>
+                            <span className="font-medium hover:underline cursor-pointer">
+                              {op.companyName}
+                            </span>
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {op.telnyxPhoneNumber || (
+                            <span className="text-muted-foreground italic">Not provisioned</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {op.portingRequested ? (
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 gap-1"
+                                data-testid={`badge-porting-${op.companyId}`}
+                              >
+                                <AlertTriangle className="h-3 w-3" />
+                                Action needed
+                              </Badge>
+                              {op.portingPhoneNumber && (
+                                <span className="font-mono text-xs text-muted-foreground">
+                                  {op.portingPhoneNumber}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums font-medium">
+                          {op.leadCountLast30.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          <span
+                            className={
+                              op.depositConversionRate >= 20
+                                ? "text-green-700 dark:text-green-400 font-medium"
+                                : op.depositConversionRate >= 10
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-muted-foreground"
+                            }
+                          >
+                            {op.depositConversionRate}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {op.leadResponseActiveUntil
+                            ? new Date(op.leadResponseActiveUntil).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })
+                            : "Ongoing"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       <div data-testid="section-system-health">
         <div className="flex items-center gap-2 mb-3">

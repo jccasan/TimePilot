@@ -2897,6 +2897,101 @@ Respond with exactly one category from the list above and nothing else.`;
     }
   });
 
+  // ================ Lead Response Operators ================
+  app.get("/api/admin/lead-response/operators", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { leadResponseConfig } = await import("@shared/schema");
+
+      const configs = await db
+        .select({
+          companyId: leadResponseConfig.companyId,
+          leadResponseActive: leadResponseConfig.leadResponseActive,
+          leadResponseActiveUntil: leadResponseConfig.leadResponseActiveUntil,
+          telnyxNumberReleaseDate: leadResponseConfig.telnyxNumberReleaseDate,
+        })
+        .from(leadResponseConfig)
+        .where(eq(leadResponseConfig.leadResponseActive, true));
+
+      const now = new Date();
+      const last30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const rows = await Promise.all(
+        configs.map(async (cfg) => {
+          const company = await storage.getCompany(cfg.companyId);
+          if (!company) return null;
+
+          const portingRequested =
+            !!(company as Record<string, unknown>).portingPhoneNumber ||
+            (company as Record<string, unknown>).voiceNumberPortingStatus === "requested" ||
+            (company as Record<string, unknown>).voiceNumberPortingStatus === "in_progress";
+
+          // Lead count last 30 days (for the table column)
+          // Conversion rate: deposit_paid / all-time new leads × 100
+          // "new" in the formula means all inbound leads (total ever received)
+          const [leadCountResult, depositPaidResult, newLeadsResult] = await Promise.all([
+            db
+              .select({ count: sql<number>`COUNT(*)::int` })
+              .from(contacts)
+              .where(
+                and(
+                  eq(contacts.companyId, cfg.companyId),
+                  eq(contacts.leadSource, "lead_response"),
+                  gte(contacts.createdAt, last30Start)
+                )
+              ),
+            // deposit_paid: all-time count of contacts that paid a deposit
+            db
+              .select({ count: sql<number>`COUNT(*)::int` })
+              .from(contacts)
+              .where(
+                and(
+                  eq(contacts.companyId, cfg.companyId),
+                  eq(contacts.leadSource, "lead_response"),
+                  eq(contacts.leadResponseStatus, "deposit_paid")
+                )
+              ),
+            // new: total inbound leads (all-time, all statuses) — the denominator for conversion
+            db
+              .select({ count: sql<number>`COUNT(*)::int` })
+              .from(contacts)
+              .where(
+                and(eq(contacts.companyId, cfg.companyId), eq(contacts.leadSource, "lead_response"))
+              ),
+          ]);
+
+          const leadCount = leadCountResult[0]?.count ?? 0;
+          const depositPaidCount = depositPaidResult[0]?.count ?? 0;
+          const newLeadsCount = newLeadsResult[0]?.count ?? 0;
+          // deposit_paid / new × 100 as specified
+          const depositConversionRate =
+            newLeadsCount > 0 ? Math.round((depositPaidCount / newLeadsCount) * 100) : 0;
+
+          return {
+            companyId: cfg.companyId,
+            companyName: company.name,
+            telnyxPhoneNumber: (company as Record<string, unknown>).telnyxPhoneNumber as
+              | string
+              | null,
+            portingRequested,
+            portingPhoneNumber: (company as Record<string, unknown>).portingPhoneNumber as
+              | string
+              | null,
+            portingStatus: (company as Record<string, unknown>).voiceNumberPortingStatus as
+              | string
+              | null,
+            leadCountLast30: leadCount,
+            depositConversionRate,
+            leadResponseActiveUntil: cfg.leadResponseActiveUntil,
+          };
+        })
+      );
+
+      res.json(rows.filter(Boolean));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // ================ Demo Account Management ================
   app.post("/api/admin/demo/reset", isAdmin, async (_req: Request, res: Response) => {
     try {

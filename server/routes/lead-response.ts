@@ -1,5 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
+import { db } from "../db";
+import { sql, eq, and, gte, inArray, desc, asc } from "drizzle-orm";
+import { contacts, quotes } from "@shared/schema";
 import { isAuthenticated, getCompanyContext, handleError } from "./shared";
 import { API_KEY_ALLOWED_ROUTES } from "./shared";
 
@@ -137,6 +140,250 @@ export async function registerLeadResponseRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const config = await storage.getLeadResponseConfig(companyId);
       return res.json(config || { leadResponseActive: false });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
+   * GET /api/lead-response/dashboard
+   * Auth: user session
+   * Returns 6 summary card metrics for the Lead Response dashboard.
+   * All queries scoped to the calling company, filtered to leadSource = 'lead_response'.
+   */
+  app.get("/api/lead-response/dashboard", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const last30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      const [
+        newTodayResult,
+        estimateSentResult,
+        depositPendingResult,
+        depositPaidResult,
+        scheduledResult,
+        deadResult,
+      ] = await Promise.all([
+        // New leads today
+        db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.companyId, companyId),
+              eq(contacts.leadSource, "lead_response"),
+              eq(contacts.leadResponseStatus, "new"),
+              gte(contacts.createdAt, todayStart)
+            )
+          ),
+
+        // Estimates sent (last 30 days) — contacts updated to estimate_sent or beyond within 30 days
+        db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.companyId, companyId),
+              eq(contacts.leadSource, "lead_response"),
+              inArray(contacts.leadResponseStatus, [
+                "estimate_sent",
+                "deposit_pending",
+                "deposit_paid",
+                "scheduled",
+              ]),
+              gte(contacts.updatedAt, last30Start)
+            )
+          ),
+
+        // Deposit pending count + total value
+        db
+          .select({
+            count: sql<number>`COUNT(*)::int`,
+            total: sql<number>`COALESCE(SUM(deposit_amount), 0)`,
+          })
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.companyId, companyId),
+              eq(contacts.leadSource, "lead_response"),
+              eq(contacts.leadResponseStatus, "deposit_pending")
+            )
+          ),
+
+        // Deposit paid this month + total value
+        db
+          .select({
+            count: sql<number>`COUNT(*)::int`,
+            total: sql<number>`COALESCE(SUM(deposit_amount), 0)`,
+          })
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.companyId, companyId),
+              eq(contacts.leadSource, "lead_response"),
+              eq(contacts.leadResponseStatus, "deposit_paid"),
+              gte(contacts.depositPaidAt, monthStart)
+            )
+          ),
+
+        // Scheduled this month
+        db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.companyId, companyId),
+              eq(contacts.leadSource, "lead_response"),
+              eq(contacts.leadResponseStatus, "scheduled"),
+              gte(contacts.updatedAt, monthStart)
+            )
+          ),
+
+        // Dead leads this month
+        db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.companyId, companyId),
+              eq(contacts.leadSource, "lead_response"),
+              eq(contacts.leadResponseStatus, "dead"),
+              gte(contacts.updatedAt, monthStart)
+            )
+          ),
+      ]);
+
+      return res.json({
+        newToday: newTodayResult[0]?.count ?? 0,
+        estimateSentLast30: estimateSentResult[0]?.count ?? 0,
+        depositPendingCount: depositPendingResult[0]?.count ?? 0,
+        depositPendingValue: Number(depositPendingResult[0]?.total ?? 0),
+        depositPaidMonthCount: depositPaidResult[0]?.count ?? 0,
+        depositPaidMonthValue: Number(depositPaidResult[0]?.total ?? 0),
+        scheduledThisMonth: scheduledResult[0]?.count ?? 0,
+        deadThisMonth: deadResult[0]?.count ?? 0,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
+   * GET /api/lead-response/leads
+   * Auth: user session
+   * Returns paginated, sortable list of lead_response contacts.
+   * Scoped to the calling company.
+   */
+  app.get("/api/lead-response/leads", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
+      const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "25"), 10)));
+      const offset = (page - 1) * limit;
+      const sortField = String(req.query.sortField ?? "createdAt");
+      const sortDir = String(req.query.sortDir ?? "desc");
+
+      const validSortFields: Record<
+        string,
+        typeof contacts.createdAt | typeof contacts.leadResponseStatus
+      > = {
+        createdAt: contacts.createdAt,
+        status: contacts.leadResponseStatus,
+      };
+      const sortCol = validSortFields[sortField] ?? contacts.createdAt;
+      const orderFn = sortDir === "asc" ? asc : desc;
+
+      const whereClause = and(
+        eq(contacts.companyId, companyId),
+        eq(contacts.leadSource, "lead_response")
+      );
+
+      // Subquery: most recent non-draft quote selectedPrice for each contact
+      const latestQuoteSq = db
+        .select({
+          contactId: quotes.contactId,
+          estimateAmount: sql<string | null>`MAX(${quotes.selectedPrice})`,
+        })
+        .from(quotes)
+        .where(and(eq(quotes.companyId, companyId), sql`${quotes.status} <> 'draft'`))
+        .groupBy(quotes.contactId)
+        .as("latest_quote");
+
+      const [countResult, rows] = await Promise.all([
+        db
+          .select({ total: sql<number>`COUNT(*)::int` })
+          .from(contacts)
+          .where(whereClause),
+        db
+          .select({
+            id: contacts.id,
+            firstName: contacts.firstName,
+            lastName: contacts.lastName,
+            phone: contacts.phone,
+            streetAddress: contacts.streetAddress,
+            city: contacts.city,
+            state: contacts.state,
+            yardSize: contacts.yardSize,
+            numberOfDogs: contacts.numberOfDogs,
+            leadResponseStatus: contacts.leadResponseStatus,
+            depositAmount: contacts.depositAmount,
+            estimateAmount: latestQuoteSq.estimateAmount,
+            createdAt: contacts.createdAt,
+          })
+          .from(contacts)
+          .leftJoin(latestQuoteSq, eq(contacts.id, latestQuoteSq.contactId))
+          .where(whereClause)
+          .orderBy(orderFn(sortCol))
+          .limit(limit)
+          .offset(offset),
+      ]);
+
+      return res.json({
+        leads: rows,
+        total: countResult[0]?.total ?? 0,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
+   * GET /api/lead-response/funnel
+   * Auth: user session
+   * Returns counts for each funnel stage for the calling company.
+   */
+  app.get("/api/lead-response/funnel", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+
+      const stages = [
+        { stage: "new", label: "New" },
+        { stage: "estimate_sent", label: "Estimate Sent" },
+        { stage: "deposit_pending", label: "Deposit Pending" },
+        { stage: "deposit_paid", label: "Deposit Paid" },
+        { stage: "scheduled", label: "Scheduled" },
+      ];
+
+      const results = await Promise.all(
+        stages.map(async ({ stage, label }) => {
+          const rows = await db
+            .select({ count: sql<number>`COUNT(*)::int` })
+            .from(contacts)
+            .where(
+              and(
+                eq(contacts.companyId, companyId),
+                eq(contacts.leadSource, "lead_response"),
+                eq(contacts.leadResponseStatus, stage)
+              )
+            );
+          return { stage, label, count: rows[0]?.count ?? 0 };
+        })
+      );
+
+      return res.json(results);
     } catch (err) {
       handleError(res, err);
     }
