@@ -205,9 +205,7 @@ function CostItemRow({
   const lastSavedCents = useRef(item.monthlyCostCents);
 
   const isFormulaMode =
-    item.type === "variable" &&
-    item.variableRatePct !== null &&
-    item.variableRatePct !== undefined;
+    item.type === "variable" && item.variableRatePct !== null && item.variableRatePct !== undefined;
 
   useEffect(() => {
     if (!isFormulaMode && inputRef.current && document.activeElement !== inputRef.current) {
@@ -283,9 +281,7 @@ function CostItemRow({
           </p>
         )}
         {isFormulaMode && (
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            estimated from pricing config
-          </p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">estimated from pricing config</p>
         )}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
@@ -1550,8 +1546,8 @@ function CostsTab() {
                     Formula (optional)
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    Estimated monthly cost is computed from your pricing config. Leave blank to enter
-                    a manual dollar amount after adding.
+                    Estimated monthly cost is computed from your pricing config. Leave blank to
+                    enter a manual dollar amount after adding.
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     <div>

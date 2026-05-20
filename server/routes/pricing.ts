@@ -2276,8 +2276,7 @@ Rules:
           const ratePct = Number(item.variableRatePct);
           const flatCents = item.variableFlatCents ?? 0;
           const computedCents = Math.round(
-            (ratePct / 100) * estimatedMonthlyRevenueCents +
-              flatCents * estimatedMonthlyStops
+            (ratePct / 100) * estimatedMonthlyRevenueCents + flatCents * estimatedMonthlyStops
           );
           return { ...item, monthlyCostCents: computedCents };
         }
@@ -2297,7 +2296,15 @@ Rules:
   app.post("/api/overhead-costs", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const { category, name, monthlyCostCents, type, sortOrder, variableRatePct, variableFlatCents } = req.body;
+      const {
+        category,
+        name,
+        monthlyCostCents,
+        type,
+        sortOrder,
+        variableRatePct,
+        variableFlatCents,
+      } = req.body;
       if (!category || typeof category !== "string" || !name || typeof name !== "string") {
         return res.status(400).json({ error: "category and name are required strings" });
       }
@@ -2307,9 +2314,7 @@ Rules:
           : 0;
       const validType = type === "variable" ? "variable" : "fixed";
       const parsedRatePct =
-        typeof variableRatePct === "number" && variableRatePct > 0
-          ? String(variableRatePct)
-          : null;
+        typeof variableRatePct === "number" && variableRatePct > 0 ? String(variableRatePct) : null;
       const parsedFlatCents =
         typeof variableFlatCents === "number" && variableFlatCents >= 0
           ? Math.round(variableFlatCents)
