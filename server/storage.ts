@@ -846,6 +846,7 @@ export interface IStorage {
     trailingMonthlyStops: number;
     trailingMonthlyRevenueCents: number;
     trailingMonthlyTransactions: number;
+    trailingMonthlyMiles: number;
     dataSource: "trailing_90d" | "estimated";
   }>;
 
@@ -4444,6 +4445,7 @@ export class DatabaseStorage implements IStorage {
     trailingMonthlyStops: number;
     trailingMonthlyRevenueCents: number;
     trailingMonthlyTransactions: number;
+    trailingMonthlyMiles: number;
     dataSource: "trailing_90d" | "estimated";
   }> {
     const ninety = new Date();
@@ -4460,6 +4462,9 @@ export class DatabaseStorage implements IStorage {
         )
       );
 
+    // NOTE: invoice_status enum does not include 'posted' — valid values are
+    // draft, sent, pending, paid, failed, refunded, voided. Only 'paid' invoices
+    // represent settled revenue suitable for trailing-actuals calculations.
     const [revenueRow] = await db
       .select({ total: sql<string>`COALESCE(SUM(${invoices.total}), 0)` })
       .from(invoices)
@@ -4491,6 +4496,9 @@ export class DatabaseStorage implements IStorage {
         trailingMonthlyStops: 0,
         trailingMonthlyRevenueCents: 0,
         trailingMonthlyTransactions: 0,
+        // Route distance is not stored in the DB; the route handler augments
+        // this with geometry-based computation and a stop-count fallback.
+        trailingMonthlyMiles: 0,
         dataSource: "estimated",
       };
     }
@@ -4499,6 +4507,9 @@ export class DatabaseStorage implements IStorage {
       trailingMonthlyStops: Math.round(totalStops / 3),
       trailingMonthlyRevenueCents: Math.round((totalRevenueDollars / 3) * 100),
       trailingMonthlyTransactions: Math.round(totalTransactions / 3),
+      // Route distance is not stored in the DB; the route handler augments
+      // this with geometry-based computation and a stop-count fallback.
+      trailingMonthlyMiles: 0,
       dataSource: "trailing_90d",
     };
   }

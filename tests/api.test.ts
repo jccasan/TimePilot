@@ -2943,8 +2943,7 @@ async function runTests() {
       assert(r.status === 200, `Expected 200, got ${r.status}`);
       const hasMileDriver = r.data.items.some(
         (i: { type: string; costDriverType: string }) =>
-          i.type === "variable" &&
-          (i.costDriverType === "per_mile" || i.costDriverType === "fuel")
+          i.type === "variable" && (i.costDriverType === "per_mile" || i.costDriverType === "fuel")
       );
       if (hasMileDriver) {
         assert(

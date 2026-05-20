@@ -2260,8 +2260,12 @@ Rules:
 
       // Get trailing 90-day actuals; falls back to "estimated" when no real data exists
       const actuals = await storage.getOverheadTrailingActuals(companyId);
-      let { trailingMonthlyStops, trailingMonthlyRevenueCents, trailingMonthlyTransactions } =
-        actuals;
+      let {
+        trailingMonthlyStops,
+        trailingMonthlyRevenueCents,
+        trailingMonthlyTransactions,
+        trailingMonthlyMiles,
+      } = actuals;
       const { dataSource } = actuals;
 
       // For new accounts with no activity yet, fall back to pricing config estimates
@@ -2276,8 +2280,10 @@ Rules:
         trailingMonthlyTransactions = Math.round(trailingMonthlyStops / 4);
       }
 
-      // Compute monthly route miles (used by per_mile and fuel drivers) — best-effort
-      let trailingMonthlyMiles = 0;
+      // Augment trailingMonthlyMiles with geometry-based computation when routes exist.
+      // The storage layer returns 0 because route distances are not persisted in the DB;
+      // this block computes them on the fly from route stop coordinates.
+      // trailingMonthlyMiles is already initialised from actuals above.
       const hasMileDrivers = items.some(
         (i) =>
           i.type === "variable" && (i.costDriverType === "per_mile" || i.costDriverType === "fuel")
