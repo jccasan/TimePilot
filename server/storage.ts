@@ -842,6 +842,11 @@ export interface IStorage {
   ): Promise<OverheadCost>;
   deleteOverheadCost(id: string, companyId: string): Promise<void>;
   getTotalMonthlyOverheadCents(companyId: string): Promise<number>;
+  getOverheadTrailingActuals(companyId: string): Promise<{
+    trailingMonthlyStops: number;
+    trailingMonthlyRevenueCents: number;
+    dataSource: "trailing_90d" | "estimated";
+  }>;
 
   // Competitor Pricing
   getCompetitorPricing(companyId: string, zipCode?: string): Promise<CompetitorPricing[]>;
@@ -4432,6 +4437,40 @@ export class DatabaseStorage implements IStorage {
       .from(overheadCosts)
       .where(eq(overheadCosts.companyId, companyId));
     return Number(result[0]?.total ?? 0);
+  }
+
+  async getOverheadTrailingActuals(companyId: string): Promise<{
+    trailingMonthlyStops: number;
+    trailingMonthlyRevenueCents: number;
+    dataSource: "trailing_90d" | "estimated";
+  }> {
+    const ninety = new Date();
+    ninety.setDate(ninety.getDate() - 90);
+
+    const [stopsRow] = await db
+      .select({ total: sql<number>`COUNT(*)::int` })
+      .from(visits)
+      .where(
+        and(eq(visits.companyId, companyId), eq(visits.status, "completed"), gte(visits.completedAt, ninety))
+      );
+
+    const [revenueRow] = await db
+      .select({ total: sql<string>`COALESCE(SUM(${invoices.total}), 0)` })
+      .from(invoices)
+      .where(and(eq(invoices.companyId, companyId), eq(invoices.status, "paid"), gte(invoices.paidAt, ninety)));
+
+    const totalStops = Number(stopsRow?.total ?? 0);
+    const totalRevenueDollars = Number(revenueRow?.total ?? 0);
+
+    if (totalStops === 0 && totalRevenueDollars === 0) {
+      return { trailingMonthlyStops: 0, trailingMonthlyRevenueCents: 0, dataSource: "estimated" };
+    }
+
+    return {
+      trailingMonthlyStops: Math.round(totalStops / 3),
+      trailingMonthlyRevenueCents: Math.round((totalRevenueDollars / 3) * 100),
+      dataSource: "trailing_90d",
+    };
   }
 
   // ================ Competitor Pricing ================

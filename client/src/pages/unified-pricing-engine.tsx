@@ -81,14 +81,16 @@ type OverheadCostItem = {
   type: "fixed" | "variable";
   isDefault: boolean;
   sortOrder: number;
-  variableRatePct: string | null;
-  variableFlatCents: number | null;
+  costDriverType: "pct_revenue" | "per_stop" | null;
+  driverRate: string | null;
 };
 
 type OverheadData = {
   items: OverheadCostItem[];
   totalMonthlyOverheadCents: number;
-  estimatedMonthlyRevenueCents?: number;
+  trailingMonthlyStops: number;
+  trailingMonthlyRevenueCents: number;
+  dataSource: "trailing_90d" | "estimated";
 };
 
 type MonthlyFuelData = {
@@ -176,12 +178,11 @@ const CATEGORY_ORDER = [
 ];
 
 function formulaLabel(item: OverheadCostItem): string {
-  const rate = item.variableRatePct !== null ? Number(item.variableRatePct) : null;
-  const flat = item.variableFlatCents;
-  const parts: string[] = [];
-  if (rate !== null && rate > 0) parts.push(`${rate}% of rev`);
-  if (flat !== null && flat > 0) parts.push(`$${(flat / 100).toFixed(2)}/stop`);
-  return parts.length > 0 ? parts.join(" + ") : "";
+  if (!item.costDriverType || !item.driverRate) return "";
+  const rate = Number(item.driverRate);
+  if (item.costDriverType === "pct_revenue") return `${rate}% of rev`;
+  if (item.costDriverType === "per_stop") return `$${rate.toFixed(2)}/stop`;
+  return "";
 }
 
 function CostItemRow({
@@ -205,7 +206,9 @@ function CostItemRow({
   const lastSavedCents = useRef(item.monthlyCostCents);
 
   const isFormulaMode =
-    item.type === "variable" && item.variableRatePct !== null && item.variableRatePct !== undefined;
+    item.type === "variable" &&
+    item.costDriverType !== null &&
+    item.costDriverType !== undefined;
 
   useEffect(() => {
     if (!isFormulaMode && inputRef.current && document.activeElement !== inputRef.current) {
@@ -281,7 +284,9 @@ function CostItemRow({
           </p>
         )}
         {isFormulaMode && (
-          <p className="text-[10px] text-muted-foreground mt-0.5">estimated from pricing config</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5" data-testid={`text-formula-source-${item.id}`}>
+            {item.costDriverType === "pct_revenue" ? "% of revenue" : "per stop"} · based on last 90 days
+          </p>
         )}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
@@ -1219,12 +1224,12 @@ function CostsTab() {
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const [newItemType, setNewItemType] = useState<"fixed" | "variable">("fixed");
-  const [newItemRatePct, setNewItemRatePct] = useState("");
-  const [newItemFlatDollars, setNewItemFlatDollars] = useState("");
+  const [newItemDriverType, setNewItemDriverType] = useState<"pct_revenue" | "per_stop">("pct_revenue");
+  const [newItemDriverRate, setNewItemDriverRate] = useState("");
 
   const [editingFormulaItem, setEditingFormulaItem] = useState<OverheadCostItem | null>(null);
-  const [formulaRatePct, setFormulaRatePct] = useState("");
-  const [formulaFlatDollars, setFormulaFlatDollars] = useState("");
+  const [formulaDriverType, setFormulaDriverType] = useState<"pct_revenue" | "per_stop">("pct_revenue");
+  const [formulaDriverRate, setFormulaDriverRate] = useState("");
 
   const { data, isLoading } = useQuery<OverheadData>({ queryKey: ["/api/overhead-costs"] });
   const { data: pricingConfigData, isLoading: configLoading } = useQuery<PricingConfigResponse>({
@@ -1268,6 +1273,7 @@ function CostsTab() {
           i.id === id ? { ...i, monthlyCostCents } : i
         );
         queryClient.setQueryData<OverheadData>(["/api/overhead-costs"], {
+          ...previous,
           items: updatedItems,
           totalMonthlyOverheadCents: updatedItems.reduce((s, i) => s + i.monthlyCostCents, 0),
         });
@@ -1299,8 +1305,8 @@ function CostsTab() {
       category: string;
       name: string;
       type: "fixed" | "variable";
-      variableRatePct?: number;
-      variableFlatCents?: number;
+      costDriverType?: "pct_revenue" | "per_stop";
+      driverRate?: number;
     }) => apiRequest("POST", "/api/overhead-costs", d),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs"] });
@@ -1308,8 +1314,8 @@ function CostsTab() {
       setAddingCategory(null);
       setNewItemName("");
       setNewItemType("fixed");
-      setNewItemRatePct("");
-      setNewItemFlatDollars("");
+      setNewItemDriverType("pct_revenue");
+      setNewItemDriverRate("");
       toast({ title: "Item added" });
     },
   });
@@ -1317,19 +1323,18 @@ function CostsTab() {
   const updateFormulaMutation = useMutation({
     mutationFn: ({
       id,
-      variableRatePct,
-      variableFlatCents,
+      costDriverType,
+      driverRate,
     }: {
       id: string;
-      variableRatePct: number | null;
-      variableFlatCents: number | null;
-    }) => apiRequest("PATCH", `/api/overhead-costs/${id}`, { variableRatePct, variableFlatCents }),
+      costDriverType: "pct_revenue" | "per_stop" | null;
+      driverRate: number | null;
+    }) => apiRequest("PATCH", `/api/overhead-costs/${id}`, { costDriverType, driverRate }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overhead-costs/total"] });
       setEditingFormulaItem(null);
-      setFormulaRatePct("");
-      setFormulaFlatDollars("");
+      setFormulaDriverRate("");
     },
     onError: () => {
       toast({ title: "Failed to save formula", variant: "destructive" });
@@ -1338,10 +1343,8 @@ function CostsTab() {
 
   const handleEditFormula = (item: OverheadCostItem) => {
     setEditingFormulaItem(item);
-    setFormulaRatePct(item.variableRatePct ? String(Number(item.variableRatePct)) : "");
-    setFormulaFlatDollars(
-      item.variableFlatCents != null ? (item.variableFlatCents / 100).toFixed(2) : ""
-    );
+    setFormulaDriverType(item.costDriverType ?? "pct_revenue");
+    setFormulaDriverRate(item.driverRate ? String(Number(item.driverRate)) : "");
   };
 
   const autoFuelCostCents = monthlyFuelData?.fuelCostCents ?? 0;
@@ -1487,8 +1490,8 @@ function CostsTab() {
                   setAddingCategory(cat);
                   setNewItemName("");
                   setNewItemType("fixed");
-                  setNewItemRatePct("");
-                  setNewItemFlatDollars("");
+                  setNewItemDriverType("pct_revenue");
+                  setNewItemDriverRate("");
                 }}
                 onEditFormula={handleEditFormula}
                 isPending={updateMutation.isPending || deleteMutation.isPending}
@@ -1527,8 +1530,8 @@ function CostsTab() {
                 value={newItemType}
                 onValueChange={(v) => {
                   setNewItemType(v as "fixed" | "variable");
-                  setNewItemRatePct("");
-                  setNewItemFlatDollars("");
+                  setNewItemDriverType("pct_revenue");
+                  setNewItemDriverRate("");
                 }}
               >
                 <SelectTrigger className="h-9" data-testid="select-new-item-type">
@@ -1543,39 +1546,58 @@ function CostsTab() {
                 <div className="rounded-md border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 p-3 space-y-2">
                   <p className="text-xs font-medium text-violet-700 dark:text-violet-300 flex items-center gap-1">
                     <Percent className="h-3 w-3" />
-                    Formula (optional)
+                    Cost driver (optional)
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    Estimated monthly cost is computed from your pricing config. Leave blank to
+                    Monthly cost is computed from your last 90 days of activity. Leave blank to
                     enter a manual dollar amount after adding.
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">
-                        % of revenue
-                      </label>
-                      <div className="relative">
+                  <div className="flex rounded-md overflow-hidden border border-violet-200 dark:border-violet-800">
+                    <button
+                      type="button"
+                      className={`flex-1 h-8 text-xs font-medium transition-colors ${
+                        newItemDriverType === "pct_revenue"
+                          ? "bg-violet-600 text-white"
+                          : "bg-transparent text-muted-foreground hover:bg-violet-100 dark:hover:bg-violet-900"
+                      }`}
+                      onClick={() => { setNewItemDriverType("pct_revenue"); setNewItemDriverRate(""); }}
+                      data-testid="button-new-driver-pct-revenue"
+                    >
+                      % of revenue
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 h-8 text-xs font-medium transition-colors ${
+                        newItemDriverType === "per_stop"
+                          ? "bg-violet-600 text-white"
+                          : "bg-transparent text-muted-foreground hover:bg-violet-100 dark:hover:bg-violet-900"
+                      }`}
+                      onClick={() => { setNewItemDriverType("per_stop"); setNewItemDriverRate(""); }}
+                      data-testid="button-new-driver-per-stop"
+                    >
+                      per stop
+                    </button>
+                  </div>
+                  <div className="relative">
+                    {newItemDriverType === "pct_revenue" ? (
+                      <>
                         <Input
                           type="number"
                           min="0"
                           max="100"
                           step="0.01"
                           placeholder="e.g. 2.9"
-                          value={newItemRatePct}
-                          onChange={(e) => setNewItemRatePct(e.target.value)}
+                          value={newItemDriverRate}
+                          onChange={(e) => setNewItemDriverRate(e.target.value)}
                           className="h-8 text-sm pr-6"
-                          data-testid="input-new-item-rate-pct"
+                          data-testid="input-new-item-driver-rate"
                         />
                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
                           %
                         </span>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">
-                        Flat per stop
-                      </label>
-                      <div className="relative">
+                      </>
+                    ) : (
+                      <>
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
                           $
                         </span>
@@ -1584,13 +1606,13 @@ function CostsTab() {
                           min="0"
                           step="0.01"
                           placeholder="e.g. 0.30"
-                          value={newItemFlatDollars}
-                          onChange={(e) => setNewItemFlatDollars(e.target.value)}
+                          value={newItemDriverRate}
+                          onChange={(e) => setNewItemDriverRate(e.target.value)}
                           className="h-8 text-sm pl-5"
-                          data-testid="input-new-item-flat-dollars"
+                          data-testid="input-new-item-driver-rate"
                         />
-                      </div>
-                    </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -1607,17 +1629,13 @@ function CostsTab() {
                   size="sm"
                   onClick={() => {
                     if (!addingCategory || !newItemName.trim()) return;
-                    const ratePct = parseFloat(newItemRatePct);
-                    const flatDollars = parseFloat(newItemFlatDollars);
+                    const driverRate = parseFloat(newItemDriverRate);
                     createMutation.mutate({
                       category: addingCategory,
                       name: newItemName.trim(),
                       type: newItemType,
-                      ...(newItemType === "variable" && !isNaN(ratePct) && ratePct > 0
-                        ? { variableRatePct: ratePct }
-                        : {}),
-                      ...(newItemType === "variable" && !isNaN(flatDollars) && flatDollars >= 0
-                        ? { variableFlatCents: Math.round(flatDollars * 100) }
+                      ...(newItemType === "variable" && !isNaN(driverRate) && driverRate > 0
+                        ? { costDriverType: newItemDriverType, driverRate }
                         : {}),
                     });
                   }}
@@ -1658,49 +1676,81 @@ function CostsTab() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-xs text-muted-foreground">
-                The estimated monthly cost is computed as{" "}
-                <span className="font-medium">
-                  (rate % &times; est. monthly revenue) + (flat &times; est. monthly stops)
-                </span>
-                . Revenue is derived from your pricing config.
+                Monthly cost is auto-computed from your{" "}
+                <span className="font-medium">last 90 days of activity</span>. New accounts fall
+                back to your pricing config estimate.
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-medium block mb-1.5">% of revenue</label>
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      placeholder="e.g. 2.9"
-                      value={formulaRatePct}
-                      onChange={(e) => setFormulaRatePct(e.target.value)}
-                      className="h-8 text-sm pr-6"
-                      data-testid="input-formula-rate-pct"
-                      autoFocus
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                      %
-                    </span>
+                  <label className="text-xs font-medium block mb-1.5">Driver type</label>
+                  <div className="flex rounded-md overflow-hidden border border-input">
+                    <button
+                      type="button"
+                      className={`flex-1 h-9 text-xs font-medium transition-colors ${
+                        formulaDriverType === "pct_revenue"
+                          ? "bg-violet-600 text-white"
+                          : "bg-transparent text-muted-foreground hover:bg-violet-50 dark:hover:bg-violet-950"
+                      }`}
+                      onClick={() => { setFormulaDriverType("pct_revenue"); setFormulaDriverRate(""); }}
+                      data-testid="button-formula-driver-pct-revenue"
+                    >
+                      % of revenue
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 h-9 text-xs font-medium transition-colors ${
+                        formulaDriverType === "per_stop"
+                          ? "bg-violet-600 text-white"
+                          : "bg-transparent text-muted-foreground hover:bg-violet-50 dark:hover:bg-violet-950"
+                      }`}
+                      onClick={() => { setFormulaDriverType("per_stop"); setFormulaDriverRate(""); }}
+                      data-testid="button-formula-driver-per-stop"
+                    >
+                      per stop
+                    </button>
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs font-medium block mb-1.5">Flat per stop</label>
+                  <label className="text-xs font-medium block mb-1.5">
+                    {formulaDriverType === "pct_revenue" ? "Rate (%)" : "Rate ($ per stop)"}
+                  </label>
                   <div className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                      $
-                    </span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="e.g. 0.30"
-                      value={formulaFlatDollars}
-                      onChange={(e) => setFormulaFlatDollars(e.target.value)}
-                      className="h-8 text-sm pl-5"
-                      data-testid="input-formula-flat-dollars"
-                    />
+                    {formulaDriverType === "pct_revenue" ? (
+                      <>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          placeholder="e.g. 2.9"
+                          value={formulaDriverRate}
+                          onChange={(e) => setFormulaDriverRate(e.target.value)}
+                          className="h-9 text-sm pr-6"
+                          data-testid="input-formula-driver-rate"
+                          autoFocus
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          %
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          $
+                        </span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="e.g. 0.30"
+                          value={formulaDriverRate}
+                          onChange={(e) => setFormulaDriverRate(e.target.value)}
+                          className="h-9 text-sm pl-5"
+                          data-testid="input-formula-driver-rate"
+                          autoFocus
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1712,14 +1762,14 @@ function CostsTab() {
                   onClick={() => {
                     updateFormulaMutation.mutate({
                       id: editingFormulaItem.id,
-                      variableRatePct: null,
-                      variableFlatCents: null,
+                      costDriverType: null,
+                      driverRate: null,
                     });
                   }}
                   disabled={updateFormulaMutation.isPending}
                   data-testid="button-clear-formula"
                 >
-                  Clear formula
+                  Clear driver
                 </Button>
                 <div className="flex gap-2">
                   <Button
@@ -1734,15 +1784,11 @@ function CostsTab() {
                     size="sm"
                     className="gap-1"
                     onClick={() => {
-                      const ratePct = parseFloat(formulaRatePct);
-                      const flatDollars = parseFloat(formulaFlatDollars);
+                      const rate = parseFloat(formulaDriverRate);
                       updateFormulaMutation.mutate({
                         id: editingFormulaItem.id,
-                        variableRatePct: !isNaN(ratePct) && ratePct > 0 ? ratePct : null,
-                        variableFlatCents:
-                          !isNaN(flatDollars) && flatDollars >= 0
-                            ? Math.round(flatDollars * 100)
-                            : null,
+                        costDriverType: !isNaN(rate) && rate > 0 ? formulaDriverType : null,
+                        driverRate: !isNaN(rate) && rate > 0 ? rate : null,
                       });
                     }}
                     disabled={updateFormulaMutation.isPending}

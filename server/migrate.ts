@@ -911,6 +911,41 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] overhead_costs variable formula columns ensured");
 
+    // ── Cost driver refactor (Task #905) ─────────────────────────────────────
+    // Replace the two-field formula (variable_rate_pct + variable_flat_cents) with
+    // a single driver type + rate model. The old columns are kept in place for
+    // backward compatibility; data is back-filled into the new columns.
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE cost_driver_type AS ENUM ('pct_revenue', 'per_stop');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await client.query(`
+      ALTER TABLE overhead_costs
+        ADD COLUMN IF NOT EXISTS cost_driver_type cost_driver_type,
+        ADD COLUMN IF NOT EXISTS driver_rate      NUMERIC(10,4)
+    `);
+    // Back-fill pct_revenue from old variable_rate_pct
+    await client.query(`
+      UPDATE overhead_costs
+        SET cost_driver_type = 'pct_revenue',
+            driver_rate      = variable_rate_pct::numeric
+        WHERE variable_rate_pct IS NOT NULL
+          AND variable_rate_pct::numeric > 0
+          AND cost_driver_type IS NULL
+    `);
+    // Back-fill per_stop from old variable_flat_cents (convert cents → dollars)
+    await client.query(`
+      UPDATE overhead_costs
+        SET cost_driver_type = 'per_stop',
+            driver_rate      = variable_flat_cents / 100.0
+        WHERE variable_flat_cents IS NOT NULL
+          AND variable_flat_cents > 0
+          AND cost_driver_type IS NULL
+    `);
+    console.log("[Migration] overhead_costs cost_driver_type / driver_rate columns ensured and back-filled");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

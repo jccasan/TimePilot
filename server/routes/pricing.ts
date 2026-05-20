@@ -2258,36 +2258,45 @@ Rules:
       const { companyId } = await getCompanyContext(req);
       const items = await storage.getOverheadCosts(companyId);
 
-      // Compute formula-based variable item costs from estimated revenue
-      const company = await storage.getCompany(companyId);
-      const pricingCfg = (company?.pricingConfig ?? {}) as Record<string, unknown>;
-      const estimatedMonthlyStops = Number(pricingCfg.estimatedMonthlyStops ?? 100);
-      const pricingRules = (pricingCfg.pricingRules ?? {}) as Record<string, unknown>;
-      const basePrices = (pricingRules.basePrices ?? {}) as Record<string, number>;
-      const weeklyBasePriceCents = Math.round((basePrices.weekly ?? 25) * 100);
-      const estimatedMonthlyRevenueCents = estimatedMonthlyStops * weeklyBasePriceCents;
+      // Get trailing 90-day actuals; falls back to "estimated" when no real data exists
+      const actuals = await storage.getOverheadTrailingActuals(companyId);
+      let { trailingMonthlyStops, trailingMonthlyRevenueCents } = actuals;
+      const { dataSource } = actuals;
+
+      // For new accounts with no activity yet, fall back to pricing config estimates
+      if (dataSource === "estimated") {
+        const company = await storage.getCompany(companyId);
+        const pricingCfg = (company?.pricingConfig ?? {}) as Record<string, unknown>;
+        trailingMonthlyStops = Number(pricingCfg.estimatedMonthlyStops ?? 100);
+        const pricingRules = (pricingCfg.pricingRules ?? {}) as Record<string, unknown>;
+        const basePrices = (pricingRules.basePrices ?? {}) as Record<string, number>;
+        const weeklyBasePriceCents = Math.round((basePrices.weekly ?? 25) * 100);
+        trailingMonthlyRevenueCents = trailingMonthlyStops * weeklyBasePriceCents;
+      }
 
       const enrichedItems = items.map((item) => {
-        if (
-          item.type === "variable" &&
-          item.variableRatePct !== null &&
-          item.variableRatePct !== undefined
-        ) {
-          const ratePct = Number(item.variableRatePct);
-          const flatCents = item.variableFlatCents ?? 0;
-          const computedCents = Math.round(
-            (ratePct / 100) * estimatedMonthlyRevenueCents + flatCents * estimatedMonthlyStops
-          );
+        if (item.type === "variable" && item.costDriverType) {
+          const rate = Number(item.driverRate ?? 0);
+          let computedCents = 0;
+          if (item.costDriverType === "pct_revenue") {
+            computedCents = Math.round((rate / 100) * trailingMonthlyRevenueCents);
+          } else if (item.costDriverType === "per_stop") {
+            // driverRate is stored in dollars per stop
+            computedCents = Math.round(rate * trailingMonthlyStops * 100);
+          }
           return { ...item, monthlyCostCents: computedCents };
         }
         return item;
       });
 
-      const totalMonthlyOverheadCents = enrichedItems.reduce(
-        (sum, i) => sum + i.monthlyCostCents,
-        0
-      );
-      res.json({ items: enrichedItems, totalMonthlyOverheadCents, estimatedMonthlyRevenueCents });
+      const totalMonthlyOverheadCents = enrichedItems.reduce((sum, i) => sum + i.monthlyCostCents, 0);
+      res.json({
+        items: enrichedItems,
+        totalMonthlyOverheadCents,
+        trailingMonthlyStops,
+        trailingMonthlyRevenueCents,
+        dataSource,
+      });
     } catch (err) {
       handleError(res, err);
     }
@@ -2296,15 +2305,8 @@ Rules:
   app.post("/api/overhead-costs", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      const {
-        category,
-        name,
-        monthlyCostCents,
-        type,
-        sortOrder,
-        variableRatePct,
-        variableFlatCents,
-      } = req.body;
+      const { category, name, monthlyCostCents, type, sortOrder, costDriverType, driverRate } =
+        req.body;
       if (!category || typeof category !== "string" || !name || typeof name !== "string") {
         return res.status(400).json({ error: "category and name are required strings" });
       }
@@ -2313,12 +2315,10 @@ Rules:
           ? Math.round(monthlyCostCents)
           : 0;
       const validType = type === "variable" ? "variable" : "fixed";
-      const parsedRatePct =
-        typeof variableRatePct === "number" && variableRatePct > 0 ? String(variableRatePct) : null;
-      const parsedFlatCents =
-        typeof variableFlatCents === "number" && variableFlatCents >= 0
-          ? Math.round(variableFlatCents)
-          : null;
+      const parsedDriverType =
+        costDriverType === "pct_revenue" || costDriverType === "per_stop" ? costDriverType : null;
+      const parsedDriverRate =
+        typeof driverRate === "number" && driverRate > 0 ? String(driverRate) : null;
       const item = await storage.createOverheadCost({
         companyId,
         category: category.trim(),
@@ -2327,8 +2327,8 @@ Rules:
         type: validType,
         isDefault: false,
         sortOrder: typeof sortOrder === "number" ? sortOrder : 0,
-        variableRatePct: parsedRatePct,
-        variableFlatCents: parsedFlatCents,
+        costDriverType: parsedDriverType,
+        driverRate: parsedDriverRate,
       });
       res.json(item);
     } catch (err) {
@@ -2348,17 +2348,17 @@ Rules:
       if (req.body.type === "fixed" || req.body.type === "variable") updates.type = req.body.type;
       if (typeof req.body.category === "string") updates.category = req.body.category.trim();
       if (typeof req.body.sortOrder === "number") updates.sortOrder = req.body.sortOrder;
-      // Formula fields — allow explicit null to clear the formula
-      if ("variableRatePct" in req.body) {
-        updates.variableRatePct =
-          typeof req.body.variableRatePct === "number" && req.body.variableRatePct > 0
-            ? String(req.body.variableRatePct)
+      // Driver fields — allow explicit null to clear the cost driver
+      if ("costDriverType" in req.body) {
+        updates.costDriverType =
+          req.body.costDriverType === "pct_revenue" || req.body.costDriverType === "per_stop"
+            ? req.body.costDriverType
             : null;
       }
-      if ("variableFlatCents" in req.body) {
-        updates.variableFlatCents =
-          typeof req.body.variableFlatCents === "number" && req.body.variableFlatCents >= 0
-            ? Math.round(req.body.variableFlatCents)
+      if ("driverRate" in req.body) {
+        updates.driverRate =
+          typeof req.body.driverRate === "number" && req.body.driverRate > 0
+            ? String(req.body.driverRate)
             : null;
       }
       if (Object.keys(updates).length === 0)
