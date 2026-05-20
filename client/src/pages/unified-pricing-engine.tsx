@@ -102,11 +102,11 @@ type FreqMultKey =
 // ─── Tab routing via URL search params ───────────────────────────────────────
 
 function readTabFromUrl(): string {
-  if (typeof window === "undefined") return "costs";
+  if (typeof window === "undefined") return "pricing";
   const params = new URLSearchParams(window.location.search);
   const t = params.get("tab");
   if (t === "engine" || t === "simulator" || t === "costs" || t === "pricing") return t;
-  return "costs";
+  return "pricing";
 }
 
 function writeTabToUrl(tab: string) {
@@ -2461,20 +2461,20 @@ export default function UnifiedPricingEngine() {
           data-testid="tabs-pricing"
         >
           <TabsTrigger
-            value="costs"
-            data-testid="tab-costs"
-            className="gap-1 text-xs sm:text-sm sm:gap-1.5"
-          >
-            <DollarSign className="h-3.5 w-3.5 shrink-0" />
-            <span>Costs</span>
-          </TabsTrigger>
-          <TabsTrigger
             value="pricing"
             data-testid="tab-my-pricing"
             className="gap-1 text-xs sm:text-sm sm:gap-1.5"
           >
             <Target className="h-3.5 w-3.5 shrink-0" />
             <span>My Pricing</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="costs"
+            data-testid="tab-costs"
+            className="gap-1 text-xs sm:text-sm sm:gap-1.5"
+          >
+            <DollarSign className="h-3.5 w-3.5 shrink-0" />
+            <span>Costs</span>
           </TabsTrigger>
           <TabsTrigger
             value="engine"
