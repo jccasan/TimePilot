@@ -2911,6 +2911,108 @@ async function runTests() {
   );
 
   // ==========================================
+  // OVERHEAD COST DRIVER FALLBACK TESTS
+  // Verifies that per_mile and fuel drivers produce non-zero estimates
+  // even when no route distance data exists (new-account / no-route scenario).
+  // ==========================================
+
+  await test(
+    "GET /api/overhead-costs returns 200 with items and envelope fields",
+    "Overhead Driver Fallback",
+    async () => {
+      const r = await req("GET", "/api/overhead-costs");
+      assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.data)}`);
+      assert(Array.isArray(r.data.items), "Expected items array in response");
+      assert(
+        typeof r.data.trailingMonthlyMiles === "number",
+        "Expected trailingMonthlyMiles number in envelope"
+      );
+      assert(
+        typeof r.data.trailingMonthlyTransactions === "number",
+        "Expected trailingMonthlyTransactions number in envelope"
+      );
+      assert(typeof r.data.dataSource === "string", "Expected dataSource string in envelope");
+    }
+  );
+
+  await test(
+    "GET /api/overhead-costs: trailingMonthlyMiles > 0 even when no route distance data (stop-count fallback)",
+    "Overhead Driver Fallback",
+    async () => {
+      const r = await req("GET", "/api/overhead-costs");
+      assert(r.status === 200, `Expected 200, got ${r.status}`);
+      const hasMileDriver = r.data.items.some(
+        (i: { type: string; costDriverType: string }) =>
+          i.type === "variable" &&
+          (i.costDriverType === "per_mile" || i.costDriverType === "fuel")
+      );
+      if (hasMileDriver) {
+        assert(
+          r.data.trailingMonthlyMiles > 0,
+          `Expected trailingMonthlyMiles > 0 when mile-based drivers exist, got ${r.data.trailingMonthlyMiles}`
+        );
+      }
+    }
+  );
+
+  await test(
+    "GET /api/overhead-costs: fuel driver item has non-zero monthlyCostCents",
+    "Overhead Driver Fallback",
+    async () => {
+      const r = await req("GET", "/api/overhead-costs");
+      assert(r.status === 200, `Expected 200, got ${r.status}`);
+      const fuelItem = r.data.items.find(
+        (i: { type: string; costDriverType: string }) =>
+          i.type === "variable" && i.costDriverType === "fuel"
+      );
+      if (fuelItem) {
+        assert(
+          fuelItem.monthlyCostCents > 0,
+          `Expected fuel driver monthlyCostCents > 0, got ${fuelItem.monthlyCostCents}`
+        );
+      }
+    }
+  );
+
+  await test(
+    "GET /api/overhead-costs: per_mile driver item has non-zero monthlyCostCents",
+    "Overhead Driver Fallback",
+    async () => {
+      const r = await req("GET", "/api/overhead-costs");
+      assert(r.status === 200, `Expected 200, got ${r.status}`);
+      const perMileItem = r.data.items.find(
+        (i: { type: string; costDriverType: string }) =>
+          i.type === "variable" && i.costDriverType === "per_mile"
+      );
+      if (perMileItem) {
+        assert(
+          perMileItem.monthlyCostCents > 0,
+          `Expected per_mile driver monthlyCostCents > 0, got ${perMileItem.monthlyCostCents}`
+        );
+      }
+    }
+  );
+
+  await test(
+    "GET /api/overhead-costs: payment_processing driver item has non-zero monthlyCostCents",
+    "Overhead Driver Fallback",
+    async () => {
+      const r = await req("GET", "/api/overhead-costs");
+      assert(r.status === 200, `Expected 200, got ${r.status}`);
+      const ppItem = r.data.items.find(
+        (i: { type: string; costDriverType: string }) =>
+          i.type === "variable" && i.costDriverType === "payment_processing"
+      );
+      if (ppItem) {
+        assert(
+          ppItem.monthlyCostCents > 0,
+          `Expected payment_processing driver monthlyCostCents > 0, got ${ppItem.monthlyCostCents}`
+        );
+      }
+    }
+  );
+
+  // ==========================================
   // REPORT
   // ==========================================
 

@@ -2327,8 +2327,14 @@ Rules:
             trailingMonthlyMiles = Math.round(weeklyMiles * 4.33 * 10) / 10;
           }
         } catch {
-          // Miles computation is best-effort; fall back to 0
+          // Miles computation is best-effort; fall through to estimate below
         }
+      }
+
+      // Fallback: when no route distance data is available, estimate from stop count.
+      // 5 mi/stop is a reasonable default for local pet-waste routes.
+      if (trailingMonthlyMiles === 0 && hasMileDrivers) {
+        trailingMonthlyMiles = Math.round(trailingMonthlyStops * 5);
       }
 
       // First pass: compute all non-pct_expense variable items
@@ -2356,9 +2362,7 @@ Rules:
               const mpg = Number(params?.mpg ?? 18);
               const gasPrice = Number(params?.gasPricePerGallon ?? 4.0);
               computedCents =
-                mpg > 0 && trailingMonthlyMiles > 0
-                  ? Math.round((trailingMonthlyMiles / mpg) * gasPrice * 100)
-                  : 0;
+                mpg > 0 ? Math.round((trailingMonthlyMiles / mpg) * gasPrice * 100) : 0;
               break;
             }
             case "payment_processing": {
