@@ -992,8 +992,14 @@ export async function runStartupMigrations(): Promise<void> {
       )
     `);
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_lead_response_config_company
-        ON lead_response_config (company_id)
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes WHERE indexname = 'idx_lead_response_config_company'
+        ) THEN
+          CREATE INDEX idx_lead_response_config_company ON lead_response_config (company_id);
+        END IF;
+      END $$
     `);
     console.log("[Migration] lead_response_config table ensured");
 
