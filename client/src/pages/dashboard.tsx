@@ -145,6 +145,7 @@ import { TIER_CONFIG } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import GuidedSetup from "@/components/guided-setup";
+import FieldView from "@/components/field-view";
 
 type OnboardingStatus = {
   isComplete: boolean;
@@ -3767,6 +3768,8 @@ export default function Dashboard() {
           Customize
         </Button>
       </div>
+
+      <FieldView />
 
       {onboarding && !onboarding.isComplete && <GuidedSetup onboarding={onboarding} />}
 
