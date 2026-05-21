@@ -913,6 +913,34 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.post("/api/visits/:id/start", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, userId, role } = await getCompanyContext(req);
+      const visit = await storage.getVisit(p(req.params.id), companyId);
+      if (!visit) return res.status(404).json({ error: "Visit not found" });
+
+      if (visit.status === "completed" || visit.status === "cancelled") {
+        return res.status(409).json({ error: `Visit is already ${visit.status}` });
+      }
+
+      if (role === "tech") {
+        if (!visit.routeId) return res.status(403).json({ error: "Visit has no assigned route" });
+        const route = await storage.getRoute(visit.routeId, companyId);
+        if (!route || route.technicianId !== userId)
+          return res.status(403).json({ error: "You are not assigned to this visit's route" });
+      }
+
+      const updated = await storage.updateVisit(p(req.params.id), companyId, {
+        status: "in_progress",
+        startedAt: new Date(),
+      });
+
+      res.json(updated);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   const customSmsCooldowns = new Map<string, number>();
   app.post(
     "/api/visits/:id/send-custom-sms",

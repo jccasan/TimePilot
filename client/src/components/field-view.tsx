@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -96,9 +96,14 @@ function getActionState(v: TodayVisit): ActionState {
 export default function FieldView() {
   const { toast } = useToast();
 
-  const { data: visits, isLoading } = useQuery<TodayVisit[]>({
+  const { data: rawVisits, isLoading } = useQuery<TodayVisit[]>({
     queryKey: ["/api/visits/today"],
   });
+
+  const visits = useMemo(() => {
+    if (!rawVisits) return rawVisits;
+    return [...rawVisits].sort((a, b) => (a.stopOrder ?? 999) - (b.stopOrder ?? 999));
+  }, [rawVisits]);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [gateExpanded, setGateExpanded] = useState<Record<string, boolean>>({});
@@ -183,10 +188,7 @@ export default function FieldView() {
   const handleStartVisit = async (visit: TodayVisit) => {
     setStartingId(visit.id);
     try {
-      await apiRequest("PATCH", `/api/visits/${visit.id}`, {
-        startedAt: new Date().toISOString(),
-        status: "in_progress",
-      });
+      await apiRequest("POST", `/api/visits/${visit.id}/start`, {});
       queryClient.invalidateQueries({ queryKey: ["/api/visits/today"] });
       toast({ title: "Visit started" });
     } catch (err) {
@@ -279,10 +281,7 @@ export default function FieldView() {
 
   if (isLoading) {
     return (
-      <div
-        className="rounded-xl border bg-card p-4 space-y-3"
-        data-testid="field-view-loading"
-      >
+      <div className="rounded-xl border bg-card p-4 space-y-3" data-testid="field-view-loading">
         <Skeleton className="h-5 w-48" />
         <Skeleton className="h-40 w-full rounded-lg" />
       </div>
@@ -314,7 +313,10 @@ export default function FieldView() {
               Today&apos;s Route &mdash; {totalStops} stop{totalStops !== 1 ? "s" : ""}
             </span>
           </div>
-          <span className="text-xs text-muted-foreground font-medium" data-testid="text-route-progress">
+          <span
+            className="text-xs text-muted-foreground font-medium"
+            data-testid="text-route-progress"
+          >
             {allDone ? "Route complete" : `${completedCount} of ${totalStops} done`}
           </span>
         </div>
@@ -402,9 +404,7 @@ export default function FieldView() {
                     className="text-2xl font-bold leading-tight"
                     data-testid={`text-client-name-${current.id}`}
                   >
-                    {contact
-                      ? `${contact.firstName} ${contact.lastName}`
-                      : "Unknown Client"}
+                    {contact ? `${contact.firstName} ${contact.lastName}` : "Unknown Client"}
                   </p>
                   {prop && (
                     <div className="flex items-start gap-1.5 mt-1">
@@ -444,19 +444,7 @@ export default function FieldView() {
                   </div>
                 )}
 
-                {/* Special instructions shown inline when gate panel is closed */}
-                {prop?.specialInstructions && !gateOpen && (
-                  <div
-                    className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2"
-                    data-testid={`text-instructions-${current.id}`}
-                  >
-                    <p className="text-sm text-amber-800 dark:text-amber-300">
-                      {prop.specialInstructions}
-                    </p>
-                  </div>
-                )}
-
-                {/* Gate info — collapsed, one tap to expand */}
+                {/* Gate info — collapsed by default, one tap to expand */}
                 {hasGateInfo && (
                   <div>
                     <button
@@ -583,9 +571,7 @@ export default function FieldView() {
               {completionVisit?.contact
                 ? `${completionVisit.contact.firstName} ${completionVisit.contact.lastName}`
                 : "Visit"}
-              {completionVisit?.property
-                ? ` — ${completionVisit.property.streetAddress}`
-                : ""}
+              {completionVisit?.property ? ` — ${completionVisit.property.streetAddress}` : ""}
             </DialogDescription>
           </DialogHeader>
 
@@ -647,10 +633,7 @@ export default function FieldView() {
                   }}
                   data-testid="checkbox-no-gate"
                 />
-                <Label
-                  htmlFor="fv-no-gate"
-                  className="text-sm cursor-pointer select-none"
-                >
+                <Label htmlFor="fv-no-gate" className="text-sm cursor-pointer select-none">
                   No gate — photo not needed
                 </Label>
               </div>
