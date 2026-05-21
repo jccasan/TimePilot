@@ -212,10 +212,7 @@ export default function SignupWidgetThankYou() {
                   }}
                   data-testid="card-initial-cleanup-thankyou"
                 >
-                  <p
-                    className="text-sm font-medium mb-1"
-                    style={{ color: brandStyles.accentText }}
-                  >
+                  <p className="text-sm font-medium mb-1" style={{ color: brandStyles.accentText }}>
                     Initial Cleanup Estimate
                   </p>
                   <p className="text-lg font-bold">

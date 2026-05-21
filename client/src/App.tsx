@@ -878,8 +878,7 @@ function AppContent() {
     typeof window !== "undefined" && window.location.pathname === "/reset-password";
 
   const isSignupThankYouPath =
-    typeof window !== "undefined" &&
-    /^\/signup\/[^/]+\/thank-you$/.test(window.location.pathname);
+    typeof window !== "undefined" && /^\/signup\/[^/]+\/thank-you$/.test(window.location.pathname);
 
   const isSignupPath =
     typeof window !== "undefined" &&

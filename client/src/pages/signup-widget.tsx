@@ -695,7 +695,7 @@ export default function SignupWidget() {
     state: "",
   });
   const [smsOptIn, setSmsOptIn] = useState(false);
-  const [quoteResult, setQuoteResult] = useState<QuoteResult | null>(null);
+  const [quoteResult] = useState<QuoteResult | null>(null);
   const [pendingQuoteResult, setPendingQuoteResult] = useState<QuoteResult | null>(null);
   const [setupClientSecret, setSetupClientSecret] = useState<string | null>(null);
   const [setupIntentError, setSetupIntentError] = useState<string | null>(null);
@@ -917,7 +917,7 @@ export default function SignupWidget() {
           firstName: formData.firstName,
           priceCents: pc,
           callForQuote: quoteData.quote.callForQuote,
-          freqLabel: selectedFreq ? (FREQ_DISPLAY[selectedFreq] || selectedFreq) : "visit",
+          freqLabel: selectedFreq ? FREQ_DISPLAY[selectedFreq] || selectedFreq : "visit",
           initialCleanupLow: icLow,
           initialCleanupHigh: icHigh,
         })
