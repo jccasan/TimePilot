@@ -1391,7 +1391,20 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     numberOfDogs: z
       .union([z.number().int().min(1).max(20), z.string().regex(/^\d+$/).transform(Number)])
       .default(1),
-    yardSize: z.enum(["tier_1", "tier_2", "tier_3", "tier_4", "tier_5", "tier_6"]).optional(),
+    yardSize: z
+      .enum([
+        "tier_1",
+        "tier_2",
+        "tier_3",
+        "tier_4",
+        "tier_5",
+        "tier_6",
+        "small",
+        "medium",
+        "large",
+        "extra-large",
+      ])
+      .optional(),
     serviceFrequency: z
       .enum(["twice_weekly", "weekly", "biweekly", "monthly", "onetime"])
       .default("weekly"),
