@@ -88,6 +88,7 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         first_name: string | null;
         last_name: string | null;
         phone: string | null;
+        contact_notes: string | null;
         addon_name: string | null;
         addon_price: string | null;
       };
@@ -134,6 +135,7 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
             c.first_name                     AS first_name,
             c.last_name                      AS last_name,
             c.phone                          AS phone,
+            c.notes                          AS contact_notes,
             spa.name                         AS addon_name,
             spa.price                        AS addon_price
           FROM visits v
@@ -171,6 +173,7 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
           firstName: string;
           lastName: string;
           phone: string | null;
+          notes: string | null;
         } | null;
         addOns: { name: string; price: string }[];
       };
@@ -231,6 +234,7 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
                   firstName: row.first_name ?? "",
                   lastName: row.last_name ?? "",
                   phone: row.phone,
+                  notes: row.contact_notes,
                 }
               : null,
             addOns: [],

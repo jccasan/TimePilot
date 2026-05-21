@@ -60,6 +60,7 @@ type TodayVisit = {
   contact?: {
     firstName: string;
     lastName: string;
+    notes: string | null;
   } | null;
 };
 
@@ -426,6 +427,19 @@ export default function FieldView() {
                     <span data-testid={`text-dogs-${current.id}`}>
                       {prop.numberOfDogs} {prop.numberOfDogs === 1 ? "dog" : "dogs"}
                     </span>
+                  </div>
+                )}
+
+                {/* Technician-visible notes */}
+                {contact?.notes && (
+                  <div
+                    className="rounded-lg border bg-muted/50 px-3 py-2"
+                    data-testid={`text-contact-notes-${current.id}`}
+                  >
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-0.5">
+                      Notes
+                    </p>
+                    <p className="text-sm">{contact.notes}</p>
                   </div>
                 )}
 
