@@ -84,6 +84,7 @@ const MigrationPage = lazy(() => import("@/pages/migration-page"));
 const CommandCenter = lazy(() => import("@/pages/command-center"));
 const ResetPassword = lazy(() => import("@/pages/reset-password"));
 const SignupWidget = lazy(() => import("@/pages/signup-widget"));
+const SignupWidgetThankYou = lazy(() => import("@/pages/signup-widget-thank-you"));
 const VoiceSignup = lazy(() => import("@/pages/voice-signup"));
 const PrivacyPolicy = lazy(() => import("@/pages/privacy-policy"));
 const SmsTerms = lazy(() => import("@/pages/sms-terms"));
@@ -876,8 +877,14 @@ function AppContent() {
   const isResetPasswordPath =
     typeof window !== "undefined" && window.location.pathname === "/reset-password";
 
+  const isSignupThankYouPath =
+    typeof window !== "undefined" &&
+    /^\/signup\/[^/]+\/thank-you$/.test(window.location.pathname);
+
   const isSignupPath =
-    typeof window !== "undefined" && window.location.pathname.startsWith("/signup/");
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/signup/") &&
+    !isSignupThankYouPath;
 
   const isOnboardingPath =
     typeof window !== "undefined" && window.location.pathname.startsWith("/onboarding/");
@@ -944,6 +951,14 @@ function AppContent() {
     return (
       <Suspense fallback={<PageLoader />}>
         <ResetPassword />
+      </Suspense>
+    );
+  }
+
+  if (isSignupThankYouPath) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <SignupWidgetThankYou />
       </Suspense>
     );
   }

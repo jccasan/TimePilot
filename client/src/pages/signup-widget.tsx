@@ -900,11 +900,33 @@ export default function SignupWidget() {
             setSetupIntentError("Failed to initialize card setup. Please try again.");
           });
       } else {
-        setQuoteResult(data);
-        track("quote_shown", 4);
+        redirectToThankYou(data);
       }
     },
   });
+
+  const redirectToThankYou = useCallback(
+    (quoteData: QuoteResult) => {
+      const option = LAST_CLEANUP_OPTIONS.find((o) => o.value === lastCleanup);
+      const pc = quoteData.quote.recommendedPriceCents;
+      const icLow = option && pc ? Math.round(pc * option.multiplier) : null;
+      const icHigh = option && pc ? Math.round(pc * (option.multiplier + 0.5)) : null;
+      sessionStorage.setItem(
+        `sq_result_${slug}`,
+        JSON.stringify({
+          firstName: formData.firstName,
+          priceCents: pc,
+          callForQuote: quoteData.quote.callForQuote,
+          freqLabel: selectedFreq ? (FREQ_DISPLAY[selectedFreq] || selectedFreq) : "visit",
+          initialCleanupLow: icLow,
+          initialCleanupHigh: icHigh,
+        })
+      );
+      track("quote_shown", 4);
+      window.location.href = `/signup/${slug}/thank-you${isEmbed ? "?embed=true" : ""}`;
+    },
+    [slug, lastCleanup, formData.firstName, selectedFreq, isEmbed, track]
+  );
 
   const updateField = useCallback((field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -1294,8 +1316,7 @@ export default function SignupWidget() {
                       className="flex-[2] text-white h-12 text-base font-semibold"
                       style={{ backgroundColor: brandStyles.buttonBg }}
                       onClick={() => {
-                        setQuoteResult(pendingQuoteResult);
-                        track("quote_shown", 4);
+                        redirectToThankYou(pendingQuoteResult);
                       }}
                       data-testid="button-use-card-on-file"
                     >
@@ -1343,8 +1364,7 @@ export default function SignupWidget() {
                         setupToken={pendingQuoteResult.setupToken}
                         brandStyles={brandStyles}
                         onSuccess={() => {
-                          setQuoteResult(pendingQuoteResult);
-                          track("quote_shown", 4);
+                          redirectToThankYou(pendingQuoteResult);
                         }}
                         onBack={() => {
                           setSetupClientSecret(null);
