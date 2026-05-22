@@ -4346,6 +4346,7 @@ function SignupWidgetSection({
   const baseUrl = window.location.origin;
   const signupUrl = company?.slug ? `${baseUrl}/signup/${company.slug}` : "";
   const embedUrl = company?.slug ? `${baseUrl}/signup/${company.slug}?embed=true` : "";
+  const conversionUrl = company?.slug ? `${baseUrl}/signup/${company.slug}/thank-you` : "";
   const iframeSnippet = company?.slug
     ? `<div style="max-width:500px;margin:0 auto;"><iframe src="${embedUrl}" width="100%" height="700" frameborder="0" style="border:none;width:100%;min-height:700px;" allow="clipboard-write"></iframe></div>`
     : "";
@@ -4500,6 +4501,33 @@ function SignupWidgetSection({
                   )}
                 </Button>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Conversion URL</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={conversionUrl}
+                  readOnly
+                  className="text-sm font-mono"
+                  data-testid="input-conversion-url"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => copyToClipboard(conversionUrl, "Conversion URL")}
+                  data-testid="button-copy-conversion-url"
+                >
+                  {copied === "Conversion URL" ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Use this URL as the conversion destination in Google Ads or Facebook Ads.
+              </p>
             </div>
 
             <div className="space-y-1.5">
