@@ -156,6 +156,18 @@ type TeamMember = {
   email: string;
 };
 
+interface PetPropertyData {
+  numberOfDogs: string;
+  dogNames: string;
+  dogBreeds: string;
+  dogTemperament: string;
+  hasDangerousDog: boolean;
+  dangerousDogNotes: string;
+  gateCode: string;
+  yardAccess: string;
+  specialInstructions: string;
+}
+
 interface JobFormPayload {
   contactId: string;
   propertyId: string;
@@ -174,6 +186,7 @@ interface JobFormPayload {
   endsAfterUnit?: string | null;
   endDate?: string | null;
   suppressNotifications?: boolean;
+  petData?: PetPropertyData;
 }
 
 const dayOfWeekLabels: Record<string, string> = {
@@ -258,6 +271,19 @@ function ScheduleJobForm({
   const [assignedUserId, setAssignedUserId] = useState("none");
   const [suppressNotifications, setSuppressNotifications] = useState(false);
 
+  const defaultPetData: PetPropertyData = {
+    numberOfDogs: "",
+    dogNames: "",
+    dogBreeds: "",
+    dogTemperament: "friendly",
+    hasDangerousDog: false,
+    dangerousDogNotes: "",
+    gateCode: "",
+    yardAccess: "",
+    specialInstructions: "",
+  };
+  const [petData, setPetData] = useState<PetPropertyData>(defaultPetData);
+
   const activeServices = useMemo(() => services.filter((s) => s.isActive), [services]);
 
   const groupedServices = useMemo(() => {
@@ -292,6 +318,25 @@ function ScheduleJobForm({
     if (props.length === 1) setPropertyId(props[0].id);
     else setPropertyId("");
   }, [contactId, properties]);
+
+  useEffect(() => {
+    if (!propertyId) return;
+    const prop = properties.find((p) => p.id === propertyId);
+    const ctct = contacts.find((c) => c.id === contactId);
+    if (prop) {
+      setPetData({
+        numberOfDogs: prop.numberOfDogs != null ? String(prop.numberOfDogs) : "",
+        dogNames: prop.dogNames || "",
+        dogBreeds: prop.dogBreeds || "",
+        dogTemperament: (ctct as any)?.dogTemperament || "friendly",
+        hasDangerousDog: prop.hasDangerousDog || false,
+        dangerousDogNotes: prop.dangerousDogNotes || "",
+        gateCode: prop.gateCode || "",
+        yardAccess: (ctct as any)?.yardAccess || "",
+        specialInstructions: prop.specialInstructions || "",
+      });
+    }
+  }, [propertyId, properties, contactId, contacts]);
 
   const handleStartDateChange = (val: string) => {
     setStartDate(val);
@@ -330,6 +375,7 @@ function ScheduleJobForm({
       anytime,
       visitInstructions: visitInstructions || null,
       assignedUserId: assignedUserId && assignedUserId !== "none" ? assignedUserId : null,
+      petData: propertyId ? petData : undefined,
     };
     if (jobType === "recurring") {
       if (endsAfterMode === "count" && endsAfterCount) {
@@ -762,6 +808,120 @@ function ScheduleJobForm({
 
         <Separator />
 
+        {/* Section: Property & Pet Details */}
+        {propertyId && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Property & Pet Details
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Number of Dogs</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={petData.numberOfDogs}
+                  onChange={(e) => setPetData({ ...petData, numberOfDogs: e.target.value })}
+                  data-testid="input-sched-dog-count"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Gate Code</Label>
+                <Input
+                  value={petData.gateCode}
+                  onChange={(e) => setPetData({ ...petData, gateCode: e.target.value })}
+                  placeholder="e.g. 1234#"
+                  data-testid="input-sched-gate-code"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Dog Names</Label>
+              <Input
+                value={petData.dogNames}
+                onChange={(e) => setPetData({ ...petData, dogNames: e.target.value })}
+                placeholder="e.g. Buddy, Max"
+                data-testid="input-sched-dog-names"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Dog Breeds</Label>
+              <Input
+                value={petData.dogBreeds}
+                onChange={(e) => setPetData({ ...petData, dogBreeds: e.target.value })}
+                placeholder="e.g. Labrador, Poodle"
+                data-testid="input-sched-dog-breeds"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Dog Temperament</Label>
+                <Select
+                  value={petData.dogTemperament}
+                  onValueChange={(v) => setPetData({ ...petData, dogTemperament: v })}
+                >
+                  <SelectTrigger data-testid="select-sched-dog-temperament">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="friendly">Friendly</SelectItem>
+                    <SelectItem value="anxious">Anxious</SelectItem>
+                    <SelectItem value="unpredictable">Unpredictable</SelectItem>
+                    <SelectItem value="aggressive">Aggressive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Yard Access</Label>
+                <Input
+                  value={petData.yardAccess}
+                  onChange={(e) => setPetData({ ...petData, yardAccess: e.target.value })}
+                  placeholder="e.g. side gate"
+                  data-testid="input-sched-yard-access"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
+              <div>
+                <p className="text-sm font-medium">Dangerous Dog</p>
+                <p className="text-xs text-muted-foreground">
+                  Flag this property as having an aggressive animal
+                </p>
+              </div>
+              <Switch
+                id="sched-dangerous-dog"
+                checked={petData.hasDangerousDog}
+                onCheckedChange={(v) => setPetData({ ...petData, hasDangerousDog: v })}
+                data-testid="switch-sched-dangerous-dog"
+              />
+            </div>
+            {petData.hasDangerousDog && (
+              <div className="space-y-1.5">
+                <Label>Dangerous Dog Notes</Label>
+                <Textarea
+                  value={petData.dangerousDogNotes}
+                  onChange={(e) => setPetData({ ...petData, dangerousDogNotes: e.target.value })}
+                  placeholder="Describe the risk and any precautions..."
+                  rows={2}
+                  data-testid="textarea-sched-dangerous-dog-notes"
+                />
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label>Special Instructions</Label>
+              <Textarea
+                value={petData.specialInstructions}
+                onChange={(e) => setPetData({ ...petData, specialInstructions: e.target.value })}
+                placeholder="Access notes, care requirements..."
+                rows={2}
+                data-testid="textarea-sched-special-instructions"
+              />
+            </div>
+          </div>
+        )}
+
+        <Separator />
+
         {/* Section: Assignment */}
         <div className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -973,13 +1133,33 @@ export default function Scheduling() {
 
   const createMutation = useMutation({
     mutationFn: async (data: JobFormPayload) => {
-      await apiRequest("POST", "/api/jobs", data);
+      const { petData, ...jobData } = data;
+      await apiRequest("POST", "/api/jobs", jobData);
+      if (petData && data.propertyId) {
+        await apiRequest("PATCH", `/api/properties/${data.propertyId}`, {
+          numberOfDogs: petData.numberOfDogs !== "" ? parseInt(petData.numberOfDogs) : null,
+          dogNames: petData.dogNames || null,
+          dogBreeds: petData.dogBreeds || null,
+          hasDangerousDog: petData.hasDangerousDog,
+          dangerousDogNotes: petData.dangerousDogNotes || null,
+          gateCode: petData.gateCode || null,
+          specialInstructions: petData.specialInstructions || null,
+        });
+        if (data.contactId) {
+          await apiRequest("PATCH", `/api/contacts/${data.contactId}`, {
+            dogTemperament: petData.dogTemperament || null,
+            yardAccess: petData.yardAccess || null,
+          });
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/company/pipeline"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       queryClient.invalidateQueries({
         predicate: (query) =>
           Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),

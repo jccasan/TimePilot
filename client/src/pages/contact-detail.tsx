@@ -1867,9 +1867,9 @@ export default function ContactDetail() {
         </DialogContent>
       </Dialog>
 
-      <RouteAssignmentCard servicePlans={servicePlansForPricing} routes={allRoutes} />
-
       <ServicePlansCard contactId={id!} properties={properties || []} contact={contact} />
+
+      <RouteAssignmentCard servicePlans={servicePlansForPricing} routes={allRoutes} />
 
       <Card>
         <CardHeader>
@@ -4677,6 +4677,20 @@ function ServicePlansCard({
   const [createSelectedAddOns, setCreateSelectedAddOns] = useState<string[]>([]);
   const [createTemplateId, setCreateTemplateId] = useState<string>("");
 
+  const defaultPetFields = {
+    numberOfDogs: "",
+    dogNames: "",
+    dogBreeds: "",
+    dogTemperament: "friendly",
+    hasDangerousDog: false,
+    dangerousDogNotes: "",
+    gateCode: "",
+    yardAccess: "",
+    specialInstructions: "",
+  };
+  type PetPropertyData = typeof defaultPetFields;
+  const [createPetFields, setCreatePetFields] = useState<PetPropertyData>(defaultPetFields);
+
   const basePricingForFreq = useCallback(
     (freq: string) => {
       if (!pricingItems) return [];
@@ -4726,11 +4740,37 @@ function ServicePlansCard({
     },
   });
 
+  const createPropertyId = createForm.watch("propertyId");
+
   useEffect(() => {
     if (createDialogOpen && properties.length === 1) {
       createForm.setValue("propertyId", properties[0].id);
     }
   }, [createDialogOpen, properties, createForm]);
+
+  useEffect(() => {
+    if (!createDialogOpen) return;
+    const prop = properties.find((p) => p.id === createPropertyId);
+    if (prop) {
+      setCreatePetFields({
+        numberOfDogs: prop.numberOfDogs != null ? String(prop.numberOfDogs) : "",
+        dogNames: prop.dogNames || "",
+        dogBreeds: prop.dogBreeds || "",
+        dogTemperament: contact?.dogTemperament || "friendly",
+        hasDangerousDog: prop.hasDangerousDog || false,
+        dangerousDogNotes: prop.dangerousDogNotes || "",
+        gateCode: prop.gateCode || "",
+        yardAccess: contact?.yardAccess || "",
+        specialInstructions: prop.specialInstructions || "",
+      });
+    } else {
+      setCreatePetFields((prev) => ({
+        ...prev,
+        dogTemperament: contact?.dogTemperament || "friendly",
+        yardAccess: contact?.yardAccess || "",
+      }));
+    }
+  }, [createPropertyId, createDialogOpen, properties, contact]);
 
   useEffect(() => {
     if (editingPlan) {
@@ -4789,6 +4829,22 @@ function ServicePlansCard({
         contactId,
         addOns: buildAddOnsPayload(createSelectedAddOns),
       });
+      if (data.propertyId) {
+        await apiRequest("PATCH", `/api/properties/${data.propertyId}`, {
+          numberOfDogs:
+            createPetFields.numberOfDogs !== "" ? parseInt(createPetFields.numberOfDogs) : null,
+          dogNames: createPetFields.dogNames || null,
+          dogBreeds: createPetFields.dogBreeds || null,
+          hasDangerousDog: createPetFields.hasDangerousDog,
+          dangerousDogNotes: createPetFields.dangerousDogNotes || null,
+          gateCode: createPetFields.gateCode || null,
+          specialInstructions: createPetFields.specialInstructions || null,
+        });
+        await apiRequest("PATCH", `/api/contacts/${contactId}`, {
+          dogTemperament: createPetFields.dogTemperament || null,
+          yardAccess: createPetFields.yardAccess || null,
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -4802,10 +4858,13 @@ function ServicePlansCard({
           Array.isArray(query.queryKey) && (query.queryKey[0] as string)?.startsWith("/api/visits"),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/profitability/customer", contactId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
       toast({ title: "Job created" });
       setCreateDialogOpen(false);
       createForm.reset();
       setCreateSelectedAddOns([]);
+      setCreatePetFields(defaultPetFields);
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -4893,7 +4952,6 @@ function ServicePlansCard({
     }
   };
 
-  const createPropertyId = createForm.watch("propertyId");
   const createFrequency = createForm.watch("frequency");
   const createPrice = createForm.watch("pricePerVisit");
 
@@ -4940,7 +4998,9 @@ function ServicePlansCard({
     selectedAddOns?: string[],
     setSelectedAddOns?: (ids: string[]) => void,
     selectedTemplateId?: string,
-    setSelectedTemplateId?: (id: string) => void
+    setSelectedTemplateId?: (id: string) => void,
+    petFields?: PetPropertyData,
+    setPetFields?: (d: PetPropertyData) => void
   ) => {
     const freq = form.watch("frequency");
     const basePrice = form.watch("pricePerVisit");
@@ -5030,6 +5090,117 @@ function ServicePlansCard({
               </FormItem>
             )}
           />
+          {petFields && setPetFields && form.watch("propertyId") && (
+            <div className="space-y-3 rounded-md border p-3">
+              <Label className="text-sm font-semibold">Property & Pet Details</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Number of Dogs</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={petFields.numberOfDogs}
+                    onChange={(e) => setPetFields({ ...petFields, numberOfDogs: e.target.value })}
+                    data-testid="input-add-job-dog-count"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Gate Code</Label>
+                  <Input
+                    value={petFields.gateCode}
+                    onChange={(e) => setPetFields({ ...petFields, gateCode: e.target.value })}
+                    placeholder="e.g. 1234#"
+                    data-testid="input-add-job-gate-code"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Dog Names</Label>
+                <Input
+                  value={petFields.dogNames}
+                  onChange={(e) => setPetFields({ ...petFields, dogNames: e.target.value })}
+                  placeholder="e.g. Buddy, Max"
+                  data-testid="input-add-job-dog-names"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Dog Breeds</Label>
+                <Input
+                  value={petFields.dogBreeds}
+                  onChange={(e) => setPetFields({ ...petFields, dogBreeds: e.target.value })}
+                  placeholder="e.g. Labrador, Poodle"
+                  data-testid="input-add-job-dog-breeds"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Dog Temperament</Label>
+                  <Select
+                    value={petFields.dogTemperament}
+                    onValueChange={(v) => setPetFields({ ...petFields, dogTemperament: v })}
+                  >
+                    <SelectTrigger data-testid="select-add-job-dog-temperament">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="friendly">Friendly</SelectItem>
+                      <SelectItem value="anxious">Anxious</SelectItem>
+                      <SelectItem value="unpredictable">Unpredictable</SelectItem>
+                      <SelectItem value="aggressive">Aggressive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Yard Access</Label>
+                  <Input
+                    value={petFields.yardAccess}
+                    onChange={(e) => setPetFields({ ...petFields, yardAccess: e.target.value })}
+                    placeholder="e.g. side gate"
+                    data-testid="input-add-job-yard-access"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
+                <div>
+                  <p className="text-sm font-medium">Dangerous Dog</p>
+                  <p className="text-xs text-muted-foreground">
+                    Flag this property as having an aggressive animal
+                  </p>
+                </div>
+                <Switch
+                  checked={petFields.hasDangerousDog}
+                  onCheckedChange={(v) => setPetFields({ ...petFields, hasDangerousDog: v })}
+                  data-testid="switch-add-job-dangerous-dog"
+                />
+              </div>
+              {petFields.hasDangerousDog && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Dangerous Dog Notes</Label>
+                  <Textarea
+                    value={petFields.dangerousDogNotes}
+                    onChange={(e) =>
+                      setPetFields({ ...petFields, dangerousDogNotes: e.target.value })
+                    }
+                    placeholder="Describe the risk and any precautions..."
+                    rows={2}
+                    data-testid="textarea-add-job-dangerous-dog-notes"
+                  />
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label className="text-sm">Special Instructions</Label>
+                <Textarea
+                  value={petFields.specialInstructions}
+                  onChange={(e) =>
+                    setPetFields({ ...petFields, specialInstructions: e.target.value })
+                  }
+                  placeholder="Access notes, care requirements..."
+                  rows={2}
+                  data-testid="textarea-add-job-special-instructions"
+                />
+              </div>
+            </div>
+          )}
           {jobType !== "one_off" && (
             <FormField
               control={form.control}
@@ -5502,7 +5673,9 @@ function ServicePlansCard({
               createSelectedAddOns,
               setCreateSelectedAddOns,
               createTemplateId,
-              setCreateTemplateId
+              setCreateTemplateId,
+              createPetFields,
+              setCreatePetFields
             )}
           </DialogContent>
         </Dialog>
