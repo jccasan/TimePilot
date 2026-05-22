@@ -54,7 +54,10 @@ export default function GrowthTools() {
       : undefined;
 
   const fixedOverheadCents = overheadData?.totalMonthlyOverheadCents;
-  const weeklyBasePriceCents = pricingConfig?.pricingRules?.basePrices?.weekly;
+  const weeklyBasePriceCents =
+    pricingConfig?.pricingRules?.basePrices?.weekly != null
+      ? Math.round(pricingConfig.pricingRules.basePrices.weekly * 100)
+      : undefined;
   const hasPricingConfig = weeklyBasePriceCents != null && weeklyBasePriceCents > 0;
   const hasOverheadData = fixedOverheadCents != null && fixedOverheadCents > 0;
 
