@@ -663,6 +663,15 @@ export default function SignupWidget() {
     return searchParams.get("preview") === "true";
   }, []);
 
+  const utmParams = useMemo(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    return {
+      utmSource: searchParams.get("utm_source") || undefined,
+      utmMedium: searchParams.get("utm_medium") || undefined,
+      utmCampaign: searchParams.get("utm_campaign") || undefined,
+    };
+  }, []);
+
   const { data: authUser, isLoading: authLoading } = useQuery<{ id: string; role: string } | null>({
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
@@ -853,6 +862,7 @@ export default function SignupWidget() {
           lastCleanup: lastCleanup || undefined,
           notes: noteParts.length > 0 ? noteParts.join(". ") : undefined,
           smsOptIn,
+          ...utmParams,
         }),
       });
       if (!res.ok) {
@@ -910,9 +920,15 @@ export default function SignupWidget() {
         })
       );
       track("quote_shown", 4);
-      window.location.href = `/signup/${slug}/thank-you${isEmbed ? "?embed=true" : ""}`;
+      const thankYouParams = new URLSearchParams();
+      if (isEmbed) thankYouParams.set("embed", "true");
+      if (utmParams.utmSource) thankYouParams.set("utm_source", utmParams.utmSource);
+      if (utmParams.utmMedium) thankYouParams.set("utm_medium", utmParams.utmMedium);
+      if (utmParams.utmCampaign) thankYouParams.set("utm_campaign", utmParams.utmCampaign);
+      const thankYouQuery = thankYouParams.toString();
+      window.location.href = `/signup/${slug}/thank-you${thankYouQuery ? `?${thankYouQuery}` : ""}`;
     },
-    [slug, lastCleanup, formData.firstName, selectedFreq, isEmbed, track]
+    [slug, lastCleanup, formData.firstName, selectedFreq, isEmbed, track, utmParams]
   );
 
   const updateField = useCallback((field: string, value: string) => {

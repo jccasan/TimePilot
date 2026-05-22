@@ -1036,6 +1036,15 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] company_users invite_pending column ensured");
 
+    // ── UTM campaign tracking columns on contacts (Task #945) ──────────────────
+    await client.query(`
+      ALTER TABLE contacts
+        ADD COLUMN IF NOT EXISTS utm_source   VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS utm_medium   VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(255)
+    `);
+    console.log("[Migration] contacts UTM tracking columns ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

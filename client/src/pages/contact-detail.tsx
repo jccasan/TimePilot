@@ -1062,6 +1062,25 @@ export default function ContactDetail() {
                   }[contact.leadSource] || contact.leadSource}
                 </p>
               )}
+              {(contact.utmSource || contact.utmMedium || contact.utmCampaign) && (
+                <div data-testid="div-utm-acquisition" className="pt-1">
+                  {contact.utmSource && (
+                    <p data-testid="text-utm-source">
+                      Ad Source: <span className="font-medium">{contact.utmSource}</span>
+                    </p>
+                  )}
+                  {contact.utmMedium && (
+                    <p data-testid="text-utm-medium">
+                      Ad Medium: <span className="font-medium">{contact.utmMedium}</span>
+                    </p>
+                  )}
+                  {contact.utmCampaign && (
+                    <p data-testid="text-utm-campaign">
+                      Campaign: <span className="font-medium">{contact.utmCampaign}</span>
+                    </p>
+                  )}
+                </div>
+              )}
               {contact.serviceDay && (
                 <p data-testid="text-contact-service-day">
                   Service Day: <span className="capitalize">{contact.serviceDay}</span>

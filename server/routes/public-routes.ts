@@ -1419,6 +1419,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       .optional(),
     notes: z.string().max(2000).optional(),
     smsOptIn: z.boolean().optional().default(false),
+    utmSource: z.string().max(255).optional(),
+    utmMedium: z.string().max(255).optional(),
+    utmCampaign: z.string().max(255).optional(),
   });
 
   // Ensure the DB-backed rate limit table exists (created once at startup).
@@ -1497,6 +1500,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         lastCleanup,
         notes,
         smsOptIn,
+        utmSource,
+        utmMedium,
+        utmCampaign,
       } = parsed.data;
 
       const dedup = req.query.dedup === "true";
@@ -1543,6 +1549,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
             notes: notesText,
             status: "lead",
             leadSource: "website_widget",
+            utmSource: utmSource || null,
+            utmMedium: utmMedium || null,
+            utmCampaign: utmCampaign || null,
           });
         }
       } else {
@@ -1563,6 +1572,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
           notes: notesText,
           status: "lead",
           leadSource: "website_widget",
+          utmSource: utmSource || null,
+          utmMedium: utmMedium || null,
+          utmCampaign: utmCampaign || null,
         });
       }
 
