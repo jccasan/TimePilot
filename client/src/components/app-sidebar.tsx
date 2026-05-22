@@ -41,6 +41,7 @@ import {
   Users2,
   Kanban,
   Mail,
+  MailOpen,
   GitBranch,
   PhoneIncoming,
   CreditCard,
@@ -123,6 +124,12 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
         title: "Messages",
         url: "/communications",
         icon: MessageSquare,
+        requiresSubscription: true,
+      },
+      {
+        title: "Unmatched Emails",
+        url: "/unmatched-emails",
+        icon: MailOpen,
         requiresSubscription: true,
       },
       {
@@ -266,6 +273,11 @@ export function AppSidebar({
     refetchInterval: 60000,
   });
   const uninvoicedCount = uninvoicedData?.count || 0;
+
+  const { data: unmatchedEmailData } = useQuery<{ count: number }>({
+    queryKey: ["/api/email/unmatched"],
+  });
+  const unmatchedEmailCount = unmatchedEmailData?.count || 0;
   const tours = getAvailableTours();
   const { startTutorial, allTutorials } = useTutorialContext();
 
@@ -510,6 +522,16 @@ export function AppSidebar({
                                         {unreadSmsCount > 99 ? "99+" : unreadSmsCount}
                                       </Badge>
                                     )}
+                                    {item.title === "Unmatched Emails" &&
+                                      unmatchedEmailCount > 0 && (
+                                        <Badge
+                                          variant="secondary"
+                                          className="ml-auto h-5 min-w-[20px] px-1.5 text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
+                                          data-testid="badge-sidebar-unmatched-emails"
+                                        >
+                                          {unmatchedEmailCount > 99 ? "99+" : unmatchedEmailCount}
+                                        </Badge>
+                                      )}
                                     {item.title === "Invoices" && uninvoicedCount > 0 && (
                                       <Badge
                                         variant="secondary"

@@ -99,6 +99,7 @@ const CrmRouter = lazy(() => import("@/pages/crm/index"));
 const SignDocumentsPage = lazy(() => import("@/pages/sign-documents-page"));
 const LeadResponseRegisterPage = lazy(() => import("@/pages/lead-response-register"));
 const LeadResponseDashboard = lazy(() => import("@/pages/lead-response-dashboard"));
+const UnmatchedEmails = lazy(() => import("@/pages/unmatched-emails"));
 
 function PageLoader() {
   return (
@@ -241,6 +242,7 @@ function Router() {
         <Route path="/crm/:rest*" component={CrmRouter} />
         <Route path="/crm" component={CrmRouter} />
         <Route path="/lead-response" component={LeadResponseDashboard} />
+        <Route path="/unmatched-emails" component={UnmatchedEmails} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

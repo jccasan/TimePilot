@@ -1,6 +1,7 @@
 import {
   eq,
   and,
+  ne,
   desc,
   asc,
   sql,
@@ -218,6 +219,9 @@ import {
   leadResponseConfig,
   type LeadResponseConfig,
   type InsertLeadResponseConfig,
+  inboundEmails,
+  type InboundEmail,
+  type InsertInboundEmail,
 } from "@shared/schema";
 
 export interface CustomerProfitabilityEntry {
@@ -710,6 +714,20 @@ export interface IStorage {
     limit?: number,
     offset?: number
   ): Promise<ActivityLog[]>;
+
+  // Inbound Emails
+  createInboundEmail(data: InsertInboundEmail): Promise<InboundEmail>;
+  getInboundEmailById(id: string, companyId: string): Promise<InboundEmail | undefined>;
+  getUnmatchedEmailsCount(companyId: string): Promise<number>;
+  getUnmatchedEmails(
+    companyId: string,
+    page?: number,
+    limit?: number,
+    includeIgnored?: boolean
+  ): Promise<{ data: InboundEmail[]; total: number }>;
+  linkInboundEmail(id: string, companyId: string, contactId: string): Promise<InboundEmail>;
+  ignoreInboundEmail(id: string, companyId: string): Promise<InboundEmail>;
+  getCompanyByInboundEmail(inboundEmail: string): Promise<Company | undefined>;
 
   // Webhook Deliveries
   createWebhookDelivery(data: InsertWebhookDelivery): Promise<WebhookDelivery>;
@@ -5585,6 +5603,80 @@ export class DatabaseStorage implements IStorage {
       }
       return created;
     }
+  }
+  async createInboundEmail(data: InsertInboundEmail): Promise<InboundEmail> {
+    const [row] = await db.insert(inboundEmails).values(data).returning();
+    return row;
+  }
+
+  async getInboundEmailById(id: string, companyId: string): Promise<InboundEmail | undefined> {
+    const [row] = await db
+      .select()
+      .from(inboundEmails)
+      .where(and(eq(inboundEmails.id, id), eq(inboundEmails.tenantId, companyId)))
+      .limit(1);
+    return row;
+  }
+
+  async getUnmatchedEmailsCount(companyId: string): Promise<number> {
+    const [row] = await db
+      .select({ count: count() })
+      .from(inboundEmails)
+      .where(and(eq(inboundEmails.tenantId, companyId), eq(inboundEmails.status, "unmatched")));
+    return Number(row?.count ?? 0);
+  }
+
+  async getUnmatchedEmails(
+    companyId: string,
+    page: number = 1,
+    limit: number = 25,
+    includeIgnored: boolean = false
+  ): Promise<{ data: InboundEmail[]; total: number }> {
+    const offset = (page - 1) * limit;
+    const baseWhere = includeIgnored
+      ? and(eq(inboundEmails.tenantId, companyId), ne(inboundEmails.status, "matched"))
+      : and(eq(inboundEmails.tenantId, companyId), eq(inboundEmails.status, "unmatched"));
+
+    const [totalRow] = await db.select({ count: count() }).from(inboundEmails).where(baseWhere);
+
+    const data = await db
+      .select()
+      .from(inboundEmails)
+      .where(baseWhere)
+      .orderBy(desc(inboundEmails.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    return { data, total: Number(totalRow?.count ?? 0) };
+  }
+
+  async linkInboundEmail(id: string, companyId: string, contactId: string): Promise<InboundEmail> {
+    const [row] = await db
+      .update(inboundEmails)
+      .set({ matchedContactId: contactId, status: "matched" })
+      .where(and(eq(inboundEmails.id, id), eq(inboundEmails.tenantId, companyId)))
+      .returning();
+    if (!row) throw { status: 404, message: "Inbound email not found" };
+    return row;
+  }
+
+  async ignoreInboundEmail(id: string, companyId: string): Promise<InboundEmail> {
+    const [row] = await db
+      .update(inboundEmails)
+      .set({ status: "ignored" })
+      .where(and(eq(inboundEmails.id, id), eq(inboundEmails.tenantId, companyId)))
+      .returning();
+    if (!row) throw { status: 404, message: "Inbound email not found" };
+    return row;
+  }
+
+  async getCompanyByInboundEmail(inboundEmail: string): Promise<Company | undefined> {
+    const [row] = await db
+      .select()
+      .from(companies)
+      .where(eq(companies.inboundEmail, inboundEmail.toLowerCase()))
+      .limit(1);
+    return row;
   }
 }
 

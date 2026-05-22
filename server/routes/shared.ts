@@ -544,6 +544,16 @@ export async function ensureCompanySetup(
   await seedDefaultLeadSources(company.id);
   await storage.seedDefaultPricing(company.id);
 
+  // Provision inbound email if we have a phone number
+  if (company.phone) {
+    try {
+      const { provisionInboundEmail } = await import("../services/inbound-email");
+      await provisionInboundEmail(company);
+    } catch (err) {
+      console.error("[InboundEmail] Failed to provision at company creation:", err);
+    }
+  }
+
   return { companyId: company.id, alreadySetup: false };
 }
 

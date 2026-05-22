@@ -1387,6 +1387,20 @@ export async function registerMessagesRoutes(app: Express): Promise<void> {
         }
 
         if (!threadId) {
+          const crmTenantMatch = /crm\.[a-z0-9_-]+@mail\.scoopilot\.com/i.exec(combinedTo);
+          if (crmTenantMatch) {
+            const { handleTenantInboundEmail } = await import("../services/inbound-email");
+            await handleTenantInboundEmail({
+              to: crmTenantMatch[0],
+              from,
+              subject,
+              text: textBody,
+              html: htmlBody,
+              headers: req.body.headers || "",
+              envelope: req.body.envelope || "",
+            });
+            return res.status(200).json({ ok: true });
+          }
           console.log(
             `[Inbound Email] No thread ID found in to addresses: ${combinedTo.substring(0, 200)}`
           );

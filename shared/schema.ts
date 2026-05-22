@@ -438,6 +438,8 @@ export const companies = pgTable("companies", {
     .unique()
     .default(sql`gen_random_uuid()`),
   calendarFeedMode: calendarFeedModeEnum("calendar_feed_mode").notNull().default("summary"),
+  inboundEmail: text("inbound_email").unique(),
+  inboundEmailSlug: text("inbound_email_slug").unique(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -2080,6 +2082,7 @@ export const activityActionEnum = pgEnum("activity_action", [
   "invoice_created",
   "invoice_paid",
   "email_sent",
+  "email_inbound",
   "sms_sent",
   "note_added",
   "portal_login",
@@ -3598,3 +3601,45 @@ export const insertCustomFieldDefinitionSchema = createInsertSchema(customFieldD
 });
 export type CustomFieldDefinition = typeof customFieldDefinitions.$inferSelect;
 export type InsertCustomFieldDefinition = typeof insertCustomFieldDefinitionSchema._type;
+
+export const inboundEmailStatusEnum = pgEnum("inbound_email_status", [
+  "matched",
+  "unmatched",
+  "ignored",
+]);
+
+export const inboundEmails = pgTable(
+  "inbound_emails",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenantId: varchar("tenant_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    fromAddress: text("from_address").notNull(),
+    fromName: text("from_name"),
+    subject: text("subject"),
+    bodyText: text("body_text"),
+    bodyHtml: text("body_html"),
+    matchedContactId: varchar("matched_contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    rawHeaders: jsonb("raw_headers").$type<Record<string, string>>(),
+    status: inboundEmailStatusEnum("status").notNull().default("unmatched"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_ie_tenant").on(table.tenantId),
+    index("idx_ie_status").on(table.status),
+    index("idx_ie_contact").on(table.matchedContactId),
+    index("idx_ie_created").on(table.createdAt),
+  ]
+);
+
+export const insertInboundEmailSchema = createInsertSchema(inboundEmails).omit({
+  id: true,
+  createdAt: true,
+});
+export type InboundEmail = typeof inboundEmails.$inferSelect;
+export type InsertInboundEmail = z.infer<typeof insertInboundEmailSchema>;

@@ -2098,6 +2098,15 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
         await storage.addUserToCompany(newUser.id, newCompany.id, "lead_response_operator");
 
+        if (safePhone) {
+          try {
+            const { provisionInboundEmail } = await import("../services/inbound-email");
+            await provisionInboundEmail({ ...newCompany, phone: safePhone });
+          } catch (err) {
+            console.error("[InboundEmail] Provisioning failed at LR company creation:", err);
+          }
+        }
+
         await storage.upsertLeadResponseConfig(newCompany.id, {
           leadResponseActive: true,
           stripeSessionId: sessionId,

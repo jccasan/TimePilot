@@ -490,6 +490,13 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
 
       await seedDefaultLeadSources(company.id);
 
+      try {
+        const { provisionInboundEmail } = await import("../services/inbound-email");
+        await provisionInboundEmail(company);
+      } catch (err) {
+        console.error("[InboundEmail] Provisioning failed at admin company creation:", err);
+      }
+
       let emailSent = false;
       try {
         const protocol = req.headers["x-forwarded-proto"] || "https";
@@ -2987,6 +2994,32 @@ Respond with exactly one category from the list above and nothing else.`;
       );
 
       res.json(rows.filter(Boolean));
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // ================ Inbound Email Backfill ================
+  app.post("/api/admin/inbound-email/backfill", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { provisionInboundEmail } = await import("../services/inbound-email");
+      const allCompanies = await db
+        .select()
+        .from(companies)
+        .where(
+          sql`${companies.deletedAt} IS NULL AND ${companies.phone} IS NOT NULL AND (${companies.inboundEmail} IS NULL OR ${companies.inboundEmail} = '')`
+        );
+      let provisioned = 0;
+      let failed = 0;
+      for (const company of allCompanies) {
+        try {
+          await provisionInboundEmail(company);
+          provisioned++;
+        } catch {
+          failed++;
+        }
+      }
+      res.json({ ok: true, provisioned, failed, total: allCompanies.length });
     } catch (err) {
       handleError(res, err);
     }

@@ -150,6 +150,218 @@ type LrConfig = {
   firstTimeCleanupFee?: string | number | null;
 };
 
+function EmailForwardingCard(_props: { company: Company | null }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [copiedAddress, setCopiedAddress] = useState(false);
+  const [testReceived, setTestReceived] = useState(false);
+  const [testPolling, setTestPolling] = useState(false);
+
+  const { data: addrData, isLoading } = useQuery<{
+    inbound_email: string | null;
+    pending: boolean;
+  }>({
+    queryKey: ["/api/email/inbound-address"],
+  });
+
+  const handleCopy = async () => {
+    if (!addrData?.inbound_email) return;
+    await navigator.clipboard.writeText(addrData.inbound_email);
+    setCopiedAddress(true);
+    setTimeout(() => setCopiedAddress(false), 2000);
+  };
+
+  const handleSendTest = async () => {
+    setTestReceived(false);
+    try {
+      const res = await apiRequest("POST", "/api/email/send-test");
+      if (!res.ok) throw new Error("Failed");
+      setTestPolling(true);
+      const start = Date.now();
+      const poll = setInterval(async () => {
+        if (Date.now() - start > 30_000) {
+          clearInterval(poll);
+          setTestPolling(false);
+          return;
+        }
+        try {
+          const statusRes = await apiRequest("GET", "/api/email/test-status");
+          const status = await statusRes.json();
+          if (status.received) {
+            clearInterval(poll);
+            setTestPolling(false);
+            setTestReceived(true);
+            qc.invalidateQueries({ queryKey: ["/api/email/unmatched"] });
+          }
+        } catch {
+          // ignore polling errors
+        }
+      }, 3000);
+    } catch {
+      toast({ title: "Failed to send test email", variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      {isLoading ? (
+        <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">
+          Loading email forwarding settings…
+        </div>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">Your CRM Inbound Address</p>
+            {addrData?.pending ? (
+              <div className="rounded-md border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 px-3 py-2 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>
+                  Address pending — add a phone number in{" "}
+                  <button
+                    className="underline font-medium"
+                    onClick={() => {
+                      const el = document.querySelector('[data-block-id="company_info"]');
+                      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }}
+                    data-testid="link-go-to-company-info"
+                  >
+                    Company Information
+                  </button>{" "}
+                  to activate email forwarding.
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Forward client emails to this address and they will automatically appear in the
+                  contact activity timeline.
+                </p>
+                <div className="flex gap-2 mt-2">
+                  <code
+                    className="flex-1 min-w-0 truncate rounded border bg-muted px-3 py-2 text-xs font-mono"
+                    data-testid="text-inbound-email-address"
+                  >
+                    {addrData?.inbound_email ?? ""}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopy}
+                    data-testid="button-copy-inbound-email"
+                  >
+                    {copiedAddress ? (
+                      <CheckCircle2 className="h-4 w-4" />
+                    ) : (
+                      <Mail className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {!addrData?.pending && (
+            <>
+              <Separator />
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Test Your Setup</p>
+                <p className="text-xs text-muted-foreground">
+                  Send a test email to your inbound address and verify it arrives.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSendTest}
+                    disabled={testPolling}
+                    data-testid="button-send-test-email"
+                  >
+                    {testPolling ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        Waiting…
+                      </>
+                    ) : (
+                      "Send Test Email"
+                    )}
+                  </Button>
+                  {testReceived && (
+                    <span className="text-xs text-green-700 dark:text-green-400 flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Test received
+                    </span>
+                  )}
+                  {!testPolling && !testReceived && (
+                    <span className="text-xs text-muted-foreground">
+                      After sending, forward the test email to your inbound address from your inbox.
+                    </span>
+                  )}
+                </div>
+                {!testPolling && !testReceived && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    If the test times out after 30 seconds, check that your email client is set to
+                    forward to the address above, and that DNS for mail.scoopilot.com is configured
+                    by your admin.
+                  </p>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Setup Instructions</p>
+                <Collapsible>
+                  <CollapsibleTrigger
+                    className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground w-full text-left"
+                    data-testid="button-expand-gmail-instructions"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    Gmail — Set up auto-forward
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 space-y-1.5 text-xs text-muted-foreground pl-5">
+                    <p>1. Open Gmail Settings → See all settings → Forwarding and POP/IMAP.</p>
+                    <p>2. Click "Add a forwarding address" and enter your inbound address above.</p>
+                    <p>3. Confirm the verification email that ScooPilot will receive and log.</p>
+                    <p>
+                      4. Create a filter (e.g., from a specific sender) and check "Forward it to"
+                      your inbound address.
+                    </p>
+                    <p className="text-amber-700 dark:text-amber-400">
+                      Note: Gmail forwarding is DNS-verified. Confirmation may take a few minutes.
+                    </p>
+                  </CollapsibleContent>
+                </Collapsible>
+                <Collapsible>
+                  <CollapsibleTrigger
+                    className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground w-full text-left"
+                    data-testid="button-expand-outlook-instructions"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    Outlook — Set up auto-forward
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 space-y-1.5 text-xs text-muted-foreground pl-5">
+                    <p>1. Go to Settings → Mail → Forwarding.</p>
+                    <p>2. Enable "Enable forwarding" and enter your inbound address.</p>
+                    <p>
+                      3. Optionally create a rule (Rules → Add new rule) to forward only client
+                      emails.
+                    </p>
+                    <p className="text-amber-700 dark:text-amber-400">
+                      Note: Outlook forwarding may add headers that ScooPilot uses to identify the
+                      original sender.
+                    </p>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function CalendarSyncCard(_props: { company: Company | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -848,6 +1060,14 @@ const SETTINGS_BLOCK_DEFS: {
   { id: "custom_fields", label: "Custom Fields", defaultW: 6, defaultH: 7, minW: 4, minH: 5 },
   { id: "lead_response", label: "Lead Response", defaultW: 6, defaultH: 12, minW: 4, minH: 8 },
   { id: "calendar_sync", label: "Calendar Sync", defaultW: 6, defaultH: 8, minW: 4, minH: 6 },
+  {
+    id: "email_forwarding",
+    label: "Email Forwarding",
+    defaultW: 6,
+    defaultH: 8,
+    minW: 4,
+    minH: 6,
+  },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -881,6 +1101,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "custom_fields",
   "lead_response",
   "calendar_sync",
+  "email_forwarding",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -8857,6 +9078,24 @@ export default function Settings() {
             </CardHeader>
             <CardContent>
               <CalendarSyncCard company={company ?? null} />
+            </CardContent>
+          </Card>
+        );
+      case "email_forwarding":
+        return (
+          <Card className="h-full overflow-auto">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5" />
+                Email Forwarding
+              </CardTitle>
+              <CardDescription>
+                Forward client emails to your unique CRM address to automatically log them on the
+                contact timeline.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EmailForwardingCard company={company ?? null} />
             </CardContent>
           </Card>
         );

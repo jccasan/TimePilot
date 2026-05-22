@@ -1308,6 +1308,14 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               await storage.addUserToCompany(existingUser.id, company.id, "owner");
               await seedDefaultLeadSources(company.id);
               await storage.seedDefaultPricing(company.id);
+              if (phone) {
+                try {
+                  const { provisionInboundEmail } = await import("../services/inbound-email");
+                  await provisionInboundEmail({ ...company, phone });
+                } catch (err) {
+                  console.error("[InboundEmail] Provisioning failed at Stripe checkout:", err);
+                }
+              }
               console.log(
                 `[Stripe Subscription] Created company "${companyName}" (${company.id}) for existing user ${email} status=${subStatus2}`
               );
@@ -1339,6 +1347,17 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
             await storage.addUserToCompany(user.id, company.id, "owner");
             await seedDefaultLeadSources(company.id);
             await storage.seedDefaultPricing(company.id);
+            if (phone) {
+              try {
+                const { provisionInboundEmail } = await import("../services/inbound-email");
+                await provisionInboundEmail({ ...company, phone });
+              } catch (err) {
+                console.error(
+                  "[InboundEmail] Provisioning failed at Stripe new user checkout:",
+                  err
+                );
+              }
+            }
 
             const claimed = await claimOnboardingEmailSend(user.id).catch(() => false);
             if (!claimed) {

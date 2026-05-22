@@ -118,6 +118,7 @@ import {
   Users,
   Download,
   Pencil,
+  MailOpen,
 } from "lucide-react";
 import {
   compressMessageAttachment,
@@ -5978,6 +5979,55 @@ function ServicePlansCard({
   );
 }
 
+function InboundEmailActivityDetail({
+  logId,
+  subject,
+  from,
+  preview,
+  inboundEmailId,
+}: {
+  logId: number | string;
+  subject: string;
+  from: string;
+  preview: string;
+  inboundEmailId: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const { data: fullEmail } = useQuery<{ bodyText?: string | null; bodyHtml?: string | null }>({
+    queryKey: ["/api/email/inbound", inboundEmailId],
+    queryFn: async () => {
+      const res = await fetch(`/api/email/inbound/${inboundEmailId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch email");
+      return res.json();
+    },
+    enabled: expanded && !!inboundEmailId,
+  });
+
+  return (
+    <div className="mt-1 space-y-0.5" data-testid={`activity-details-${logId}`}>
+      {subject && <p className="text-xs font-medium truncate">{subject}</p>}
+      {from && <p className="text-xs text-muted-foreground truncate">From: {from}</p>}
+      {preview && !expanded && (
+        <p className="text-xs text-muted-foreground line-clamp-2">{preview}</p>
+      )}
+      {expanded && (
+        <div className="text-xs text-muted-foreground whitespace-pre-wrap break-words border rounded p-2 bg-muted/40 max-h-60 overflow-y-auto mt-1">
+          {fullEmail?.bodyText ?? preview}
+        </div>
+      )}
+      {(preview || inboundEmailId) && (
+        <button
+          className="text-xs text-primary underline-offset-2 hover:underline mt-0.5"
+          onClick={() => setExpanded((v) => !v)}
+          data-testid={`button-expand-email-${logId}`}
+        >
+          {expanded ? "Collapse" : "Show full email"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 const activityActionIcons: Record<string, typeof Plus> = {
   created: Plus,
   updated: Edit2,
@@ -5987,6 +6037,7 @@ const activityActionIcons: Record<string, typeof Plus> = {
   invoice_created: FileText,
   invoice_paid: DollarSign,
   email_sent: Mail,
+  email_inbound: MailOpen,
   sms_sent: MessageSquare,
   note_added: StickyNote,
   portal_login: LogIn,
@@ -6001,6 +6052,7 @@ const activityActionLabels: Record<string, string> = {
   invoice_created: "Invoice Created",
   invoice_paid: "Invoice Paid",
   email_sent: "Email Sent",
+  email_inbound: "Email Received",
   sms_sent: "SMS Sent",
   note_added: "Note Added",
   portal_login: "Portal Login",
@@ -6430,6 +6482,18 @@ function ActivitySection({ contactId }: { contactId: string }) {
               const details = log.details as Record<string, any> | null;
               const description = details?.description || details?.message || "";
 
+              const isInboundEmail = log.action === "email_inbound";
+              const emailSubject = isInboundEmail ? (details?.subject as string) || "" : "";
+              const emailFrom = isInboundEmail
+                ? details?.fromName
+                  ? `${details.fromName} <${details.fromAddress}>`
+                  : (details?.fromAddress as string) || ""
+                : "";
+              const emailPreview = isInboundEmail ? (details?.preview as string) || "" : "";
+              const inboundEmailId = isInboundEmail
+                ? (details?.inboundEmailId as string) || ""
+                : "";
+
               return (
                 <div
                   key={log.id}
@@ -6444,17 +6508,27 @@ function ActivitySection({ contactId }: { contactId: string }) {
                       <div className="w-px flex-1 bg-border min-h-[16px]" />
                     )}
                   </div>
-                  <div className="pb-4 pt-1 min-w-0">
+                  <div className="pb-4 pt-1 min-w-0 flex-1">
                     <p className="text-sm font-medium" data-testid={`activity-action-${log.id}`}>
                       {label}
                     </p>
-                    {description && (
-                      <p
-                        className="text-xs text-muted-foreground"
-                        data-testid={`activity-details-${log.id}`}
-                      >
-                        {description}
-                      </p>
+                    {isInboundEmail ? (
+                      <InboundEmailActivityDetail
+                        logId={log.id}
+                        subject={emailSubject}
+                        from={emailFrom}
+                        preview={emailPreview}
+                        inboundEmailId={inboundEmailId}
+                      />
+                    ) : (
+                      description && (
+                        <p
+                          className="text-xs text-muted-foreground"
+                          data-testid={`activity-details-${log.id}`}
+                        >
+                          {description}
+                        </p>
+                      )
                     )}
                     <p
                       className="text-xs text-muted-foreground"

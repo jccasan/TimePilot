@@ -44,6 +44,7 @@ import { registerDocumentsRoutes } from "./documents";
 import { registerCustomFieldsRoutes } from "./custom-fields";
 import { registerLeadResponseRoutes, blockLeadResponseOperator } from "./lead-response";
 import { registerCalendarRoutes } from "./calendar";
+import { registerEmailInboundRoutes } from "./email-inbound";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Object file download route — registered before registerObjectStorageRoutes so this
@@ -254,6 +255,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerCustomFieldsRoutes(app);
   await registerLeadResponseRoutes(app);
   await registerCalendarRoutes(app);
+  await registerEmailInboundRoutes(app);
 
   return httpServer;
 }

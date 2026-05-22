@@ -534,6 +534,15 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         }
       }
       const company = await storage.updateCompany(companyId, updates as Partial<InsertCompany>);
+      // Provision inbound email when phone is first saved (lazy provision on phone add).
+      if (updates.phone && company.phone && existing && !existing.inboundEmail) {
+        try {
+          const { provisionInboundEmail } = await import("../services/inbound-email");
+          await provisionInboundEmail(company);
+        } catch (err) {
+          console.error("[InboundEmail] Provisioning failed on phone save:", err);
+        }
+      }
       // Mark the new logo as public so it can be served via /objects/ without auth.
       // Awaited so the ACL is committed before the response reaches the client,
       // preventing a transient 403 on the very first image load after upload.
