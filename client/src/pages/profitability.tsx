@@ -207,7 +207,9 @@ export default function Profitability() {
     const urlTab = new URLSearchParams(window.location.search).get("tab");
     if (urlTab === "customers" || urlTab === "routes" || urlTab === "breakeven") return urlTab;
     const saved = localStorage.getItem("scoopilot_profit_view_mode");
-    return saved === "customers" || saved === "routes" || saved === "breakeven" ? saved : "customers";
+    return saved === "customers" || saved === "routes" || saved === "breakeven"
+      ? saved
+      : "customers";
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -235,9 +237,23 @@ export default function Profitability() {
     queryKey: ["/api/profitability/summary"],
   });
 
-  const { data: overheadData } = useQuery<{ totalMonthlyOverheadCents: number }>({
+  type OverheadItem = { type: "fixed" | "variable"; monthlyCostCents: number };
+  const { data: overheadData } = useQuery<{
+    totalMonthlyOverheadCents: number;
+    trailingMonthlyStops: number;
+    items: OverheadItem[];
+  }>({
     queryKey: ["/api/overhead-costs"],
   });
+
+  const variableMonthlyTotalCents = (overheadData?.items ?? [])
+    .filter((i) => i.type === "variable")
+    .reduce((s, i) => s + i.monthlyCostCents, 0);
+  const variableCostPerVisitCents =
+    (overheadData?.trailingMonthlyStops ?? 0) > 0
+      ? variableMonthlyTotalCents / overheadData!.trailingMonthlyStops
+      : 0;
+  const variableCostPerVisit = variableCostPerVisitCents / 100;
 
   const { data: pricingConfig } = useQuery<{
     pricingRules?: { basePrices?: { weekly?: number } };
@@ -520,11 +536,12 @@ export default function Profitability() {
       </div>
 
       {/* Breakeven Status Indicator */}
-      {overheadData?.totalMonthlyOverheadCents && pricingConfig?.pricingRules?.basePrices?.weekly ? (
+      {overheadData?.totalMonthlyOverheadCents &&
+      pricingConfig?.pricingRules?.basePrices?.weekly ? (
         <BreakevenStatusIndicator
           activeClients={(customers ?? []).length}
           avgPricePerVisit={pricingConfig.pricingRules.basePrices.weekly / 100}
-          variableCostPerVisit={0}
+          variableCostPerVisit={variableCostPerVisit}
           fixedMonthlyOverhead={overheadData.totalMonthlyOverheadCents / 100}
         />
       ) : null}
@@ -1235,6 +1252,7 @@ export default function Profitability() {
         <BreakevenCalculator
           weeklyBasePriceCents={pricingConfig?.pricingRules?.basePrices?.weekly}
           fixedOverheadCents={overheadData?.totalMonthlyOverheadCents}
+          variableCostPerVisitCents={variableCostPerVisitCents}
           activeClients={(customers ?? []).length}
         />
       )}

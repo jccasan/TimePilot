@@ -44,15 +44,15 @@ export default function BreakevenStatusIndicator({
   const gapPct = breakevenRevenue > 0 ? (gapDollars / breakevenRevenue) * 100 : 0;
 
   const isAbove = gapClients >= 0;
-  const isNear = !isAbove || Math.abs(gapPct) <= 10;
+  const isNear = Math.abs(gapPct) <= 10;
 
-  const badgeClass = isAbove
-    ? isNear
-      ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-      : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-    : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+  const badgeClass = isNear
+    ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+    : isAbove
+      ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+      : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
 
-  const badgeLabel = isAbove ? (isNear ? "Near Breakeven" : "Above Breakeven") : "Below Breakeven";
+  const badgeLabel = isNear ? "Near Breakeven" : isAbove ? "Above Breakeven" : "Below Breakeven";
 
   return (
     <Card data-testid="card-breakeven-status">
@@ -72,16 +72,19 @@ export default function BreakevenStatusIndicator({
           </div>
           <div className="flex items-center gap-4 text-sm">
             <span
-              className={isAbove ? "text-green-600 dark:text-green-400 font-medium" : "text-red-600 dark:text-red-400 font-medium"}
+              className={
+                isAbove
+                  ? "text-green-600 dark:text-green-400 font-medium"
+                  : "text-red-600 dark:text-red-400 font-medium"
+              }
               data-testid="text-breakeven-dollars"
             >
-              {isAbove ? "+" : ""}{fmtCurrency(gapDollars)}/mo
+              {isAbove ? "+" : ""}
+              {fmtCurrency(gapDollars)}/mo
             </span>
-            <span
-              className="text-muted-foreground"
-              data-testid="text-breakeven-pct"
-            >
-              {isAbove ? "+" : ""}{gapPct.toFixed(1)}%
+            <span className="text-muted-foreground" data-testid="text-breakeven-pct">
+              {isAbove ? "+" : ""}
+              {gapPct.toFixed(1)}%
             </span>
             <Link
               href="/profitability?tab=breakeven"

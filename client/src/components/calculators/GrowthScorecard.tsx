@@ -63,7 +63,8 @@ export default function GrowthScorecard({
       ? Math.ceil(fixedOverhead / contributionMargin)
       : null;
   const breakevenValid = hasPricingConfig && hasOverheadData && breakevenClients != null;
-  const gapClients = breakevenValid && breakevenClients != null ? activeClients - breakevenClients : null;
+  const gapClients =
+    breakevenValid && breakevenClients != null ? activeClients - breakevenClients : null;
   const gapDollars = gapClients != null ? gapClients * revenuePerClient : null;
 
   // --- Step-off threshold ---
@@ -81,7 +82,12 @@ export default function GrowthScorecard({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" data-testid="growth-scorecard">
       {/* LTV:CAC Tile */}
-      <ScorecardTile title="LTV:CAC Ratio" subtitle="Healthy is 3:1 or better" linkTo="/pricing?tab=ltv" linkLabel="LTV Calculator">
+      <ScorecardTile
+        title="LTV:CAC Ratio"
+        subtitle="Healthy is 3:1 or better"
+        linkTo="/pricing?tab=ltv"
+        linkLabel="LTV Calculator"
+      >
         {!ltvCacValid ? (
           <SetupPrompt text="Set up Pricing to see this" linkTo="/pricing" />
         ) : (
@@ -109,7 +115,12 @@ export default function GrowthScorecard({
       </ScorecardTile>
 
       {/* Breakeven Gap Tile */}
-      <ScorecardTile title="Breakeven Gap" subtitle="Clients above or below breakeven" linkTo="/profitability?tab=breakeven" linkLabel="Breakeven Calculator">
+      <ScorecardTile
+        title="Breakeven Gap"
+        subtitle="Clients above or below breakeven"
+        linkTo="/profitability?tab=breakeven"
+        linkLabel="Breakeven Calculator"
+      >
         {!breakevenValid ? (
           <SetupPrompt text="Set up Overhead to see this" linkTo="/pricing?tab=costs" />
         ) : (
@@ -128,7 +139,9 @@ export default function GrowthScorecard({
                 className={`text-sm font-medium ${gapDollars >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
                 data-testid="text-scorecard-breakeven-dollars"
               >
-                {gapDollars >= 0 ? `+${fmtCurrency(gapDollars)}/mo surplus` : `${fmtCurrency(gapDollars)}/mo gap`}
+                {gapDollars >= 0
+                  ? `+${fmtCurrency(gapDollars)}/mo surplus`
+                  : `${fmtCurrency(gapDollars)}/mo gap`}
               </p>
             )}
           </div>
@@ -136,7 +149,12 @@ export default function GrowthScorecard({
       </ScorecardTile>
 
       {/* Step-Off Threshold Tile */}
-      <ScorecardTile title="Step-Off-The-Truck" subtitle="Clients needed before owner can stop scooping" linkTo="/growth-tools#hire" linkLabel="Hire Calculator">
+      <ScorecardTile
+        title="Step-Off-The-Truck"
+        subtitle="Clients needed before owner can stop scooping"
+        linkTo="/growth-tools#hire"
+        linkLabel="Hire Calculator"
+      >
         {!hasPricingConfig ? (
           <SetupPrompt text="Set up Pricing to see this" linkTo="/pricing" />
         ) : stepOffThreshold == null ? (
@@ -151,10 +169,16 @@ export default function GrowthScorecard({
                 {activeClients} / {stepOffThreshold}
               </p>
               <p className="text-sm text-muted-foreground">
-                {pastThreshold ? "Past threshold" : `${stepOffThreshold - activeClients} more needed`}
+                {pastThreshold
+                  ? "Past threshold"
+                  : `${stepOffThreshold - activeClients} more needed`}
               </p>
             </div>
-            <Progress value={stepOffProgress} className="h-2" data-testid="progress-scorecard-step-off" />
+            <Progress
+              value={stepOffProgress}
+              className="h-2"
+              data-testid="progress-scorecard-step-off"
+            />
           </div>
         )}
       </ScorecardTile>
@@ -198,7 +222,11 @@ function ScorecardTile({
 
 function SetupPrompt({ text, linkTo }: { text: string; linkTo: string }) {
   return (
-    <Link href={linkTo} className="text-sm text-muted-foreground hover:text-primary underline" data-testid="link-scorecard-setup">
+    <Link
+      href={linkTo}
+      className="text-sm text-muted-foreground hover:text-primary underline"
+      data-testid="link-scorecard-setup"
+    >
       {text}
     </Link>
   );

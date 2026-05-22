@@ -28,7 +28,11 @@ const VISITS_PER_WEEK_DEFAULT = 1;
 const WEEKS_PER_MONTH = 4.33;
 
 function fmtCurrency(n: number): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(n);
 }
 
 function fmtAxisY(n: number): string {
@@ -43,8 +47,10 @@ export default function BreakevenCalculator({
   variableCostPerVisitCents = 0,
 }: BreakevenCalculatorProps) {
   const defaultPrice = weeklyBasePriceCents > 0 ? (weeklyBasePriceCents / 100).toFixed(2) : "25.00";
-  const defaultOverhead = fixedOverheadCents > 0 ? (fixedOverheadCents / 100).toFixed(2) : "2000.00";
-  const defaultVarCost = variableCostPerVisitCents > 0 ? (variableCostPerVisitCents / 100).toFixed(2) : "5.00";
+  const defaultOverhead =
+    fixedOverheadCents > 0 ? (fixedOverheadCents / 100).toFixed(2) : "2000.00";
+  const defaultVarCost =
+    variableCostPerVisitCents > 0 ? (variableCostPerVisitCents / 100).toFixed(2) : "5.00";
 
   const [pricePerVisit, setPricePerVisit] = useState(defaultPrice);
   const [priceAdj, setPriceAdj] = useState("0");
@@ -141,7 +147,9 @@ export default function BreakevenCalculator({
                 <div className="space-y-1.5">
                   <Label htmlFor="be-price">Price / Visit ($)</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      $
+                    </span>
                     <Input
                       id="be-price"
                       type="number"
@@ -171,7 +179,9 @@ export default function BreakevenCalculator({
               <div className="space-y-1.5">
                 <Label htmlFor="be-price-adj">Price Adjustment (±$ / visit)</Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">±$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    ±$
+                  </span>
                   <Input
                     id="be-price-adj"
                     type="number"
@@ -186,7 +196,8 @@ export default function BreakevenCalculator({
                 </div>
                 {adjNum !== 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Old price: {fmtCurrency(priceNum)} → New effective price: {fmtCurrency(calc.effectivePrice)}
+                    Old price: {fmtCurrency(priceNum)} → New effective price:{" "}
+                    {fmtCurrency(calc.effectivePrice)}
                   </p>
                 )}
               </div>
@@ -194,7 +205,9 @@ export default function BreakevenCalculator({
               <div className="space-y-1.5">
                 <Label htmlFor="be-var-cost">Variable Cost / Visit ($)</Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    $
+                  </span>
                   <Input
                     id="be-var-cost"
                     type="number"
@@ -211,7 +224,9 @@ export default function BreakevenCalculator({
               <div className="space-y-1.5">
                 <Label htmlFor="be-overhead">Fixed Monthly Overhead ($)</Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    $
+                  </span>
                   <Input
                     id="be-overhead"
                     type="number"
@@ -261,7 +276,9 @@ export default function BreakevenCalculator({
               <div className="space-y-1.5">
                 <Label htmlFor="be-mile-rate">Mileage Cost ($/mile)</Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    $
+                  </span>
                   <Input
                     id="be-mile-rate"
                     type="number"
@@ -289,7 +306,9 @@ export default function BreakevenCalculator({
               <div className="space-y-1.5">
                 <Label htmlFor="be-rev-target">Monthly Revenue Target ($)</Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    $
+                  </span>
                   <Input
                     id="be-rev-target"
                     type="number"
@@ -316,7 +335,9 @@ export default function BreakevenCalculator({
                     className="pr-6"
                     data-testid="input-be-margin-target"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    %
+                  </span>
                 </div>
               </div>
             </CardContent>
@@ -329,7 +350,8 @@ export default function BreakevenCalculator({
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Your current pricing doesn't cover variable costs — breakeven is unreachable at this price.
+                Your current pricing doesn't cover variable costs — breakeven is unreachable at this
+                price.
               </AlertDescription>
             </Alert>
           ) : (
@@ -342,24 +364,44 @@ export default function BreakevenCalculator({
                   <KeyNumber
                     label="Breakeven Clients (current routes)"
                     value={calc.breakevenClients != null ? `${calc.breakevenClients} clients` : "—"}
-                    sub={calc.breakevenRevenue != null ? `${fmtCurrency(calc.breakevenRevenue)}/mo revenue` : undefined}
+                    sub={
+                      calc.breakevenRevenue != null
+                        ? `${fmtCurrency(calc.breakevenRevenue)}/mo revenue`
+                        : undefined
+                    }
                     data-testid="text-be-breakeven-current"
-                    highlight={activeClients > 0 && calc.breakevenClients != null && activeClients >= calc.breakevenClients ? "green" : "red"}
+                    highlight={
+                      activeClients > 0 &&
+                      calc.breakevenClients != null &&
+                      activeClients >= calc.breakevenClients
+                        ? "green"
+                        : "red"
+                    }
                   />
                   <KeyNumber
                     label="Breakeven Clients (target route density)"
-                    value={calc.breakevenClientsDense != null ? `${calc.breakevenClientsDense} clients` : "—"}
+                    value={
+                      calc.breakevenClientsDense != null
+                        ? `${calc.breakevenClientsDense} clients`
+                        : "—"
+                    }
                     sub="Lower cost per stop from denser routes"
                     data-testid="text-be-breakeven-dense"
                   />
                   <KeyNumber
                     label={`Clients for ${fmtCurrency(parseFloat(revenueTarget) || 0)}/mo revenue target`}
-                    value={calc.clientsForRevTarget != null ? `${calc.clientsForRevTarget} clients` : "—"}
+                    value={
+                      calc.clientsForRevTarget != null ? `${calc.clientsForRevTarget} clients` : "—"
+                    }
                     data-testid="text-be-clients-revenue-target"
                   />
                   <KeyNumber
                     label={`Clients for ${parseFloat(marginTarget) || 0}% margin target`}
-                    value={calc.clientsForMarginTarget != null ? `${calc.clientsForMarginTarget} clients` : "—"}
+                    value={
+                      calc.clientsForMarginTarget != null
+                        ? `${calc.clientsForMarginTarget} clients`
+                        : "—"
+                    }
                     data-testid="text-be-clients-margin-target"
                   />
                 </div>
@@ -399,7 +441,12 @@ export default function BreakevenCalculator({
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={calc.chartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="clients" tick={{ fontSize: 11 }} label={{ value: "Clients", position: "insideBottom", offset: -2, fontSize: 11 }} height={36} />
+                <XAxis
+                  dataKey="clients"
+                  tick={{ fontSize: 11 }}
+                  label={{ value: "Clients", position: "insideBottom", offset: -2, fontSize: 11 }}
+                  height={36}
+                />
                 <YAxis tickFormatter={fmtAxisY} tick={{ fontSize: 11 }} width={52} />
                 <Tooltip
                   formatter={(v: number, name: string) => [fmtCurrency(v), name]}
@@ -414,8 +461,18 @@ export default function BreakevenCalculator({
                     label={{ value: "You", position: "top", fontSize: 11 }}
                   />
                 )}
-                <Bar dataKey="revenue" name="Revenue" fill="hsl(var(--chart-1))" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="totalCost" name="Total Cost" fill="hsl(var(--chart-2))" radius={[3, 3, 0, 0]} />
+                <Bar
+                  dataKey="revenue"
+                  name="Revenue"
+                  fill="hsl(var(--chart-1))"
+                  radius={[3, 3, 0, 0]}
+                />
+                <Bar
+                  dataKey="totalCost"
+                  name="Total Cost"
+                  fill="hsl(var(--chart-2))"
+                  radius={[3, 3, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -447,7 +504,9 @@ function KeyNumber({
   return (
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={`text-xl font-bold ${valueColor}`} data-testid={testId}>{value}</p>
+      <p className={`text-xl font-bold ${valueColor}`} data-testid={testId}>
+        {value}
+      </p>
       {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
     </div>
   );

@@ -333,9 +333,22 @@ export default function BusinessOverview() {
     queryKey: ["/api/business-overview"],
   });
 
-  const { data: overheadData } = useQuery<{ totalMonthlyOverheadCents: number }>({
+  type OverheadItem = { type: "fixed" | "variable"; monthlyCostCents: number };
+  const { data: overheadData } = useQuery<{
+    totalMonthlyOverheadCents: number;
+    trailingMonthlyStops: number;
+    items: OverheadItem[];
+  }>({
     queryKey: ["/api/overhead-costs"],
   });
+
+  const variableMonthlyTotalCents = (overheadData?.items ?? [])
+    .filter((i) => i.type === "variable")
+    .reduce((s, i) => s + i.monthlyCostCents, 0);
+  const variableCostPerVisit =
+    (overheadData?.trailingMonthlyStops ?? 0) > 0
+      ? variableMonthlyTotalCents / overheadData!.trailingMonthlyStops / 100
+      : 0;
 
   const { data: pricingConfig } = useQuery<{
     pricingRules?: { basePrices?: { weekly?: number } };
@@ -664,11 +677,12 @@ export default function BusinessOverview() {
       </div>
 
       {/* Breakeven Status */}
-      {overheadData?.totalMonthlyOverheadCents && pricingConfig?.pricingRules?.basePrices?.weekly ? (
+      {overheadData?.totalMonthlyOverheadCents &&
+      pricingConfig?.pricingRules?.basePrices?.weekly ? (
         <BreakevenStatusIndicator
           activeClients={kpis.activeCustomers}
           avgPricePerVisit={pricingConfig.pricingRules.basePrices.weekly / 100}
-          variableCostPerVisit={0}
+          variableCostPerVisit={variableCostPerVisit}
           fixedMonthlyOverhead={overheadData.totalMonthlyOverheadCents / 100}
         />
       ) : null}

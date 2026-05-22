@@ -13,7 +13,11 @@ interface LTVCalculatorProps {
 
 function fmtDollars(n: number): string {
   if (!isFinite(n)) return "—";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(n);
 }
 
 function fmtMonths(n: number): string {
@@ -81,8 +85,12 @@ function calcLTV(
   };
 }
 
-export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct: initMargin = 30 }: LTVCalculatorProps) {
-  const defaultRevenue = avgMonthlyRevenueCents > 0 ? (avgMonthlyRevenueCents / 100).toFixed(2) : "120.00";
+export default function LTVCalculator({
+  avgMonthlyRevenueCents = 0,
+  netMarginPct: initMargin = 30,
+}: LTVCalculatorProps) {
+  const defaultRevenue =
+    avgMonthlyRevenueCents > 0 ? (avgMonthlyRevenueCents / 100).toFixed(2) : "120.00";
 
   const [avgMonthlyRevenue, setAvgMonthlyRevenue] = useState(defaultRevenue);
   const [netMarginPct, setNetMarginPct] = useState(String(Math.max(0, initMargin || 30)));
@@ -106,7 +114,13 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
 
   const sensitivityRows = useMemo(() => {
     return CHURN_ROWS.map((churnPct) => {
-      const r = calcLTV(revenueNum, marginNum, churnPct, parseFloat(annualDiscountRate) || 10, cacNum);
+      const r = calcLTV(
+        revenueNum,
+        marginNum,
+        churnPct,
+        parseFloat(annualDiscountRate) || 10,
+        cacNum
+      );
       return { churnPct, ...r };
     });
   }, [revenueNum, marginNum, annualDiscountRate, cacNum]);
@@ -125,7 +139,9 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
             <div className="space-y-1.5">
               <Label htmlFor="ltv-avg-revenue">Avg Monthly Revenue / Client ($)</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  $
+                </span>
                 <Input
                   id="ltv-avg-revenue"
                   type="number"
@@ -137,7 +153,9 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
                   data-testid="input-ltv-avg-revenue"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">Pre-filled from your profitability data</p>
+              <p className="text-xs text-muted-foreground">
+                Pre-filled from your profitability data
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ltv-net-margin">Net Profit Margin (%)</Label>
@@ -153,7 +171,9 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
                   className="pr-6"
                   data-testid="input-ltv-net-margin"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  %
+                </span>
               </div>
             </div>
             <div className="space-y-1.5">
@@ -170,7 +190,9 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
                   className="pr-6"
                   data-testid="input-ltv-churn"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  %
+                </span>
               </div>
             </div>
             <div className="space-y-1.5">
@@ -187,13 +209,17 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
                   className="pr-6"
                   data-testid="input-ltv-discount-rate"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  %
+                </span>
               </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ltv-cac">Customer Acquisition Cost ($)</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                  $
+                </span>
                 <Input
                   id="ltv-cac"
                   type="number"
@@ -205,7 +231,9 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
                   data-testid="input-ltv-cac"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">Marketing spend ÷ new clients acquired</p>
+              <p className="text-xs text-muted-foreground">
+                Marketing spend ÷ new clients acquired
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -216,7 +244,8 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Your current margin means each client costs you money over their lifetime. Fix pricing before optimizing acquisition.
+                Your current margin means each client costs you money over their lifetime. Fix
+                pricing before optimizing acquisition.
               </AlertDescription>
             </Alert>
           )}
@@ -235,14 +264,36 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
-                <OutputTile label="Avg Lifespan" value={fmtMonths(result.lifespanMonths)} data-testid="text-ltv-lifespan" />
-                <OutputTile label="Gross LTV" value={fmtDollars(result.grossLTV)} data-testid="text-ltv-gross" />
-                <OutputTile label="Net LTV" value={fmtDollars(result.netLTV)} data-testid="text-ltv-net" />
-                <OutputTile label="NPV of LTV" value={fmtDollars(result.npvLTV)} data-testid="text-ltv-npv" />
-                <OutputTile label="Max CAC (3:1)" value={fmtDollars(result.maxCAC)} data-testid="text-ltv-max-cac" />
+                <OutputTile
+                  label="Avg Lifespan"
+                  value={fmtMonths(result.lifespanMonths)}
+                  data-testid="text-ltv-lifespan"
+                />
+                <OutputTile
+                  label="Gross LTV"
+                  value={fmtDollars(result.grossLTV)}
+                  data-testid="text-ltv-gross"
+                />
+                <OutputTile
+                  label="Net LTV"
+                  value={fmtDollars(result.netLTV)}
+                  data-testid="text-ltv-net"
+                />
+                <OutputTile
+                  label="NPV of LTV"
+                  value={fmtDollars(result.npvLTV)}
+                  data-testid="text-ltv-npv"
+                />
+                <OutputTile
+                  label="Max CAC (3:1)"
+                  value={fmtDollars(result.maxCAC)}
+                  data-testid="text-ltv-max-cac"
+                />
                 <OutputTile
                   label="CAC Payback"
-                  value={!isFinite(result.paybackMonths) ? "∞" : `${result.paybackMonths.toFixed(1)} mo`}
+                  value={
+                    !isFinite(result.paybackMonths) ? "∞" : `${result.paybackMonths.toFixed(1)} mo`
+                  }
                   data-testid="text-ltv-payback"
                 />
               </div>
@@ -304,7 +355,9 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
                       <td className="py-2 pr-4">
                         {row.churnPct}%
                         {isCurrent && (
-                          <Badge variant="outline" className="ml-2 text-xs py-0">current</Badge>
+                          <Badge variant="outline" className="ml-2 text-xs py-0">
+                            current
+                          </Badge>
                         )}
                       </td>
                       <td className="py-2 pr-4">{fmtMonths(row.lifespanMonths)}</td>
@@ -325,7 +378,8 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
             </table>
             {cacNum > 0 && (
               <p className="text-xs text-muted-foreground mt-2">
-                Max CAC cells highlighted green when your entered CAC (${cacNum.toFixed(0)}) is below the threshold, red when above.
+                Max CAC cells highlighted green when your entered CAC (${cacNum.toFixed(0)}) is
+                below the threshold, red when above.
               </p>
             )}
           </CardContent>
@@ -335,11 +389,21 @@ export default function LTVCalculator({ avgMonthlyRevenueCents = 0, netMarginPct
   );
 }
 
-function OutputTile({ label, value, "data-testid": testId }: { label: string; value: string; "data-testid"?: string }) {
+function OutputTile({
+  label,
+  value,
+  "data-testid": testId,
+}: {
+  label: string;
+  value: string;
+  "data-testid"?: string;
+}) {
   return (
     <div className="space-y-0.5">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-xl font-bold" data-testid={testId}>{value}</p>
+      <p className="text-xl font-bold" data-testid={testId}>
+        {value}
+      </p>
     </div>
   );
 }

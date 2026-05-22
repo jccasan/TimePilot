@@ -15,7 +15,11 @@ interface WhenToHireProps {
 const WEEKS_PER_MONTH = 4.33;
 
 function fmtCurrency(n: number): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(n);
 }
 
 export default function WhenToHire({
@@ -23,12 +27,16 @@ export default function WhenToHire({
   fixedOverheadCents = 0,
   activeClients = 0,
 }: WhenToHireProps) {
-  const defaultRevPerVisit = weeklyBasePriceCents > 0 ? (weeklyBasePriceCents / 100).toFixed(2) : "25.00";
-  const defaultOverhead = fixedOverheadCents > 0 ? (fixedOverheadCents / 100).toFixed(2) : "2000.00";
+  const defaultRevPerVisit =
+    weeklyBasePriceCents > 0 ? (weeklyBasePriceCents / 100).toFixed(2) : "25.00";
+  const defaultOverhead =
+    fixedOverheadCents > 0 ? (fixedOverheadCents / 100).toFixed(2) : "2000.00";
 
   const [avgRevenuePerVisit, setAvgRevenuePerVisit] = useState(defaultRevPerVisit);
   const [ownerYardsPerWeek, setOwnerYardsPerWeek] = useState("40");
-  const [currentClients, setCurrentClients] = useState(activeClients > 0 ? String(activeClients) : "30");
+  const [currentClients, setCurrentClients] = useState(
+    activeClients > 0 ? String(activeClients) : "30"
+  );
   const [fixedOverhead, setFixedOverhead] = useState(defaultOverhead);
 
   const [hourlyWage, setHourlyWage] = useState("18");
@@ -54,15 +62,15 @@ export default function WhenToHire({
     const techMonthlyCost = burdenedWage * hoursPerDay * daysPerWeek * WEEKS_PER_MONTH + vehicle;
 
     const ownerMonthlyFieldIncome = ownerYards * WEEKS_PER_MONTH * rev;
-    const stepOffThreshold = rev * WEEKS_PER_MONTH > 0
-      ? Math.ceil((techMonthlyCost + ownerMonthlyFieldIncome) / (rev * WEEKS_PER_MONTH))
-      : null;
+    const stepOffThreshold =
+      rev * WEEKS_PER_MONTH > 0
+        ? Math.ceil((techMonthlyCost + ownerMonthlyFieldIncome) / (rev * WEEKS_PER_MONTH))
+        : null;
 
     const soloIncome = clients * rev * WEEKS_PER_MONTH - overhead;
     const withTechOwnerScoop =
       (clients + techYards * WEEKS_PER_MONTH) * rev - techMonthlyCost - overhead;
-    const withTechOwnerManage =
-      techYards * WEEKS_PER_MONTH * rev - techMonthlyCost - overhead;
+    const withTechOwnerManage = techYards * WEEKS_PER_MONTH * rev - techMonthlyCost - overhead;
 
     const ownerCapacity = ownerYards > 0 ? (clients / ownerYards) * 100 : 0;
 
@@ -92,24 +100,43 @@ export default function WhenToHire({
 
   const capacityStatus =
     result.ownerCapacity < 60
-      ? { label: "Room to grow", color: "text-green-600 dark:text-green-400", badge: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" }
+      ? {
+          label: "Room to grow",
+          color: "text-green-600 dark:text-green-400",
+          badge: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+        }
       : result.ownerCapacity < 80
-        ? { label: "Getting full", color: "text-yellow-600 dark:text-yellow-400", badge: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" }
-        : { label: "Near capacity", color: "text-red-600 dark:text-red-400", badge: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" };
+        ? {
+            label: "Getting full",
+            color: "text-yellow-600 dark:text-yellow-400",
+            badge: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+          }
+        : {
+            label: "Near capacity",
+            color: "text-red-600 dark:text-red-400",
+            badge: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+          };
 
-  const thresholdProgress = threshold && threshold > 0 ? Math.min((clientsNum / threshold) * 100, 100) : 0;
+  const thresholdProgress =
+    threshold && threshold > 0 ? Math.min((clientsNum / threshold) * 100, 100) : 0;
   const pastThreshold = threshold != null && clientsNum >= threshold;
 
   return (
     <div className="space-y-6">
       {/* Step-off threshold hero */}
       {threshold != null && (
-        <Card className={`border-2 ${pastThreshold ? "border-green-500 dark:border-green-600" : "border-primary/30"}`}>
+        <Card
+          className={`border-2 ${pastThreshold ? "border-green-500 dark:border-green-600" : "border-primary/30"}`}
+        >
           <CardContent className="pt-5 pb-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Step-Off-The-Truck Threshold</p>
-                <p className="text-4xl font-bold mt-1" data-testid="text-hire-threshold">{threshold} clients</p>
+                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                  Step-Off-The-Truck Threshold
+                </p>
+                <p className="text-4xl font-bold mt-1" data-testid="text-hire-threshold">
+                  {threshold} clients
+                </p>
                 <p className="text-sm text-muted-foreground mt-1">
                   {pastThreshold
                     ? "You have enough clients to hire your first tech and stop scooping."
@@ -126,7 +153,9 @@ export default function WhenToHire({
                   className="h-3"
                   data-testid="progress-hire-threshold"
                 />
-                <p className={`text-xs mt-1 font-medium ${pastThreshold ? "text-green-600 dark:text-green-400" : ""}`}>
+                <p
+                  className={`text-xs mt-1 font-medium ${pastThreshold ? "text-green-600 dark:text-green-400" : ""}`}
+                >
                   {thresholdProgress.toFixed(0)}% of threshold
                 </p>
               </div>
@@ -147,7 +176,9 @@ export default function WhenToHire({
                 <div className="space-y-1.5">
                   <Label htmlFor="hire-rev">Avg Revenue / Visit ($)</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      $
+                    </span>
                     <Input
                       id="hire-rev"
                       type="number"
@@ -189,7 +220,9 @@ export default function WhenToHire({
                 <div className="space-y-1.5">
                   <Label htmlFor="hire-overhead">Fixed Overhead ($)</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      $
+                    </span>
                     <Input
                       id="hire-overhead"
                       type="number"
@@ -215,7 +248,9 @@ export default function WhenToHire({
                 <div className="space-y-1.5">
                   <Label htmlFor="hire-wage">Hourly Wage ($)</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      $
+                    </span>
                     <Input
                       id="hire-wage"
                       type="number"
@@ -242,7 +277,9 @@ export default function WhenToHire({
                       className="pr-6"
                       data-testid="input-hire-burden"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      %
+                    </span>
                   </div>
                 </div>
               </div>
@@ -277,7 +314,9 @@ export default function WhenToHire({
                 <div className="space-y-1.5">
                   <Label htmlFor="hire-vehicle">Vehicle Cost ($/mo)</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      $
+                    </span>
                     <Input
                       id="hire-vehicle"
                       type="number"
@@ -306,7 +345,9 @@ export default function WhenToHire({
               <div className="pt-2 border-t">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Est. tech monthly cost</span>
-                  <span className="font-semibold" data-testid="text-hire-tech-cost">{fmtCurrency(result.techMonthlyCost)}</span>
+                  <span className="font-semibold" data-testid="text-hire-tech-cost">
+                    {fmtCurrency(result.techMonthlyCost)}
+                  </span>
                 </div>
               </div>
             </CardContent>
@@ -375,7 +416,8 @@ export default function WhenToHire({
               />
             </div>
             <p className="text-xs text-muted-foreground mt-4">
-              Net income shown after overhead. "Owner Manages" is the target state once past threshold.
+              Net income shown after overhead. "Owner Manages" is the target state once past
+              threshold.
             </p>
           </CardContent>
         </Card>
@@ -402,7 +444,11 @@ function ScenarioColumn({
     <div
       className={`rounded-lg border p-3 text-center space-y-1 ${highlight ? "border-primary/40 bg-primary/5" : ""}`}
     >
-      <p className={`text-xs font-semibold ${highlight ? "text-primary" : "text-muted-foreground"}`}>{title}</p>
+      <p
+        className={`text-xs font-semibold ${highlight ? "text-primary" : "text-muted-foreground"}`}
+      >
+        {title}
+      </p>
       <p className="text-[11px] text-muted-foreground leading-tight">{subtitle}</p>
       <p
         className={`text-lg font-bold mt-2 ${positive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}

@@ -48,7 +48,9 @@ export default function GrowthTools() {
 
   const avgMonthlyRevenueCents =
     profSummary && profSummary.length > 0
-      ? Math.round(profSummary.reduce((sum, c) => sum + c.monthlyRevenueCents, 0) / profSummary.length)
+      ? Math.round(
+          profSummary.reduce((sum, c) => sum + c.monthlyRevenueCents, 0) / profSummary.length
+        )
       : undefined;
 
   const fixedOverheadCents = overheadData?.totalMonthlyOverheadCents;
@@ -63,7 +65,8 @@ export default function GrowthTools() {
           Growth Tools
         </h1>
         <p className="text-muted-foreground">
-          Forward-looking financial tools to guide your pricing, staffing, and acquisition decisions.
+          Forward-looking financial tools to guide your pricing, staffing, and acquisition
+          decisions.
         </p>
       </div>
 
@@ -85,7 +88,8 @@ export default function GrowthTools() {
       <section id="hire">
         <h2 className="text-base font-semibold mb-3">When to Hire</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Calculate the client count at which hiring your first technician makes financial sense, and see how your income changes across scenarios.
+          Calculate the client count at which hiring your first technician makes financial sense,
+          and see how your income changes across scenarios.
         </p>
         <WhenToHire
           weeklyBasePriceCents={weeklyBasePriceCents}

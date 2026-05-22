@@ -148,7 +148,8 @@ function readTabFromUrl(): string {
   if (typeof window === "undefined") return "pricing";
   const params = new URLSearchParams(window.location.search);
   const t = params.get("tab");
-  if (t === "engine" || t === "simulator" || t === "costs" || t === "pricing" || t === "ltv") return t;
+  if (t === "engine" || t === "simulator" || t === "costs" || t === "pricing" || t === "ltv")
+    return t;
   return "pricing";
 }
 
@@ -3328,7 +3329,9 @@ export default function UnifiedPricingEngine() {
 
   const avgMonthlyRevenueCents =
     profSummary && profSummary.length > 0
-      ? Math.round(profSummary.reduce((sum, c) => sum + c.monthlyRevenueCents, 0) / profSummary.length)
+      ? Math.round(
+          profSummary.reduce((sum, c) => sum + c.monthlyRevenueCents, 0) / profSummary.length
+        )
       : 0;
   const netMarginPct = overviewData?.kpis.avgProfitMarginPct ?? 30;
 
@@ -3410,7 +3413,8 @@ export default function UnifiedPricingEngine() {
           <TabsContent value="ltv" className="mt-0">
             <div className="space-y-2 mb-4">
               <p className="text-sm text-muted-foreground">
-                Calculate lifetime client value and set a rational ceiling on what you should spend to acquire a customer.
+                Calculate lifetime client value and set a rational ceiling on what you should spend
+                to acquire a customer.
               </p>
             </div>
             <LTVCalculator
