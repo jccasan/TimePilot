@@ -79,15 +79,37 @@ export default function WhenToHire({
     const financialBreakEven =
       rev * WEEKS_PER_MONTH > 0 ? Math.ceil(techMonthlyCost / (rev * WEEKS_PER_MONTH)) : null;
 
-    const soloIncome = clients * rev * WEEKS_PER_MONTH - overhead;
-    const withTechOwnerScoop =
-      (clients + techYards * WEEKS_PER_MONTH) * rev - techMonthlyCost - overhead;
-    const withTechOwnerManage = techYards * WEEKS_PER_MONTH * rev - techMonthlyCost - overhead;
+    // Monthly revenue from the existing client book
+    const clientMonthlyRevenue = clients * rev * WEEKS_PER_MONTH;
+
+    // Monthly revenue the tech generates from their capacity
+    const techMonthlyRevenue = techYards * rev * WEEKS_PER_MONTH;
+
+    // Scenario 1 — Solo: owner services all clients, no tech cost
+    const soloIncome = clientMonthlyRevenue - overhead;
+
+    // Scenario 2 — With Tech, owner still scoops:
+    // Tech handles techYards/week of new/overflow clients, owner keeps existing book.
+    // Total revenue = (existing clients + tech's weekly yards) × rev × weeks
+    const withTechTotalRevenue = (clients + techYards) * rev * WEEKS_PER_MONTH;
+    const withTechOwnerScoop = withTechTotalRevenue - techMonthlyCost - overhead;
+
+    // Scenario 3 — Owner Manages (step off the truck):
+    // Tech services the full existing client book. Owner earns the net after
+    // paying the tech and overhead — no longer trading time for revenue.
+    const withTechOwnerManage = clientMonthlyRevenue - techMonthlyCost - overhead;
+
+    // Tech P&L: does the tech pay for themselves?
+    // In "owner manages" the tech generates clientMonthlyRevenue;
+    // in "with tech" they generate techMonthlyRevenue on top of owner's book.
+    const techPnl = techMonthlyRevenue - techMonthlyCost;
 
     const ownerCapacityPct = ownerWeeklyCapacity > 0 ? (clients / ownerWeeklyCapacity) * 100 : 0;
 
     return {
       techMonthlyCost,
+      techMonthlyRevenue,
+      techPnl,
       stepOffThreshold,
       financialBreakEven,
       soloIncome,
@@ -299,7 +321,11 @@ export default function WhenToHire({
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Technician Cost Inputs</CardTitle>
+              <CardTitle className="text-base">Technician Schedule &amp; Cost</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Hours and days below reflect the tech&apos;s paid schedule. Owner handles any
+                overflow beyond the tech&apos;s capacity.
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -400,11 +426,29 @@ export default function WhenToHire({
                   />
                 </div>
               </div>
-              <div className="pt-2 border-t">
+              <div className="pt-2 border-t space-y-1.5">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Est. tech monthly cost</span>
                   <span className="font-semibold" data-testid="text-hire-tech-cost">
                     {fmtCurrency(result.techMonthlyCost)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Tech revenue ({parseFloat(techYardsPerWeek) || 0} yds/wk)
+                  </span>
+                  <span className="font-semibold" data-testid="text-hire-tech-revenue">
+                    {fmtCurrency(result.techMonthlyRevenue)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm pt-1 border-t">
+                  <span className="text-muted-foreground font-medium">Tech net P&amp;L</span>
+                  <span
+                    className={`font-bold ${result.techPnl >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}
+                    data-testid="text-hire-tech-pnl"
+                  >
+                    {result.techPnl >= 0 ? "+" : ""}
+                    {fmtCurrency(result.techPnl)}/mo
                   </span>
                 </div>
               </div>
@@ -449,33 +493,33 @@ export default function WhenToHire({
         {/* Scenario Columns */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Owner Income Scenarios</CardTitle>
+            <CardTitle className="text-base">Owner Net Income Scenarios</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-3">
               <ScenarioColumn
                 title="Solo"
-                subtitle="Owner does all the work"
+                subtitle="Owner services all clients, no tech"
                 income={result.soloIncome}
                 data-testid="text-hire-solo-income"
               />
               <ScenarioColumn
                 title="With Tech"
-                subtitle="Owner still scoops"
+                subtitle={`Tech adds ${parseFloat(techYardsPerWeek) || 0} yds/wk; owner covers the rest`}
                 income={result.withTechOwnerScoop}
                 data-testid="text-hire-with-tech-scoop"
               />
               <ScenarioColumn
                 title="Owner Manages"
-                subtitle="Tech does field work"
+                subtitle="Tech handles full client book; owner off the truck"
                 income={result.withTechOwnerManage}
                 highlight
                 data-testid="text-hire-manager-income"
               />
             </div>
             <p className="text-xs text-muted-foreground mt-4">
-              Net income shown after overhead. "Owner Manages" is the target state once past
-              threshold.
+              All figures are monthly net after overhead. Tech cost deducted in the two hired
+              scenarios.
             </p>
           </CardContent>
         </Card>
