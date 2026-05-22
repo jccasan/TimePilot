@@ -648,6 +648,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         widgetFieldConfig: company.widgetFieldConfig ?? null,
         yardSizeTierConfig: company.yardSizeTierConfig ?? null,
         lrPricingTiers: lrPricingTiers ?? null,
+        pricingRules: (company.pricingConfig as any)?.pricingRules ?? null,
         stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
         stripeConnectOnboarded: company.stripeConnectOnboarded || false,
         stripeConnectAccountId: company.stripeConnectAccountId || null,

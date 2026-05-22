@@ -2293,6 +2293,23 @@ const YARD_SIZE_TIERS = [
   { label: "Over 1/2 acre", midpointAcres: 0.625, upToAcres: null as number | null },
 ];
 
+/**
+ * Convert pricingRules.yardSizeTiers into the same shape as YARD_SIZE_TIERS,
+ * computing midpointAcres from adjacent boundaries. Falls back to YARD_SIZE_TIERS
+ * when the saved list is empty (e.g. brand-new account).
+ */
+function toActiveTiers(
+  yardSizeTiers: PricingRulesConfig["yardSizeTiers"]
+): Array<{ label: string; midpointAcres: number; upToAcres: number | null }> {
+  if (!yardSizeTiers || yardSizeTiers.length === 0) return YARD_SIZE_TIERS;
+  return yardSizeTiers.map((t, i) => {
+    const prevBound = i > 0 ? (yardSizeTiers[i - 1].upToAcres ?? 0) : 0;
+    const midpointAcres =
+      t.upToAcres !== null ? (prevBound + t.upToAcres) / 2 : prevBound + 0.5;
+    return { label: t.name || `Tier ${i + 1}`, midpointAcres, upToAcres: t.upToAcres };
+  });
+}
+
 type BaseKey = "weekly" | "biweekly" | "monthly" | "onetime";
 type Bases = Record<BaseKey, number>;
 
@@ -2375,6 +2392,10 @@ function PricingEngineTab() {
   const pricingRules: PricingRulesConfig = pricingConfigData?.pricingRules ?? DEFAULT_PRICING_RULES;
   const totalMonthlyOverheadDollars = (overheadTotal?.totalMonthlyOverheadCents ?? 0) / 100;
 
+  // Dynamic tiers derived from saved pricingRules (falls back to hardcoded YARD_SIZE_TIERS
+  // only when the account has never configured tiers).
+  const activeTiers = toActiveTiers(pricingRules.yardSizeTiers);
+
   const [marginPct, setMarginPct] = useState(() => config.targetProfitMarginPct || 30);
 
   /**
@@ -2417,10 +2438,11 @@ function PricingEngineTab() {
     () => pricingRules.perDogRule ?? DEFAULT_PRICING_RULES.perDogRule
   );
 
-  // Yard-size surcharges — shared by accordion editor AND the tier-i table cells.
-  // Mapped by upToAcres boundary (not array index) so legacy 3-tier configs load correctly.
+  // Yard-size surcharges — one entry per activeTier, indexed by position.
   const [yardSizeSurcharges, setYardSizeSurcharges] = useState<number[]>(() =>
-    YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, pricingRules.yardSizeTiers))
+    pricingRules.yardSizeTiers.length > 0
+      ? pricingRules.yardSizeTiers.map((t) => t.surcharge)
+      : YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, pricingRules.yardSizeTiers))
   );
 
   const [isDirty, setIsDirty] = useState(false);
@@ -2452,16 +2474,20 @@ function PricingEngineTab() {
           (wMult > 0 ? w * ((cfg.oneTimeMultiplier || 3) / wMult) : w * 2.5),
       });
       setPerDogRule(rules.perDogRule ?? DEFAULT_PRICING_RULES.perDogRule);
-      setYardSizeSurcharges(
-        YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, rules.yardSizeTiers))
-      );
+      if (rules.yardSizeTiers.length > 0) {
+        setYardSizeSurcharges(rules.yardSizeTiers.map((t) => t.surcharge));
+      } else {
+        setYardSizeSurcharges(
+          YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, rules.yardSizeTiers))
+        );
+      }
       setMarginPct(cfg.targetProfitMarginPct || 30);
     }
   }, [pricingConfigData]);
 
   const suggestedPrices = useMemo(() => {
     const result: Record<number, Partial<Record<BaseKey, number>>> = {};
-    YARD_SIZE_TIERS.forEach((tier, ti) => {
+    activeTiers.forEach((tier, ti) => {
       result[ti] = {};
       FREQ_COLUMNS.forEach((freq) => {
         const mult = getFreqMultiplier(config, freq.multKey);
@@ -2487,8 +2513,13 @@ function PricingEngineTab() {
         monthly: Math.max(0, bases.monthly),
         oneTime: Math.max(0, bases.onetime),
       };
-      const newTiers: PricingRulesConfig["yardSizeTiers"] = YARD_SIZE_TIERS.map((tier, ti) => ({
-        name: tier.label,
+      // Preserve the existing tier names and boundaries; only update surcharges.
+      const tierSource =
+        pricingRules.yardSizeTiers.length > 0
+          ? pricingRules.yardSizeTiers
+          : activeTiers.map((t) => ({ name: t.label, upToAcres: t.upToAcres, surcharge: 0 }));
+      const newTiers: PricingRulesConfig["yardSizeTiers"] = tierSource.map((tier, ti) => ({
+        name: (tier as { name?: string }).name ?? (tier as { label?: string }).label ?? `Tier ${ti + 1}`,
         upToAcres: tier.upToAcres,
         surcharge: Math.round((yardSizeSurcharges[ti] ?? 0) * 100) / 100,
       }));
@@ -2536,7 +2567,7 @@ function PricingEngineTab() {
     // frequency-specific implied surcharges (suggested[freq] - newBases[freq]).
     // This minimises the overall deviation from all 4 suggested values simultaneously.
     setYardSizeSurcharges(
-      YARD_SIZE_TIERS.map((_, ti) => {
+      activeTiers.map((_, ti) => {
         if (ti === 0) return 0;
         const freqSurcharges = FREQ_COLUMNS.map((f) => {
           const suggested = suggestedPrices[ti]?.[f.key] ?? 0;
@@ -2679,7 +2710,7 @@ function PricingEngineTab() {
               </tr>
             </thead>
             <tbody>
-              {YARD_SIZE_TIERS.map((tier, ti) => (
+              {activeTiers.map((tier, ti) => (
                 <tr key={ti} className="border-b last:border-0 hover:bg-muted/20">
                   <td className="px-4 py-3 text-xs font-medium text-muted-foreground">
                     {tier.label}
@@ -2763,7 +2794,7 @@ function PricingEngineTab() {
                   Surcharges are added on top of the base price for larger yards.
                 </p>
                 <div className="space-y-2">
-                  {YARD_SIZE_TIERS.map((tier, ti) => (
+                  {activeTiers.map((tier, ti) => (
                     <div
                       key={ti}
                       className="flex items-center gap-3"
@@ -2946,6 +2977,8 @@ function MyPricingTab() {
     : DEFAULT_PRICING_CONFIG;
   const pricingRules: PricingRulesConfig = pricingConfigData?.pricingRules ?? DEFAULT_PRICING_RULES;
 
+  const activeTiers = toActiveTiers(pricingRules.yardSizeTiers);
+
   const [bases, setBases] = useState<Bases>(() => {
     const w = pricingRules.basePrices.weekly ?? DEFAULT_PRICING_RULES.basePrices.weekly;
     const bw = pricingRules.basePrices.biWeekly ?? DEFAULT_PRICING_RULES.basePrices.biWeekly;
@@ -2963,7 +2996,9 @@ function MyPricingTab() {
   });
 
   const [yardSizeSurcharges, setYardSizeSurcharges] = useState<number[]>(() =>
-    YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, pricingRules.yardSizeTiers))
+    pricingRules.yardSizeTiers.length > 0
+      ? pricingRules.yardSizeTiers.map((t) => t.surcharge)
+      : YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, pricingRules.yardSizeTiers))
   );
 
   const [perDogRule, setPerDogRule] = useState<PricingRulesConfig["perDogRule"]>(
@@ -2992,9 +3027,13 @@ function MyPricingTab() {
           (wMult > 0 ? w * ((cfg.oneTimeMultiplier || 3) / wMult) : w * 2.5),
       });
       setPerDogRule(rules.perDogRule ?? DEFAULT_PRICING_RULES.perDogRule);
-      setYardSizeSurcharges(
-        YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, rules.yardSizeTiers))
-      );
+      if (rules.yardSizeTiers.length > 0) {
+        setYardSizeSurcharges(rules.yardSizeTiers.map((t) => t.surcharge));
+      } else {
+        setYardSizeSurcharges(
+          YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, rules.yardSizeTiers))
+        );
+      }
     }
   }, [pricingConfigData]);
 
@@ -3028,8 +3067,12 @@ function MyPricingTab() {
         monthly: Math.max(0, bases.monthly),
         oneTime: Math.max(0, bases.onetime),
       };
-      const newTiers: PricingRulesConfig["yardSizeTiers"] = YARD_SIZE_TIERS.map((tier, ti) => ({
-        name: tier.label,
+      const tierSource =
+        pricingRules.yardSizeTiers.length > 0
+          ? pricingRules.yardSizeTiers
+          : activeTiers.map((t) => ({ name: t.label, upToAcres: t.upToAcres, surcharge: 0 }));
+      const newTiers: PricingRulesConfig["yardSizeTiers"] = tierSource.map((tier, ti) => ({
+        name: (tier as { name?: string }).name ?? (tier as { label?: string }).label ?? `Tier ${ti + 1}`,
         upToAcres: tier.upToAcres,
         surcharge: Math.round((yardSizeSurcharges[ti] ?? 0) * 100) / 100,
       }));
@@ -3112,7 +3155,7 @@ function MyPricingTab() {
               </tr>
             </thead>
             <tbody>
-              {YARD_SIZE_TIERS.map((tier, ti) => (
+              {activeTiers.map((tier, ti) => (
                 <tr key={ti} className="border-b last:border-0 hover:bg-muted/20">
                   <td className="px-4 py-3 text-sm font-medium">
                     {tier.label}
@@ -3152,7 +3195,7 @@ function MyPricingTab() {
           <div>
             <p className="text-sm font-medium mb-3">Yard Size Surcharges</p>
             <div className="space-y-2">
-              {YARD_SIZE_TIERS.map((tier, ti) => (
+              {activeTiers.map((tier, ti) => (
                 <div
                   key={ti}
                   className="flex items-center gap-3"

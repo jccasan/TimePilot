@@ -100,6 +100,12 @@ type LrPricingTier = {
   pricePerVisit: number | null;
 };
 
+type PricingRulesYardTier = {
+  name?: string;
+  upToAcres: number | null;
+  surcharge: number;
+};
+
 type CompanyInfo = {
   name: string;
   logoUrl: string | null;
@@ -113,6 +119,7 @@ type CompanyInfo = {
   widgetFieldConfig: WidgetFieldConfig | null;
   yardSizeTierConfig: YardSizeTierConfig | null;
   lrPricingTiers: LrPricingTier[] | null;
+  pricingRules: { yardSizeTiers: PricingRulesYardTier[] } | null;
 };
 
 type QuoteResult = {
@@ -830,7 +837,10 @@ export default function SignupWidget() {
       const numberOfDogs = currentTier ? currentTier.dogCount : 1;
       const backendFreq = BACKEND_FREQ_MAP[selectedFreq] || selectedFreq || "weekly";
       let yardSize: string;
-      if (hasYardSizeTiers && /^tier_[1-6]$/.test(selectedLot)) {
+      if (hasYardSizeTiers && selectedLot) {
+        // Send the tier value directly — for pricingRules tiers this is the tier
+        // name (e.g. "Standard"), which getAcreageSurcharge matches by name.
+        // For legacy tier_N values the positional fallback still applies.
         yardSize = selectedLot;
       } else if (["small", "medium", "large", "extra-large"].includes(selectedLot)) {
         yardSize = selectedLot;
@@ -949,31 +959,50 @@ export default function SignupWidget() {
   const hasLotAddons = parsed && parsed.lotAddons.length > 0;
 
   const yardSizeTiers = useMemo(() => {
-    // LR tiers take priority over SP yardSizeTierConfig when present
+    // pricingRules.yardSizeTiers is the canonical source — it's what the backend
+    // uses for pricing, so the form options must match it exactly.
+    if (company?.pricingRules?.yardSizeTiers && company.pricingRules.yardSizeTiers.length > 0) {
+      return company.pricingRules.yardSizeTiers.map((t, i) => ({
+        value: t.name || `Tier ${i + 1}`,
+        label: t.name || `Tier ${i + 1}`,
+        price: t.surcharge,
+        isAddon: true,
+      }));
+    }
+    // LR tiers fallback (lead-response override)
     if (company?.lrPricingTiers && company.lrPricingTiers.length > 0) {
       return company.lrPricingTiers.map((t, i) => ({
         value: `tier_${i + 1}`,
         label: t.label.trim(),
         price: t.pricePerVisit ?? 0,
+        isAddon: false,
       }));
     }
+    // Legacy yardSizeTierConfig fallback
     const config = company?.yardSizeTierConfig;
     if (!config) return [];
-    const result: { value: string; label: string; price: number }[] = [];
+    const result: { value: string; label: string; price: number; isAddon: boolean }[] = [];
     for (let i = 1; i <= 6; i++) {
       const key = `tier${i}` as keyof YardSizeTierConfig;
       const tier = config[key];
       if (tier?.label?.trim()) {
-        result.push({ value: `tier_${i}`, label: tier.label.trim(), price: tier.price ?? 0 });
+        result.push({
+          value: `tier_${i}`,
+          label: tier.label.trim(),
+          price: tier.price ?? 0,
+          isAddon: false,
+        });
       }
     }
     return result;
-  }, [company?.lrPricingTiers, company?.yardSizeTierConfig]);
+  }, [company?.pricingRules?.yardSizeTiers, company?.lrPricingTiers, company?.yardSizeTierConfig]);
 
   const hasYardSizeTiers = yardSizeTiers.length > 0;
 
-  // When LR tiers are configured but fewer than 3 are valid, block the form
+  // When LR tiers are configured (and pricingRules tiers aren't overriding them)
+  // but fewer than 3 are valid, block the form
   const lrTiersInactive =
+    !company?.pricingRules?.yardSizeTiers?.length &&
     company?.lrPricingTiers !== undefined &&
     company.lrPricingTiers !== null &&
     yardSizeTiers.length < 3;
@@ -1748,7 +1777,7 @@ export default function SignupWidget() {
                               <span className="text-sm flex-1">{tier.label}</span>
                               {tier.price > 0 && (
                                 <span className="text-sm text-muted-foreground ml-2">
-                                  ${tier.price.toFixed(0)}
+                                  {tier.isAddon ? "+" : ""}${tier.price.toFixed(0)}
                                 </span>
                               )}
                             </RadioOption>
@@ -2403,7 +2432,7 @@ export default function SignupWidget() {
                             <span className="text-sm flex-1">{tier.label}</span>
                             {tier.price > 0 && (
                               <span className="text-sm text-muted-foreground ml-2">
-                                ${tier.price.toFixed(0)}
+                                {tier.isAddon ? "+" : ""}${tier.price.toFixed(0)}
                               </span>
                             )}
                           </RadioOption>
