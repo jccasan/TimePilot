@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState, useEffect, useMemo } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { ServicePlan, Property, Contact, Visit } from "@shared/schema";
+import type { ServicePlan, Property, Contact, Visit, ServicePricingItem } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -75,6 +75,16 @@ export function EditJobPanel({
   const [timeWindowType, setTimeWindowType] = useState<"anytime" | "morning" | "afternoon" | "specific">("anytime");
   const [scheduledTimeStart, setScheduledTimeStart] = useState("");
   const [scheduledTimeEnd, setScheduledTimeEnd] = useState("");
+  const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>([]);
+
+  const { data: pricingItems = [] } = useQuery<ServicePricingItem[]>({
+    queryKey: ["/api/pricing"],
+  });
+
+  const addOnPricing = useMemo(
+    () => pricingItems.filter((p) => p.category === "add_on" && p.isActive),
+    [pricingItems]
+  );
 
   const [numberOfDogs, setNumberOfDogs] = useState("");
   const [dogNames, setDogNames] = useState("");
@@ -98,6 +108,11 @@ export function EditJobPanel({
       setEndDate(servicePlan.endDate || "");
       setVisitInstructions(servicePlan.visitInstructions || "");
       setAssignedUserId(servicePlan.assignedUserId || "none");
+      setSelectedAddOnIds(
+        (servicePlan.addOns as { servicePricingId: string }[] | undefined)?.map(
+          (a) => a.servicePricingId
+        ) ?? []
+      );
     }
   }, [servicePlan, open]);
 
@@ -162,6 +177,10 @@ export function EditJobPanel({
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!servicePlan?.id) throw new Error("No service plan");
+      const addOnsPayload = selectedAddOnIds.map((id) => {
+        const item = addOnPricing.find((p) => p.id === id);
+        return { servicePricingId: id, name: item?.name || "", price: item?.basePrice || "0" };
+      });
       await apiRequest("PATCH", `/api/service-plans/${servicePlan.id}`, {
         serviceName: serviceName || null,
         frequency,
@@ -171,6 +190,7 @@ export function EditJobPanel({
         endDate: endDate || null,
         visitInstructions: visitInstructions || null,
         assignedUserId: assignedUserId !== "none" ? assignedUserId : null,
+        addOns: addOnsPayload,
       });
       if (property?.id) {
         await apiRequest("PATCH", `/api/properties/${property.id}`, {
@@ -276,6 +296,51 @@ export function EditJobPanel({
                 data-testid="input-edit-job-price"
               />
             </div>
+
+            {addOnPricing.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Add-On Services</Label>
+                <div className="border rounded-md divide-y">
+                  {addOnPricing.map((addon) => {
+                    const checked = selectedAddOnIds.includes(addon.id);
+                    return (
+                      <label
+                        key={addon.id}
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/40"
+                        data-testid={`addon-toggle-${addon.id}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setSelectedAddOnIds(
+                              checked
+                                ? selectedAddOnIds.filter((id) => id !== addon.id)
+                                : [...selectedAddOnIds, addon.id]
+                            )
+                          }
+                          className="accent-primary"
+                        />
+                        <span className="text-sm flex-1">{addon.name}</span>
+                        <span className="text-sm text-muted-foreground">+${addon.basePrice}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {selectedAddOnIds.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Total per visit: $
+                    {(
+                      parseFloat(pricePerVisit || "0") +
+                      selectedAddOnIds.reduce((sum, id) => {
+                        const item = addOnPricing.find((p) => p.id === id);
+                        return sum + parseFloat(item?.basePrice || "0");
+                      }, 0)
+                    ).toFixed(2)}
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
