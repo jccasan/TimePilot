@@ -1421,79 +1421,52 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     smsOptIn: z.boolean().optional().default(false),
   });
 
-  const contactLookupRateLimit = new Map<string, { count: number; resetAt: number }>();
-
-  app.get("/api/public/contact-lookup/:slug", async (req: Request, res: Response) => {
-    try {
-      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
-      const now = Date.now();
-      const entry = contactLookupRateLimit.get(clientIp);
-      if (entry && entry.resetAt > now) {
-        if (entry.count >= 5) {
-          return res.status(429).json({ error: "Too many requests. Please try again later." });
-        }
-        entry.count++;
-      } else {
-        contactLookupRateLimit.set(clientIp, { count: 1, resetAt: now + 15 * 60 * 1000 });
-      }
-
-      const slug = p(req.params.slug);
-      const company = await storage.getCompanyBySlug(slug);
-      if (!company) return res.status(404).json({ error: "Company not found" });
-
-      const email = req.query.email;
-      const zip = req.query.zip;
-
-      if (!email || typeof email !== "string") {
-        return res.status(400).json({ error: "Email is required" });
-      }
-      if (!zip || typeof zip !== "string") {
-        return res.status(400).json({ error: "ZIP code is required" });
-      }
-
-      const normalizedEmail = email.trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(normalizedEmail)) {
-        return res.status(400).json({ error: "Invalid email" });
-      }
-
-      const normalizedZip = zip.trim().slice(0, 5);
-      if (!/^\d{5}$/.test(normalizedZip)) {
-        return res.status(400).json({ error: "Invalid ZIP code" });
-      }
-
-      const [contact] = await db
-        .select({ id: contacts.id })
-        .from(contacts)
-        .where(
-          and(
-            eq(contacts.companyId, company.id),
-            sql`LOWER(TRIM(${contacts.email})) = ${normalizedEmail}`,
-            eq(contacts.zipCode, normalizedZip)
-          )
-        )
-        .limit(1);
-
-      return res.json({ found: !!contact });
-    } catch (err) {
-      handleError(res, err);
-    }
+  // Ensure the DB-backed rate limit table exists (created once at startup).
+  // This table is shared across all app instances, making it safe for autoscaled deployments.
+  db.execute(
+    sql`
+    CREATE TABLE IF NOT EXISTS public_rate_limits (
+      key TEXT NOT NULL PRIMARY KEY,
+      count INTEGER NOT NULL DEFAULT 1,
+      reset_at TIMESTAMPTZ NOT NULL
+    )
+  `
+  ).catch((err: unknown) => {
+    console.error("[public-rate-limits] Failed to create rate limit table:", err);
   });
 
-  const publicLeadRateLimit = new Map<string, { count: number; resetAt: number }>();
+  /**
+   * Atomically increment the request counter for a given key.
+   * Returns true when the caller has exceeded `limit` requests within `windowMs`.
+   * Works across multiple app instances because the counter lives in PostgreSQL.
+   */
+  async function dbCheckRateLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
+    const resetAt = new Date(Date.now() + windowMs);
+    const result = await db.execute(sql`
+      INSERT INTO public_rate_limits (key, count, reset_at)
+      VALUES (${key}, 1, ${resetAt})
+      ON CONFLICT (key) DO UPDATE SET
+        count = CASE
+          WHEN public_rate_limits.reset_at <= NOW() THEN 1
+          ELSE public_rate_limits.count + 1
+        END,
+        reset_at = CASE
+          WHEN public_rate_limits.reset_at <= NOW() THEN ${resetAt}
+          ELSE public_rate_limits.reset_at
+        END
+      RETURNING count
+    `);
+    const count = (result.rows[0] as { count: number } | undefined)?.count ?? 1;
+    return count > limit;
+  }
 
   app.post("/api/public/leads/:slug", async (req: Request, res: Response) => {
     try {
       const clientIp = req.ip || req.socket.remoteAddress || "unknown";
-      const now = Date.now();
-      const entry = publicLeadRateLimit.get(clientIp);
-      if (entry && entry.resetAt > now) {
-        if (entry.count >= 10) {
-          return res.status(429).json({ error: "Too many requests. Please try again later." });
-        }
-        entry.count++;
-      } else {
-        publicLeadRateLimit.set(clientIp, { count: 1, resetAt: now + 60 * 60 * 1000 });
+      const rateLimitKey = `leads:${clientIp}`;
+      const exceeded = await dbCheckRateLimit(rateLimitKey, 10, 60 * 60 * 1000);
+      if (exceeded) {
+        return res.status(429).json({ error: "Too many requests. Please try again later." });
       }
 
       const { slug: _slug } = req.params;

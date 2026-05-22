@@ -708,7 +708,6 @@ export default function SignupWidget() {
   const [setupIntentError, setSetupIntentError] = useState<string | null>(null);
   const [cardOnFile, setCardOnFile] = useState<{ last4: string; brand: string } | null>(null);
   const [useNewCard, setUseNewCard] = useState(false);
-  const [returningContactPrefilled, setReturningContactPrefilled] = useState(false);
 
   const {
     data: company,
@@ -809,28 +808,6 @@ export default function SignupWidget() {
       setZipError(err.message);
     },
   });
-
-  const lookupContactByEmail = useCallback(
-    async (email: string) => {
-      const trimmed = email.trim().toLowerCase();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!trimmed || !emailRegex.test(trimmed)) return;
-      const verifiedZip = zipCode.trim().slice(0, 5);
-      if (!zipVerified || !/^\d{5}$/.test(verifiedZip)) return;
-      try {
-        const res = await fetch(
-          `/api/public/contact-lookup/${slug}?email=${encodeURIComponent(trimmed)}&zip=${encodeURIComponent(verifiedZip)}`
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.found) {
-          setReturningContactPrefilled(false);
-          setCurrentStep(2);
-        }
-      } catch {}
-    },
-    [slug, zipVerified, zipCode]
-  );
 
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -2072,7 +2049,7 @@ export default function SignupWidget() {
             totalSteps={totalSteps}
             brandStyles={brandStyles}
             labels={stepLabels}
-            extraCompletedSteps={returningContactPrefilled ? [3] : undefined}
+            extraCompletedSteps={undefined}
           />
 
           <CardContent className="p-6 pt-0">
@@ -2201,9 +2178,7 @@ export default function SignupWidget() {
                           value={formData.email}
                           onChange={(e) => {
                             updateField("email", e.target.value);
-                            if (returningContactPrefilled) setReturningContactPrefilled(false);
                           }}
-                          onBlur={(e) => lookupContactByEmail(e.target.value)}
                           data-testid="input-email"
                         />
                       </div>
@@ -2287,22 +2262,6 @@ export default function SignupWidget() {
                 className="space-y-5 animate-in fade-in slide-in-from-right-4 duration-300"
                 data-testid="step-2-details"
               >
-                {returningContactPrefilled && (
-                  <div
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium"
-                    style={{
-                      backgroundColor: brandStyles.lightBg,
-                      border: `1px solid ${brandStyles.lightBorder}`,
-                      color: brandStyles.accentText,
-                    }}
-                    data-testid="banner-returning-customer"
-                  >
-                    <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-                    <span>
-                      Welcome back! We recognized your account and pre-filled your details.
-                    </span>
-                  </div>
-                )}
                 <div className="text-center space-y-1">
                   <h2 className="text-xl font-bold">Service Details</h2>
                   <p className="text-sm text-muted-foreground">Tell us about your yard and pets</p>
