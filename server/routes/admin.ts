@@ -2704,7 +2704,7 @@ Respond with exactly one category from the list above and nothing else.`;
     {
       keywords: ["route", "routing", "optimize", "optimization", "dispatch"],
       answer:
-        "Routes let you organize daily service stops. Use the Route Builder to drag-and-drop visits, optimize the order using our route optimization algorithm, and dispatch routes to technicians. You can optimize routes using credits from your account.",
+        "Routes let you organize daily service stops. Use the Route Builder to drag-and-drop visits, optimize the order using our route optimization algorithm, and dispatch routes to technicians. Route optimization is always available — just open a route and click Optimize.",
     },
     {
       keywords: ["schedule", "service plan", "recurring", "visit", "appointment", "job"],

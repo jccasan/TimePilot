@@ -3340,7 +3340,7 @@ export default function RoutesPage() {
               onClick={handleConfirmOptimize}
               data-testid="button-confirm-optimize"
             >
-              Use {confirmOptimize && confirmOptimize.stopCount <= 30 ? "1 Credit" : "2 Credits"}
+              Optimize Route
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
