@@ -1,0 +1,240 @@
+You are working on an existing codebase called Scoopilot. It is a multi-tenant
+SaaS CRM for pet waste removal businesses built with:
+- PostgreSQL + Drizzle ORM
+- Express backend (session auth, REST API)
+- React frontend (Tailwind CSS, shadcn/ui)
+
+Do not scaffold a new project. Extend the existing codebase only.
+Do not modify any existing working features.
+
+IMPORTANT: These two features both modify shared/schema.ts and generate Drizzle
+migrations. Run Feature 1 (ICS Calendar) fully — including migration — before
+starting Feature 2 (Inbound Email). Do not run both migrations simultaneously.
+
+---
+
+## FEATURE 1: ICS CALENDAR FEED (read-only, no OAuth)
+
+### Base URL
+Before writing any URL construction, search the codebase for existing env var
+usage. Look for: PUBLIC_URL, APP_URL, BASE_URL, NEXT_PUBLIC_URL, or any
+`process.env` reference used to construct absolute URLs elsewhere. Use whatever
+is already established. Do not hardcode a domain. If no env var exists, use
+`process.env.APP_URL` and add it to .env.example with a comment.
+
+### Goal
+Each tenant gets a unique, subscribable calendar feed URL that exposes their
+scheduled jobs as calendar events. Works with Google Calendar, Outlook, and
+Apple Calendar via standard iCal/ICS format.
+
+### Database
+Add to the tenants table (or equivalent):
+- calendar_token: text, unique, not null (UUID generated on account creation)
+- calendar_feed_mode: enum('summary', 'detailed'), default 'summary'
+
+Add to the visits/jobs table (whatever the existing scheduled visit table is
+called — check the schema before assuming the table name):
+- scheduled_time_start: time | null
+- scheduled_time_end: time | null
+- time_window_type: enum('anytime', 'morning', 'afternoon', 'specific'),
+  default 'anytime'
+
+NOTE: scheduled_time_start and scheduled_time_end will be null for all existing
+visits. This is correct and expected. All historical visits will render as
+all-day events. Do not backfill times.
+
+### ICS Event Rules
+- time_window_type = 'anytime' OR scheduled_time_start is null:
+  Render as all-day event using DATE format (no time component):
+  DTSTART;VALUE=DATE:20260603
+  DTEND;VALUE=DATE:20260604
+- time_window_type = 'morning': timed event, 07:00–12:00 local tenant timezone
+- time_window_type = 'afternoon': timed event, 12:00–17:00 local tenant timezone
+- time_window_type = 'specific': use scheduled_time_start / scheduled_time_end
+
+### Feed Modes
+- summary (default): one event per route per day
+  SUMMARY: "{Route Name} — {N} stops"
+  DESCRIPTION: ordered list of all stops (customer name + street address)
+- detailed: one event per stop
+  SUMMARY: "{customer_name} — {street_address}"
+  DESCRIPTION: dog count, yard size, gate code, special instructions
+
+### Backend
+1. On tenant creation, auto-generate UUID → calendar_token. Set
+   calendar_feed_mode to 'summary'.
+
+2. Public (no auth) GET endpoint:
+   GET /api/calendar/:token/feed.ics
+   - Look up tenant by calendar_token
+   - Query visits for that tenant (upcoming + past 30 days)
+   - Apply feed mode logic (summary vs detailed)
+   - Apply ICS event rules (all-day vs timed)
+   - Return valid ICS with Content-Type: text/calendar
+   - UID per event: stable, use visit ID + tenant ID (summary: route ID + date
+     + tenant ID)
+   - Use `ical-generator` npm package if not already installed
+
+3. GET /api/calendar/token (authenticated):
+   Returns { feed_url, feed_mode, token }
+   feed_url must be constructed using the env var identified above.
+
+4. POST /api/calendar/regenerate (authenticated):
+   Regenerates calendar_token. Returns new { feed_url }.
+
+5. PATCH /api/calendar/settings (authenticated):
+   Body: { feed_mode: 'summary' | 'detailed' }
+   Updates calendar_feed_mode for the tenant.
+
+### Frontend
+Add "Calendar Sync" card to Settings → Integrations section (create the
+section if it doesn't exist).
+
+Contents:
+- Feed URL in read-only input with Copy button
+- feed_mode toggle: "Summary (one event per route)" / "Detailed (one per stop)"
+  — updates via PATCH /api/calendar/settings on change
+- Setup instructions for Google Calendar, Outlook, Apple Calendar (collapsed
+  by default, expandable — don't clutter the page)
+- Helper text: "Google Calendar refreshes subscribed feeds every 6–24 hours.
+  Changes in Scoopilot won't appear instantly."
+- Regenerate Link button with confirmation dialog:
+  "This will break any existing calendar subscriptions. Are you sure?"
+
+---
+
+## FEATURE 2: INBOUND EMAIL ADDRESS
+
+Run this feature's migration only after Feature 1's migration is complete.
+
+### CRITICAL: Existing Webhook — Do Not Overwrite
+The file server/routes/messages.ts already contains a handler for:
+POST /api/webhooks/sendgrid/inbound
+
+This handler processes reply-threading using the pattern:
+reply+<threadId>@inbound.scoopilot.com
+
+Do not replace or refactor this handler. Extend it by adding routing logic at
+the TOP of the existing handler, before any existing logic runs:
+
+Routing logic:
+1. Parse the `to` field from the incoming SendGrid payload
+2. If `to` matches pattern reply+*@inbound.scoopilot.com → fall through to
+   existing handler logic unchanged
+3. If `to` matches pattern crm.*@mail.scoopilot.com → route to new
+   per-tenant inbound handler (see below)
+4. If neither pattern matches → log and return 200 (don't retry)
+
+All existing reply-threading behavior must remain fully intact.
+
+### Infrastructure Prerequisites (not code — flag these clearly)
+The following must be configured outside the codebase before this feature
+receives any email. Add a comment block at the top of the new handler file
+listing these:
+
+  // INFRASTRUCTURE REQUIRED BEFORE THIS FEATURE IS LIVE:
+  // 1. Add MX records for mail.scoopilot.com pointing to SendGrid inbound
+  //    parse servers (mx.sendgrid.net, priority 10)
+  // 2. Configure SendGrid Inbound Parse in the SendGrid dashboard:
+  //    - Host: mail.scoopilot.com
+  //    - Destination URL: https://{APP_URL}/api/webhooks/sendgrid/inbound
+  //    - Check "POST the raw, full MIME message" if needed for header parsing
+  // These are DNS/dashboard steps — no code can do them.
+
+### Slug Generation
+On tenant creation:
+1. Slugify business name: lowercase, strip non-alphanumeric, truncate to 20 chars
+2. Check inbound_email column for collision
+3. If collision: append first 4 digits of business phone (digits only, no
+   formatting)
+4. If still collision: append full 10 digits
+5. If phone not yet available: store slug as pending, generate final address
+   when phone is saved. Surface a warning in Settings until resolved.
+6. Once assigned, inbound_email is immutable. Never update it on business name
+   or phone change.
+
+### Database
+Add to tenants table:
+- inbound_email: text, unique, nullable (null = pending until phone available)
+- inbound_email_slug: text, unique, nullable
+
+New table: inbound_emails
+- id, tenant_id (FK), from_address, from_name, subject
+- body_text: text, body_html: text
+- matched_contact_id: FK to contacts, nullable
+- raw_headers: jsonb
+- status: enum('matched', 'unmatched', 'ignored')
+- created_at
+
+### Inbound Handler Logic (new function, called from existing webhook)
+1. Extract `to` → look up tenant by inbound_email
+2. If tenant not found: log, return (don't throw — caller returns 200)
+3. Parse forwarded headers to identify real originating sender:
+   - Check raw headers first: X-Forwarded-To, X-Original-From,
+     X-MS-Exchange-* (Outlook)
+   - If not in headers: parse body for Gmail forwarding block:
+     "---------- Forwarded message ---------" then extract From: line
+   - Fall back to envelope `from` if neither found
+4. Match parsed from_address to contacts table (case-insensitive email match,
+   scoped to tenant)
+5. Insert into inbound_emails with appropriate status and matched_contact_id
+6. If matched: append to contact activity timeline
+   type: 'email_inbound'
+   fields: subject, body_text (first 500 chars as preview), from_name,
+   from_address, full body stored in inbound_emails table
+7. If unmatched: insert with status = 'unmatched'. Do not drop silently.
+8. Return cleanly — caller always returns HTTP 200 to SendGrid
+
+### Supporting Endpoints
+- GET /api/email/inbound-address (authenticated):
+  Returns { inbound_email, pending: boolean }
+
+- GET /api/email/unmatched (authenticated):
+  Without pagination params: return { count: number } only (cheap badge fetch)
+  With pagination params (?page=&limit=): return full paginated list
+  Include ignored emails only when ?include_ignored=true
+
+- POST /api/email/unmatched/:id/link (authenticated):
+  Body: { contact_id }
+  Sets status = 'matched', matched_contact_id, appends to contact timeline
+
+- POST /api/email/unmatched/:id/ignore (authenticated):
+  Sets status = 'ignored'
+
+### Frontend — Settings Card
+Add "Email Forwarding" card to Settings → Integrations section (same section
+as Calendar Sync above).
+
+Contents:
+- Inbound address in read-only input with Copy button
+- If pending (no phone on file): show warning banner with link to complete
+  business profile
+- Gmail setup instructions (collapsed/expandable):
+  "Gmail Settings → See all settings → Filters and Blocked Addresses →
+  Create filter → Forward to {inbound_email}"
+- Outlook setup instructions (collapsed/expandable):
+  "Settings → View all Outlook settings → Mail → Rules →
+  Add rule → Forward to {inbound_email}"
+- Send Test Email button:
+  Posts to POST /api/email/send-test (authenticated)
+  Backend sends a test email to the tenant's inbound address from a
+  Scoopilot system address
+  Frontend polls GET /api/email/test-status for up to 30 seconds
+  Shows: "Working — test email received" or "Not yet received — check your
+  MX records and forwarding rule"
+
+### Frontend — Unmatched Email Queue
+Add "Unmatched Emails" view accessible from the inbox or contacts nav.
+
+- Nav badge: fetch GET /api/email/unmatched (no params) → show count if > 0
+  Fetch on page load only, not on polling interval
+- Table columns: From, Subject, Received, Preview (first 80 chars), Actions
+- Actions: "Link to Contact" (opens contact picker modal) | "Ignore"
+- Default view hides ignored. Toggle: "Show ignored (N)"
+
+### Frontend — Activity Timeline
+In the existing contact activity timeline, add rendering for type = 'email_inbound':
+- Icon: inbox icon, visually distinct from outbound email events
+- Label: "Email received"
+- Show: subject line, from name + address, body preview (first 200 chars)
+- Expand/collapse toggle to show full body_text
