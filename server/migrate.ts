@@ -1027,6 +1027,15 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] lead_response_config setup_complete column ensured");
 
+    // ── Invite-pending flag on company_users (Task #937) ───────────────────────
+    // Separates "pending invite not yet accepted" from "removed/deactivated member"
+    // so removed users cannot self-reactivate via the accept-invite endpoint.
+    await client.query(`
+      ALTER TABLE company_users
+        ADD COLUMN IF NOT EXISTS invite_pending BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    console.log("[Migration] company_users invite_pending column ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

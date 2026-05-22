@@ -444,6 +444,7 @@ export const companyUsers = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     role: userRoleEnum("role").notNull().default("tech"),
     isActive: boolean("is_active").notNull().default(true),
+    invitePending: boolean("invite_pending").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

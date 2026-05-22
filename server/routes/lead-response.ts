@@ -37,7 +37,10 @@ export async function blockLeadResponseOperator(
   try {
     const memberships = await storage.getCompaniesForUser(userId as string);
     if (!memberships.length) return next();
-    const role = memberships[0].role;
+    const pinnedId = req.session?.activeCompanyId;
+    const activeMembership =
+      (pinnedId ? memberships.find((m) => m.companyId === pinnedId) : undefined) ?? memberships[0];
+    const role = activeMembership.role;
     if (role !== "lead_response_operator") return next();
     req._isLeadResponseOperator = true;
     const path = req.path;

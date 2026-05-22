@@ -177,7 +177,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       if (!companyId && resolvedUserId) {
         const memberships = await storage.getCompaniesForUser(resolvedUserId);
-        if (memberships.length > 0) companyId = memberships[0].companyId;
+        if (memberships.length > 0) {
+          const pinnedId = req.session?.activeCompanyId;
+          const pinned = pinnedId ? memberships.find((m) => m.companyId === pinnedId) : undefined;
+          companyId = (pinned ?? memberships[0]).companyId;
+        }
       }
       if (!companyId && hasApiKey) {
         const apiKeyHeader = req.headers["x-api-key"] as string;

@@ -152,7 +152,9 @@ export async function getCompanyContext(req: Request) {
   if (!memberships.length) {
     throw { status: 403, message: "No company membership found" };
   }
-  const membership = memberships[0];
+  const pinnedId = req.session.activeCompanyId;
+  const membership =
+    (pinnedId ? memberships.find((m) => m.companyId === pinnedId) : undefined) ?? memberships[0];
   return { userId, companyId: membership.companyId, role: membership.role };
 }
 

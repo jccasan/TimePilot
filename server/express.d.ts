@@ -5,6 +5,7 @@ declare module "express-session" {
   interface SessionData {
     userId?: string;
     portalContactId?: string;
+    activeCompanyId?: string;
   }
 }
 

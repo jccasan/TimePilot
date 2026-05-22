@@ -1173,7 +1173,8 @@ export class DatabaseStorage implements IStorage {
     return db
       .select()
       .from(companyUsers)
-      .where(and(eq(companyUsers.userId, userId), eq(companyUsers.isActive, true)));
+      .where(and(eq(companyUsers.userId, userId), eq(companyUsers.isActive, true)))
+      .orderBy(asc(companyUsers.createdAt));
   }
 
   async createCompanyUser(data: InsertCompanyUser): Promise<CompanyUser> {
@@ -1190,6 +1191,39 @@ export class DatabaseStorage implements IStorage {
         role: role as "owner" | "admin" | "tech" | "lead_response_operator",
       })
       .returning();
+    return cu;
+  }
+
+  async addUserToCompanyPending(
+    userId: string,
+    companyId: string,
+    role: string
+  ): Promise<CompanyUser> {
+    const [cu] = await db
+      .insert(companyUsers)
+      .values({
+        userId,
+        companyId,
+        role: role as "owner" | "admin" | "tech" | "lead_response_operator",
+        isActive: false,
+        invitePending: true,
+      })
+      .returning();
+    return cu;
+  }
+
+  async getPendingMembership(userId: string, companyId: string): Promise<CompanyUser | undefined> {
+    const [cu] = await db
+      .select()
+      .from(companyUsers)
+      .where(
+        and(
+          eq(companyUsers.userId, userId),
+          eq(companyUsers.companyId, companyId),
+          eq(companyUsers.isActive, false),
+          eq(companyUsers.invitePending, true)
+        )
+      );
     return cu;
   }
 

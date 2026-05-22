@@ -793,12 +793,16 @@ Return ONLY valid JSON, no markdown.`,
           return res.status(409).json({ error: "This user is already a team member" });
         }
         if (existingMembership && !existingMembership.isActive) {
+          // Previously-deactivated member: re-invite as pending so they must accept.
           await storage.updateCompanyUser(existingMembership.id, {
-            isActive: true,
+            isActive: false,
+            invitePending: true,
             role: targetRole || "tech",
           });
         } else {
-          await storage.addUserToCompany(existingUser.id, companyId, targetRole || "tech");
+          // Brand-new membership for an existing user account: create as pending
+          // so the invitee must explicitly accept before it affects their session scope.
+          await storage.addUserToCompanyPending(existingUser.id, companyId, targetRole || "tech");
         }
       } else {
         const crypto = await import("crypto");
@@ -851,22 +855,24 @@ Return ONLY valid JSON, no markdown.`,
         await sendEmail({
           companyId: companyId,
           to: email,
-          subject: `You've been added to ${companyName} on ScooPilot`,
+          subject: `Invitation to join ${companyName} on ScooPilot`,
           senderName: company?.name || undefined,
           replyTo: company?.email || undefined,
-          text: `Hi ${firstName},\n\nYou've been added as a ${targetRole || "tech"} on ${companyName}'s ScooPilot account. Log in with your existing credentials at: ${appUrl}`,
+          text: `Hi ${firstName},\n\n${companyName} has invited you to join their ScooPilot account as a ${targetRole || "tech"}.\n\nTo accept this invitation, log in with your existing credentials and accept the pending invite from ${companyName}.\n\nLog in at: ${appUrl}\n\nIf you did not expect this invitation, you can safely ignore this email.`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
                 <h1 style="color: white; margin: 0;">${companyName}</h1>
               </div>
               <div style="padding: 20px; border: 1px solid #e5e7eb;">
-                <h2 style="margin-top: 0;">You've been added to ${companyName}</h2>
+                <h2 style="margin-top: 0;">You've been invited to ${companyName}</h2>
                 <p>Hi ${firstName},</p>
-                <p>You've been added as a <strong>${targetRole || "technician"}</strong>. Log in with your existing credentials.</p>
+                <p>${companyName} has invited you to join their ScooPilot account as a <strong>${targetRole || "technician"}</strong>.</p>
+                <p>To accept this invitation, log in with your existing credentials. You will see a pending invite from ${companyName} that you can accept.</p>
                 <div style="text-align: center; margin: 24px 0;">
-                  <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In Now</a>
+                  <a href="${appUrl}" style="background-color: #2d8a5e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Log In to Accept</a>
                 </div>
+                <p style="color: #6b7280; font-size: 14px;">If you did not expect this invitation, you can safely ignore this email.</p>
               </div>
             </div>
           `,
@@ -896,6 +902,29 @@ Return ONLY valid JSON, no markdown.`,
       })();
 
       res.json({ success: true, userId: existingUser.id, email, role: targetRole || "tech" });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/company/accept-invite", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      if (req._apiKeyAuth) {
+        return res
+          .status(403)
+          .json({ error: "This endpoint requires user session authentication" });
+      }
+      const userId = req.session.userId as string;
+      const { companyId } = req.body;
+      if (!companyId || typeof companyId !== "string") {
+        return res.status(400).json({ error: "companyId is required" });
+      }
+      const pending = await storage.getPendingMembership(userId, companyId);
+      if (!pending) {
+        return res.status(404).json({ error: "No pending invite found for this company" });
+      }
+      await storage.updateCompanyUser(pending.id, { isActive: true, invitePending: false });
+      return res.json({ success: true, companyId, role: pending.role });
     } catch (err) {
       handleError(res, err);
     }

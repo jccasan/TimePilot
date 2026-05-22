@@ -57,6 +57,11 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       const memberships = await storage.getCompaniesForUser(result.user.id);
       const role = memberships.length > 0 ? memberships[0].role : "tech";
       const companyId = memberships.length > 0 ? memberships[0].companyId : null;
+      // Pin session to this company so multi-membership users always land in
+      // their original (oldest) tenant rather than a newly-forced one.
+      if (companyId) {
+        req.session.activeCompanyId = companyId;
+      }
       let subscriptionStatus: string | null = null;
       let voicePlanStatus: string | null = null;
       if (companyId) {
@@ -105,7 +110,12 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       }
       // Only owner/admin may toggle import mode
       const memberships = await storage.getCompaniesForUser(userId);
-      const role = memberships.length > 0 ? memberships[0].role : "tech";
+      const pinnedId = req.session.activeCompanyId;
+      const activeMembership =
+        (pinnedId ? memberships.find((m) => m.companyId === pinnedId) : undefined) ??
+        memberships[0] ??
+        null;
+      const role = activeMembership ? activeMembership.role : "tech";
       if (role !== "owner" && role !== "admin") {
         return res.status(403).json({ error: "Only owners and admins can toggle import mode" });
       }
@@ -128,8 +138,13 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       if (!user) return res.status(401).json({ message: "User not found" });
       const { passwordHash: _passwordHash, ...safeUser } = user;
       const memberships = await storage.getCompaniesForUser(userId);
-      const role = memberships.length > 0 ? memberships[0].role : "tech";
-      const companyId = memberships.length > 0 ? memberships[0].companyId : null;
+      const pinnedId = req.session.activeCompanyId;
+      const activeMembership =
+        (pinnedId ? memberships.find((m) => m.companyId === pinnedId) : undefined) ??
+        memberships[0] ??
+        null;
+      const role = activeMembership ? activeMembership.role : "tech";
+      const companyId = activeMembership ? activeMembership.companyId : null;
       let subscriptionStatus: string | null = null;
       let voicePlanStatus: string | null = null;
       if (companyId) {
@@ -177,7 +192,11 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         }
         const memberships = await storage.getCompaniesForUser(userId);
         if (!memberships.length) return res.status(404).json({ error: "No company found" });
-        const companyId = memberships[0].companyId;
+        const pinnedId = req.session.activeCompanyId;
+        const activeMembership =
+          (pinnedId ? memberships.find((m) => m.companyId === pinnedId) : undefined) ??
+          memberships[0];
+        const companyId = activeMembership.companyId;
         const company = await storage.getCompany(companyId);
         if (!company || company.subscriptionStatus !== "pending_approval") {
           return res.status(403).json({
