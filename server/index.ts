@@ -3188,6 +3188,9 @@ async function seedLakeErieScoopersAccount() {
   await ensureVisitEnRouteAtColumn();
   await ensureVisitTimeWindowColumns();
   await ensureInboundEmailsTable();
+  await ensureFallbackLogTable();
+  await ensureSmsSessionsTable();
+  await ensureCustomFieldDefinitionsTable();
   await ensureVoicePortingColumn();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
