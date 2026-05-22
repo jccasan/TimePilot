@@ -272,7 +272,11 @@ export async function calculateCustomerProfitability(
     const costPerVisitCents = result.totalCostPerVisitCentsUnrounded;
     const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;
     const profitMarginPct =
-      revenuePerVisitCents > 0 ? (profitPerVisitCents / revenuePerVisitCents) * 100 : 0;
+      revenuePerVisitCents > 0
+        ? (profitPerVisitCents / revenuePerVisitCents) * 100
+        : costPerVisitCents > 0
+          ? -100
+          : 0;
     const jobMinutes = result.derived.jobMinutes;
     const profitPerHourCents = jobMinutes > 0 ? (profitPerVisitCents / jobMinutes) * 60 : 0;
 
@@ -339,7 +343,9 @@ export async function calculateCustomerProfitability(
   const overallMarginPct =
     totalRevenuePerVisitCents > 0
       ? (totalProfitPerVisitCents / totalRevenuePerVisitCents) * 100
-      : 0;
+      : totalCostPerVisitCents > 0
+        ? -100
+        : 0;
 
   let monthlyRevenueCents = 0;
   let monthlyCostCents = 0;
@@ -490,7 +496,11 @@ export async function calculateAllCustomerProfitability(
       const costPerVisitCents = result.totalCostPerVisitCentsUnrounded;
       const profitPerVisitCents = revenuePerVisitCents - costPerVisitCents;
       const profitMarginPct =
-        revenuePerVisitCents > 0 ? (profitPerVisitCents / revenuePerVisitCents) * 100 : 0;
+        revenuePerVisitCents > 0
+          ? (profitPerVisitCents / revenuePerVisitCents) * 100
+          : costPerVisitCents > 0
+            ? -100
+            : 0;
       const jobMinutes = result.derived.jobMinutes;
       const profitPerHourCents = jobMinutes > 0 ? (profitPerVisitCents / jobMinutes) * 60 : 0;
 
@@ -561,7 +571,9 @@ export async function calculateAllCustomerProfitability(
     const overallMarginPct =
       totalRevenuePerVisitCents > 0
         ? (totalProfitPerVisitCents / totalRevenuePerVisitCents) * 100
-        : 0;
+        : totalCostPerVisitCents > 0
+          ? -100
+          : 0;
 
     let monthlyRevenueCents = 0;
     let monthlyCostCents = 0;
