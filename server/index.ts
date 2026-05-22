@@ -2563,6 +2563,41 @@ async function ensureVisitEnRouteAtColumn() {
   }
 }
 
+async function ensureInboundEmailsTable() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      DO $$ BEGIN
+        CREATE TYPE inbound_email_status AS ENUM ('matched', 'unmatched', 'ignored');
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+      CREATE TABLE IF NOT EXISTS inbound_emails (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        from_address TEXT NOT NULL,
+        from_name TEXT,
+        subject TEXT,
+        body_text TEXT,
+        body_html TEXT,
+        matched_contact_id VARCHAR REFERENCES contacts(id) ON DELETE SET NULL,
+        raw_headers JSONB,
+        status inbound_email_status NOT NULL DEFAULT 'unmatched',
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_ie_tenant ON inbound_emails(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_ie_status ON inbound_emails(status);
+      CREATE INDEX IF NOT EXISTS idx_ie_contact ON inbound_emails(matched_contact_id);
+      CREATE INDEX IF NOT EXISTS idx_ie_created ON inbound_emails(created_at);
+    `);
+    console.log("[Migration] inbound_emails table ensured");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure inbound_emails table:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function ensureVisitTimeWindowColumns() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -3076,6 +3111,7 @@ async function seedLakeErieScoopersAccount() {
   await ensureUserColumns();
   await ensureVisitEnRouteAtColumn();
   await ensureVisitTimeWindowColumns();
+  await ensureInboundEmailsTable();
   await ensureVoicePortingColumn();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
