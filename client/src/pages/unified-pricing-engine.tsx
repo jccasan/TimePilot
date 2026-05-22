@@ -2304,8 +2304,7 @@ function toActiveTiers(
   if (!yardSizeTiers || yardSizeTiers.length === 0) return YARD_SIZE_TIERS;
   return yardSizeTiers.map((t, i) => {
     const prevBound = i > 0 ? (yardSizeTiers[i - 1].upToAcres ?? 0) : 0;
-    const midpointAcres =
-      t.upToAcres !== null ? (prevBound + t.upToAcres) / 2 : prevBound + 0.5;
+    const midpointAcres = t.upToAcres !== null ? (prevBound + t.upToAcres) / 2 : prevBound + 0.5;
     return { label: t.name || `Tier ${i + 1}`, midpointAcres, upToAcres: t.upToAcres };
   });
 }
@@ -2519,7 +2518,10 @@ function PricingEngineTab() {
           ? pricingRules.yardSizeTiers
           : activeTiers.map((t) => ({ name: t.label, upToAcres: t.upToAcres, surcharge: 0 }));
       const newTiers: PricingRulesConfig["yardSizeTiers"] = tierSource.map((tier, ti) => ({
-        name: (tier as { name?: string }).name ?? (tier as { label?: string }).label ?? `Tier ${ti + 1}`,
+        name:
+          (tier as { name?: string }).name ??
+          (tier as { label?: string }).label ??
+          `Tier ${ti + 1}`,
         upToAcres: tier.upToAcres,
         surcharge: Math.round((yardSizeSurcharges[ti] ?? 0) * 100) / 100,
       }));
@@ -3072,7 +3074,10 @@ function MyPricingTab() {
           ? pricingRules.yardSizeTiers
           : activeTiers.map((t) => ({ name: t.label, upToAcres: t.upToAcres, surcharge: 0 }));
       const newTiers: PricingRulesConfig["yardSizeTiers"] = tierSource.map((tier, ti) => ({
-        name: (tier as { name?: string }).name ?? (tier as { label?: string }).label ?? `Tier ${ti + 1}`,
+        name:
+          (tier as { name?: string }).name ??
+          (tier as { label?: string }).label ??
+          `Tier ${ti + 1}`,
         upToAcres: tier.upToAcres,
         surcharge: Math.round((yardSizeSurcharges[ti] ?? 0) * 100) / 100,
       }));
