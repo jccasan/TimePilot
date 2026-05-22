@@ -381,6 +381,7 @@ export default function Quotes() {
   }, [searchString]);
   const [sendQuoteId, setSendQuoteId] = useState<string | null>(null);
   const [sendVia, setSendVia] = useState("email");
+  const [approvalEnabled, setApprovalEnabled] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewQuoteId, setPreviewQuoteId] = useState<string | null>(null);
   const [downloadMenuId, setDownloadMenuId] = useState<string | null>(null);
@@ -447,8 +448,19 @@ export default function Quotes() {
   });
 
   const sendMutation = useMutation({
-    mutationFn: async ({ id, sendVia }: { id: string; sendVia: string }) => {
-      const res = await apiRequest("POST", `/api/quotes/${id}/send`, { sendVia });
+    mutationFn: async ({
+      id,
+      sendVia,
+      approvalEnabled,
+    }: {
+      id: string;
+      sendVia: string;
+      approvalEnabled: boolean;
+    }) => {
+      const res = await apiRequest("POST", `/api/quotes/${id}/send`, {
+        sendVia,
+        approvalEnabled,
+      });
       return res.json();
     },
     onSuccess: (data) => {
@@ -669,7 +681,10 @@ export default function Quotes() {
               </TableHeader>
               <TableBody>
                 {filteredQuotes.map((quote) => {
-                  const cfg = statusConfig[quote.status] || statusConfig.draft;
+                  const cfg =
+                    quote.status === "accepted" && quote.acceptedAt
+                      ? { label: "Approved by Client", variant: "default" as const }
+                      : statusConfig[quote.status] || statusConfig.draft;
                   return (
                     <TableRow key={quote.id} data-testid={`row-quote-${quote.id}`}>
                       <TableCell
@@ -868,7 +883,13 @@ export default function Quotes() {
         }}
       />
 
-      <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
+      <Dialog
+        open={sendDialogOpen}
+        onOpenChange={(open) => {
+          setSendDialogOpen(open);
+          if (!open) setApprovalEnabled(true);
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Send Quote</DialogTitle>
@@ -885,6 +906,26 @@ export default function Quotes() {
                 <SelectItem value="both">Email & SMS</SelectItem>
               </SelectContent>
             </Select>
+            <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">Enable client approval</p>
+                <p className="text-xs text-muted-foreground">
+                  Client can pick a start date &amp; approve the service directly
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={approvalEnabled}
+                data-testid="toggle-approval-enabled"
+                onClick={() => setApprovalEnabled((v) => !v)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${approvalEnabled ? "bg-green-600" : "bg-input"}`}
+              >
+                <span
+                  className={`pointer-events-none block h-4 w-4 rounded-full bg-white shadow-lg ring-0 transition-transform ${approvalEnabled ? "translate-x-4" : "translate-x-0"}`}
+                />
+              </button>
+            </div>
             {(sendVia === "email" || sendVia === "both") && sendQuoteId && (
               <Button
                 variant="outline"
@@ -901,7 +942,10 @@ export default function Quotes() {
               data-testid="button-confirm-send"
               className="w-full"
               disabled={sendMutation.isPending}
-              onClick={() => sendQuoteId && sendMutation.mutate({ id: sendQuoteId, sendVia })}
+              onClick={() =>
+                sendQuoteId &&
+                sendMutation.mutate({ id: sendQuoteId, sendVia, approvalEnabled })
+              }
             >
               {sendMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />

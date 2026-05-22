@@ -1174,6 +1174,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         acceptedAt: quoteRow.accepted_at,
         companyId: quoteRow.company_id,
         lineItems: quoteRow.line_items || null,
+        approvalEnabled: quoteRow.approval_enabled !== false,
       };
 
       const company = await storage.getCompany(quoteRow.company_id as string);
@@ -1208,10 +1209,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
     try {
       const quoteId = p(req.params.id);
       const requestToken = typeof req.query.token === "string" ? req.query.token.trim() : "";
-      const { tier } = req.body;
-      if (!tier || !["essential", "premium", "deluxe"].includes(tier)) {
-        return res.status(400).json({ error: "Must select a tier: essential, premium, or deluxe" });
-      }
+      const { tier, serviceDay, startDate } = req.body;
 
       const result = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
       const quoteRow = result.rows?.[0];
@@ -1230,13 +1228,34 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: "This quote has expired" });
       }
 
-      const priceKey = `${tier}_price` as string;
-      const selectedPrice = quoteRow[priceKey] || "0";
+      const hasLineItems =
+        Array.isArray(quoteRow.line_items) && (quoteRow.line_items as unknown[]).length > 0;
+
+      let selectedTier = tier || "essential";
+      let selectedPrice: string;
+
+      if (hasLineItems) {
+        const lineItemsArr = quoteRow.line_items as {
+          unitPrice: number;
+          quantity: number;
+        }[];
+        const total = lineItemsArr.reduce((sum, li) => sum + li.unitPrice * li.quantity, 0);
+        selectedPrice = total.toFixed(2);
+        selectedTier = "essential";
+      } else {
+        if (!tier || !["essential", "premium", "deluxe"].includes(tier)) {
+          return res
+            .status(400)
+            .json({ error: "Must select a tier: essential, premium, or deluxe" });
+        }
+        const priceKey = `${tier}_price` as string;
+        selectedPrice = String(quoteRow[priceKey] || "0");
+      }
 
       await db.execute(sql`
         UPDATE quotes SET
           status = 'accepted',
-          selected_tier = ${tier},
+          selected_tier = ${selectedTier},
           selected_price = ${selectedPrice},
           accepted_at = NOW(),
           updated_at = NOW()
@@ -1256,29 +1275,81 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         }
       }
 
+      let createdServicePlan = null;
       if (contactId && propertyId) {
         try {
           const today = new Date().toISOString().split("T")[0];
-          const portalSvcName = `${tier.charAt(0).toUpperCase() + tier.slice(1)} Service (Quote #${quoteNumber || quoteId})`;
-          await storage.createServicePlan({
+          const planStartDate = startDate || today;
+          const portalSvcName = hasLineItems
+            ? `Service (Quote #${quoteNumber || quoteId})`
+            : `${selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Service (Quote #${quoteNumber || quoteId})`;
+
+          const validDays = [
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+            "tbd",
+          ];
+          const normalizedDay =
+            serviceDay && validDays.includes(serviceDay) ? serviceDay : "tbd";
+
+          createdServicePlan = await storage.createServicePlan({
             companyId,
             contactId,
             propertyId,
             frequency: normalizeQuoteFrequency(frequency),
-            pricePerVisit: String(selectedPrice),
-            startDate: today,
+            pricePerVisit: selectedPrice,
+            startDate: planStartDate,
+            dayOfWeek: normalizedDay,
             isActive: true,
             serviceName: portalSvcName,
             jobType: "recurring",
             jobStatus: "active",
             stopOrder: 0,
           });
+
+          try {
+            const { generateVisitsForPlans } = await import("../jobs/auto-visits");
+            const planStart = new Date(planStartDate + "T00:00:00");
+            const anchor = planStart > new Date() ? planStart : new Date();
+            const sixMonthsOut = new Date(anchor);
+            sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+            await generateVisitsForPlans(
+              companyId,
+              [createdServicePlan.id],
+              planStart.toISOString().split("T")[0],
+              sixMonthsOut.toISOString().split("T")[0]
+            );
+          } catch (genErr) {
+            console.error("[portal/accept] Failed to auto-generate visits:", genErr);
+          }
+
+          const contact = await storage.getContactById(contactId);
+          const companyData = await storage.getCompany(companyId);
+          if (contact && companyData) {
+            notify(
+              companyId,
+              "general",
+              "Quote Approved by Client",
+              `${contact.firstName} ${contact.lastName} approved Quote #${quoteNumber || quoteId} — service starts ${planStartDate}.`,
+              `/quotes`
+            );
+          }
         } catch (spErr) {
           console.error("Failed to create service plan from portal quote acceptance:", spErr);
         }
       }
 
-      res.json({ success: true, tier, price: selectedPrice });
+      res.json({
+        success: true,
+        tier: selectedTier,
+        price: selectedPrice,
+        servicePlanId: createdServicePlan?.id || null,
+      });
     } catch (err: unknown) {
       console.error("Error accepting quote:", err);
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });

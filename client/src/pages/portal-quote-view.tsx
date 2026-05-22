@@ -6,6 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   CheckCircle2,
   XCircle,
@@ -14,6 +22,7 @@ import {
   Building2,
   AlertTriangle,
   Loader2,
+  CalendarDays,
 } from "lucide-react";
 
 interface LineItem {
@@ -45,10 +54,23 @@ interface PortalQuote {
   sentAt?: string;
   acceptedAt?: string;
   lineItems?: LineItem[] | null;
+  approvalEnabled?: boolean;
 }
+
+const SERVICE_DAYS = [
+  { value: "monday", label: "Monday" },
+  { value: "tuesday", label: "Tuesday" },
+  { value: "wednesday", label: "Wednesday" },
+  { value: "thursday", label: "Thursday" },
+  { value: "friday", label: "Friday" },
+  { value: "saturday", label: "Saturday" },
+  { value: "tbd", label: "No preference — let the provider choose" },
+];
 
 export default function PortalQuoteView({ quoteId, token }: { quoteId: string; token: string }) {
   const [selectedTier, setSelectedTier] = useState<string>("");
+  const [serviceDay, setServiceDay] = useState<string>("tbd");
+  const [startDate, setStartDate] = useState<string>("");
 
   const { data, isLoading, error } = useQuery<{
     quote: PortalQuote;
@@ -68,13 +90,17 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
   });
 
   const acceptMutation = useMutation({
-    mutationFn: async (tier: string) => {
+    mutationFn: async ({ tier, day, date }: { tier: string; day: string; date: string }) => {
       const res = await fetch(
         `/api/portal/quotes/${quoteId}/accept?token=${encodeURIComponent(token)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tier }),
+          body: JSON.stringify({
+            tier,
+            serviceDay: day || "tbd",
+            startDate: date || undefined,
+          }),
         }
       );
       if (!res.ok) {
@@ -151,6 +177,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
   }
 
   const { quote, companyName, companyLogoUrl } = data;
+  const approvalEnabled = quote.approvalEnabled !== false;
 
   if (quote.status === "accepted") {
     return (
@@ -158,15 +185,16 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
         <Card className="max-w-md text-center">
           <CardContent className="p-8">
             <CheckCircle2 className="h-16 w-16 mx-auto text-green-500 mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Quote Accepted!</h2>
+            <h2 className="text-xl font-semibold mb-2">Service Approved!</h2>
             <p className="text-muted-foreground mb-4">
-              Thank you, {quote.contactName}. You selected the{" "}
-              <strong className="capitalize">{quote.selectedTier}</strong> plan at{" "}
-              <strong>{formatMoney(parseFloat(quote.selectedPrice || "0"))}/visit</strong>.
+              Thank you, {quote.contactName}. Your service plan has been created and{" "}
+              {companyName} will confirm your schedule shortly.
             </p>
-            <p className="text-sm text-muted-foreground">
-              {companyName} will reach out to schedule your first service.
-            </p>
+            {quote.selectedPrice && parseFloat(quote.selectedPrice) > 0 && (
+              <p className="text-sm font-medium text-green-700">
+                {formatMoney(parseFloat(quote.selectedPrice))}/visit
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -209,7 +237,6 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
   const premiumPrice = parseFloat(quote.premiumPrice || "0");
   const deluxePrice = parseFloat(quote.deluxePrice || "0");
   const hasLineItems = Array.isArray(quote.lineItems) && quote.lineItems.length > 0;
-  // Only suppress tier cards for residential quotes — commercial tier pricing is intentionally distinct
   const allPricesIdentical =
     quote.type === "residential" && essentialPrice === premiumPrice && premiumPrice === deluxePrice;
 
@@ -259,6 +286,20 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
                 ? "3x Weekly"
                 : quote.frequency || "";
 
+  const canAccept =
+    hasLineItems || allPricesIdentical || !!selectedTier;
+  const acceptLabel = hasLineItems || allPricesIdentical
+    ? approvalEnabled
+      ? "Approve & Start Service"
+      : "Accept Quote"
+    : selectedTier
+      ? approvalEnabled
+        ? `Approve ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
+        : `Accept ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
+      : "Select a plan to continue";
+
+  const todayStr = new Date().toISOString().split("T")[0];
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
       <div className="max-w-4xl mx-auto p-4 md:p-8">
@@ -291,7 +332,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
                   {quote.contactName}
                 </p>
                 {quote.propertyAddress && (
-                  <p className="text-sm text-muted-foreground">📍 {quote.propertyAddress}</p>
+                  <p className="text-sm text-muted-foreground">{quote.propertyAddress}</p>
                 )}
               </div>
               <div className="text-right">
@@ -425,7 +466,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
                     <div
                       className={`px-4 py-2 ${tier.bgColor} border-t ${tier.borderColor} text-center`}
                     >
-                      <p className={`text-sm font-semibold ${tier.textColor}`}>Selected ✓</p>
+                      <p className={`text-sm font-semibold ${tier.textColor}`}>Selected</p>
                     </div>
                   )}
                 </div>
@@ -454,20 +495,76 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
           </Card>
         )}
 
+        {approvalEnabled && (
+          <Card className="mb-6 border-green-200 bg-green-50/50" data-testid="card-service-setup">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <CalendarDays className="h-4 w-4 text-green-700" />
+                <p className="text-sm font-semibold text-green-800">Service Preferences</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="portal-start-date"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Preferred start date
+                  </Label>
+                  <input
+                    id="portal-start-date"
+                    type="date"
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    min={todayStr}
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    data-testid="input-start-date"
+                  />
+                  <p className="text-xs text-muted-foreground">Leave blank to start as soon as possible</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="portal-service-day"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Preferred service day
+                  </Label>
+                  <Select value={serviceDay} onValueChange={setServiceDay}>
+                    <SelectTrigger
+                      id="portal-service-day"
+                      className="h-9"
+                      data-testid="select-service-day"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SERVICE_DAYS.map((d) => (
+                        <SelectItem key={d.value} value={d.value}>
+                          {d.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Your provider will confirm availability</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button
             data-testid="button-accept-quote"
             size="lg"
-            className="bg-green-600 hover:bg-green-700"
-            disabled={
-              acceptMutation.isPending || (!hasLineItems && !allPricesIdentical && !selectedTier)
-            }
+            className="bg-green-600 hover:bg-green-700 font-semibold"
+            disabled={acceptMutation.isPending || !canAccept}
             onClick={() => {
-              if (hasLineItems || allPricesIdentical) {
-                acceptMutation.mutate("essential");
-              } else if (selectedTier) {
-                acceptMutation.mutate(selectedTier);
-              }
+              const tier =
+                hasLineItems || allPricesIdentical ? "essential" : selectedTier;
+              acceptMutation.mutate({
+                tier,
+                day: serviceDay,
+                date: startDate,
+              });
             }}
           >
             {acceptMutation.isPending ? (
@@ -475,11 +572,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
             ) : (
               <CheckCircle2 className="h-4 w-4 mr-2" />
             )}
-            {hasLineItems || allPricesIdentical
-              ? "Accept Quote"
-              : selectedTier
-                ? `Accept ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
-                : "Select a plan to accept"}
+            {acceptLabel}
           </Button>
           <Button
             data-testid="button-decline-quote"

@@ -365,6 +365,16 @@ function DraggableStop({
                   One-Time
                 </Badge>
               )}
+              {stop.createdAt &&
+                Date.now() - new Date(stop.createdAt).getTime() < 48 * 60 * 60 * 1000 && (
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                    data-testid={`badge-new-client-${stop.id}`}
+                  >
+                    New Client
+                  </Badge>
+                )}
               {displayIndex != null && (
                 <Badge
                   variant="outline"
