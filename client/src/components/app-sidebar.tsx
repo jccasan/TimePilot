@@ -44,6 +44,7 @@ import {
   GitBranch,
   PhoneIncoming,
   CreditCard,
+  Sprout,
 } from "lucide-react";
 import {
   Sidebar,
@@ -158,6 +159,12 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
         title: "Pricing",
         url: "/pricing",
         icon: Calculator,
+        requiresSubscription: true,
+      },
+      {
+        title: "Growth Tools",
+        url: "/growth-tools",
+        icon: Sprout,
         requiresSubscription: true,
       },
       { title: "Reports", url: "/reports", icon: BarChart3, requiresSubscription: true },

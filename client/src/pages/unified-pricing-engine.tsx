@@ -69,6 +69,7 @@ import {
   Percent,
 } from "lucide-react";
 import AIPricingOptimizer from "@/pages/ai-pricing-optimizer";
+import LTVCalculator from "@/components/calculators/LTVCalculator";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ function readTabFromUrl(): string {
   if (typeof window === "undefined") return "pricing";
   const params = new URLSearchParams(window.location.search);
   const t = params.get("tab");
-  if (t === "engine" || t === "simulator" || t === "costs" || t === "pricing") return t;
+  if (t === "engine" || t === "simulator" || t === "costs" || t === "pricing" || t === "ltv") return t;
   return "pricing";
 }
 
@@ -3304,6 +3305,9 @@ function MyPricingTab() {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+type ProfitSummaryEntry = { monthlyRevenueCents: number };
+type OverviewKpis = { kpis: { avgProfitMarginPct: number } };
+
 export default function UnifiedPricingEngine() {
   const [tab, setTab] = useState(readTabFromUrl);
 
@@ -3311,6 +3315,22 @@ export default function UnifiedPricingEngine() {
     setTab(newTab);
     writeTabToUrl(newTab);
   };
+
+  const { data: profSummary } = useQuery<ProfitSummaryEntry[]>({
+    queryKey: ["/api/profitability/summary"],
+    enabled: tab === "ltv",
+  });
+
+  const { data: overviewData } = useQuery<OverviewKpis>({
+    queryKey: ["/api/business-overview"],
+    enabled: tab === "ltv",
+  });
+
+  const avgMonthlyRevenueCents =
+    profSummary && profSummary.length > 0
+      ? Math.round(profSummary.reduce((sum, c) => sum + c.monthlyRevenueCents, 0) / profSummary.length)
+      : 0;
+  const netMarginPct = overviewData?.kpis.avgProfitMarginPct ?? 30;
 
   return (
     <div className="p-4 md:p-6 overflow-auto h-full">
@@ -3325,7 +3345,7 @@ export default function UnifiedPricingEngine() {
 
       <Tabs value={tab} onValueChange={handleTabChange}>
         <TabsList
-          className="w-full grid grid-cols-4 sm:inline-flex sm:w-auto"
+          className="w-full grid grid-cols-5 sm:inline-flex sm:w-auto"
           data-testid="tabs-pricing"
         >
           <TabsTrigger
@@ -3360,6 +3380,14 @@ export default function UnifiedPricingEngine() {
             <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
             <span>Simulator</span>
           </TabsTrigger>
+          <TabsTrigger
+            value="ltv"
+            data-testid="tab-ltv"
+            className="gap-1 text-xs sm:text-sm sm:gap-1.5"
+          >
+            <TrendingUp className="h-3.5 w-3.5 shrink-0" />
+            <span>LTV</span>
+          </TabsTrigger>
         </TabsList>
 
         <div className="mt-4 pb-6">
@@ -3377,6 +3405,18 @@ export default function UnifiedPricingEngine() {
 
           <TabsContent value="simulator" className="mt-0">
             <AIPricingOptimizer />
+          </TabsContent>
+
+          <TabsContent value="ltv" className="mt-0">
+            <div className="space-y-2 mb-4">
+              <p className="text-sm text-muted-foreground">
+                Calculate lifetime client value and set a rational ceiling on what you should spend to acquire a customer.
+              </p>
+            </div>
+            <LTVCalculator
+              avgMonthlyRevenueCents={avgMonthlyRevenueCents}
+              netMarginPct={netMarginPct}
+            />
           </TabsContent>
         </div>
       </Tabs>

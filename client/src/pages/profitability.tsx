@@ -48,6 +48,8 @@ import {
 } from "lucide-react";
 import { ClientInfoPopover } from "@/components/client-info-popover";
 import type { Route as RouteRecord } from "@shared/schema";
+import BreakevenCalculator from "@/components/calculators/BreakevenCalculator";
+import BreakevenStatusIndicator from "@/components/calculators/BreakevenStatusIndicator";
 type RouteWithOptStatus = RouteRecord & { isOptimizedCurrent?: boolean };
 
 interface ProfitabilitySuggestion {
@@ -133,7 +135,7 @@ interface RouteProfitability {
   customers: RouteCustomer[];
 }
 
-type ViewMode = "customers" | "routes";
+type ViewMode = "customers" | "routes" | "breakeven";
 type SortField = "name" | "revenue" | "cost" | "profit" | "margin";
 type SortDir = "asc" | "desc";
 type StatusFilter = "all" | "profitable" | "marginal" | "unprofitable";
@@ -202,8 +204,10 @@ export default function Profitability() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const urlTab = new URLSearchParams(window.location.search).get("tab");
+    if (urlTab === "customers" || urlTab === "routes" || urlTab === "breakeven") return urlTab;
     const saved = localStorage.getItem("scoopilot_profit_view_mode");
-    return saved === "customers" || saved === "routes" ? saved : "customers";
+    return saved === "customers" || saved === "routes" || saved === "breakeven" ? saved : "customers";
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -229,6 +233,16 @@ export default function Profitability() {
 
   const { data: customers, isLoading } = useQuery<CustomerProfitability[]>({
     queryKey: ["/api/profitability/summary"],
+  });
+
+  const { data: overheadData } = useQuery<{ totalMonthlyOverheadCents: number }>({
+    queryKey: ["/api/overhead-costs"],
+  });
+
+  const { data: pricingConfig } = useQuery<{
+    pricingRules?: { basePrices?: { weekly?: number } };
+  }>({
+    queryKey: ["/api/pricing-config"],
   });
 
   const { data: routeData, isLoading: isRouteLoading } = useQuery<RouteProfitability[]>({
@@ -426,11 +440,18 @@ export default function Profitability() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-profitability-heading">
-            {viewMode === "customers" ? "Customer Profitability" : "Route Profitability"}
+            {viewMode === "customers"
+              ? "Customer Profitability"
+              : viewMode === "routes"
+                ? "Route Profitability"
+                : "Breakeven Analysis"}
           </h1>
           <p className="text-muted-foreground">
-            Analyze profit and loss across your{" "}
-            {viewMode === "customers" ? "customer base" : "routes"}
+            {viewMode === "customers"
+              ? "Analyze profit and loss across your customer base"
+              : viewMode === "routes"
+                ? "Analyze profit and loss across your routes"
+                : "See how many clients you need to cover your costs"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -443,6 +464,10 @@ export default function Profitability() {
               <TabsTrigger value="routes" data-testid="tab-by-route">
                 <Route className="mr-1 h-4 w-4" />
                 By Route
+              </TabsTrigger>
+              <TabsTrigger value="breakeven" data-testid="tab-breakeven">
+                <TrendingDown className="mr-1 h-4 w-4" />
+                Breakeven
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -493,6 +518,16 @@ export default function Profitability() {
             ))}
         </div>
       </div>
+
+      {/* Breakeven Status Indicator */}
+      {overheadData?.totalMonthlyOverheadCents && pricingConfig?.pricingRules?.basePrices?.weekly ? (
+        <BreakevenStatusIndicator
+          activeClients={(customers ?? []).length}
+          avgPricePerVisit={pricingConfig.pricingRules.basePrices.weekly / 100}
+          variableCostPerVisit={0}
+          fixedMonthlyOverhead={overheadData.totalMonthlyOverheadCents / 100}
+        />
+      ) : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card data-testid="card-kpi-total-revenue">
@@ -1194,6 +1229,14 @@ export default function Profitability() {
             All customers are operating at healthy margins. No price adjustments needed.
           </CardContent>
         </Card>
+      )}
+
+      {viewMode === "breakeven" && (
+        <BreakevenCalculator
+          weeklyBasePriceCents={pricingConfig?.pricingRules?.basePrices?.weekly}
+          fixedOverheadCents={overheadData?.totalMonthlyOverheadCents}
+          activeClients={(customers ?? []).length}
+        />
       )}
     </div>
   );

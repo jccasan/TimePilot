@@ -81,6 +81,7 @@ const ProfitabilityDetail = lazy(() => import("@/pages/profitability-detail"));
 const RouteProfitMaps = lazy(() => import("@/pages/route-profit-maps"));
 const FieldView = lazy(() => import("@/pages/field-view"));
 const MigrationPage = lazy(() => import("@/pages/migration-page"));
+const GrowthTools = lazy(() => import("@/pages/growth-tools"));
 const CommandCenter = lazy(() => import("@/pages/command-center"));
 const ResetPassword = lazy(() => import("@/pages/reset-password"));
 const SignupWidget = lazy(() => import("@/pages/signup-widget"));
@@ -190,6 +191,11 @@ function Router() {
         <Route path="/route-profit-maps">
           <SubscriptionGate featureName="Route Profit Maps">
             <RouteProfitMaps />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/growth-tools">
+          <SubscriptionGate featureName="Growth Tools">
+            <GrowthTools />
           </SubscriptionGate>
         </Route>
         <Route path="/field-view">

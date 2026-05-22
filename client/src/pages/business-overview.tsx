@@ -63,6 +63,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import BreakevenStatusIndicator from "@/components/calculators/BreakevenStatusIndicator";
 
 type BusinessOverviewData = {
   kpis: {
@@ -330,6 +331,16 @@ export default function BusinessOverview() {
 
   const { data, isLoading } = useQuery<BusinessOverviewData>({
     queryKey: ["/api/business-overview"],
+  });
+
+  const { data: overheadData } = useQuery<{ totalMonthlyOverheadCents: number }>({
+    queryKey: ["/api/overhead-costs"],
+  });
+
+  const { data: pricingConfig } = useQuery<{
+    pricingRules?: { basePrices?: { weekly?: number } };
+  }>({
+    queryKey: ["/api/pricing-config"],
   });
 
   const {
@@ -651,6 +662,16 @@ export default function BusinessOverview() {
           icon={CheckCircle}
         />
       </div>
+
+      {/* Breakeven Status */}
+      {overheadData?.totalMonthlyOverheadCents && pricingConfig?.pricingRules?.basePrices?.weekly ? (
+        <BreakevenStatusIndicator
+          activeClients={kpis.activeCustomers}
+          avgPricePerVisit={pricingConfig.pricingRules.basePrices.weekly / 100}
+          variableCostPerVisit={0}
+          fixedMonthlyOverhead={overheadData.totalMonthlyOverheadCents / 100}
+        />
+      ) : null}
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
