@@ -4,7 +4,7 @@
 
 Scoopilot is a multi-tenant SaaS platform for pet waste removal businesses. The production application consists of a TypeScript/Express backend in `server/`, a React/TanStack Query frontend in `client/`, PostgreSQL via Drizzle, Replit object storage for uploaded files, and a separate Python Flask onboarding service in `wizard/` that is documented in `replit.md` as production-reachable on port 5001.
 
-Users include tenant owners/admins/technicians, customer portal users, public prospects using quote/signup flows, and third-party integrations such as Stripe, Twilio/Telnyx, SendGrid, QuickBooks, Mapbox, OpenAI, and Retell. Production assumptions for scans: `NODE_ENV=production`; TLS is provided by the platform; mockup sandbox/dev-only experiments are not deployed.
+Users include tenant owners/admins/technicians, customer portal users, public prospects using quote/signup flows, and third-party integrations such as Stripe, Twilio/Telnyx, SendGrid, QuickBooks, Mapbox, OpenAI, and Retell. Production assumptions for scans: `NODE_ENV=production`; TLS is provided by the platform; mockup sandbox/dev-only experiments are not deployed; and the main app is publicly deployed with autoscaling, so process-local in-memory throttles are not durable security controls for internet-facing endpoints.
 
 ## Assets
 
@@ -50,7 +50,7 @@ Scoopilot stores sensitive customer, billing, routing, and media data, plus wiza
 
 ### Denial of Service
 
-The app exposes public authentication and integration endpoints and performs potentially expensive work such as geocoding, quote generation, file processing, and third-party API calls. Public and low-trust endpoints must be rate-limited and bounded by request size/timeouts so attackers cannot cheaply consume compute or provider quotas. This includes the customer portal login boundary, not just reset and signup flows.
+The app exposes public authentication and integration endpoints and performs potentially expensive work such as geocoding, quote generation, file processing, and third-party API calls. Public and low-trust endpoints must be rate-limited and bounded by request size/timeouts so attackers cannot cheaply consume compute or provider quotas. This includes the customer portal login boundary, not just reset and signup flows. Because the production deployment is autoscaled and public, per-process in-memory rate limits should be treated as advisory at best; abuse controls for internet-facing endpoints need shared state or another mechanism that survives instance fan-out and churn.
 
 ### Elevation of Privilege
 
