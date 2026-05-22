@@ -1175,6 +1175,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         companyId: quoteRow.company_id,
         lineItems: quoteRow.line_items || null,
         approvalEnabled: quoteRow.approval_enabled !== false,
+        acceptedVia: (quoteRow.accepted_via as string | null) || null,
       };
 
       const company = await storage.getCompany(quoteRow.company_id as string);
@@ -1252,21 +1253,61 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         selectedPrice = String(quoteRow[priceKey] || "0");
       }
 
+      const contactId = quoteRow.contact_id as string | null;
+      const propertyId = quoteRow.property_id as string | null;
+      const companyId = quoteRow.company_id as string;
+      const quoteNumber = quoteRow.quote_number as string | null;
+      const frequency = (quoteRow.frequency as string) || "weekly";
+
+      const today = new Date().toISOString().split("T")[0];
+      const planStartDate =
+        startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) && startDate >= today
+          ? startDate
+          : today;
+      const validDays = [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+        "tbd",
+      ];
+      const normalizedDay = serviceDay && validDays.includes(serviceDay) ? serviceDay : "tbd";
+
+      let createdServicePlan = null;
+      if (contactId && propertyId) {
+        const portalSvcName = hasLineItems
+          ? `Service (Quote #${quoteNumber || quoteId})`
+          : `${selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Service (Quote #${quoteNumber || quoteId})`;
+
+        createdServicePlan = await storage.createServicePlan({
+          companyId,
+          contactId,
+          propertyId,
+          frequency: normalizeQuoteFrequency(frequency),
+          pricePerVisit: selectedPrice,
+          startDate: planStartDate,
+          dayOfWeek: normalizedDay,
+          isActive: true,
+          serviceName: portalSvcName,
+          jobType: "recurring",
+          jobStatus: "active",
+          stopOrder: 0,
+        });
+      }
+
       await db.execute(sql`
         UPDATE quotes SET
           status = 'accepted',
           selected_tier = ${selectedTier},
           selected_price = ${selectedPrice},
           accepted_at = NOW(),
+          accepted_via = 'portal',
           updated_at = NOW()
         WHERE id = ${quoteId}
       `);
-
-      const contactId = quoteRow.contact_id as string | null;
-      const propertyId = quoteRow.property_id as string | null;
-      const companyId = quoteRow.company_id as string;
-      const quoteNumber = quoteRow.quote_number as string | null;
-      const frequency = (quoteRow.frequency as string) || "weekly";
 
       if (contactId) {
         const contact = await storage.getContactById(contactId);
@@ -1275,62 +1316,26 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         }
       }
 
-      let createdServicePlan = null;
-      if (contactId && propertyId) {
+      if (createdServicePlan) {
         try {
-          const today = new Date().toISOString().split("T")[0];
-          const planStartDate = startDate || today;
-          const portalSvcName = hasLineItems
-            ? `Service (Quote #${quoteNumber || quoteId})`
-            : `${selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Service (Quote #${quoteNumber || quoteId})`;
-
-          const validDays = [
-            "monday",
-            "tuesday",
-            "wednesday",
-            "thursday",
-            "friday",
-            "saturday",
-            "sunday",
-            "tbd",
-          ];
-          const normalizedDay =
-            serviceDay && validDays.includes(serviceDay) ? serviceDay : "tbd";
-
-          createdServicePlan = await storage.createServicePlan({
+          const { generateVisitsForPlans } = await import("../jobs/auto-visits");
+          const planStart = new Date(planStartDate + "T00:00:00");
+          const anchor = planStart > new Date() ? planStart : new Date();
+          const sixMonthsOut = new Date(anchor);
+          sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+          await generateVisitsForPlans(
             companyId,
-            contactId,
-            propertyId,
-            frequency: normalizeQuoteFrequency(frequency),
-            pricePerVisit: selectedPrice,
-            startDate: planStartDate,
-            dayOfWeek: normalizedDay,
-            isActive: true,
-            serviceName: portalSvcName,
-            jobType: "recurring",
-            jobStatus: "active",
-            stopOrder: 0,
-          });
+            [createdServicePlan.id],
+            planStart.toISOString().split("T")[0],
+            sixMonthsOut.toISOString().split("T")[0]
+          );
+        } catch (genErr) {
+          console.error("[portal/accept] Failed to auto-generate visits:", genErr);
+        }
 
-          try {
-            const { generateVisitsForPlans } = await import("../jobs/auto-visits");
-            const planStart = new Date(planStartDate + "T00:00:00");
-            const anchor = planStart > new Date() ? planStart : new Date();
-            const sixMonthsOut = new Date(anchor);
-            sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
-            await generateVisitsForPlans(
-              companyId,
-              [createdServicePlan.id],
-              planStart.toISOString().split("T")[0],
-              sixMonthsOut.toISOString().split("T")[0]
-            );
-          } catch (genErr) {
-            console.error("[portal/accept] Failed to auto-generate visits:", genErr);
-          }
-
-          const contact = await storage.getContactById(contactId);
-          const companyData = await storage.getCompany(companyId);
-          if (contact && companyData) {
+        try {
+          const contact = await storage.getContactById(contactId as string);
+          if (contact) {
             notify(
               companyId,
               "general",
@@ -1339,8 +1344,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
               `/quotes`
             );
           }
-        } catch (spErr) {
-          console.error("Failed to create service plan from portal quote acceptance:", spErr);
+        } catch (notifyErr) {
+          console.error("[portal/accept] Failed to send notification:", notifyErr);
         }
       }
 

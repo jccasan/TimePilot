@@ -472,7 +472,10 @@ async function ensureCompanyColumns() {
     await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS crew_size INTEGER`);
     await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS site_sqft INTEGER`);
     await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS quote_token VARCHAR(36) UNIQUE`);
-    await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS approval_enabled BOOLEAN NOT NULL DEFAULT true`);
+    await pool.query(
+      `ALTER TABLE quotes ADD COLUMN IF NOT EXISTS approval_enabled BOOLEAN NOT NULL DEFAULT true`
+    );
+    await pool.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS accepted_via VARCHAR(20)`);
     console.log("[Migration] Quotes table verified");
     console.log("[Migration] Company voice columns verified");
     await pool.query(`

@@ -634,7 +634,8 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         selectedTier: tier as "essential" | "premium" | "deluxe",
         selectedPrice,
         acceptedAt: new Date(),
-      });
+        acceptedVia: "staff",
+      } as Partial<import("@shared/schema").InsertQuote>);
 
       if (quote.contactId) {
         const contact = await storage.getContactById(quote.contactId);
@@ -899,8 +900,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       }
 
       const expiresAt = quote.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      const approvalEnabledFlag =
-        req.body.approvalEnabled === false ? false : true;
+      const approvalEnabledFlag = req.body.approvalEnabled === false ? false : true;
       const updatedQuote = await storage.updateQuote(p(req.params.id), companyId, {
         status: "sent",
         sentAt: new Date(),

@@ -187,8 +187,8 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
             <CheckCircle2 className="h-16 w-16 mx-auto text-green-500 mb-4" />
             <h2 className="text-xl font-semibold mb-2">Service Approved!</h2>
             <p className="text-muted-foreground mb-4">
-              Thank you, {quote.contactName}. Your service plan has been created and{" "}
-              {companyName} will confirm your schedule shortly.
+              Thank you, {quote.contactName}. Your service plan has been created and {companyName}{" "}
+              will confirm your schedule shortly.
             </p>
             {quote.selectedPrice && parseFloat(quote.selectedPrice) > 0 && (
               <p className="text-sm font-medium text-green-700">
@@ -286,17 +286,17 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
                 ? "3x Weekly"
                 : quote.frequency || "";
 
-  const canAccept =
-    hasLineItems || allPricesIdentical || !!selectedTier;
-  const acceptLabel = hasLineItems || allPricesIdentical
-    ? approvalEnabled
-      ? "Approve & Start Service"
-      : "Accept Quote"
-    : selectedTier
+  const canAccept = hasLineItems || allPricesIdentical || !!selectedTier;
+  const acceptLabel =
+    hasLineItems || allPricesIdentical
       ? approvalEnabled
-        ? `Approve ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
-        : `Accept ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
-      : "Select a plan to continue";
+        ? "Approve & Start Service"
+        : "Accept Quote"
+      : selectedTier
+        ? approvalEnabled
+          ? `Approve ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
+          : `Accept ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
+        : "Select a plan to continue";
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -504,10 +504,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label
-                    htmlFor="portal-start-date"
-                    className="text-sm font-medium text-gray-700"
-                  >
+                  <Label htmlFor="portal-start-date" className="text-sm font-medium text-gray-700">
                     Preferred start date
                   </Label>
                   <input
@@ -519,13 +516,12 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
                     onChange={(e) => setStartDate(e.target.value)}
                     data-testid="input-start-date"
                   />
-                  <p className="text-xs text-muted-foreground">Leave blank to start as soon as possible</p>
+                  <p className="text-xs text-muted-foreground">
+                    Leave blank to start as soon as possible
+                  </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label
-                    htmlFor="portal-service-day"
-                    className="text-sm font-medium text-gray-700"
-                  >
+                  <Label htmlFor="portal-service-day" className="text-sm font-medium text-gray-700">
                     Preferred service day
                   </Label>
                   <Select value={serviceDay} onValueChange={setServiceDay}>
@@ -544,7 +540,9 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Your provider will confirm availability</p>
+                  <p className="text-xs text-muted-foreground">
+                    Your provider will confirm availability
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -558,8 +556,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
             className="bg-green-600 hover:bg-green-700 font-semibold"
             disabled={acceptMutation.isPending || !canAccept}
             onClick={() => {
-              const tier =
-                hasLineItems || allPricesIdentical ? "essential" : selectedTier;
+              const tier = hasLineItems || allPricesIdentical ? "essential" : selectedTier;
               acceptMutation.mutate({
                 tier,
                 day: serviceDay,

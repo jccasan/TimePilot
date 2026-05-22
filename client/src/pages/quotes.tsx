@@ -682,7 +682,7 @@ export default function Quotes() {
               <TableBody>
                 {filteredQuotes.map((quote) => {
                   const cfg =
-                    quote.status === "accepted" && quote.acceptedAt
+                    quote.status === "accepted" && (quote as any).acceptedVia === "portal"
                       ? { label: "Approved by Client", variant: "default" as const }
                       : statusConfig[quote.status] || statusConfig.draft;
                   return (
@@ -729,9 +729,19 @@ export default function Quotes() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={cfg.variant} data-testid={`badge-status-${quote.id}`}>
-                          {cfg.label}
-                        </Badge>
+                        <div className="space-y-1">
+                          <Badge variant={cfg.variant} data-testid={`badge-status-${quote.id}`}>
+                            {cfg.label}
+                          </Badge>
+                          {quote.status === "accepted" && quote.acceptedAt && (
+                            <p
+                              className="text-[10px] text-muted-foreground"
+                              data-testid={`text-accepted-at-${quote.id}`}
+                            >
+                              {new Date(quote.acceptedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {quote.createdAt ? new Date(quote.createdAt).toLocaleDateString() : "—"}
@@ -943,8 +953,7 @@ export default function Quotes() {
               className="w-full"
               disabled={sendMutation.isPending}
               onClick={() =>
-                sendQuoteId &&
-                sendMutation.mutate({ id: sendQuoteId, sendVia, approvalEnabled })
+                sendQuoteId && sendMutation.mutate({ id: sendQuoteId, sendVia, approvalEnabled })
               }
             >
               {sendMutation.isPending ? (

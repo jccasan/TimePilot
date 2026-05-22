@@ -365,7 +365,8 @@ function DraggableStop({
                   One-Time
                 </Badge>
               )}
-              {stop.createdAt &&
+              {!stop.routeId &&
+                stop.createdAt &&
                 Date.now() - new Date(stop.createdAt).getTime() < 48 * 60 * 60 * 1000 && (
                   <Badge
                     variant="secondary"

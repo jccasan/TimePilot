@@ -2950,6 +2950,7 @@ export const quotes = pgTable(
     declinedAt: timestamp("declined_at"),
     quoteToken: varchar("quote_token", { length: 36 }).unique(),
     approvalEnabled: boolean("approval_enabled").notNull().default(true),
+    acceptedVia: varchar("accepted_via", { length: 20 }),
     convertedServicePlanId: varchar("converted_service_plan_id").references(() => servicePlans.id, {
       onDelete: "set null",
     }),

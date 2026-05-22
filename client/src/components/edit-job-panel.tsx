@@ -72,7 +72,9 @@ export function EditJobPanel({
   const [endDate, setEndDate] = useState("");
   const [visitInstructions, setVisitInstructions] = useState("");
   const [assignedUserId, setAssignedUserId] = useState("none");
-  const [timeWindowType, setTimeWindowType] = useState<"anytime" | "morning" | "afternoon" | "specific">("anytime");
+  const [timeWindowType, setTimeWindowType] = useState<
+    "anytime" | "morning" | "afternoon" | "specific"
+  >("anytime");
   const [scheduledTimeStart, setScheduledTimeStart] = useState("");
   const [scheduledTimeEnd, setScheduledTimeEnd] = useState("");
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>([]);
@@ -139,7 +141,9 @@ export function EditJobPanel({
 
   useEffect(() => {
     if (visit && open) {
-      setTimeWindowType((visit.timeWindowType as "anytime" | "morning" | "afternoon" | "specific") || "anytime");
+      setTimeWindowType(
+        (visit.timeWindowType as "anytime" | "morning" | "afternoon" | "specific") || "anytime"
+      );
       setScheduledTimeStart(visit.scheduledTimeStart || "");
       setScheduledTimeEnd(visit.scheduledTimeEnd || "");
     }
@@ -214,8 +218,8 @@ export function EditJobPanel({
       if (visit?.id) {
         await apiRequest("PATCH", `/api/visits/${visit.id}`, {
           timeWindowType,
-          scheduledTimeStart: timeWindowType === "specific" ? (scheduledTimeStart || null) : null,
-          scheduledTimeEnd: timeWindowType === "specific" ? (scheduledTimeEnd || null) : null,
+          scheduledTimeStart: timeWindowType === "specific" ? scheduledTimeStart || null : null,
+          scheduledTimeEnd: timeWindowType === "specific" ? scheduledTimeEnd || null : null,
         });
       }
     },
