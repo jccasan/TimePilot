@@ -434,6 +434,11 @@ export const companies = pgTable("companies", {
   widgetFieldConfig: jsonb("widget_field_config").$type<WidgetFieldConfig>(),
   yardSizeTierConfig: jsonb("yard_size_tier_config").$type<YardSizeTierConfig>(),
   requireDocumentSigning: boolean("require_document_signing").notNull().default(false),
+  businessOnboardingStep: integer("business_onboarding_step").notNull().default(0),
+  businessOnboardingComplete: boolean("business_onboarding_complete").notNull().default(false),
+  websiteUrl: text("website_url"),
+  businessDescription: text("business_description"),
+  serviceAreaDescription: text("service_area_description"),
   calendarToken: text("calendar_token")
     .unique()
     .default(sql`gen_random_uuid()`),
@@ -3360,7 +3365,7 @@ export const routificUsageLog = pgTable(
     id: varchar("id")
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    companyId: integer("company_id"),
+    companyId: varchar("company_id"),
     stopCount: integer("stop_count").notNull(),
     success: boolean("success").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
