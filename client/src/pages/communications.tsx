@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import {
   Mail,
+  MailOpen,
   MessageSquare,
   Send,
   ArrowUpRight,
@@ -48,6 +49,8 @@ import {
   Paperclip,
   X,
   Download,
+  Copy,
+  Check,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useLocation } from "wouter";
@@ -1289,6 +1292,17 @@ export default function Communications() {
     queryKey: ["/api/messages/config"],
   });
 
+  const { data: addrData } = useQuery<{ inbound_email: string | null; pending: boolean }>({
+    queryKey: ["/api/email/inbound-address"],
+  });
+  const [copiedInbound, setCopiedInbound] = useState(false);
+  const handleCopyInbound = useCallback(async () => {
+    if (!addrData?.inbound_email) return;
+    await navigator.clipboard.writeText(addrData.inbound_email);
+    setCopiedInbound(true);
+    setTimeout(() => setCopiedInbound(false), 2000);
+  }, [addrData?.inbound_email]);
+
   const emailForm = useForm<EmailFormValues>({
     resolver: zodResolver(emailFormSchema),
     defaultValues: { contactId: "", to: "", subject: "", body: "" },
@@ -1870,6 +1884,40 @@ export default function Communications() {
         </TabsContent>
 
         <TabsContent value="email" className="mt-4">
+          {addrData?.inbound_email && (
+            <div
+              className="flex items-start gap-3 px-4 py-3 mb-4 rounded-lg border bg-muted/40"
+              data-testid="card-inbound-email-info"
+            >
+              <MailOpen className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground">Email forwarding address</p>
+                <p
+                  className="text-sm font-mono text-primary break-all mt-0.5"
+                  data-testid="text-inbound-email-address"
+                >
+                  {addrData.inbound_email}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Clients can forward emails here and they will appear automatically in this inbox,
+                  linked to their contact record.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyInbound}
+                className="shrink-0 p-1.5 rounded hover:bg-muted transition-colors"
+                title="Copy address"
+                data-testid="button-copy-inbound-email"
+              >
+                {copiedInbound ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : (
+                  <Copy className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+            </div>
+          )}
           <UnifiedInbox channelFilter="email" />
         </TabsContent>
       </Tabs>

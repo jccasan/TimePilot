@@ -74,6 +74,9 @@ import {
   Camera,
   X,
   Navigation,
+  Copy,
+  Check,
+  Link2,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -1107,6 +1110,20 @@ export default function Scheduling() {
   const { data: pricingItems } = useQuery<ServicePricingItem[]>({ queryKey: ["/api/pricing"] });
   const { data: team } = useQuery<TeamMember[]>({ queryKey: ["/api/company/team"] });
 
+  const { data: companyData } = useQuery<{ calendarToken?: string | null }>({
+    queryKey: ["/api/company"],
+  });
+  const calFeedUrl = companyData?.calendarToken
+    ? `${window.location.origin}/api/calendar/${companyData.calendarToken}/feed.ics`
+    : null;
+  const [copiedCal, setCopiedCal] = useState(false);
+  const handleCopyCal = useCallback(async () => {
+    if (!calFeedUrl) return;
+    await navigator.clipboard.writeText(calFeedUrl);
+    setCopiedCal(true);
+    setTimeout(() => setCopiedCal(false), 2000);
+  }, [calFeedUrl]);
+
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
   const [invoiceDialogContactId, setInvoiceDialogContactId] = useState<string | undefined>(
@@ -1503,6 +1520,41 @@ export default function Scheduling() {
           </Button>
         </div>
       </div>
+
+      {calFeedUrl && (
+        <div
+          className="flex items-start gap-3 px-4 py-3 rounded-lg border bg-muted/40"
+          data-testid="card-calendar-feed-info"
+        >
+          <Link2 className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">Calendar subscription link</p>
+            <p
+              className="text-xs font-mono text-muted-foreground break-all mt-0.5"
+              data-testid="text-calendar-feed-url"
+            >
+              {calFeedUrl}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Subscribe in Google Calendar, Outlook, or Apple Calendar to see your schedule outside
+              the app. The feed updates automatically.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopyCal}
+            className="shrink-0 p-1.5 rounded hover:bg-muted transition-colors"
+            title="Copy link"
+            data-testid="button-copy-calendar-feed"
+          >
+            {copiedCal ? (
+              <Check className="h-4 w-4 text-green-600" />
+            ) : (
+              <Copy className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
