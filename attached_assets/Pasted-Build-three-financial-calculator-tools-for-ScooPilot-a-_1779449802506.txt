@@ -1,0 +1,158 @@
+Build three financial calculator tools for ScooPilot, a pet waste removal business management SaaS. These will be added to the existing Profitability section of the app. Build each as a standalone, self-contained component that accepts inputs and returns calculated outputs. No backend required — all calculations are client-side.
+
+Navigation placement
+Each tool lives in a specific location within the existing "Make More Money" sidebar section:
+LTV Calculator → add as a tab or sub-page under Pricing. It lives alongside the existing pricing engine and suggested vs. current price comparison. The operator is already thinking about per-client value when they're in Pricing.
+Breakeven Calculator → add as a tab under Profitability, alongside the existing "By Customer" and "By Route" tabs. It is the forward-looking complement to the backward-looking per-customer P&L already there.
+When to Hire Calculator → add as a new top-level nav item called Growth Tools under the Make More Money section, positioned between Pricing and Reports:
+MAKE MORE MONEY
+  Business Overview
+  Profitability
+  Route Profit Maps
+  Pricing
+  Growth Tools        ← new
+  Reports
+When to Hire is the first feature under Growth Tools. The section is intentionally named to accommodate future additions (12-month growth projection, seasonal cash reserve model) without requiring a rename.
+
+Tool 1: LTV Calculator
+Purpose: Show operators the dollar value of a client over their lifetime, and how much they can spend to acquire one.
+Inputs:
+
+Monthly churn rate (%) — default 3%
+Average monthly revenue per client ($) — pulled from existing P&L data if available, otherwise manual entry
+Net profit margin (%) — pulled from existing profitability data if available, otherwise manual entry
+Current customer acquisition cost ($/client) — manual entry
+Annual discount rate (%) — default 10%
+
+Calculations:
+
+Average client lifespan (months) = 1 ÷ monthly churn rate
+Gross LTV = avg monthly revenue × avg lifespan
+Net LTV = gross LTV × net profit margin
+NPV of LTV = Net LTV ÷ (1 + annual discount rate ÷ 12) applied over lifespan months [standard NPV of annuity]
+Max acquisition cost (3:1 ratio) = Net LTV ÷ 3
+Current ROI on acquisition = (Net LTV − CAC) ÷ CAC × 100
+
+Key output — Churn Sensitivity Table:
+Show a table with rows at churn rates: 1%, 2%, 3%, 4%, 5%, 7%, 10%, 15%
+Columns: Monthly Churn %, Avg Lifespan (months), Net LTV ($), Max CAC at 3:1 ($)
+Highlight the row matching the user's current churn rate input.
+Display logic:
+
+If Net LTV is negative (because margin is negative), show a warning: "Your current margin means each client costs you money over their lifetime. Fix pricing before optimizing acquisition."
+Color code Max CAC: green if current CAC is below it, red if above.
+
+
+Tool 2: Breakeven Calculator
+Purpose: Tell the operator exactly how many clients they need to cover costs, hit a revenue target, and hit a margin target. Include route density adjustment to show that costs drop as routes get denser.
+Inputs:
+
+Average price per visit ($) — default pulled from pricing settings if available
+Average visits per client per week — default 1
+Fixed monthly overhead ($) — pulled from overhead ledger if available
+Variable cost per visit ($) — pulled from labor + vehicle cost settings if available
+Miles between stops — current density (manual entry)
+Miles between stops — at target client count (manual entry)
+Average drive speed (mph) — default 30
+Vehicle cost per mile ($/mile) — pulled from settings if available
+Target monthly revenue ($) — manual entry
+Target net profit margin (%) — manual entry
+
+Calculations:
+Base:
+
+Revenue per client per month = avg price per visit × visits per week × 4.33
+Contribution margin per client = revenue per client per month − (variable cost per visit × visits per week × 4.33)
+Breakeven clients = fixed monthly overhead ÷ contribution margin per client
+
+Route density adjustment:
+
+Daily mileage at target density = miles between stops (target) × stops per day [derive stops per day from target client count ÷ 5 days/week]
+Adjusted fuel cost = (daily mileage at target density ÷ fuel efficiency) × gas price [use values from settings or defaults]
+Adjusted variable cost per visit = recalculate with lower mileage
+Adjusted breakeven = fixed overhead ÷ adjusted contribution margin
+
+Key outputs:
+
+Breakeven clients (current density)
+Breakeven clients (at target density) — shown side by side to illustrate scale benefit
+Clients needed for revenue target
+Clients needed for margin target
+Revenue scenario table: show monthly revenue, costs, and net profit at 10, 20, 30, 40, 50, 75, 100, 125, 150, 200 clients
+
+Display note: Add a callout under the density section: "As you add clients in the same area, miles per stop drops and your per-visit cost falls. Denser routes = lower breakeven."
+
+Tool 3: When to Hire Calculator
+Purpose: Give the operator a specific client count threshold at which hiring a first technician makes financial sense. The key output is the number of clients needed before the owner can step off the truck without a pay cut.
+Inputs:
+Section 1 — Owner capacity:
+
+Field hours per day — default 6
+Yards serviced per hour — default 3.75
+Days worked per week — default 5
+Maximum days owner wants to work (their ceiling) — default 5
+Current active clients — manual entry
+Average revenue per visit ($) — pulled from pricing if available
+
+Section 2 — Technician costs:
+
+Tech hourly wage ($/hr) — default 18
+Labor burden rate (%) — default 18%
+Tech field hours per day — default 6
+Tech days per week — default 5
+Additional vehicle cost per month ($) — default 400
+Tech yards per hour — default 3
+
+Calculations:
+Owner capacity:
+
+Yards per day = field hours × yards per hour
+Yards per week = yards per day × days per week
+Current capacity utilization % = current clients ÷ (yards per week × 4.33)
+Remaining capacity (yards) = (max days × yards per day) − (current clients ÷ 4.33)
+Revenue headroom = remaining capacity × avg revenue per visit × 4.33
+
+Tech economics:
+
+Burdened labor cost per hour = hourly wage × (1 + burden rate)
+Total monthly labor cost = burdened rate × hours per day × days per week × 4.33
+Total monthly cost (labor + vehicle) = labor cost + vehicle cost
+Yards tech can do per week = tech yards per hour × tech hours per day × tech days per week
+Monthly revenue tech can generate = yards per week × 4.33 × avg revenue per visit
+Tech monthly contribution = revenue − total monthly cost
+Minimum clients for tech to break even = total monthly cost ÷ (avg revenue per visit × 4.33)
+
+Owner income scenarios — show three columns:
+
+Solo (current): field revenue − own labor cost − fixed overhead
+With tech (owner still scoops): combined revenue − own labor − tech cost − overhead
+With tech (owner manages only): tech revenue − tech cost − overhead [owner field revenue = 0]
+
+Key output — the trigger number:
+
+Clients needed before owner can step off the truck = (tech total monthly cost + owner's current field income) ÷ (avg revenue per visit × 4.33)
+Display this prominently. Label it: "Step off the truck threshold"
+Add note: "Until you hit this number, stepping off the truck means a pay cut. That's okay if growth is the goal — just know the number going in."
+
+Capacity status indicator:
+
+Below 60% utilized → "Room to grow — fill your own schedule before hiring"
+60–80% → "Getting full — start planning for growth"
+Above 80% → "Near capacity — hiring is worth modeling seriously"
+
+
+Shared dependencies and build notes
+Stack: React + Tailwind. No backend. All state managed locally with useState/useReducer.
+Data flow: Each tool should accept optional props to pre-populate fields from existing ScooPilot data (labor settings, overhead ledger, pricing engine). If those props are not passed, fall back to manual entry with sensible defaults. Do not break if props are absent.
+UI pattern: Each tool is a card-based layout. Inputs on the left or top, outputs on the right or below. Use a two-column grid on desktop, single column on mobile.
+Number formatting: All dollar values formatted as $X,XXX.XX. Percentages formatted as XX.X%. No raw decimals visible to the user.
+Color conventions (match ScooPilot's existing green-primary theme):
+
+Positive/healthy → green
+Caution → amber/yellow
+Negative/at risk → red
+Neutral calculated outputs → default text color
+
+Recharts for the scenario table in Tool 2 (bar chart of revenue vs costs across client counts). No other charting library needed.
+No form tags. Use onChange handlers on inputs, onClick on buttons.
+Each tool is a separate exportable React component: LTVCalculator.jsx, BreakevenCalculator.jsx, WhenToHire.jsx. A parent FinancialTools.jsx renders all three with tab navigation between them. The tab navigation in FinancialTools.jsx is for development/preview only — in production, each component will be dropped into its respective nav location independently. Build them so they work in isolation without the parent wrapper.
