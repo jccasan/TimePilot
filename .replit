@@ -71,6 +71,10 @@ args = "check-all-parallel"
 task = "workflow.run"
 args = "fix-all"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "schema-check"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -175,6 +179,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npx eslint . --fix && npx prettier --write ."
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "schema-check"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/check-schema.sh"
 
 [workflows.workflow.metadata]
 isValidation = true
