@@ -77,9 +77,7 @@ export default function WhenToHire({
 
     // Financial break-even: minimum clients to cover tech cost alone
     const financialBreakEven =
-      rev * WEEKS_PER_MONTH > 0
-        ? Math.ceil(techMonthlyCost / (rev * WEEKS_PER_MONTH))
-        : null;
+      rev * WEEKS_PER_MONTH > 0 ? Math.ceil(techMonthlyCost / (rev * WEEKS_PER_MONTH)) : null;
 
     const soloIncome = clients * rev * WEEKS_PER_MONTH - overhead;
     const withTechOwnerScoop =

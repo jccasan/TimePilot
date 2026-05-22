@@ -1095,10 +1095,12 @@ export type GroupedErrorReport = {
 // in some production databases until the publish-time migration runs.
 // This helper checks once and returns the appropriate Drizzle column map.
 // ---------------------------------------------------------------------------
-let _companyCols: Record<string, unknown> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _companyCols: any = null;
 let _hasCalendarToken = true;
 
-async function companyCols(): Promise<Record<string, unknown>> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function companyCols(): Promise<any> {
   if (_companyCols !== null) return _companyCols;
   try {
     await db.execute(sql`SELECT calendar_token FROM companies LIMIT 0`);
@@ -1133,10 +1135,9 @@ export class DatabaseStorage implements IStorage {
 
   async listCompanies(): Promise<Company[]> {
     const cols = await companyCols();
-    return db
-      .select(cols)
-      .from(companies)
-      .where(isNull(companies.deletedAt)) as Promise<Company[]>;
+    return db.select(cols).from(companies).where(isNull(companies.deletedAt)) as unknown as Promise<
+      Company[]
+    >;
   }
 
   async getCompanyByPhone(phone: string): Promise<Company | undefined> {
