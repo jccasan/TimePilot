@@ -2185,6 +2185,88 @@ async function backfillSpSubscriberLeadResponse() {
   }
 }
 
+async function backfillInboundEmails() {
+  try {
+    const { Pool } = await import("pg");
+    const { provisionInboundEmail } = await import("./services/inbound-email");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    try {
+      // Advisory lock — only one instance runs this at a time
+      const lockRes = await pool.query<{ acquired: boolean }>(
+        `SELECT pg_try_advisory_lock(hashtext('inbound_email_backfill')) AS acquired`
+      );
+      if (!lockRes.rows[0]?.acquired) {
+        console.log("[InboundEmail Backfill] Another instance is running — skipping");
+        return;
+      }
+      try {
+        const { rows } = await pool.query<{
+          id: string;
+          name: string;
+          phone: string;
+          inbound_email: string | null;
+          inbound_email_slug: string | null;
+        }>(
+          `SELECT id, name, phone, inbound_email, inbound_email_slug
+             FROM companies
+            WHERE inbound_email IS NULL
+              AND phone IS NOT NULL
+              AND phone <> ''`
+        );
+        if (rows.length === 0) {
+          console.log("[InboundEmail Backfill] All companies already have inbound addresses");
+          return;
+        }
+        console.log(
+          `[InboundEmail Backfill] Found ${rows.length} companies without an inbound address, provisioning now...`
+        );
+        let provisioned = 0;
+        let skipped = 0;
+        let failed = 0;
+        for (const row of rows) {
+          try {
+            // Re-fetch a fresh snapshot so we don't overwrite a concurrent provisioning
+            const freshRes = await pool.query<{ inbound_email: string | null }>(
+              `SELECT inbound_email FROM companies WHERE id = $1`,
+              [row.id]
+            );
+            if (freshRes.rows[0]?.inbound_email) {
+              skipped++;
+              continue;
+            }
+            await provisionInboundEmail({
+              id: row.id,
+              name: row.name,
+              phone: row.phone,
+              inboundEmail: null,
+              inboundEmailSlug: row.inbound_email_slug,
+            });
+            provisioned++;
+          } catch (err) {
+            failed++;
+            console.error(
+              `[InboundEmail Backfill] Failed for company ${row.id}:`,
+              err instanceof Error ? err.message : String(err)
+            );
+          }
+        }
+        console.log(
+          `[InboundEmail Backfill] Done — provisioned ${provisioned}, skipped ${skipped} (already set), failed ${failed} of ${rows.length} total`
+        );
+      } finally {
+        await pool.query(`SELECT pg_advisory_unlock(hashtext('inbound_email_backfill'))`);
+      }
+    } finally {
+      await pool.end();
+    }
+  } catch (err) {
+    console.error(
+      "[InboundEmail Backfill] Fatal error:",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+}
+
 async function backfillPropertyCoordinates() {
   const { Pool } = await import("pg");
   const { geocodeAddress } = await import("./services/geocode");
@@ -3027,6 +3109,10 @@ async function seedLakeErieScoopersAccount() {
 
       backfillSpSubscriberLeadResponse().catch((err) =>
         console.error("[LR Backfill] Unexpected error:", err)
+      );
+
+      backfillInboundEmails().catch((err) =>
+        console.error("[InboundEmail Backfill] Unexpected error:", err)
       );
 
       auditRetellWebhooks().catch((err) => console.error("[RetellAudit] Unexpected error:", err));
