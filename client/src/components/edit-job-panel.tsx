@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { ServicePlan, Property, Contact } from "@shared/schema";
+import type { ServicePlan, Property, Contact, Visit } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,7 @@ interface EditJobPanelProps {
   property: Property | null;
   contact?: Pick<Contact, "id" | "dogTemperament" | "yardAccess"> | null;
   contactId?: string | null;
+  visit?: Visit | null;
   team?: TeamMember[];
   onSaved?: () => void;
   extraInvalidateKeys?: unknown[][];
@@ -56,6 +57,7 @@ export function EditJobPanel({
   property,
   contact,
   contactId,
+  visit,
   team,
   onSaved,
   extraInvalidateKeys,
@@ -70,6 +72,9 @@ export function EditJobPanel({
   const [endDate, setEndDate] = useState("");
   const [visitInstructions, setVisitInstructions] = useState("");
   const [assignedUserId, setAssignedUserId] = useState("none");
+  const [timeWindowType, setTimeWindowType] = useState<"anytime" | "morning" | "afternoon" | "specific">("anytime");
+  const [scheduledTimeStart, setScheduledTimeStart] = useState("");
+  const [scheduledTimeEnd, setScheduledTimeEnd] = useState("");
 
   const [numberOfDogs, setNumberOfDogs] = useState("");
   const [dogNames, setDogNames] = useState("");
@@ -116,6 +121,14 @@ export function EditJobPanel({
       setYardAccess(contact.yardAccess || "");
     }
   }, [contact, open]);
+
+  useEffect(() => {
+    if (visit && open) {
+      setTimeWindowType((visit.timeWindowType as "anytime" | "morning" | "afternoon" | "specific") || "anytime");
+      setScheduledTimeStart(visit.scheduledTimeStart || "");
+      setScheduledTimeEnd(visit.scheduledTimeEnd || "");
+    }
+  }, [visit, open]);
 
   const invalidateAll = () => {
     if (contactId) {
@@ -176,6 +189,13 @@ export function EditJobPanel({
         await apiRequest("PATCH", `/api/contacts/${contact.id}`, {
           dogTemperament: dogTemperament || null,
           yardAccess: yardAccess || null,
+        });
+      }
+      if (visit?.id) {
+        await apiRequest("PATCH", `/api/visits/${visit.id}`, {
+          timeWindowType,
+          scheduledTimeStart: timeWindowType === "specific" ? (scheduledTimeStart || null) : null,
+          scheduledTimeEnd: timeWindowType === "specific" ? (scheduledTimeEnd || null) : null,
         });
       }
     },
@@ -294,6 +314,47 @@ export function EditJobPanel({
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-1.5">
+              <Label>Arrival Window</Label>
+              <Select
+                value={timeWindowType}
+                onValueChange={(v) => setTimeWindowType(v as typeof timeWindowType)}
+              >
+                <SelectTrigger data-testid="select-edit-job-time-window">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="anytime">Anytime</SelectItem>
+                  <SelectItem value="morning">Morning (before noon)</SelectItem>
+                  <SelectItem value="afternoon">Afternoon (noon–5pm)</SelectItem>
+                  <SelectItem value="specific">Specific time range</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {timeWindowType === "specific" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Start Time</Label>
+                  <Input
+                    type="time"
+                    value={scheduledTimeStart}
+                    onChange={(e) => setScheduledTimeStart(e.target.value)}
+                    data-testid="input-edit-job-time-start"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>End Time</Label>
+                  <Input
+                    type="time"
+                    value={scheduledTimeEnd}
+                    onChange={(e) => setScheduledTimeEnd(e.target.value)}
+                    data-testid="input-edit-job-time-end"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label>Visit Instructions</Label>

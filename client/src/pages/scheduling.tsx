@@ -2690,6 +2690,7 @@ function VisitDetailSheet({
         property={property || null}
         contact={contact || null}
         contactId={contact?.id}
+        visit={visit}
         team={_team}
         extraInvalidateKeys={[
           [`/api/visits/range?start=${startStr}&end=${endStr}`],

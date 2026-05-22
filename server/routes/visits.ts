@@ -696,6 +696,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         "gateClosedPhoto",
         "extraPhotos",
         "technicianNotes",
+        "timeWindowType",
+        "scheduledTimeStart",
+        "scheduledTimeEnd",
       ];
       const updates: Partial<InsertVisit> = {};
       for (const key of allowedFields as (keyof InsertVisit)[]) {
