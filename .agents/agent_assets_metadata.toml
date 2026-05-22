@@ -18,3 +18,9 @@ id = "AMLskpbRkm7WmV4xtAOws"
 uri = "file://.local/tasks/email-implementation-guide.md"
 type = "text"
 title = "Email Handling Implementation Guide — Complete Reference"
+
+[[outputs]]
+id = "euw531FeweMXyooKmfS1w"
+uri = "file://scoopilot-financial-calculations.csv"
+type = "table"
+title = "ScooPilot Financial Calculations Reference"
