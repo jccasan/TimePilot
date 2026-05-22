@@ -2598,6 +2598,82 @@ async function ensureInboundEmailsTable() {
   }
 }
 
+async function ensureFallbackLogTable() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS fallback_log (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        channel VARCHAR(20) NOT NULL DEFAULT 'sms',
+        trigger_phrase TEXT,
+        agent_response TEXT,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_fallback_log_company ON fallback_log(company_id);
+      CREATE INDEX IF NOT EXISTS idx_fallback_log_created_at ON fallback_log(created_at);
+    `);
+    console.log("[Migration] fallback_log table ensured");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure fallback_log table:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
+async function ensureSmsSessionsTable() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sms_sessions (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        from_number VARCHAR(30) NOT NULL,
+        to_number VARCHAR(30) NOT NULL,
+        messages JSONB NOT NULL DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        UNIQUE(from_number, to_number)
+      );
+      CREATE INDEX IF NOT EXISTS idx_sms_sessions_updated_at ON sms_sessions(updated_at);
+      CREATE INDEX IF NOT EXISTS idx_sms_sessions_company ON sms_sessions(company_id);
+    `);
+    console.log("[Migration] sms_sessions table ensured");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure sms_sessions table:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
+async function ensureCustomFieldDefinitionsTable() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS custom_field_definitions (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        label VARCHAR(100) NOT NULL,
+        key VARCHAR(100) NOT NULL,
+        field_type VARCHAR(20) NOT NULL DEFAULT 'text',
+        entity_type VARCHAR(20) NOT NULL DEFAULT 'contact',
+        options JSONB,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_custom_field_defs_company ON custom_field_definitions(company_id);
+    `);
+    console.log("[Migration] custom_field_definitions table ensured");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure custom_field_definitions table:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function ensureVisitTimeWindowColumns() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
