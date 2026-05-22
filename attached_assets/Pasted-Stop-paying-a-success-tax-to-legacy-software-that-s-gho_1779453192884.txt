@@ -1,0 +1,220 @@
+Stop paying a "success tax" to legacy software that’s ghosting you on features and killing you on price.
+ScoopPilot is the only platform built specifically for pet waste pros, offering the high-efficiency tools the industry has been begging for.
+🚨 NEW THIS WEEK: The Autonomous Lead Response Engine Stop playing telephone with new leads while your hands are full on a route. The second a customer submits your website quote form, ScoopPilot takes over on autopilot:
+•	⚡ Sends an instant, menu-priced SMS quote based on their exact yard size.
+•	💳 Automatically requests and secures the service deposit.
+•	📅 Books them directly into your optimized routing schedule.
+•	Zero manual texts. Zero phone tag. Zero wasted time.
+The ScoopPilot Core Command Suite:
+•	📱 Two-Way Text & Email (Native on EVERY tier, not gated behind $349/mo plans)
+•	🗺️ Route Profit Maps (Instantly see which routes make money and which ones lose it)
+•	📐 In-App Yard Measurement Tool (No clunky manual screenshots—data is hard-coded to the client profile)
+No shade to Erica Krupin—she’s amazing and legitimately one of the best in the game. Her hustle is the blueprint. But if you want to scale a modern enterprise, you need modern infrastructure.
+Worried about switching? We will white-glove migrate your entire current client list into ScoopPilot the exact same day, completely free. Try us risk-free with our 30-Day, No-Questions-Asked, Money-Back Guarantee.
+Stop playing photographer with screenshots. Start piloting your business.
+🚀 Put your route on autopilot: https://scoopilot.com
+#pooperscooper #psm #smallbusiness #scoopilot #automation #fieldservice #saas
+ 
+You are working on an existing codebase called Scoopilot. It is a multi-tenant 
+SaaS CRM for pet waste removal businesses built with:
+- PostgreSQL + Drizzle ORM
+- Express backend (session auth, REST API)
+- React frontend (Tailwind CSS, shadcn/ui)
+
+Do not scaffold a new project. Extend the existing codebase only.
+Do not modify any existing working features.
+
+---
+
+## FEATURE 1: ICS CALENDAR FEED (read-only, no OAuth)
+
+### Goal
+Each tenant gets a unique, subscribable calendar feed URL that exposes their 
+scheduled jobs as calendar events. Works with Google Calendar, Outlook, and 
+Apple Calendar via standard iCal/ICS format.
+
+### Database
+Add to the tenants table (or equivalent):
+- calendar_token: text, unique, not null (UUID generated on account creation)
+
+### Backend
+1. On tenant creation, auto-generate a UUID and store as calendar_token.
+2. Create a public (no auth) GET endpoint:
+   GET /api/calendar/:token/feed.ics
+   - Look up tenant by calendar_token
+   - Query all scheduled visits/jobs for that tenant (upcoming + past 30 days)
+   - Return a valid ICS file with Content-Type: text/calendar
+   - Each job event must include:
+     - SUMMARY: customer name + service type
+     - DTSTART / DTEND: job scheduled time (use UTC)
+     - LOCATION: property address
+     - DESCRIPTION: dog count, yard size, gate code, special instructions
+     - UID: stable unique ID per visit (use visit ID + tenant ID)
+   - Use the `ical-generator` npm package if not already installed
+
+3. Add a GET /api/calendar/token endpoint (authenticated) that returns the 
+   tenant's current calendar_token and the full subscribable feed URL.
+
+4. Add a POST /api/calendar/regenerate endpoint (authenticated) that regenerates 
+   the calendar_token (invalidates old feed URL).
+
+### Frontend
+Add a "Calendar Sync" card to the Settings page (or onboarding step if one exists):
+
+- Display the full feed URL in a read-only input with a Copy button
+- Show setup instructions for Google Calendar:
+  "In Google Calendar → Other Calendars → From URL → paste this link"
+- Show setup instructions for Outlook:
+  "In Outlook → Add Calendar → Subscribe from web → paste this link"
+- Show setup instructions for Apple Calendar:
+  "In Apple Calendar → File → New Calendar Subscription → paste this link"
+- Add a Regenerate Link button with a confirmation warning:
+  "This will break any existing calendar subscriptions. Continue?"
+- Note: Google refreshes subscribed calendars every 6–24 hours, not instantly.
+  Display this as a subtle helper text under the URL.
+
+---
+
+## FEATURE 2: INBOUND EMAIL ADDRESS (forwarding-based, no OAuth)
+
+### Goal
+Each tenant gets a unique inbound email address 
+(crm.{slug}@mail.scoopilot.com). Emails forwarded to this address are parsed 
+by SendGrid Inbound Parse, matched to a contact record, and appended to the 
+contact's activity timeline. Unmatched emails go to a review queue.
+
+### Slug Generation Logic
+On tenant creation, auto-generate the inbound email address:
+
+1. Slugify the business name:
+   - Lowercase
+   - Remove all non-alphanumeric characters
+   - Truncate to 20 characters
+   - Example: "Acme Scoop & Go LLC" → "acmescoopgo"
+
+2. Check for collisions in the tenant table:
+   - If crm.{slug}@mail.scoopilot.com is taken:
+     - Append first 4 digits of the business phone number
+     - Example: crm.acmescoopgo1234@mail.scoopilot.com
+   - If still collides (edge case): append full 10-digit phone number
+
+3. If phone number is not yet available at time of generation:
+   - Store slug as pending, generate final address when phone is saved
+   - Block address generation UI until resolved
+
+4. Once assigned, the inbound address NEVER changes even if business name 
+   changes. Store it as immutable after first generation.
+
+### Database
+Add to the tenants table:
+- inbound_email: text, unique (the full email address)
+- inbound_email_slug: text, unique (just the slug portion)
+
+Add a new table: inbound_emails
+- id, tenant_id, from_address, from_name, subject, body_text, body_html
+- matched_contact_id (nullable FK to contacts)
+- raw_headers: jsonb
+- status: enum('matched', 'unmatched', 'ignored')
+- created_at
+
+### Backend — SendGrid Inbound Parse Webhook
+1. Create a POST /api/webhooks/email/inbound endpoint (no auth — SendGrid posts here)
+   - Parse the multipart form data from SendGrid
+   - Extract: to, from, subject, text, html, headers
+   - Identify tenant from the `to` address (match against inbound_email column)
+   - If tenant not found: return 200 (don't let SendGrid retry) and log the drop
+
+2. Parse forwarded email headers to get the real originating sender:
+   - Gmail forwards include a "---------- Forwarded message ---------" block in body
+     Parse the From: line inside that block
+   - Outlook forwards include X-MS-Exchange-* headers — check raw headers first
+   - Apple Mail forwards similarly to Gmail body format
+   - Fall back to the envelope `from` if no forwarding headers are detected
+   - Store both the envelope from and the parsed original from
+
+3. Match parsed from_address to a contact in the tenant's contacts table 
+   (match on email field, case-insensitive)
+
+4. If matched:
+   - Insert into inbound_emails with status = 'matched', matched_contact_id set
+   - Append to contact activity timeline:
+     type: 'email_inbound'
+     subject, body_text preview (first 500 chars), from_name, from_address
+     timestamp: email received time
+
+5. If unmatched:
+   - Insert into inbound_emails with status = 'unmatched'
+   - Do NOT silently drop — surface in the unmatched queue (see Frontend)
+
+6. Always return HTTP 200 to SendGrid regardless of match outcome
+
+### Backend — Supporting Endpoints
+- GET /api/email/inbound-address (authenticated): returns tenant's inbound_email
+- GET /api/email/unmatched (authenticated): returns paginated unmatched emails
+- POST /api/email/unmatched/:id/link (authenticated): 
+  body: { contact_id }
+  Links an unmatched email to a contact, updates status to 'matched', 
+  appends to that contact's activity timeline
+- POST /api/email/unmatched/:id/ignore (authenticated):
+  Sets status to 'ignored'
+
+### Frontend — Onboarding Step
+Add an "Email Forwarding Setup" step to the onboarding flow (or Settings page 
+if onboarding is not yet implemented as a multi-step flow):
+
+Display:
+- Their unique inbound address in a read-only input with Copy button
+- Gmail setup instructions:
+  1. Open Gmail Settings → See all settings → Filters and Blocked Addresses
+  2. Create a new filter: matches all mail (leave From blank, check "has words": 
+     from your client domain if desired)
+  3. Action: Forward to {inbound_address}
+  OR: Manually forward individual emails to {inbound_address}
+- Outlook setup instructions:
+  1. Settings → View all Outlook settings → Mail → Rules
+  2. Add new rule → Forward to {inbound_address}
+- A "Send a test email" button:
+  - Sends a test email to the tenant's inbound address from a Scoopilot system address
+  - Polls for up to 30 seconds for the webhook to receive it
+  - Shows success ("Your email address is working") or failure with troubleshooting tip
+
+### Frontend — Unmatched Email Queue
+Add an "Unmatched Emails" view under the inbox or contacts section:
+- Table: From, Subject, Received, Preview, Actions
+- Actions per row: "Link to Contact" (contact picker modal) | "Ignore"
+- Ignored emails are hidden by default with a "Show ignored" toggle
+- Show a badge count on the nav item if unmatched emails exist
+
+### Frontend — Activity Timeline
+In the existing contact activity timeline, render inbound emails as a new 
+event type:
+- Icon: email/inbox icon (distinct from outbound)
+- Label: "Email received"
+- Show: subject, from name/address, body preview (first 200 chars)
+- Expandable to show full body_text
+
+---
+Visit ICS Event Rules:
+- Default: render as all-day event (DTSTART;VALUE=DATE, no time)
+- If visit has scheduled_time_start: render as timed event
+- Add scheduled_time_start, scheduled_time_end, time_window_type 
+  (enum: anytime/morning/afternoon/specific) to visits/jobs table
+- Add a feed_mode setting per tenant: 'summary' (one event per route per day) 
+  or 'detailed' (one event per stop)
+- Summary mode DESCRIPTION should list all stops for that route in sequence
+- Detailed mode SUMMARY format: "{customer_name} — {street_address}"
+- Default feed_mode to 'summary' for all tenants
+- Expose feed_mode toggle in the Calendar Sync settings card
+## SHARED REQUIREMENTS
+
+- Both features should be auto-provisioned on tenant creation — 
+  no manual admin step required
+- Both features should be exposed in the Settings page under a 
+  new "Integrations" section if one does not exist
+- Do not use any external OAuth flow for either feature
+- All new DB columns must have proper migrations via Drizzle
+- All new endpoints must follow existing auth middleware patterns
+- Use existing UI component library (shadcn/ui) for all new UI elements
+- Error states must be handled and surfaced to the user — 
+  never fail silently
+
