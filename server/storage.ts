@@ -14,6 +14,7 @@ import {
   count,
   isNull,
   isNotNull,
+  getTableColumns,
 } from "drizzle-orm";
 import { db } from "./db";
 import { encryptHcpApiKey, decryptHcpApiKey } from "./utils/hcp-crypto";
@@ -1088,6 +1089,29 @@ export type GroupedErrorReport = {
   latestId: string;
 };
 
+// ---------------------------------------------------------------------------
+// Production-safe company column set
+// The calendar_token column was added after initial deploy and may be absent
+// in some production databases until the publish-time migration runs.
+// This helper checks once and returns the appropriate Drizzle column map.
+// ---------------------------------------------------------------------------
+let _companyCols: Record<string, unknown> | null = null;
+let _hasCalendarToken = true;
+
+async function companyCols(): Promise<Record<string, unknown>> {
+  if (_companyCols !== null) return _companyCols;
+  try {
+    await db.execute(sql`SELECT calendar_token FROM companies LIMIT 0`);
+    _hasCalendarToken = true;
+    _companyCols = getTableColumns(companies);
+  } catch {
+    _hasCalendarToken = false;
+    const { calendarToken: _omit, ...rest } = getTableColumns(companies);
+    _companyCols = rest;
+  }
+  return _companyCols;
+}
+
 export class DatabaseStorage implements IStorage {
   // ================ Users ================
   async setImportMode(userId: string, value: boolean): Promise<void> {
@@ -1099,20 +1123,29 @@ export class DatabaseStorage implements IStorage {
 
   // ================ Companies ================
   async getCompany(id: string): Promise<Company | undefined> {
+    const cols = await companyCols();
     const [company] = await db
-      .select()
+      .select(cols)
       .from(companies)
       .where(and(eq(companies.id, id), isNull(companies.deletedAt)));
-    return company;
+    return company as Company | undefined;
   }
 
   async listCompanies(): Promise<Company[]> {
-    return db.select().from(companies).where(isNull(companies.deletedAt));
+    const cols = await companyCols();
+    return db
+      .select(cols)
+      .from(companies)
+      .where(isNull(companies.deletedAt)) as Promise<Company[]>;
   }
 
   async getCompanyByPhone(phone: string): Promise<Company | undefined> {
     const digits = phone.replace(/\D/g, "");
-    const allCompanies = await db.select().from(companies).where(isNull(companies.deletedAt));
+    const cols = await companyCols();
+    const allCompanies = (await db
+      .select(cols)
+      .from(companies)
+      .where(isNull(companies.deletedAt))) as Company[];
     return allCompanies.find((c) => {
       if (!c.phone) return false;
       const cDigits = c.phone.replace(/\D/g, "");
@@ -1122,36 +1155,41 @@ export class DatabaseStorage implements IStorage {
 
   async getCompanyByTelnyxNumber(telnyxNumber: string): Promise<Company | undefined> {
     const normalized = telnyxNumber.replace(/\s/g, "");
+    const cols = await companyCols();
     const [company] = await db
-      .select()
+      .select(cols)
       .from(companies)
       .where(and(eq(companies.telnyxPhoneNumber, normalized), isNull(companies.deletedAt)))
       .limit(1);
-    return company;
+    return company as Company | undefined;
   }
 
   async getCompanyBySlug(slug: string): Promise<Company | undefined> {
+    const cols = await companyCols();
     const [company] = await db
-      .select()
+      .select(cols)
       .from(companies)
       .where(and(eq(companies.slug, slug), isNull(companies.deletedAt)));
-    return company;
+    return company as Company | undefined;
   }
 
   async getCompanyByStripeConnectAccountId(accountId: string): Promise<Company | undefined> {
+    const cols = await companyCols();
     const [company] = await db
-      .select()
+      .select(cols)
       .from(companies)
       .where(and(eq(companies.stripeConnectAccountId, accountId), isNull(companies.deletedAt)));
-    return company;
+    return company as Company | undefined;
   }
 
   async getCompanyByCalendarToken(token: string): Promise<Company | undefined> {
+    if (!_hasCalendarToken) return undefined;
+    const cols = await companyCols();
     const [company] = await db
-      .select()
+      .select(cols)
       .from(companies)
       .where(and(eq(companies.calendarToken, token), isNull(companies.deletedAt)));
-    return company;
+    return company as Company | undefined;
   }
 
   async createCompany(data: InsertCompany): Promise<Company> {
@@ -5671,12 +5709,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCompanyByInboundEmail(inboundEmail: string): Promise<Company | undefined> {
+    const cols = await companyCols();
     const [row] = await db
-      .select()
+      .select(cols)
       .from(companies)
       .where(eq(companies.inboundEmail, inboundEmail.toLowerCase()))
       .limit(1);
-    return row;
+    return row as Company | undefined;
   }
 }
 
