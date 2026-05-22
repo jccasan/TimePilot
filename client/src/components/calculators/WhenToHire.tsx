@@ -33,11 +33,15 @@ export default function WhenToHire({
     fixedOverheadCents > 0 ? (fixedOverheadCents / 100).toFixed(2) : "2000.00";
 
   const [avgRevenuePerVisit, setAvgRevenuePerVisit] = useState(defaultRevPerVisit);
-  const [ownerYardsPerWeek, setOwnerYardsPerWeek] = useState("40");
   const [currentClients, setCurrentClients] = useState(
     activeClients > 0 ? String(activeClients) : "30"
   );
   const [fixedOverhead, setFixedOverhead] = useState(defaultOverhead);
+
+  // Owner capacity inputs (replaces single "yards/week")
+  const [ownerYardsPerHour, setOwnerYardsPerHour] = useState("4");
+  const [ownerHoursPerDay, setOwnerHoursPerDay] = useState("8");
+  const [ownerDaysPerWeek, setOwnerDaysPerWeek] = useState("5");
 
   const [hourlyWage, setHourlyWage] = useState("18");
   const [burdenRate, setBurdenRate] = useState("20");
@@ -48,7 +52,6 @@ export default function WhenToHire({
 
   const result = useMemo(() => {
     const rev = parseFloat(avgRevenuePerVisit) || 0;
-    const ownerYards = parseFloat(ownerYardsPerWeek) || 0;
     const clients = parseFloat(currentClients) || 0;
     const overhead = parseFloat(fixedOverhead) || 0;
     const wage = parseFloat(hourlyWage) || 0;
@@ -58,13 +61,24 @@ export default function WhenToHire({
     const vehicle = parseFloat(vehicleCost) || 0;
     const techYards = parseFloat(techYardsPerWeek) || 0;
 
+    const yardsPerHour = parseFloat(ownerYardsPerHour) || 0;
+    const ownerHours = parseFloat(ownerHoursPerDay) || 0;
+    const ownerDays = parseFloat(ownerDaysPerWeek) || 0;
+
+    // Physical capacity: how many yards/clients the owner can service per week
+    const ownerWeeklyCapacity = Math.round(yardsPerHour * ownerHours * ownerDays);
+
     const burdenedWage = wage * (1 + burden / 100);
     const techMonthlyCost = burdenedWage * hoursPerDay * daysPerWeek * WEEKS_PER_MONTH + vehicle;
 
-    const ownerMonthlyFieldIncome = ownerYards * WEEKS_PER_MONTH * rev;
-    const stepOffThreshold =
+    // Step-off threshold = owner's physical capacity ceiling
+    // (hire when you're full, not at a distant financial crossover)
+    const stepOffThreshold = ownerWeeklyCapacity > 0 ? ownerWeeklyCapacity : null;
+
+    // Financial break-even: minimum clients to cover tech cost alone
+    const financialBreakEven =
       rev * WEEKS_PER_MONTH > 0
-        ? Math.ceil((techMonthlyCost + ownerMonthlyFieldIncome) / (rev * WEEKS_PER_MONTH))
+        ? Math.ceil(techMonthlyCost / (rev * WEEKS_PER_MONTH))
         : null;
 
     const soloIncome = clients * rev * WEEKS_PER_MONTH - overhead;
@@ -72,19 +86,23 @@ export default function WhenToHire({
       (clients + techYards * WEEKS_PER_MONTH) * rev - techMonthlyCost - overhead;
     const withTechOwnerManage = techYards * WEEKS_PER_MONTH * rev - techMonthlyCost - overhead;
 
-    const ownerCapacity = ownerYards > 0 ? (clients / ownerYards) * 100 : 0;
+    const ownerCapacityPct = ownerWeeklyCapacity > 0 ? (clients / ownerWeeklyCapacity) * 100 : 0;
 
     return {
       techMonthlyCost,
       stepOffThreshold,
+      financialBreakEven,
       soloIncome,
       withTechOwnerScoop,
       withTechOwnerManage,
-      ownerCapacity,
+      ownerCapacityPct,
+      ownerWeeklyCapacity,
     };
   }, [
     avgRevenuePerVisit,
-    ownerYardsPerWeek,
+    ownerYardsPerHour,
+    ownerHoursPerDay,
+    ownerDaysPerWeek,
     currentClients,
     fixedOverhead,
     hourlyWage,
@@ -99,13 +117,13 @@ export default function WhenToHire({
   const threshold = result.stepOffThreshold;
 
   const capacityStatus =
-    result.ownerCapacity < 60
+    result.ownerCapacityPct < 60
       ? {
           label: "Room to grow",
           color: "text-green-600 dark:text-green-400",
           badge: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
         }
-      : result.ownerCapacity < 80
+      : result.ownerCapacityPct < 80
         ? {
             label: "Getting full",
             color: "text-yellow-600 dark:text-yellow-400",
@@ -140,13 +158,18 @@ export default function WhenToHire({
                 <p className="text-sm text-muted-foreground mt-1">
                   {pastThreshold
                     ? "You have enough clients to hire your first tech and stop scooping."
-                    : `${threshold - clientsNum} more clients until you can step off the truck.`}
+                    : `${threshold - clientsNum} more clients until you hit solo capacity.`}
                 </p>
+                {result.financialBreakEven != null && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Financial break-even: {result.financialBreakEven} clients covers tech cost
+                  </p>
+                )}
               </div>
               <div className="text-right sm:text-left sm:min-w-[180px]">
                 <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                   <span>{clientsNum} clients</span>
-                  <span>{threshold} target</span>
+                  <span>{threshold} capacity</span>
                 </div>
                 <Progress
                   value={thresholdProgress}
@@ -156,7 +179,7 @@ export default function WhenToHire({
                 <p
                   className={`text-xs mt-1 font-medium ${pastThreshold ? "text-green-600 dark:text-green-400" : ""}`}
                 >
-                  {thresholdProgress.toFixed(0)}% of threshold
+                  {thresholdProgress.toFixed(0)}% of capacity
                 </p>
               </div>
             </div>
@@ -204,38 +227,75 @@ export default function WhenToHire({
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="hire-owner-yards">Owner Yards / Week</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="hire-overhead">Monthly Fixed Overhead ($)</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    $
+                  </span>
                   <Input
-                    id="hire-owner-yards"
+                    id="hire-overhead"
                     type="number"
                     min="0"
-                    step="5"
-                    value={ownerYardsPerWeek}
-                    onChange={(e) => setOwnerYardsPerWeek(e.target.value)}
-                    data-testid="input-hire-owner-yards"
+                    step="100"
+                    value={fixedOverhead}
+                    onChange={(e) => setFixedOverhead(e.target.value)}
+                    className="pl-6"
+                    data-testid="input-hire-overhead"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Owner Capacity</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="hire-owner-yph">Yards / Hour</Label>
+                  <Input
+                    id="hire-owner-yph"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={ownerYardsPerHour}
+                    onChange={(e) => setOwnerYardsPerHour(e.target.value)}
+                    data-testid="input-hire-owner-yards-per-hour"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="hire-overhead">Fixed Overhead ($)</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                      $
-                    </span>
-                    <Input
-                      id="hire-overhead"
-                      type="number"
-                      min="0"
-                      step="100"
-                      value={fixedOverhead}
-                      onChange={(e) => setFixedOverhead(e.target.value)}
-                      className="pl-6"
-                      data-testid="input-hire-overhead"
-                    />
-                  </div>
+                  <Label htmlFor="hire-owner-hrs">Hrs / Day</Label>
+                  <Input
+                    id="hire-owner-hrs"
+                    type="number"
+                    min="1"
+                    max="16"
+                    step="0.5"
+                    value={ownerHoursPerDay}
+                    onChange={(e) => setOwnerHoursPerDay(e.target.value)}
+                    data-testid="input-hire-owner-hours"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="hire-owner-days">Days / Week</Label>
+                  <Input
+                    id="hire-owner-days"
+                    type="number"
+                    min="1"
+                    max="7"
+                    step="1"
+                    value={ownerDaysPerWeek}
+                    onChange={(e) => setOwnerDaysPerWeek(e.target.value)}
+                    data-testid="input-hire-owner-days"
+                  />
                 </div>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Solo capacity: {result.ownerWeeklyCapacity} clients/week
+              </p>
             </CardContent>
           </Card>
 
@@ -364,7 +424,7 @@ export default function WhenToHire({
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm">
-                      {clientsNum} clients / {parseFloat(ownerYardsPerWeek) || 0} capacity
+                      {clientsNum} clients / {result.ownerWeeklyCapacity} capacity
                     </span>
                     <Badge
                       variant="outline"
@@ -375,12 +435,12 @@ export default function WhenToHire({
                     </Badge>
                   </div>
                   <Progress
-                    value={Math.min(result.ownerCapacity, 100)}
+                    value={Math.min(result.ownerCapacityPct, 100)}
                     className="h-2"
                     data-testid="progress-capacity"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    {result.ownerCapacity.toFixed(0)}% utilized
+                    {result.ownerCapacityPct.toFixed(0)}% utilized
                   </p>
                 </div>
               </div>
