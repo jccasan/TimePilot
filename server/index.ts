@@ -2563,6 +2563,27 @@ async function ensureVisitEnRouteAtColumn() {
   }
 }
 
+async function ensureVisitTimeWindowColumns() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      DO $$ BEGIN
+        CREATE TYPE time_window_type AS ENUM ('anytime', 'morning', 'afternoon', 'specific');
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$;
+      ALTER TABLE visits ADD COLUMN IF NOT EXISTS scheduled_time_start TIME;
+      ALTER TABLE visits ADD COLUMN IF NOT EXISTS scheduled_time_end TIME;
+      ALTER TABLE visits ADD COLUMN IF NOT EXISTS time_window_type time_window_type NOT NULL DEFAULT 'anytime';
+    `);
+    console.log("[Migration] visits time window columns verified");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure visits time window columns:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function ensureRetellWebhookRepairsTable() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -3054,6 +3075,7 @@ async function seedLakeErieScoopersAccount() {
   await ensureReviewTokenGoogleUrl();
   await ensureUserColumns();
   await ensureVisitEnRouteAtColumn();
+  await ensureVisitTimeWindowColumns();
   await ensureVoicePortingColumn();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
