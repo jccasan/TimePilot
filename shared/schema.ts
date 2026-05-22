@@ -9,6 +9,7 @@ import {
   decimal,
   jsonb,
   date,
+  time,
   pgEnum,
   index,
   unique,
@@ -107,6 +108,14 @@ export const automationTriggerEnum = pgEnum("automation_trigger", [
   "payment_failed",
   "invoice_created",
   "quote_created",
+]);
+
+export const calendarFeedModeEnum = pgEnum("calendar_feed_mode", ["summary", "detailed"]);
+export const timeWindowTypeEnum = pgEnum("time_window_type", [
+  "anytime",
+  "morning",
+  "afternoon",
+  "specific",
 ]);
 
 export const yardDifficultyEnum = pgEnum("yard_difficulty", ["flat", "moderate", "difficult"]);
@@ -425,6 +434,10 @@ export const companies = pgTable("companies", {
   widgetFieldConfig: jsonb("widget_field_config").$type<WidgetFieldConfig>(),
   yardSizeTierConfig: jsonb("yard_size_tier_config").$type<YardSizeTierConfig>(),
   requireDocumentSigning: boolean("require_document_signing").notNull().default(false),
+  calendarToken: text("calendar_token")
+    .unique()
+    .default(sql`gen_random_uuid()`),
+  calendarFeedMode: calendarFeedModeEnum("calendar_feed_mode").notNull().default("summary"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -875,6 +888,9 @@ export const visits = pgTable(
     technicianNotes: text("technician_notes"),
     invoiceId: varchar("invoice_id"),
     serviceReminderSentAt: timestamp("service_reminder_sent_at"),
+    scheduledTimeStart: time("scheduled_time_start"),
+    scheduledTimeEnd: time("scheduled_time_end"),
+    timeWindowType: timeWindowTypeEnum("time_window_type").notNull().default("anytime"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

@@ -265,6 +265,7 @@ export interface IStorage {
   getCompanyByTelnyxNumber(telnyxNumber: string): Promise<Company | undefined>;
   getCompanyBySlug(slug: string): Promise<Company | undefined>;
   getCompanyByStripeConnectAccountId(accountId: string): Promise<Company | undefined>;
+  getCompanyByCalendarToken(token: string): Promise<Company | undefined>;
   createCompany(data: InsertCompany): Promise<Company>;
   updateCompany(id: string, data: Partial<InsertCompany>): Promise<Company>;
 
@@ -1127,6 +1128,14 @@ export class DatabaseStorage implements IStorage {
     return company;
   }
 
+  async getCompanyByCalendarToken(token: string): Promise<Company | undefined> {
+    const [company] = await db
+      .select()
+      .from(companies)
+      .where(and(eq(companies.calendarToken, token), isNull(companies.deletedAt)));
+    return company;
+  }
+
   async createCompany(data: InsertCompany): Promise<Company> {
     if (!data.slug && data.name) {
       const baseSlug =
@@ -1142,6 +1151,10 @@ export class DatabaseStorage implements IStorage {
         slug = `${baseSlug}-${suffix++}`;
       }
       data = { ...data, slug };
+    }
+    if (!data.calendarToken) {
+      const { randomUUID } = await import("crypto");
+      data = { ...data, calendarToken: randomUUID() };
     }
     const [company] = await db.insert(companies).values(data).returning();
     return company;

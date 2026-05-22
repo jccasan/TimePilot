@@ -66,6 +66,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
         v_tech_notes: string | null;
         v_invoice_id: string | null;
         v_reminder_sent_at: Date | null;
+        v_time_window_type: string | null;
+        v_scheduled_time_start: string | null;
+        v_scheduled_time_end: string | null;
         v_created_at: Date;
         v_updated_at: Date;
         stop_order: number | null;
@@ -113,6 +116,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
             v.technician_notes               AS v_tech_notes,
             v.invoice_id                     AS v_invoice_id,
             v.service_reminder_sent_at       AS v_reminder_sent_at,
+            v.time_window_type               AS v_time_window_type,
+            v.scheduled_time_start           AS v_scheduled_time_start,
+            v.scheduled_time_end             AS v_scheduled_time_end,
             v.created_at                     AS v_created_at,
             v.updated_at                     AS v_updated_at,
             sp.stop_order                    AS stop_order,
@@ -201,6 +207,9 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
             technicianNotes: row.v_tech_notes,
             invoiceId: row.v_invoice_id,
             serviceReminderSentAt: row.v_reminder_sent_at,
+            timeWindowType: (row.v_time_window_type as Visit["timeWindowType"]) ?? "anytime",
+            scheduledTimeStart: row.v_scheduled_time_start ?? null,
+            scheduledTimeEnd: row.v_scheduled_time_end ?? null,
             createdAt: row.v_created_at,
             updatedAt: row.v_updated_at,
           });

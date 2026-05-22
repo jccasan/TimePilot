@@ -114,10 +114,23 @@ import {
   Webhook,
   Database,
   ChevronRight as ChevronRightIcon,
+  CalendarDays,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Link } from "wouter";
 import { UpgradeWall } from "@/components/upgrade-wall";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 import { PricingTiersEditor, validatePricingTiers } from "@/components/PricingTiersEditor";
 import type { PricingTier } from "@/components/PricingTiersEditor";
@@ -136,6 +149,231 @@ type LrConfig = {
   perDogAdder?: string | number | null;
   firstTimeCleanupFee?: string | number | null;
 };
+
+function CalendarSyncCard(_props: { company: Company | null }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [copied, setCopied] = useState(false);
+
+  const { data: calData, isLoading } = useQuery<{
+    token: string;
+    feed_url: string;
+    feed_mode: string;
+  }>({
+    queryKey: ["/api/calendar/token"],
+  });
+
+  const regenerateMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/calendar/regenerate").then((r) => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/calendar/token"] });
+      toast({ title: "Calendar URL regenerated" });
+    },
+    onError: () => toast({ title: "Failed to regenerate URL", variant: "destructive" }),
+  });
+
+  const modeMutation = useMutation({
+    mutationFn: (mode: string) =>
+      apiRequest("PATCH", "/api/calendar/settings", { feed_mode: mode }).then((r) => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/calendar/token"] });
+      toast({ title: "Calendar mode updated" });
+    },
+    onError: () => toast({ title: "Failed to update mode", variant: "destructive" }),
+  });
+
+  const handleCopy = async () => {
+    if (!calData?.feed_url) return;
+    await navigator.clipboard.writeText(calData.feed_url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-5">
+      {isLoading ? (
+        <div className="h-32 flex items-center justify-center text-muted-foreground text-sm">
+          Loading calendar settings…
+        </div>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">Subscription URL</p>
+            <p className="text-xs text-muted-foreground">
+              Paste this link into Google Calendar, Outlook, or Apple Calendar to subscribe to your
+              service schedule.
+            </p>
+            <div className="flex gap-2 mt-2">
+              <code
+                className="flex-1 min-w-0 truncate rounded border bg-muted px-3 py-2 text-xs font-mono"
+                data-testid="text-calendar-feed-url"
+              >
+                {calData?.feed_url ?? "Loading…"}
+              </code>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopy}
+                disabled={!calData?.feed_url}
+                data-testid="button-copy-calendar-url"
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Feed detail level</p>
+            <p className="text-xs text-muted-foreground">
+              Summary mode groups stops by route per day. Detailed mode creates one event per visit
+              with property and pet info.
+            </p>
+            <RadioGroup
+              value={calData?.feed_mode ?? "summary"}
+              onValueChange={(v) => modeMutation.mutate(v)}
+              className="mt-2 space-y-2"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem
+                  value="summary"
+                  id="cal-mode-summary"
+                  data-testid="radio-cal-mode-summary"
+                />
+                <label htmlFor="cal-mode-summary" className="text-sm cursor-pointer">
+                  Summary — route totals per day
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem
+                  value="detailed"
+                  id="cal-mode-detailed"
+                  data-testid="radio-cal-mode-detailed"
+                />
+                <label htmlFor="cal-mode-detailed" className="text-sm cursor-pointer">
+                  Detailed — one event per stop
+                </label>
+              </div>
+            </RadioGroup>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Regenerate calendar URL</p>
+            <p className="text-xs text-muted-foreground">
+              Generates a new secret URL and invalidates the old one. Any calendars subscribed to
+              the previous URL will stop updating.
+            </p>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  data-testid="button-regenerate-calendar-url"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Regenerate URL
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Regenerate calendar URL?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will create a new subscription URL and permanently invalidate the current
+                    one. Any calendar apps subscribed to the old URL will stop receiving updates.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-cancel-regenerate">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => regenerateMutation.mutate()}
+                    data-testid="button-confirm-regenerate"
+                  >
+                    Regenerate
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Add to your calendar app</p>
+            {calData?.feed_url && (
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={`https://calendar.google.com/calendar/r?cid=webcal://${calData.feed_url.replace(/^https?:\/\//, "")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="link-google-calendar"
+                >
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <CalendarDays className="h-4 w-4" />
+                    Google Calendar
+                  </Button>
+                </a>
+                <a
+                  href={calData.feed_url.replace(/^https?:/, "webcal:")}
+                  data-testid="link-apple-outlook-calendar"
+                >
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <CalendarDays className="h-4 w-4" />
+                    Apple / Outlook
+                  </Button>
+                </a>
+              </div>
+            )}
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 px-0 text-xs text-muted-foreground hover:text-foreground"
+                  data-testid="button-setup-instructions"
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  Setup instructions
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2 space-y-2 text-xs text-muted-foreground">
+                <p className="font-medium text-foreground">Google Calendar</p>
+                <ol className="list-decimal list-inside space-y-0.5">
+                  <li>
+                    Click "Google Calendar" above, or open Google Calendar on a desktop browser
+                  </li>
+                  <li>In the left sidebar, click the "+" next to "Other calendars"</li>
+                  <li>Choose "From URL" and paste the Subscription URL above</li>
+                  <li>Click "Add calendar"</li>
+                </ol>
+                <p className="font-medium text-foreground mt-2">Outlook (desktop or web)</p>
+                <ol className="list-decimal list-inside space-y-0.5">
+                  <li>Click "Apple / Outlook" above, or go to Outlook Calendar</li>
+                  <li>Select "Add calendar" → "Subscribe from web"</li>
+                  <li>Paste the Subscription URL and click "Import"</li>
+                </ol>
+                <p className="font-medium text-foreground mt-2">Apple Calendar (iPhone / Mac)</p>
+                <ol className="list-decimal list-inside space-y-0.5">
+                  <li>Click "Apple / Outlook" above on your iPhone or Mac</li>
+                  <li>Confirm "Subscribe" when prompted</li>
+                </ol>
+                <p className="mt-2 rounded border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-2 py-1.5">
+                  <strong>Note:</strong> Google Calendar refreshes subscribed calendars every 6–24
+                  hours. New visits may not appear immediately.
+                </p>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 function LeadResponseSection(_props: { company: Company | null }) {
   const { toast } = useToast();
@@ -516,6 +754,8 @@ type Company = {
   requireDocumentSigning?: boolean;
   widgetFieldConfig?: WidgetFieldConfig | null;
   yardSizeTierConfig?: YardSizeTierConfig | null;
+  calendarToken?: string | null;
+  calendarFeedMode?: string | null;
 };
 
 type SettingsLayoutItem = {
@@ -607,6 +847,7 @@ const SETTINGS_BLOCK_DEFS: {
   { id: "document_signing", label: "Document Signing", defaultW: 6, defaultH: 6, minW: 4, minH: 5 },
   { id: "custom_fields", label: "Custom Fields", defaultW: 6, defaultH: 7, minW: 4, minH: 5 },
   { id: "lead_response", label: "Lead Response", defaultW: 6, defaultH: 12, minW: 4, minH: 8 },
+  { id: "calendar_sync", label: "Calendar Sync", defaultW: 6, defaultH: 8, minW: 4, minH: 6 },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -639,6 +880,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "document_signing",
   "custom_fields",
   "lead_response",
+  "calendar_sync",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -8597,6 +8839,24 @@ export default function Settings() {
             </CardHeader>
             <CardContent>
               <LeadResponseSection company={company ?? null} />
+            </CardContent>
+          </Card>
+        );
+      case "calendar_sync":
+        return (
+          <Card className="h-full overflow-auto">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2">
+                <CalendarDays className="h-5 w-5" />
+                Calendar Sync
+              </CardTitle>
+              <CardDescription>
+                Subscribe your service schedule to Google Calendar, Outlook, or Apple Calendar using
+                a private ICS feed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CalendarSyncCard company={company ?? null} />
             </CardContent>
           </Card>
         );

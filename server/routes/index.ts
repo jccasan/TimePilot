@@ -43,6 +43,7 @@ import { registerCrmRoutes } from "./crm";
 import { registerDocumentsRoutes } from "./documents";
 import { registerCustomFieldsRoutes } from "./custom-fields";
 import { registerLeadResponseRoutes, blockLeadResponseOperator } from "./lead-response";
+import { registerCalendarRoutes } from "./calendar";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Object file download route — registered before registerObjectStorageRoutes so this
@@ -252,6 +253,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   await registerDocumentsRoutes(app);
   registerCustomFieldsRoutes(app);
   await registerLeadResponseRoutes(app);
+  await registerCalendarRoutes(app);
 
   return httpServer;
 }
