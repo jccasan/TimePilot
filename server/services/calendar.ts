@@ -127,11 +127,7 @@ export function generateIcsForCompany(company: Company, visits: CalendarVisit[])
   return cal.toString();
 }
 
-function generateSummaryEvents(
-  cal: ICalCalendar,
-  company: Company,
-  visits: CalendarVisit[]
-): void {
+function generateSummaryEvents(cal: ICalCalendar, company: Company, visits: CalendarVisit[]): void {
   const byRouteDay = new Map<string, CalendarVisit[]>();
 
   for (const v of visits) {
