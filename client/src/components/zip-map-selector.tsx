@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { useAddressLabels } from "@/hooks/use-address-labels";
 
 const ESRI_ZIP_URL =
   "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_ZIP_Code_Areas_anaylsis/FeatureServer/0/query";
@@ -79,6 +80,12 @@ type ZipMapProps = {
 };
 
 export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
+  const { country } = useAddressLabels();
+  const isCanada = country === "ca";
+  const postalSingular = isCanada ? "postal code" : "ZIP";
+  const postalPlural = isCanada ? "postal codes" : "ZIPs";
+  const postalAreaLabel = isCanada ? "postal code areas" : "ZIP code areas";
+
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const layersRef = useRef<Map<string, L.GeoJSON>>(new Map());
@@ -279,18 +286,19 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
         <div ref={containerRef} style={{ width: "100%", height: "100%" }} data-testid="zip-map" />
         {loading && (
           <div className="absolute top-2 right-2 z-[1000] bg-white/90 text-xs text-muted-foreground px-2 py-1 rounded shadow">
-            Loading ZIPs…
+            Loading {postalPlural}…
           </div>
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Click ZIP code areas to select your service territory. Zoom in for more detail.
+        Click {postalAreaLabel} to select your service territory. Zoom in for more detail.
       </p>
       {selectedZips.length > 0 ? (
         <div className="flex items-center justify-between gap-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-md px-3 py-2">
           <div className="text-sm">
             <span className="font-semibold text-green-800 dark:text-green-300">
-              {selectedZips.length} ZIP{selectedZips.length !== 1 ? "s" : ""} selected:
+              {selectedZips.length} {selectedZips.length !== 1 ? postalPlural : postalSingular}{" "}
+              selected:
             </span>{" "}
             <span className="text-muted-foreground">
               {selectedZips.slice(0, 8).join(", ")}
@@ -307,7 +315,7 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
           </button>
         </div>
       ) : (
-        <div className="text-xs text-muted-foreground italic">No ZIP codes selected yet</div>
+        <div className="text-xs text-muted-foreground italic">No {postalPlural} selected yet</div>
       )}
     </div>
   );
