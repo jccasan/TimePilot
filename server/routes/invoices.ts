@@ -423,6 +423,19 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       const plans = await storage.getServicePlans(companyId, { contactId });
       const planMap = new Map(plans.map((p) => [p.id, p]));
 
+      // For monthly-billed contacts, exclude visits already covered by a prorated
+      // first-month invoice so they are not double-billed via manual generation.
+      if ((contact.invoiceFrequency || "per_service") === "per_month") {
+        billableVisits = billableVisits.filter((v) => {
+          const plan = v.servicePlanId ? planMap.get(v.servicePlanId) : undefined;
+          if (plan?.proratedThrough && v.scheduledDate <= plan.proratedThrough) return false;
+          return true;
+        });
+        if (billableVisits.length === 0) {
+          return res.json({ message: "No billable visits found", invoice: null });
+        }
+      }
+
       const lineItems = await buildVisitLineItemsWithAddOns(billableVisits, planMap);
 
       const subtotal = lineItems.reduce((sum, li) => sum + parseFloat(li.total), 0);
@@ -926,6 +939,21 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
               contactId: contactEntry.contactId,
             });
             const planMap = new Map(plans.map((p) => [p.id, p]));
+
+            // For monthly-billed contacts, exclude visits already covered by a prorated
+            // first-month invoice so they are not double-billed via batch generation.
+            const contactRecord = await storage.getContact(contactEntry.contactId, companyId);
+            if (
+              contactRecord &&
+              (contactRecord.invoiceFrequency || "per_service") === "per_month"
+            ) {
+              visitsToInvoice = visitsToInvoice.filter((v) => {
+                const plan = v.servicePlanId ? planMap.get(v.servicePlanId) : undefined;
+                if (plan?.proratedThrough && v.scheduledDate <= plan.proratedThrough) return false;
+                return true;
+              });
+              if (visitsToInvoice.length === 0) continue;
+            }
 
             // Collect any existing drafts so we can absorb and void them
             const existingDrafts = await storage.getInvoices(companyId, {

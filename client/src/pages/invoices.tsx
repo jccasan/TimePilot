@@ -3797,6 +3797,19 @@ export default function Invoices() {
                             Auto
                           </Badge>
                         )}
+                        {(invoice as { source?: string }).source === "prorated" && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-amber-400 text-amber-700 dark:text-amber-400"
+                            data-testid={`badge-prorated-${invoice.id}`}
+                            title={
+                              (invoice as { notes?: string }).notes ||
+                              "Prorated first-month invoice"
+                            }
+                          >
+                            Prorated
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
