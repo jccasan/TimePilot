@@ -4081,8 +4081,66 @@ function BillingPreferences({ contact, contactId }: { contact: Contact; contactI
           {timingLabels[contact.invoiceTiming || "after_service"]} /{" "}
           {frequencyLabels[contact.invoiceFrequency || "per_service"]}
         </p>
+
+        <BillingOnboardingStage contact={contact} />
       </CardContent>
     </Card>
+  );
+}
+
+const ONBOARDING_STAGE_CONFIG: Record<
+  string,
+  { label: string; description: string; variant: "default" | "secondary" | "outline" }
+> = {
+  deposit_pending: {
+    label: "Deposit Pending",
+    description: "Waiting for deposit payment. Balance invoice will be created on receipt.",
+    variant: "outline",
+  },
+  balance_pending: {
+    label: "Balance Due",
+    description: "Deposit received. Autopay will be armed when the balance invoice is paid.",
+    variant: "secondary",
+  },
+  active_autopay: {
+    label: "Autopay Active",
+    description: "Onboarding complete. Monthly autopay is armed for recurring billing.",
+    variant: "default",
+  },
+};
+
+function BillingOnboardingStage({ contact }: { contact: Contact }) {
+  const stage = contact.billingOnboardingStage ?? "none";
+  if (stage === "none" || stage === "") return null;
+
+  const config = ONBOARDING_STAGE_CONFIG[stage];
+  if (!config) return null;
+
+  const steps = ["deposit_pending", "balance_pending", "active_autopay"];
+  const currentIdx = steps.indexOf(stage);
+
+  return (
+    <div
+      className="mt-3 rounded-md border p-3 space-y-2 bg-muted/30"
+      data-testid="section-billing-onboarding-stage"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium">Client Onboarding</p>
+        <Badge variant={config.variant} className="text-xs" data-testid="badge-onboarding-stage">
+          {config.label}
+        </Badge>
+      </div>
+      <p className="text-xs text-muted-foreground">{config.description}</p>
+      <div className="flex gap-1 mt-1">
+        {steps.map((s, i) => (
+          <div
+            key={s}
+            className={`h-1.5 flex-1 rounded-full ${i <= currentIdx ? "bg-green-600" : "bg-muted"}`}
+            data-testid={`step-onboarding-${s}`}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 

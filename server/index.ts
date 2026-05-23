@@ -499,6 +499,15 @@ async function ensureCompanyColumns() {
       ALTER TABLE properties ADD COLUMN IF NOT EXISTS dog_breeds TEXT;
     `);
     console.log("[Migration] Property onboarding columns verified");
+    await pool.query(`
+      ALTER TABLE contacts ADD COLUMN IF NOT EXISTS billing_onboarding_stage VARCHAR(30) DEFAULT 'none';
+      ALTER TABLE contacts ADD COLUMN IF NOT EXISTS deposit_invoice_id VARCHAR(255);
+      ALTER TABLE invoices ADD COLUMN IF NOT EXISTS is_onboarding_invoice BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS new_client_deposit_enabled BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS new_client_deposit_type VARCHAR(10);
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS new_client_deposit_value DECIMAL(10,2);
+    `);
+    console.log("[Migration] Billing onboarding columns verified");
     await pool.query(`ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS prorated_through DATE`);
     // Backfill: mark every plan that started before the current calendar month as already-handled
     // so the nightly proration sweep never retroactively invoices historical plans.

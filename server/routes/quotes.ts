@@ -672,6 +672,15 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         }
       }
 
+      if (servicePlan) {
+        try {
+          const { startBillingOnboardingSequence } = await import("../services/billing-onboarding");
+          await startBillingOnboardingSequence(servicePlan.contactId, companyId, servicePlan);
+        } catch (obErr) {
+          console.error("[quotes/accept] Failed to start billing onboarding sequence:", obErr);
+        }
+      }
+
       res.json({ quote: updatedQuote, servicePlan });
     } catch (err: unknown) {
       console.error("Error accepting quote:", err);

@@ -355,6 +355,9 @@ async function generateProratedInvoicesForCompany(companyId: string): Promise<nu
         const contact = await storage.getContact(sp.contactId, companyId);
         if (!contact || (contact.invoiceFrequency || "per_service") !== "per_month") continue;
         if (contact.autoInvoiceEnabled === false) continue;
+        // Skip plans whose contacts are deposit_pending — the balance invoice will be created
+        // by the billing onboarding service when the deposit invoice is paid.
+        if ((contact.billingOnboardingStage ?? "none") === "deposit_pending") continue;
 
         const result = await generateProratedInvoiceForPlan(
           companyId,

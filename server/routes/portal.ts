@@ -13,7 +13,6 @@ import {
   type InvoiceLineItem,
 } from "@shared/schema";
 import { sendEmail } from "../services/email";
-import { generateProratedInvoiceForPlan } from "../jobs/auto-invoice";
 import {
   isStripeConfigured,
   getCustomerPaymentMethods,
@@ -1350,16 +1349,17 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         }
 
         try {
-          await generateProratedInvoiceForPlan(
-            companyId,
-            createdServicePlan.id,
+          const { startBillingOnboardingSequence } = await import("../services/billing-onboarding");
+          await startBillingOnboardingSequence(
             createdServicePlan.contactId,
-            createdServicePlan.startDate,
-            createdServicePlan.frequency,
-            createdServicePlan.pricePerVisit
+            companyId,
+            createdServicePlan
           );
         } catch (prorationErr) {
-          console.error("[portal/accept] Failed to generate prorated invoice:", prorationErr);
+          console.error(
+            "[portal/accept] Failed to start billing onboarding sequence:",
+            prorationErr
+          );
         }
       }
 

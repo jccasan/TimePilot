@@ -878,6 +878,12 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 `/invoices`
               );
               qboAutoSync(tenantId, invoiceId, "payment");
+              try {
+                const { advanceBillingOnboarding } = await import("../services/billing-onboarding");
+                await advanceBillingOnboarding(invoiceId, tenantId);
+              } catch (obErr) {
+                console.error("[stripe/webhook] advanceBillingOnboarding error:", obErr);
+              }
               resolved = true;
             } else if (invoice && invoice.status === "paid") {
               console.log(
@@ -916,6 +922,16 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   `/invoices`
                 );
                 qboAutoSync(resolvedTenantId, invoiceId, "payment");
+                try {
+                  const { advanceBillingOnboarding } =
+                    await import("../services/billing-onboarding");
+                  await advanceBillingOnboarding(invoiceId, resolvedTenantId);
+                } catch (obErr) {
+                  console.error(
+                    "[stripe/webhook] advanceBillingOnboarding (connect) error:",
+                    obErr
+                  );
+                }
                 resolved = true;
                 console.log(
                   `[Stripe Webhook] checkout.session.completed: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`
@@ -1026,6 +1042,12 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 `/invoices`
               );
               qboAutoSync(piTenantId, invoiceId, "payment");
+              try {
+                const { advanceBillingOnboarding } = await import("../services/billing-onboarding");
+                await advanceBillingOnboarding(invoiceId, piTenantId);
+              } catch (obErr) {
+                console.error("[stripe/webhook] advanceBillingOnboarding (pi) error:", obErr);
+              }
               resolved = true;
             } else if (invoice && invoice.status === "paid") {
               console.log(
@@ -1058,6 +1080,16 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   `/invoices`
                 );
                 qboAutoSync(connCompany.id, invoiceId, "payment");
+                try {
+                  const { advanceBillingOnboarding } =
+                    await import("../services/billing-onboarding");
+                  await advanceBillingOnboarding(invoiceId, connCompany.id);
+                } catch (obErr) {
+                  console.error(
+                    "[stripe/webhook] advanceBillingOnboarding (pi/connect) error:",
+                    obErr
+                  );
+                }
                 resolved = true;
                 console.log(
                   `[Stripe Webhook] payment_intent.succeeded: resolved tenant via Connect account ${connectAccountId} → ${connCompany.name} (${connCompany.id})`

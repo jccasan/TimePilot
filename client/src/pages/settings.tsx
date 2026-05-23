@@ -968,6 +968,9 @@ type Company = {
   yardSizeTierConfig?: YardSizeTierConfig | null;
   calendarToken?: string | null;
   calendarFeedMode?: string | null;
+  newClientDepositEnabled?: boolean;
+  newClientDepositType?: string | null;
+  newClientDepositValue?: string | null;
 };
 
 type SettingsLayoutItem = {
@@ -7272,6 +7275,122 @@ function BillingDefaultsSection({ company }: { company: Company | null | undefin
         >
           <Save className="mr-1 h-4 w-4" />
           {saveMutation.isPending ? "Saving..." : "Save Billing Defaults"}
+        </Button>
+      )}
+
+      <Separator />
+
+      <NewClientDepositSettings company={company} />
+    </div>
+  );
+}
+
+function NewClientDepositSettings({ company }: { company: Company | null | undefined }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [enabled, setEnabled] = useState(!!company?.newClientDepositEnabled);
+  const [depositType, setDepositType] = useState<string>(company?.newClientDepositType || "flat");
+  const [depositValue, setDepositValue] = useState<string>(company?.newClientDepositValue ?? "");
+
+  useEffect(() => {
+    if (company) {
+      setEnabled(!!company.newClientDepositEnabled);
+      setDepositType(company.newClientDepositType || "flat");
+      setDepositValue(company.newClientDepositValue ?? "");
+    }
+  }, [
+    company?.newClientDepositEnabled,
+    company?.newClientDepositType,
+    company?.newClientDepositValue,
+  ]);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("PATCH", "/api/company", {
+        newClientDepositEnabled: enabled,
+        newClientDepositType: depositType,
+        newClientDepositValue: enabled && depositValue ? depositValue : null,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Deposit settings saved" });
+    },
+    onError: () => toast({ title: "Failed to save deposit settings", variant: "destructive" }),
+  });
+
+  const hasChanges =
+    enabled !== !!company?.newClientDepositEnabled ||
+    (enabled && depositType !== (company?.newClientDepositType || "flat")) ||
+    (enabled && depositValue !== (company?.newClientDepositValue ?? ""));
+
+  return (
+    <div className="space-y-3" data-testid="section-new-client-deposit">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">New Client Deposit</p>
+          <p className="text-xs text-muted-foreground">
+            Collect a deposit at booking before the first service invoice for monthly-billed
+            clients.
+          </p>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={setEnabled}
+          data-testid="toggle-new-client-deposit"
+        />
+      </div>
+
+      {enabled && (
+        <div className="rounded-md border p-3 space-y-3 bg-muted/30">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Deposit Type</Label>
+            <Select value={depositType} onValueChange={setDepositType}>
+              <SelectTrigger data-testid="select-deposit-type" className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="flat">Flat dollar amount</SelectItem>
+                <SelectItem value="percent">Percentage of first month</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">
+              {depositType === "percent" ? "Percentage (%)" : "Amount ($)"}
+            </Label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                {depositType === "percent" ? "%" : "$"}
+              </span>
+              <Input
+                type="number"
+                min="0"
+                step={depositType === "percent" ? "1" : "0.01"}
+                className="pl-6 h-8 text-sm"
+                value={depositValue}
+                onChange={(e) => setDepositValue(e.target.value)}
+                placeholder={depositType === "percent" ? "e.g. 25" : "e.g. 50.00"}
+                data-testid="input-deposit-value"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {depositType === "percent"
+                ? "Percentage of the client's first full monthly rate"
+                : "Fixed dollar amount charged as a deposit on booking"}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {hasChanges && (
+        <Button
+          size="sm"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+          data-testid="button-save-deposit-settings"
+        >
+          <Save className="mr-1 h-4 w-4" />
+          {saveMutation.isPending ? "Saving..." : "Save Deposit Settings"}
         </Button>
       )}
     </div>

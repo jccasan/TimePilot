@@ -1429,6 +1429,12 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
       qboAutoSync(companyId, invoice.id, "invoice");
       if (invoiceUpdates.status === "paid") {
         qboAutoSync(companyId, invoice.id, "payment");
+        try {
+          const { advanceBillingOnboarding } = await import("../services/billing-onboarding");
+          await advanceBillingOnboarding(invoice.id, companyId);
+        } catch (obErr) {
+          console.error("[invoices/patch] advanceBillingOnboarding error:", obErr);
+        }
       }
       const { userId } = await getCompanyContext(req);
       auditLog(
