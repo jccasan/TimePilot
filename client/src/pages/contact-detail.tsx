@@ -4112,6 +4112,29 @@ const ONBOARDING_STAGE_CONFIG: Record<
 function BillingOnboardingStage({ contact }: { contact: Contact }) {
   const stage = contact.billingOnboardingStage ?? "none";
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+
+  const resendMutation = useMutation({
+    mutationFn: (invoiceId: string) => apiRequest("POST", `/api/invoices/${invoiceId}/send-email`),
+    onSuccess: () => {
+      toast({ title: "Invoice resent", description: "The invoice email has been sent." });
+    },
+    onError: (err: unknown) => {
+      let message = "Failed to resend invoice.";
+      if (err instanceof Error) {
+        const match = err.message.match(/^\d+:\s*(.+)$/s);
+        if (match) {
+          try {
+            const body = JSON.parse(match[1]);
+            if (body?.error) message = body.error;
+          } catch {
+            message = match[1];
+          }
+        }
+      }
+      toast({ title: "Resend failed", description: message, variant: "destructive" });
+    },
+  });
 
   const { data: allInvoices = [] } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices", "contact", contact.id],
@@ -4166,34 +4189,73 @@ function BillingOnboardingStage({ contact }: { contact: Contact }) {
       {(depositInvoice || balanceInvoices.length > 0) && (
         <div className="pt-1 space-y-1">
           {depositInvoice && (
-            <button
-              className="flex items-center justify-between w-full text-xs rounded px-2 py-1 bg-background border hover:bg-muted/50 transition-colors"
-              onClick={() => navigate(`/invoices?selected=${depositInvoice.id}`)}
+            <div
+              className="flex items-center justify-between w-full text-xs rounded px-2 py-1 bg-background border"
               data-testid={`link-onboarding-deposit-invoice-${depositInvoice.id}`}
             >
-              <span className="text-muted-foreground">Deposit #{depositInvoice.invoiceNumber}</span>
-              <span
-                className={`font-medium ${depositInvoice.status === "paid" ? "text-green-600" : "text-foreground"}`}
+              <button
+                className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => navigate(`/invoices?selected=${depositInvoice.id}`)}
               >
-                ${parseFloat(depositInvoice.total).toFixed(2)}{" "}
-                <span className="capitalize">{depositInvoice.status}</span>
-              </span>
-            </button>
+                Deposit #{depositInvoice.invoiceNumber}
+              </button>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`font-medium ${depositInvoice.status === "paid" ? "text-green-600" : "text-foreground"}`}
+                >
+                  ${parseFloat(depositInvoice.total).toFixed(2)}{" "}
+                  <span className="capitalize">{depositInvoice.status}</span>
+                </span>
+                {depositInvoice.status === "sent" && (
+                  <button
+                    className="text-xs text-primary underline-offset-2 hover:underline disabled:opacity-50"
+                    onClick={() => resendMutation.mutate(depositInvoice.id)}
+                    disabled={
+                      resendMutation.isPending && resendMutation.variables === depositInvoice.id
+                    }
+                    data-testid={`button-resend-deposit-invoice-${depositInvoice.id}`}
+                  >
+                    {resendMutation.isPending && resendMutation.variables === depositInvoice.id
+                      ? "Sending..."
+                      : "Resend"}
+                  </button>
+                )}
+              </div>
+            </div>
           )}
           {balanceInvoices.map((inv) => (
-            <button
+            <div
               key={inv.id}
-              className="flex items-center justify-between w-full text-xs rounded px-2 py-1 bg-background border hover:bg-muted/50 transition-colors"
-              onClick={() => navigate(`/invoices?selected=${inv.id}`)}
+              className="flex items-center justify-between w-full text-xs rounded px-2 py-1 bg-background border"
               data-testid={`link-onboarding-balance-invoice-${inv.id}`}
             >
-              <span className="text-muted-foreground">Balance #{inv.invoiceNumber}</span>
-              <span
-                className={`font-medium ${inv.status === "paid" ? "text-green-600" : "text-foreground"}`}
+              <button
+                className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => navigate(`/invoices?selected=${inv.id}`)}
               >
-                ${parseFloat(inv.total).toFixed(2)} <span className="capitalize">{inv.status}</span>
-              </span>
-            </button>
+                Balance #{inv.invoiceNumber}
+              </button>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`font-medium ${inv.status === "paid" ? "text-green-600" : "text-foreground"}`}
+                >
+                  ${parseFloat(inv.total).toFixed(2)}{" "}
+                  <span className="capitalize">{inv.status}</span>
+                </span>
+                {inv.status === "sent" && (
+                  <button
+                    className="text-xs text-primary underline-offset-2 hover:underline disabled:opacity-50"
+                    onClick={() => resendMutation.mutate(inv.id)}
+                    disabled={resendMutation.isPending && resendMutation.variables === inv.id}
+                    data-testid={`button-resend-balance-invoice-${inv.id}`}
+                  >
+                    {resendMutation.isPending && resendMutation.variables === inv.id
+                      ? "Sending..."
+                      : "Resend"}
+                  </button>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       )}
