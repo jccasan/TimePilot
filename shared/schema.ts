@@ -3143,7 +3143,7 @@ export const quoteFormEvents = pgTable(
     sessionId: varchar("session_id", { length: 64 }).notNull(),
     event: varchar("event", { length: 50 }).notNull(),
     step: integer("step"),
-    zipCode: varchar("zip_code", { length: 5 }),
+    zipCode: varchar("zip_code", { length: 10 }),
     isEmbed: boolean("is_embed").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

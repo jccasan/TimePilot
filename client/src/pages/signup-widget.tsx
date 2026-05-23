@@ -120,6 +120,7 @@ type CompanyInfo = {
   yardSizeTierConfig: YardSizeTierConfig | null;
   lrPricingTiers: LrPricingTier[] | null;
   pricingRules: { yardSizeTiers: PricingRulesYardTier[] } | null;
+  country?: string;
 };
 
 type QuoteResult = {
@@ -791,14 +792,35 @@ export default function SignupWidget() {
     return { low, high };
   }, [livePrice, lastCleanup, quoteResult]);
 
+  const isCanadian = (company?.country || "us").toLowerCase() === "ca";
+
+  const normalizeZipForApi = (raw: string): string => {
+    if (isCanadian) {
+      return raw.trim().replace(/\s/g, "").toUpperCase();
+    }
+    return raw.trim().slice(0, 5);
+  };
+
+  const isValidZip = (raw: string): boolean => {
+    if (isCanadian) {
+      const clean = raw.replace(/\s/g, "").toUpperCase();
+      return /^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(clean);
+    }
+    return /^\d{5}$/.test(raw.trim());
+  };
+
   const checkZipMutation = useMutation({
     mutationFn: async () => {
-      const normalizedZip = zipCode.trim().slice(0, 5);
-      if (normalizedZip.length < 5 || !/^\d{5}$/.test(normalizedZip)) {
-        throw new Error("Please enter a valid 5-digit ZIP code.");
+      const normalizedZip = normalizeZipForApi(zipCode);
+      if (!isValidZip(zipCode)) {
+        throw new Error(
+          isCanadian
+            ? "Please enter a valid Canadian postal code (e.g. V6B 2X3)."
+            : "Please enter a valid 5-digit ZIP code."
+        );
       }
       track("zip_entered", 1, normalizedZip);
-      const res = await fetch(`/api/public/check-zip/${slug}/${normalizedZip}`);
+      const res = await fetch(`/api/public/check-zip/${slug}/${encodeURIComponent(normalizedZip)}`);
       if (!res.ok) throw new Error("Unable to check service area. Please try again.");
       return res.json() as Promise<ZipCheckResult>;
     },
@@ -806,10 +828,10 @@ export default function SignupWidget() {
       if (data.inServiceArea) {
         setZipError(null);
         setZipVerified(true);
-        track("zip_passed", 1, zipCode.trim().slice(0, 5));
+        track("zip_passed", 1, normalizeZipForApi(zipCode));
       } else {
         setZipVerified(false);
-        track("zip_failed", 1, zipCode.trim().slice(0, 5));
+        track("zip_failed", 1, normalizeZipForApi(zipCode));
         setZipError("Sorry, we don't currently service your area. Please check back soon!");
       }
     },
@@ -852,7 +874,7 @@ export default function SignupWidget() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          zipCode: zipCode.trim().slice(0, 5),
+          zipCode: normalizeZipForApi(zipCode),
           numberOfDogs,
           yardSize,
           serviceFrequency: backendFreq,
@@ -872,7 +894,7 @@ export default function SignupWidget() {
       return res.json() as Promise<QuoteResult>;
     },
     onSuccess: (data) => {
-      track("submitted", 3, zipCode.trim().slice(0, 5));
+      track("submitted", 3, normalizeZipForApi(zipCode));
       const needsCard = company?.requireCardOnSignup && company?.stripePublishableKey;
       if (needsCard) {
         setPendingQuoteResult(data);
@@ -1488,20 +1510,26 @@ export default function SignupWidget() {
                   </div>
                   <div className="space-y-3">
                     <Label htmlFor="zipCodeSingle" className="text-sm font-medium">
-                      ZIP Code *
+                      {isCanadian ? "Postal Code *" : "ZIP Code *"}
                     </Label>
                     <div className="flex gap-2">
                       <Input
                         id="zipCodeSingle"
-                        placeholder="Enter your ZIP code"
+                        placeholder={isCanadian ? "Enter your postal code" : "Enter your ZIP code"}
                         value={zipCode}
                         onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, "").slice(0, 5);
+                          const raw = e.target.value;
+                          const val = isCanadian
+                            ? raw
+                                .toUpperCase()
+                                .replace(/[^A-Z0-9\s]/g, "")
+                                .slice(0, 7)
+                            : raw.replace(/\D/g, "").slice(0, 5);
                           setZipCode(val);
                           setZipError(null);
                           setZipVerified(false);
                         }}
-                        maxLength={5}
+                        maxLength={isCanadian ? 7 : 5}
                         className="text-lg h-12 flex-1"
                         data-testid="input-zip-code"
                       />
@@ -1515,7 +1543,7 @@ export default function SignupWidget() {
                         onMouseLeave={(e) =>
                           (e.currentTarget.style.backgroundColor = brandStyles.buttonBg)
                         }
-                        disabled={zipCode.length < 5 || checkZipMutation.isPending || zipVerified}
+                        disabled={!isValidZip(zipCode) || checkZipMutation.isPending || zipVerified}
                         onClick={() => checkZipMutation.mutate()}
                         data-testid="button-check-zip"
                       >
@@ -2094,10 +2122,16 @@ export default function SignupWidget() {
                   <div className="flex gap-2">
                     <Input
                       id="zipCode"
-                      placeholder="Enter your ZIP code"
+                      placeholder={isCanadian ? "Enter your postal code" : "Enter your ZIP code"}
                       value={zipCode}
                       onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "").slice(0, 5);
+                        const raw = e.target.value;
+                        const val = isCanadian
+                          ? raw
+                              .toUpperCase()
+                              .replace(/[^A-Z0-9\s]/g, "")
+                              .slice(0, 7)
+                          : raw.replace(/\D/g, "").slice(0, 5);
                         setZipCode(val);
                         setZipError(null);
                         setZipVerified(false);
@@ -2108,7 +2142,7 @@ export default function SignupWidget() {
                           if (!zipVerified) checkZipMutation.mutate();
                         }
                       }}
-                      maxLength={5}
+                      maxLength={isCanadian ? 7 : 5}
                       className="text-lg h-12 flex-1"
                       data-testid="input-zip-code"
                     />
@@ -2122,7 +2156,7 @@ export default function SignupWidget() {
                       onMouseLeave={(e) =>
                         (e.currentTarget.style.backgroundColor = brandStyles.buttonBg)
                       }
-                      disabled={zipCode.length < 5 || checkZipMutation.isPending || zipVerified}
+                      disabled={!isValidZip(zipCode) || checkZipMutation.isPending || zipVerified}
                       onClick={() => checkZipMutation.mutate()}
                       data-testid="button-check-zip"
                     >

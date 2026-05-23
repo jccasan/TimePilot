@@ -1045,6 +1045,15 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] contacts UTM tracking columns ensured");
 
+    // Widen quote_form_events.zip_code from varchar(5) to varchar(10) for Canadian postal codes
+    await client.query(`
+      ALTER TABLE quote_form_events
+        ALTER COLUMN zip_code TYPE VARCHAR(10)
+    `);
+    console.log(
+      "[Migration] quote_form_events.zip_code widened to VARCHAR(10) for Canadian postal codes"
+    );
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

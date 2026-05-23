@@ -99,6 +99,7 @@ export function computeInvoice(data: any, options?: { currency?: string }): any 
     has_discount: discount > 0,
     tax_rate_display: (taxRate * 100).toFixed(1) + "%",
     tax: fmt(tax),
+    // CA compliance: suppress tax row entirely when rate is 0 (small supplier / no GST registration)
     has_tax: taxRate > 0,
     total: fmt(total),
     paid: fmt(paid),

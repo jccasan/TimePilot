@@ -1335,7 +1335,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
     step: z.number().int().min(0).max(4).optional(),
     zipCode: z
       .string()
-      .regex(/^\d{5}$/)
+      .regex(/^(\d{5}|[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d)$/)
       .optional(),
     isEmbed: z.boolean().optional(),
   });
@@ -1717,11 +1717,21 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
 
       let zoneSurchargePercent = 0;
       if (zipCode && quotePriceCents !== null && !callForQuote) {
-        const normalizedZip = zipCode.trim().slice(0, 5);
         const zones = await storage.getServiceZones(company.id);
-        const matchingZone = zones.find(
-          (z) => z.zipCode.trim().slice(0, 5) === normalizedZip && z.isActive
-        );
+        let matchingZone: (typeof zones)[0] | undefined;
+        if (company.country === "ca") {
+          const caCode = zipCode.trim().replace(/\s/g, "").toUpperCase();
+          const prefix = caCode.slice(0, 3);
+          matchingZone = zones.find((z) => {
+            const zCode = z.zipCode.replace(/\s/g, "").toUpperCase();
+            return (zCode === caCode || zCode.startsWith(prefix)) && z.isActive;
+          });
+        } else {
+          const normalizedZip = zipCode.trim().slice(0, 5);
+          matchingZone = zones.find(
+            (z) => z.zipCode.trim().slice(0, 5) === normalizedZip && z.isActive
+          );
+        }
         if (matchingZone && matchingZone.priceSurchargePercent > 0) {
           zoneSurchargePercent = matchingZone.priceSurchargePercent;
           quotePriceCents = Math.round(quotePriceCents * (1 + zoneSurchargePercent / 100));

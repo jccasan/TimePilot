@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAddressLabels } from "@/hooks/use-address-labels";
 import {
   Select,
   SelectContent,
@@ -70,6 +71,8 @@ export function ServiceZoneMap({
   const { data: tokenData } = useQuery<{ token: string }>({
     queryKey: ["/api/mapbox-token"],
   });
+  const { country } = useAddressLabels();
+  const isCanadian = country === "ca";
 
   useEffect(() => {
     if (!tokenData?.token || !mapContainerRef.current || mapRef.current) return;
@@ -164,11 +167,35 @@ export function ServiceZoneMap({
     updateMarkers();
   }, [updateMarkers]);
 
+  const normalizePostalInput = (raw: string): string => {
+    if (isCanadian) {
+      const upper = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (upper.length > 6) return upper.slice(0, 6);
+      return upper;
+    }
+    return raw.replace(/\D/g, "").slice(0, 5);
+  };
+
+  const formatCanadianPostal = (raw: string): string => {
+    const clean = raw.replace(/\s/g, "").toUpperCase();
+    if (clean.length === 6) return clean.slice(0, 3) + " " + clean.slice(3);
+    return clean;
+  };
+
+  const isValidPostal = (zip: string): boolean => {
+    if (isCanadian) {
+      const clean = zip.replace(/\s/g, "").toUpperCase();
+      return /^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(clean);
+    }
+    return /^\d{5}$/.test(zip);
+  };
+
   const geocodeZip = async (zip: string): Promise<{ lat: number; lng: number } | null> => {
     if (!tokenData?.token) return null;
     try {
+      const countryParam = isCanadian ? "CA" : "US";
       const resp = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(zip)}.json?country=US&types=postcode&access_token=${tokenData.token}`
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(zip)}.json?country=${countryParam}&types=postcode&access_token=${tokenData.token}`
       );
       const data = await resp.json();
       if (data.features && data.features.length > 0) {
@@ -184,16 +211,17 @@ export function ServiceZoneMap({
   const handleAddZip = async () => {
     const zip = zipInput.trim();
     if (!zip) return;
-    if (!/^\d{5}$/.test(zip)) return;
-    if (zones.some((z) => z.zipCode === zip)) {
+    if (!isValidPostal(zip)) return;
+    const normalized = isCanadian ? formatCanadianPostal(zip) : zip;
+    if (zones.some((z) => z.zipCode === normalized)) {
       setZipInput("");
       return;
     }
 
     setAdding(true);
-    const coords = await geocodeZip(zip);
+    const coords = await geocodeZip(normalized);
     const newZone: ZoneEntry = {
-      zipCode: zip,
+      zipCode: normalized,
       dayOfWeek: "tbd",
       latitude: coords?.lat,
       longitude: coords?.lng,
@@ -237,18 +265,20 @@ export function ServiceZoneMap({
         <div className="relative flex-1">
           <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Enter zip code (e.g. 22031)"
+            placeholder={
+              isCanadian ? "Enter postal code (e.g. V6B 2X3)" : "Enter zip code (e.g. 22031)"
+            }
             className="pl-8"
             value={zipInput}
-            onChange={(e) => setZipInput(e.target.value.replace(/\D/g, "").slice(0, 5))}
+            onChange={(e) => setZipInput(normalizePostalInput(e.target.value))}
             onKeyDown={handleKeyDown}
-            maxLength={5}
+            maxLength={isCanadian ? 6 : 5}
             data-testid="input-zip-code"
           />
         </div>
         <Button
           onClick={handleAddZip}
-          disabled={adding || zipInput.length !== 5}
+          disabled={adding || !isValidPostal(zipInput)}
           data-testid="button-add-zip"
         >
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}

@@ -4770,6 +4770,7 @@ export default function Invoices() {
                           </span>
                         </div>
                       )}
+                      {/* CA compliance: suppress tax row when rate is 0 (GST small supplier) */}
                       {Number(selectedInvoice.tax) > 0 && (
                         <div className="flex flex-wrap justify-between gap-1">
                           <span className="text-muted-foreground">

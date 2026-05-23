@@ -971,6 +971,7 @@ type Company = {
   newClientDepositEnabled?: boolean;
   newClientDepositType?: string | null;
   newClientDepositValue?: string | null;
+  country?: string | null;
 };
 
 type SettingsLayoutItem = {
@@ -7276,6 +7277,23 @@ function BillingDefaultsSection({ company }: { company: Company | null | undefin
           <Save className="mr-1 h-4 w-4" />
           {saveMutation.isPending ? "Saving..." : "Save Billing Defaults"}
         </Button>
+      )}
+
+      {company?.country === "ca" && (
+        <>
+          <Separator />
+          <div className="rounded-md border bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 px-3 py-2.5 space-y-1">
+            <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">
+              Canadian GST/HST Small Supplier Threshold
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-400">
+              Businesses earning less than $30,000 CAD in taxable revenue over any 12-month period
+              are considered small suppliers and are not required to register for or collect
+              GST/HST. Leave your tax rate at 0% until you cross this threshold and register with
+              the CRA.
+            </p>
+          </div>
+        </>
       )}
 
       <Separator />
