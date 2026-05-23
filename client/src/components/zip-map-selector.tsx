@@ -18,12 +18,91 @@ function isZip(s: string) {
   return /^\d{5}$/.test(s);
 }
 
+// Canadian Forward Sortation Area: letter-digit-letter (e.g. "M5V")
+function isFSA(s: string) {
+  return /^[A-Za-z]\d[A-Za-z]$/.test(s);
+}
+
 function isCanadianPostal(s: string) {
   return /^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/.test(s);
 }
 
 function isPostal(s: string) {
-  return isZip(s) || isCanadianPostal(s);
+  return isZip(s) || isCanadianPostal(s) || isFSA(s);
+}
+
+// Stitch OSM way-member segments into closed polygon rings.
+// OSM boundary relations are composed of multiple partial way segments that must
+// be joined end-to-end before they form valid GeoJSON ring coordinates.
+// The algorithm greedily picks the next unvisited segment whose start or end
+// matches the current ring tip, reversing it if necessary, until the ring closes.
+function buildRingsFromOverpassMembers(members: any[]): number[][][] {
+  // Collect outer way coordinate arrays
+  const segments: number[][][] = [];
+  for (const m of members) {
+    if (!m.geometry?.length) continue;
+    if (m.role !== "outer" && m.role !== "") continue;
+    const coords: number[][] = m.geometry.map((pt: any) => [pt.lon, pt.lat]);
+    if (coords.length >= 2) segments.push(coords);
+  }
+  if (segments.length === 0) return [];
+
+  const EPS = 1e-7; // coordinate comparison tolerance
+
+  function ptEq(a: number[], b: number[]) {
+    return Math.abs(a[0] - b[0]) < EPS && Math.abs(a[1] - b[1]) < EPS;
+  }
+
+  const used = new Array(segments.length).fill(false);
+  const rings: number[][][] = [];
+
+  for (let start = 0; start < segments.length; start++) {
+    if (used[start]) continue;
+
+    // Begin a new ring with this segment
+    let ring: number[][] = [...segments[start]];
+    used[start] = true;
+
+    // Greedily stitch additional segments until the ring closes or no more fit
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const tip = ring[ring.length - 1];
+      const head = ring[0];
+
+      // Check if ring is already closed (tip == head, length > 3)
+      if (ring.length > 3 && ptEq(tip, head)) break;
+
+      for (let i = 0; i < segments.length; i++) {
+        if (used[i]) continue;
+        const seg = segments[i];
+        const sStart = seg[0];
+        const sEnd = seg[seg.length - 1];
+
+        if (ptEq(tip, sStart)) {
+          // Forward — append all but the duplicate first point
+          ring = ring.concat(seg.slice(1));
+          used[i] = true;
+          changed = true;
+          break;
+        } else if (ptEq(tip, sEnd)) {
+          // Reversed — append reversed seg, skipping its last point (== our tip)
+          ring = ring.concat([...seg].reverse().slice(1));
+          used[i] = true;
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    // Close the ring if it isn't already
+    if (ring.length >= 4) {
+      if (!ptEq(ring[0], ring[ring.length - 1])) ring.push([...ring[0]]);
+      rings.push(ring);
+    }
+  }
+
+  return rings;
 }
 
 async function geocodeAddress(address: string): Promise<L.LatLngExpression | null> {
@@ -46,7 +125,7 @@ function addOsmLayer(map: L.Map) {
   }).addTo(map);
 }
 
-async function fetchZipPolygonsInViewport(
+async function fetchUSZipPolygonsInViewport(
   w: number,
   s: number,
   e: number,
@@ -69,6 +148,91 @@ async function fetchZipPolygonsInViewport(
   } catch {
     return { type: "FeatureCollection", features: [] };
   }
+}
+
+// Fetch Canadian FSA (Forward Sortation Area) polygon boundaries from the
+// OpenStreetMap Overpass API. Boundaries are stored as "boundary=postal_code"
+// relations in OSM with a "postal_code" tag like "M5V".
+async function fetchCanadianFSAPolygonsInViewport(
+  w: number,
+  s: number,
+  e: number,
+  n: number
+): Promise<GeoJSON.FeatureCollection> {
+  // [out:json] with "out geom" returns member geometry inline so we can build polygons
+  const query =
+    `[out:json][timeout:25];` +
+    `(relation["boundary"="postal_code"](${s},${w},${n},${e}););` +
+    `out geom;`;
+  try {
+    const r = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      body: query,
+      headers: { "Content-Type": "text/plain" },
+      signal: AbortSignal.timeout(30000),
+    });
+    const data = await r.json();
+    const features: GeoJSON.Feature[] = [];
+    for (const el of data.elements ?? []) {
+      if (el.type !== "relation") continue;
+      // OSM stores FSA as "postal_code" tag, e.g. "M5V" or "M5V 3A8"
+      const raw: string = (el.tags?.postal_code ?? el.tags?.["addr:postal_code"] ?? "")
+        .toUpperCase()
+        .replace(/\s+/g, "");
+      // Only render FSA-level (3-char) codes — full 6-char postal codes are too granular
+      if (!raw || !isFSA(raw)) continue;
+      const rings = buildRingsFromOverpassMembers(el.members ?? []);
+      if (!rings.length) continue;
+      features.push({
+        type: "Feature",
+        // Normalise to ZIP_CODE key so the rest of loadZips works unchanged
+        properties: { ZIP_CODE: raw },
+        geometry:
+          rings.length === 1
+            ? ({ type: "Polygon", coordinates: rings } as GeoJSON.Geometry)
+            : ({ type: "MultiPolygon", coordinates: rings.map((r) => [r]) } as GeoJSON.Geometry),
+      });
+    }
+    return { type: "FeatureCollection", features };
+  } catch {
+    return { type: "FeatureCollection", features: [] };
+  }
+}
+
+// Returns true when the majority of the visible viewport area is within Canada.
+// Uses the fraction of overlap with the Canadian bounding box rather than just
+// the center point, so border-straddling views pick the dominant country.
+function viewportIsMostlyCanada(w: number, s: number, e: number, n: number): boolean {
+  // Canadian bounding box
+  const CA_W = -141.5,
+    CA_E = -52.0,
+    CA_S = 41.7,
+    CA_N = 83.5;
+
+  const overlapW = Math.max(w, CA_W);
+  const overlapE = Math.min(e, CA_E);
+  const overlapS = Math.max(s, CA_S);
+  const overlapN = Math.min(n, CA_N);
+
+  if (overlapW >= overlapE || overlapS >= overlapN) return false; // no overlap
+
+  const overlapArea = (overlapE - overlapW) * (overlapN - overlapS);
+  const viewportArea = (e - w) * (n - s);
+
+  // Use Canadian data when more than half the viewport is inside Canada
+  return viewportArea > 0 && overlapArea / viewportArea > 0.5;
+}
+
+async function fetchZipPolygonsInViewport(
+  w: number,
+  s: number,
+  e: number,
+  n: number
+): Promise<GeoJSON.FeatureCollection> {
+  if (viewportIsMostlyCanada(w, s, e, n)) {
+    return fetchCanadianFSAPolygonsInViewport(w, s, e, n);
+  }
+  return fetchUSZipPolygonsInViewport(w, s, e, n);
 }
 
 // ─── ZIP Map ──────────────────────────────────────────────────────────────────
@@ -136,7 +300,7 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
         geo.features.forEach((feat) => {
           if (!mapRef.current) return;
           const zip = (feat.properties as any)?.ZIP_CODE as string;
-          if (!zip || !isZip(zip) || layersRef.current.has(zip)) return;
+          if (!zip || (!isZip(zip) && !isFSA(zip)) || layersRef.current.has(zip)) return;
           const isSel = selectedRef.current.has(zip);
           const layer = L.geoJSON(feat as any, {
             style: {
