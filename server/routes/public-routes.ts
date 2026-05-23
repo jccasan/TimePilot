@@ -667,16 +667,17 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       const company = await storage.getCompanyBySlug(slug);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
-      const isCanadian = company.country === "ca";
       const rawZip = zip.trim();
+      const caPostalCandidate = rawZip.replace(/\s/g, "").toUpperCase();
+      const looksCanadian = /^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(caPostalCandidate);
+      const isCanadian = company.country?.toLowerCase() === "ca" || looksCanadian;
 
       let normalizedZip: string;
       if (isCanadian) {
-        const caPostal = rawZip.replace(/\s/g, "").toUpperCase();
-        if (!/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(caPostal)) {
+        if (!looksCanadian) {
           return res.status(400).json({ error: "Invalid postal code format" });
         }
-        normalizedZip = caPostal.slice(0, 3) + " " + caPostal.slice(3);
+        normalizedZip = caPostalCandidate.slice(0, 3) + " " + caPostalCandidate.slice(3);
       } else {
         normalizedZip = rawZip.slice(0, 5);
         if (!/^\d{5}$/.test(normalizedZip)) {
@@ -1721,12 +1722,14 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       if (zipCode && quotePriceCents !== null && !callForQuote) {
         const zones = await storage.getServiceZones(company.id);
         let matchingZone: (typeof zones)[0] | undefined;
-        if (company.country === "ca") {
-          const caCode = zipCode.trim().replace(/\s/g, "").toUpperCase();
-          const prefix = caCode.slice(0, 3);
+        const caCodeCandidate = zipCode.trim().replace(/\s/g, "").toUpperCase();
+        const zipLooksCanadian = /^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(caCodeCandidate);
+        const isCanadianLead = company.country?.toLowerCase() === "ca" || zipLooksCanadian;
+        if (isCanadianLead) {
+          const prefix = caCodeCandidate.slice(0, 3);
           matchingZone = zones.find((z) => {
             const zCode = z.zipCode.replace(/\s/g, "").toUpperCase();
-            return (zCode === caCode || zCode.startsWith(prefix)) && z.isActive;
+            return (zCode === caCodeCandidate || zCode.startsWith(prefix)) && z.isActive;
           });
         } else {
           const normalizedZip = zipCode.trim().slice(0, 5);
