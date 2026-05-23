@@ -1001,24 +1001,8 @@ export default function SignupWidget() {
         isAddon: false,
       }));
     }
-    // Legacy yardSizeTierConfig fallback
-    const config = company?.yardSizeTierConfig;
-    if (!config) return [];
-    const result: { value: string; label: string; price: number; isAddon: boolean }[] = [];
-    for (let i = 1; i <= 6; i++) {
-      const key = `tier${i}` as keyof YardSizeTierConfig;
-      const tier = config[key];
-      if (tier?.label?.trim()) {
-        result.push({
-          value: `tier_${i}`,
-          label: tier.label.trim(),
-          price: tier.price ?? 0,
-          isAddon: false,
-        });
-      }
-    }
-    return result;
-  }, [company?.pricingRules?.yardSizeTiers, company?.lrPricingTiers, company?.yardSizeTierConfig]);
+    return [];
+  }, [company?.pricingRules?.yardSizeTiers, company?.lrPricingTiers]);
 
   const hasYardSizeTiers = yardSizeTiers.length > 0;
 

@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -8,262 +7,193 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { PricingRulesConfig } from "@shared/schema";
 
 type YardSizeTier = PricingRulesConfig["yardSizeTiers"][number];
 
-interface YardSizeTierEditorProps {
+export interface YardSizeTierEditorProps {
   tiers: YardSizeTier[];
   onChange: (tiers: YardSizeTier[]) => void;
   maxTiers?: number;
 }
 
-// Common boundary presets — task spec: 0.10, 0.15, 0.25, 0.50, 0.75, 1.0
-const COMMON_ACRE_OPTIONS: { label: string; frac: string; value: number }[] = [
-  { label: "0.10 ac", frac: "1/10", value: 0.1 },
-  { label: "0.15 ac", frac: "3/20", value: 0.15 },
-  { label: "\u00bc acre", frac: "\u00bc", value: 0.25 },
-  { label: "\u00bd acre", frac: "\u00bd", value: 0.5 },
-  { label: "\u00be acre", frac: "\u00be", value: 0.75 },
-  { label: "1 acre", frac: "1", value: 1.0 },
-];
+const TOTAL_ROWS = 6;
+const REQUIRED_ROWS = 3;
 
-/** Return a short human label with fraction + sq ft for a given acreage. */
-function acreFracLabel(acres: number): string {
-  const sqft = Math.round(acres * 43560);
-  const opt = COMMON_ACRE_OPTIONS.find((o) => Math.abs(o.value - acres) < 0.001);
-  const acreStr = opt ? opt.label : `${acres} ac`;
-  return `${acreStr} / ${sqft.toLocaleString()} sq ft`;
-}
+const ACRE_OPTIONS: { label: string; value: number }[] = Array.from({ length: 28 }, (_, i) => {
+  const val = Math.round((0.15 + i * 0.05) * 100) / 100;
+  return { label: `${val.toFixed(2)} ac`, value: val };
+});
 
-/** Short label for the select trigger (just the fraction/ac part, no sq ft). */
-function acreShortLabel(acres: number): string {
-  const opt = COMMON_ACRE_OPTIONS.find((o) => Math.abs(o.value - acres) < 0.001);
-  return opt ? opt.label : `${acres} ac`;
-}
+type RowDraft = { name: string; upToAcres: number; surcharge: string };
 
-function BoundarySelect({
-  value,
-  onChange,
-  minAcres,
-  index,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  minAcres: number;
-  index: number;
-}) {
-  const [showCustom, setShowCustom] = useState(false);
-  const [customVal, setCustomVal] = useState(String(value));
-  const isCommon = COMMON_ACRE_OPTIONS.some((o) => Math.abs(o.value - value) < 0.001);
-
-  if (showCustom) {
-    return (
-      <div className="flex items-center gap-1 w-full">
-        <Input
-          type="number"
-          step="0.01"
-          min={minAcres + 0.01}
-          value={customVal}
-          className="h-8 text-sm"
-          data-testid={`input-yard-acres-custom-${index}`}
-          onChange={(e) => setCustomVal(e.target.value)}
-          onBlur={() => {
-            const n = parseFloat(customVal);
-            if (!isNaN(n) && n > minAcres) {
-              onChange(n);
-              setShowCustom(false);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              const n = parseFloat(customVal);
-              if (!isNaN(n) && n > minAcres) {
-                onChange(n);
-                setShowCustom(false);
-              }
-            } else if (e.key === "Escape") {
-              setShowCustom(false);
-            }
-          }}
-          autoFocus
-        />
-        <span className="text-xs text-muted-foreground shrink-0">ac</span>
-      </div>
-    );
+function toProp(tiers: YardSizeTier[]): RowDraft[] {
+  const rows: RowDraft[] = tiers.slice(0, TOTAL_ROWS).map((t) => ({
+    name: t.name ?? "",
+    upToAcres: t.upToAcres ?? 0.25,
+    surcharge: String(t.surcharge),
+  }));
+  while (rows.length < TOTAL_ROWS) {
+    rows.push({ name: "", upToAcres: 0.25, surcharge: "" });
   }
-
-  return (
-    <Select
-      value={isCommon ? String(value) : "custom"}
-      onValueChange={(v) => {
-        if (v === "custom") {
-          setCustomVal(String(value));
-          setShowCustom(true);
-        } else {
-          onChange(parseFloat(v));
-        }
-      }}
-    >
-      <SelectTrigger className="h-8 text-sm" data-testid={`select-yard-acres-${index}`}>
-        <SelectValue>{acreShortLabel(value)}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {COMMON_ACRE_OPTIONS.filter((o) => o.value > minAcres).map((o) => (
-          <SelectItem key={o.value} value={String(o.value)}>
-            {o.label} / {Math.round(o.value * 43560).toLocaleString()} sq ft
-          </SelectItem>
-        ))}
-        <SelectItem value="custom">Custom...</SelectItem>
-      </SelectContent>
-    </Select>
-  );
+  return rows;
 }
 
-export function YardSizeTierEditor({ tiers, onChange, maxTiers = 5 }: YardSizeTierEditorProps) {
-  const updateName = (index: number, name: string) => {
-    onChange(tiers.map((t, i) => (i === index ? { ...t, name } : t)));
+function toTiers(rows: RowDraft[]): YardSizeTier[] {
+  const used = rows.filter((r) => r.name.trim() !== "");
+  return used.map((d, i) => ({
+    name: d.name.trim(),
+    upToAcres: i === used.length - 1 ? null : d.upToAcres,
+    surcharge: parseFloat(d.surcharge) || 0,
+  }));
+}
+
+export function YardSizeTierEditor({ tiers, onChange }: YardSizeTierEditorProps) {
+  const [rows, setRows] = useState<RowDraft[]>(() => toProp(tiers));
+
+  useEffect(() => {
+    setRows(toProp(tiers));
+  }, [tiers]);
+
+  const lastUsedIndex = (() => {
+    let last = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].name.trim() !== "") last = i;
+    }
+    return last;
+  })();
+
+  const getPrevBoundary = (rowIndex: number): number => {
+    let max = 0;
+    for (let i = 0; i < rowIndex; i++) {
+      if (rows[i].name.trim() !== "") max = Math.max(max, rows[i].upToAcres);
+    }
+    return max;
   };
 
-  const updateBoundary = (index: number, acres: number) => {
-    const next = [...tiers];
-    next[index] = { ...next[index], upToAcres: acres };
-    // Enforce monotonic ascending: push subsequent bounded tiers up if needed
-    for (let i = index + 1; i < next.length - 1; i++) {
-      const prev = next[i - 1].upToAcres ?? 0;
-      if (next[i].upToAcres !== null && (next[i].upToAcres as number) <= prev) {
-        next[i] = { ...next[i], upToAcres: Math.round((prev + 0.1) * 100) / 100 };
+  const updateRow = (index: number, updates: Partial<RowDraft>) => {
+    let newRows = rows.map((r, i) => (i === index ? { ...r, ...updates } : r));
+
+    if ("name" in updates) {
+      const usedIndices: number[] = [];
+      for (let i = 0; i < newRows.length; i++) {
+        if (newRows[i].name.trim()) usedIndices.push(i);
+      }
+      for (let k = 0; k < usedIndices.length - 1; k++) {
+        const idx = usedIndices[k];
+        const prevIdx = k > 0 ? usedIndices[k - 1] : -1;
+        const prevBound = prevIdx >= 0 ? newRows[prevIdx].upToAcres : 0;
+        if (newRows[idx].upToAcres <= prevBound) {
+          const validOpt = ACRE_OPTIONS.find((o) => o.value > prevBound);
+          if (validOpt) {
+            newRows = newRows.map((r, i) =>
+              i === idx ? { ...r, upToAcres: validOpt.value } : r
+            );
+          }
+        }
       }
     }
-    onChange(next);
-  };
 
-  const updateSurcharge = (index: number, raw: string) => {
-    const num = parseFloat(raw);
-    if (!isNaN(num)) {
-      onChange(tiers.map((t, i) => (i === index ? { ...t, surcharge: Math.max(0, num) } : t)));
-    }
-  };
-
-  const addTier = () => {
-    if (tiers.length >= maxTiers) return;
-    const lastBounded = tiers.slice(0, -1);
-    const lastBoundary =
-      lastBounded.length > 0 ? (lastBounded[lastBounded.length - 1].upToAcres ?? 0) : 0;
-    const candidates = COMMON_ACRE_OPTIONS.filter((o) => o.value > lastBoundary);
-    const newBoundary =
-      candidates.length > 0 ? candidates[0].value : Math.round((lastBoundary + 0.25) * 100) / 100;
-    const prevLast = tiers[tiers.length - 1];
-    const withBound = tiers.map((t, i) =>
-      i === tiers.length - 1 ? { ...t, upToAcres: newBoundary } : t
-    );
-    onChange([
-      ...withBound,
-      {
-        name: `Tier ${withBound.length + 1}`,
-        upToAcres: null,
-        surcharge: (prevLast?.surcharge || 0) + 10,
-      },
-    ]);
-  };
-
-  const removeTier = (index: number) => {
-    if (tiers.length <= 1) return;
-    const next = tiers.filter((_, i) => i !== index);
-    if (next.length > 0 && next[next.length - 1].upToAcres !== null) {
-      next[next.length - 1] = { ...next[next.length - 1], upToAcres: null };
-    }
-    onChange(next);
+    setRows(newRows);
+    onChange(toTiers(newRows));
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-muted-foreground">Yard Size Tiers</p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addTier}
-          disabled={tiers.length >= maxTiers}
-          data-testid="button-add-yard-tier"
-        >
-          <Plus className="h-3 w-3 mr-1" /> Add Tier
-        </Button>
+    <div className="space-y-2">
+      <div className="grid grid-cols-[1fr_140px_110px] gap-2 px-1 mb-1">
+        <span className="text-xs font-medium text-muted-foreground">Tier Name</span>
+        <span className="text-xs font-medium text-muted-foreground text-center">Upper Bound</span>
+        <span className="text-xs font-medium text-muted-foreground text-center">Surcharge</span>
       </div>
-      {tiers.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-2">
-          No yard size tiers defined.
-        </p>
-      ) : (
-        <>
-          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center text-xs font-medium text-muted-foreground px-1">
-            <span>Tier Name</span>
-            <span className="w-48 text-center">Upper Bound</span>
-            <span className="w-28 text-center">Surcharge ($)</span>
-            <span />
-          </div>
-          {tiers.map((tier, index) => {
-            const isLast = index === tiers.length - 1;
-            const prevBoundary = index > 0 ? (tiers[index - 1].upToAcres ?? 0) : 0;
-            const prevLabel = prevBoundary > 0 ? acreFracLabel(prevBoundary) : null;
-            return (
-              <div key={index} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center">
-                <Input
-                  value={tier.name || ""}
-                  onChange={(e) => updateName(index, e.target.value)}
-                  placeholder={`Tier ${index + 1}`}
-                  className="h-8 text-sm"
-                  data-testid={`input-yard-name-${index}`}
-                />
-                <div className="w-48">
-                  {isLast ? (
-                    <div className="h-8 flex items-center justify-center text-sm text-muted-foreground border rounded-md bg-muted/30 px-2 whitespace-nowrap overflow-hidden">
-                      {prevLabel ? `Larger Than ${prevLabel}` : "Unlimited (no bound)"}
-                    </div>
-                  ) : (
-                    <BoundarySelect
-                      value={tier.upToAcres ?? 0.25}
-                      onChange={(v) => updateBoundary(index, v)}
-                      minAcres={prevBoundary}
-                      index={index}
-                    />
-                  )}
-                </div>
-                <div className="w-28 flex items-center gap-1">
-                  <span className="text-muted-foreground text-sm">$</span>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={tier.surcharge}
-                    onChange={(e) => updateSurcharge(index, e.target.value)}
-                    className="h-8 text-sm"
-                    data-testid={`input-yard-surcharge-${index}`}
-                  />
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={() => removeTier(index)}
-                  disabled={tiers.length <= 1}
-                  title={tiers.length <= 1 ? "At least one tier is required" : "Remove tier"}
-                  data-testid={`button-remove-yard-tier-${index}`}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
+
+      {rows.map((row, index) => {
+        const isRequired = index < REQUIRED_ROWS;
+        const isUsed = row.name.trim() !== "";
+        const isLastUsed = index === lastUsedIndex;
+        const prevBound = getPrevBoundary(index);
+        const hasNameError = isRequired && !isUsed;
+        const availableOptions = ACRE_OPTIONS.filter((o) => o.value > prevBound);
+        const effectiveBoundary = availableOptions.find((o) => o.value === row.upToAcres)
+          ? row.upToAcres
+          : (availableOptions[0]?.value ?? 0.25);
+
+        return (
+          <div key={index} className="grid grid-cols-[1fr_140px_110px] gap-2 items-start">
+            <div>
+              <Input
+                value={row.name}
+                onChange={(e) => updateRow(index, { name: e.target.value })}
+                placeholder={
+                  isRequired ? `Tier ${index + 1} name (required)` : "Leave blank if not used"
+                }
+                className={cn(
+                  "h-8 text-sm",
+                  hasNameError && "border-destructive focus-visible:ring-destructive"
+                )}
+                data-testid={`input-yard-name-${index}`}
+              />
+              {hasNameError && (
+                <p className="text-[11px] text-destructive mt-0.5 leading-none">Required</p>
+              )}
+            </div>
+
+            {!isUsed ? (
+              <div className="h-8 rounded-md border bg-muted/20 flex items-center justify-center text-xs text-muted-foreground/40">
+                —
               </div>
-            );
-          })}
-          <p className="text-xs text-muted-foreground">
-            The last tier is unbounded and applies to any yard larger than the previous boundary.
-            1&ndash;{maxTiers} tiers supported.
-          </p>
-        </>
-      )}
+            ) : isLastUsed ? (
+              <div className="h-8 rounded-md border bg-muted/30 flex items-center justify-center text-xs text-muted-foreground">
+                Unlimited
+              </div>
+            ) : (
+              <Select
+                value={String(effectiveBoundary)}
+                onValueChange={(v) => updateRow(index, { upToAcres: parseFloat(v) })}
+              >
+                <SelectTrigger
+                  className="h-8 text-sm"
+                  data-testid={`select-yard-acres-${index}`}
+                >
+                  <SelectValue>{`${effectiveBoundary.toFixed(2)} ac`}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {availableOptions.map((o) => (
+                    <SelectItem key={o.value} value={String(o.value)}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {!isUsed ? (
+              <div className="h-8 rounded-md border bg-muted/20 flex items-center justify-center text-xs text-muted-foreground/40">
+                —
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={row.surcharge}
+                  onChange={(e) => updateRow(index, { surcharge: e.target.value })}
+                  placeholder="0"
+                  className="h-8 text-sm"
+                  data-testid={`input-yard-surcharge-${index}`}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <p className="text-xs text-muted-foreground pt-1">
+        Tiers 1–{REQUIRED_ROWS} are required. The last filled tier is unbounded and applies to any
+        larger yard. Tiers {REQUIRED_ROWS + 1}–{TOTAL_ROWS} are optional.
+      </p>
     </div>
   );
 }

@@ -1192,8 +1192,8 @@ function PricingSetupStep({
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Yard Size Tiers</CardTitle>
             <CardDescription>
-              Configure up to 5 yard size tiers and the surcharge added for each. The last tier
-              applies to any yard larger than all the others.
+              Configure up to 6 yard size tiers (3 required, 3 optional) and the surcharge added
+              for each. The last filled tier applies to any larger yard.
             </CardDescription>
           </CardHeader>
           <CardContent>

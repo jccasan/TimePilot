@@ -2288,22 +2288,18 @@ function CostsTab() {
 
 // ─── Pricing Engine tab ───────────────────────────────────────────────────────
 
-const YARD_SIZE_TIERS = [
-  { label: "Under 1/8 acre", midpointAcres: 0.0625, upToAcres: 0.125 as number | null },
-  { label: "1/8–1/4 acre", midpointAcres: 0.1875, upToAcres: 0.25 as number | null },
-  { label: "1/4–1/2 acre", midpointAcres: 0.375, upToAcres: 0.5 as number | null },
-  { label: "Over 1/2 acre", midpointAcres: 0.625, upToAcres: null as number | null },
-];
-
 /**
- * Convert pricingRules.yardSizeTiers into the same shape as YARD_SIZE_TIERS,
- * computing midpointAcres from adjacent boundaries. Falls back to YARD_SIZE_TIERS
- * when the saved list is empty (e.g. brand-new account).
+ * Convert pricingRules.yardSizeTiers into display tiers with computed midpointAcres.
+ * Falls back to DEFAULT_PRICING_RULES.yardSizeTiers when the saved list is empty.
  */
 function toActiveTiers(
   yardSizeTiers: PricingRulesConfig["yardSizeTiers"]
 ): Array<{ label: string; midpointAcres: number; upToAcres: number | null }> {
-  if (!yardSizeTiers || yardSizeTiers.length === 0) return YARD_SIZE_TIERS;
+  if (!yardSizeTiers || yardSizeTiers.length === 0) return DEFAULT_PRICING_RULES.yardSizeTiers.map((t, i) => {
+    const prevBound = i > 0 ? (DEFAULT_PRICING_RULES.yardSizeTiers[i - 1].upToAcres ?? 0) : 0;
+    const midpointAcres = t.upToAcres !== null ? (prevBound + t.upToAcres) / 2 : prevBound + 0.5;
+    return { label: t.name || `Tier ${i + 1}`, midpointAcres, upToAcres: t.upToAcres };
+  });
   return yardSizeTiers.map((t, i) => {
     const prevBound = i > 0 ? (yardSizeTiers[i - 1].upToAcres ?? 0) : 0;
     const midpointAcres = t.upToAcres !== null ? (prevBound + t.upToAcres) / 2 : prevBound + 0.5;
@@ -2321,35 +2317,7 @@ const FREQ_COLUMNS: Array<{ key: BaseKey; label: string; multKey: FreqMultKey }>
   { key: "onetime", label: "One-time", multKey: "oneTimeMultiplier" },
 ];
 
-/**
- * Map a display tier's upToAcres boundary to the persisted surcharge.
- * Uses exact upToAcres match first, then falls back to the smallest persisted tier
- * whose upper boundary covers the display tier's boundary. This handles legacy
- * 3-tier configs being loaded into the 4-tier display without index drift.
- */
-function surchargeForDisplayTier(
-  displayTier: { upToAcres: number | null },
-  persistedTiers: PricingRulesConfig["yardSizeTiers"]
-): number {
-  if (!persistedTiers.length) return 0;
-  // Exact boundary match
-  const exact = persistedTiers.find((t) => t.upToAcres === displayTier.upToAcres);
-  if (exact) return exact.surcharge;
-  // "Over" tier (null upToAcres) → use surcharge of the last persisted tier
-  if (displayTier.upToAcres === null) {
-    const sorted = [...persistedTiers].sort(
-      (a, b) => (a.upToAcres ?? Infinity) - (b.upToAcres ?? Infinity)
-    );
-    return sorted[sorted.length - 1]?.surcharge ?? 0;
-  }
-  // Bounded display tier with no exact match → find smallest persisted boundary
-  // that is >= the display tier's upper boundary (i.e., the persisted tier that
-  // covers this display tier's range)
-  const covering = persistedTiers
-    .filter((t) => t.upToAcres !== null && (t.upToAcres as number) >= displayTier.upToAcres!)
-    .sort((a, b) => (a.upToAcres as number) - (b.upToAcres as number));
-  return covering[0]?.surcharge ?? 0;
-}
+
 
 function computeSuggestedPrice(
   midpointAcres: number,
@@ -2393,8 +2361,8 @@ function PricingEngineTab() {
   const pricingRules: PricingRulesConfig = pricingConfigData?.pricingRules ?? DEFAULT_PRICING_RULES;
   const totalMonthlyOverheadDollars = (overheadTotal?.totalMonthlyOverheadCents ?? 0) / 100;
 
-  // Dynamic tiers derived from saved pricingRules (falls back to hardcoded YARD_SIZE_TIERS
-  // only when the account has never configured tiers).
+  // Dynamic tiers derived from saved pricingRules (falls back to DEFAULT_PRICING_RULES.yardSizeTiers
+  // when the account has never configured tiers).
   const activeTiers = toActiveTiers(pricingRules.yardSizeTiers);
 
   const [marginPct, setMarginPct] = useState(() => config.targetProfitMarginPct || 30);
@@ -2443,7 +2411,7 @@ function PricingEngineTab() {
   const [yardSizeSurcharges, setYardSizeSurcharges] = useState<number[]>(() =>
     pricingRules.yardSizeTiers.length > 0
       ? pricingRules.yardSizeTiers.map((t) => t.surcharge)
-      : YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, pricingRules.yardSizeTiers))
+      : DEFAULT_PRICING_RULES.yardSizeTiers.map((t) => t.surcharge)
   );
 
   const [isDirty, setIsDirty] = useState(false);
@@ -2475,13 +2443,11 @@ function PricingEngineTab() {
           (wMult > 0 ? w * ((cfg.oneTimeMultiplier || 3) / wMult) : w * 2.5),
       });
       setPerDogRule(rules.perDogRule ?? DEFAULT_PRICING_RULES.perDogRule);
-      if (rules.yardSizeTiers.length > 0) {
-        setYardSizeSurcharges(rules.yardSizeTiers.map((t) => t.surcharge));
-      } else {
-        setYardSizeSurcharges(
-          YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, rules.yardSizeTiers))
-        );
-      }
+      setYardSizeSurcharges(
+        rules.yardSizeTiers.length > 0
+          ? rules.yardSizeTiers.map((t) => t.surcharge)
+          : DEFAULT_PRICING_RULES.yardSizeTiers.map((t) => t.surcharge)
+      );
       setMarginPct(cfg.targetProfitMarginPct || 30);
     }
   }, [pricingConfigData]);
@@ -3002,7 +2968,7 @@ function MyPricingTab() {
   const [yardSizeSurcharges, setYardSizeSurcharges] = useState<number[]>(() =>
     pricingRules.yardSizeTiers.length > 0
       ? pricingRules.yardSizeTiers.map((t) => t.surcharge)
-      : YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, pricingRules.yardSizeTiers))
+      : DEFAULT_PRICING_RULES.yardSizeTiers.map((t) => t.surcharge)
   );
 
   const [perDogRule, setPerDogRule] = useState<PricingRulesConfig["perDogRule"]>(
@@ -3031,13 +2997,11 @@ function MyPricingTab() {
           (wMult > 0 ? w * ((cfg.oneTimeMultiplier || 3) / wMult) : w * 2.5),
       });
       setPerDogRule(rules.perDogRule ?? DEFAULT_PRICING_RULES.perDogRule);
-      if (rules.yardSizeTiers.length > 0) {
-        setYardSizeSurcharges(rules.yardSizeTiers.map((t) => t.surcharge));
-      } else {
-        setYardSizeSurcharges(
-          YARD_SIZE_TIERS.map((tier) => surchargeForDisplayTier(tier, rules.yardSizeTiers))
-        );
-      }
+      setYardSizeSurcharges(
+        rules.yardSizeTiers.length > 0
+          ? rules.yardSizeTiers.map((t) => t.surcharge)
+          : DEFAULT_PRICING_RULES.yardSizeTiers.map((t) => t.surcharge)
+      );
     }
   }, [pricingConfigData]);
 

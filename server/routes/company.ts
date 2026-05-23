@@ -382,7 +382,6 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "passStripeFees",
         "requireCardOnSignup",
         "widgetFieldConfig",
-        "yardSizeTierConfig",
         "newClientDepositEnabled",
         "newClientDepositType",
         "newClientDepositValue",

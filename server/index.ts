@@ -3195,6 +3195,67 @@ async function seedLakeErieScoopersAccount() {
   }
 }
 
+async function migrateYardSizeTiers() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    const { rows } = await pool.query<{
+      id: string;
+      yard_size_tier_config: Record<string, { label?: string; price?: number }> | null;
+      pricing_config: Record<string, any> | null;
+    }>(`
+      SELECT id, yard_size_tier_config, pricing_config
+      FROM companies
+      WHERE yard_size_tier_config IS NOT NULL
+        AND (
+          pricing_config IS NULL
+          OR pricing_config->'pricingRules' IS NULL
+          OR pricing_config->'pricingRules'->'yardSizeTiers' IS NULL
+          OR jsonb_array_length(pricing_config->'pricingRules'->'yardSizeTiers') = 0
+        )
+    `);
+    const DEFAULT_BOUNDARIES = [0.25, 0.5, 0.75, 1.0, 1.25];
+    let migrated = 0;
+    for (const row of rows) {
+      const config = row.yard_size_tier_config;
+      if (!config) continue;
+      const newTiers: Array<{ name: string; upToAcres: number | null; surcharge: number }> = [];
+      let boundIdx = 0;
+      for (let i = 1; i <= 6; i++) {
+        const entry = config[`tier${i}`];
+        if (!entry?.label?.trim()) continue;
+        newTiers.push({
+          name: entry.label.trim(),
+          upToAcres: boundIdx < DEFAULT_BOUNDARIES.length - 1 ? DEFAULT_BOUNDARIES[boundIdx++] : null,
+          surcharge: typeof entry.price === "number" ? entry.price : 0,
+        });
+      }
+      if (newTiers.length === 0) continue;
+      newTiers[newTiers.length - 1].upToAcres = null;
+      const existingConfig: Record<string, any> = row.pricing_config ?? {};
+      const existingRules: Record<string, any> = existingConfig.pricingRules ?? {};
+      const updated = {
+        ...existingConfig,
+        pricingRules: { ...existingRules, yardSizeTiers: newTiers },
+      };
+      await pool.query("UPDATE companies SET pricing_config = $1 WHERE id = $2", [
+        JSON.stringify(updated),
+        row.id,
+      ]);
+      migrated++;
+    }
+    if (migrated > 0) {
+      console.log(
+        `[Migration] Migrated yardSizeTierConfig → pricingRules.yardSizeTiers for ${migrated} companies`
+      );
+    }
+  } catch (err) {
+    console.error("[Migration] Failed to migrate yard size tiers:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 (async () => {
   await applyAdminCredentialMigration();
   await ensureCompanyColumns();
@@ -3228,6 +3289,7 @@ async function seedLakeErieScoopersAccount() {
   await ensureVoicePortingColumn();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
+  await migrateYardSizeTiers();
   await runStartupMigrations();
   setupSession(app);
   await registerRoutes(httpServer, app);
