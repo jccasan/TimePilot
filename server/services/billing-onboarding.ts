@@ -210,6 +210,7 @@ async function _createBalanceInvoice(
     );
     const dueUpdates: Parameters<typeof storage.updateInvoice>[2] = {
       isOnboardingInvoice: true,
+      status: "sent",
     };
     if (firstVisit) dueUpdates.dueDate = firstVisit;
     await storage.updateInvoice(result.invoiceId, companyId, dueUpdates);
@@ -334,9 +335,10 @@ export async function advanceBillingOnboarding(
           const firstVisit = await firstUpcomingVisitDate(companyId, sp.id, sp.startDate);
 
           if (netBalance > 0) {
-            // Partial deposit credit — real balance remains outstanding
+            // Partial deposit credit — real balance remains outstanding; mark as sent
             const dueUpdates: Parameters<typeof storage.updateInvoice>[2] = {
               isOnboardingInvoice: true,
+              status: "sent",
               subtotal: netBalance.toFixed(2),
               total: netBalance.toFixed(2),
               notes:
