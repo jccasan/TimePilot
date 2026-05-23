@@ -23,7 +23,7 @@ interface PublicInvoice {
 const TIP_OPTIONS = [1, 3, 5, 10];
 
 function getCurrencySymbol(currency: string): string {
-  const formatted = new Intl.NumberFormat("en", {
+  const formatted = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: currency.toUpperCase(),
     minimumFractionDigits: 0,

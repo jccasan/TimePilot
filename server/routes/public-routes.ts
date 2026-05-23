@@ -793,6 +793,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         tipAmount: tipAmount.toFixed(2),
         stripeConnectAccountId: connectAcct,
         tenantId: invoice.companyId,
+        currency: (company?.currency || "usd").toLowerCase(),
       });
       res.json(result);
     } catch (err) {
