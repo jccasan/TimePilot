@@ -7989,7 +7989,12 @@ export default function Settings() {
   const updateMutation = useMutation({
     mutationFn: async (data: CompanyFormValues) => {
       const currency = data.country === "ca" ? "cad" : "usd";
-      const res = await apiRequest("PATCH", "/api/company", { ...data, currency });
+      const res = await apiRequest("PATCH", "/api/company", {
+        ...data,
+        currency,
+        startLatitude: data.startLatitude || null,
+        startLongitude: data.startLongitude || null,
+      });
       return res.json();
     },
     onSuccess: () => {
