@@ -1,4 +1,4 @@
-import ical, { ICalCalendarMethod } from "ical-generator";
+import { ICalCalendar, ICalCalendarMethod } from "ical-generator";
 
 interface Company {
   id: string;
@@ -112,7 +112,7 @@ function getEventTimes(visit: CalendarVisit, timezone: string): EventTimes {
 }
 
 export function generateIcsForCompany(company: Company, visits: CalendarVisit[]): string {
-  const cal = ical({
+  const cal = new ICalCalendar({
     name: `${company.name} — Service Schedule`,
     timezone: company.timezone,
     method: ICalCalendarMethod.PUBLISH,
@@ -128,7 +128,7 @@ export function generateIcsForCompany(company: Company, visits: CalendarVisit[])
 }
 
 function generateSummaryEvents(
-  cal: ReturnType<typeof ical>,
+  cal: ICalCalendar,
   company: Company,
   visits: CalendarVisit[]
 ): void {
@@ -183,7 +183,7 @@ function generateSummaryEvents(
 }
 
 function generateDetailedEvents(
-  cal: ReturnType<typeof ical>,
+  cal: ICalCalendar,
   company: Company,
   visits: CalendarVisit[]
 ): void {
