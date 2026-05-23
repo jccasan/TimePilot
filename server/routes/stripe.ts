@@ -431,7 +431,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
       let accountId = company.stripeConnectAccountId;
 
       if (!accountId) {
-        accountId = await createConnectAccount(companyId, company.name, company.email || "");
+        accountId = await createConnectAccount(companyId, company.name, company.email || "", company.country ?? undefined);
         await storage.updateCompany(companyId, { stripeConnectAccountId: accountId });
       }
 

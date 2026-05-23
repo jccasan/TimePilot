@@ -480,11 +480,13 @@ export async function migrateCustomerToConnectedAccount(params: {
 export async function createConnectAccount(
   companyId: string,
   companyName: string,
-  email: string
+  email: string,
+  country?: string
 ): Promise<string> {
   const stripe = getStripe();
   const account = await stripe.accounts.create({
     type: "express",
+    ...(country ? { country: country.toUpperCase() } : {}),
     email,
     business_profile: {
       name: companyName,
