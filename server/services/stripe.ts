@@ -485,6 +485,7 @@ export async function createConnectAccount(
   const stripe = getStripe();
   const account = await stripe.accounts.create({
     type: "express",
+    country: "CA",
     email,
     business_profile: {
       name: companyName,
