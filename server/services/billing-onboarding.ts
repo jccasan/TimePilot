@@ -363,6 +363,7 @@ export async function advanceBillingOnboarding(
       let remainingCredit = depositPaid;
       // Track whether any balance invoice with a positive amount was created
       let anyOutstandingBalance = false;
+      const balanceInvoiceIds: string[] = [];
 
       for (const sp of unprorated) {
         const result = await generateProratedInvoiceForPlan(
@@ -395,6 +396,7 @@ export async function advanceBillingOnboarding(
             };
             if (firstVisit) dueUpdates.dueDate = firstVisit;
             await storage.updateInvoice(result.invoiceId, companyId, dueUpdates);
+            balanceInvoiceIds.push(result.invoiceId);
             anyOutstandingBalance = true;
           } else {
             // Deposit fully covers this invoice — auto-mark it paid, no client action needed
@@ -426,7 +428,7 @@ export async function advanceBillingOnboarding(
               creditApplied > 0 ? ` (deposit credit: -$${creditApplied.toFixed(2)})` : "";
             const label = `First month — ${sp.startDate} to ${eom}${depositNote}`;
 
-            await storage.createInvoiceWithLineItems(
+            const balanceInvoice = await storage.createInvoiceWithLineItems(
               {
                 companyId,
                 contactId: contact.id,
@@ -452,6 +454,7 @@ export async function advanceBillingOnboarding(
                 },
               ]
             );
+            balanceInvoiceIds.push(balanceInvoice.id);
             anyOutstandingBalance = true;
           }
           // Always mark proratedThrough so the nightly sweep doesn't double-bill
@@ -463,14 +466,48 @@ export async function advanceBillingOnboarding(
         await storage.updateContact(contact.id, companyId, {
           billingOnboardingStage: "balance_pending",
         });
-        storage
-          .createNotification({
-            companyId,
-            type: "general",
-            title: "Deposit Received",
-            message: `Deposit paid for ${contact.firstName} ${contact.lastName}. Balance invoice created — autopay will be armed on payment.`,
-            isRead: false,
-            linkUrl: `/contacts/${contact.id}`,
+
+        // Auto-send balance invoice(s) via email and optionally SMS (fire-and-forget)
+        const baseUrl = getAppBaseUrl();
+        Promise.all(
+          balanceInvoiceIds.map(async (balInvId) => {
+            try {
+              const emailResult = await sendInvoiceEmail(balInvId, companyId, { baseUrl });
+              if (contact.phone && emailResult.paymentUrl) {
+                try {
+                  const smsConfigured = await isSmsConfiguredForCompany(companyId);
+                  if (smsConfigured) {
+                    await sendSmsForCompany({
+                      to: contact.phone,
+                      body: `Hi ${contact.firstName}, your balance invoice is ready. Pay here: ${emailResult.paymentUrl}`,
+                      companyId,
+                      contactId: contact.id,
+                    });
+                  }
+                } catch (smsErr) {
+                  console.error("[billing-onboarding] balance invoice SMS error:", smsErr);
+                }
+              }
+              return emailResult;
+            } catch (err) {
+              console.error("[billing-onboarding] balance invoice email error:", err);
+              return { success: false };
+            }
+          })
+        )
+          .then((results) => {
+            const anySent = results.some((r) => r.success);
+            const sentNote = anySent ? " Balance invoice sent to client." : "";
+            storage
+              .createNotification({
+                companyId,
+                type: "general",
+                title: "Deposit Received",
+                message: `Deposit paid for ${contact.firstName} ${contact.lastName}. Balance invoice created — autopay will be armed on payment.${sentNote}`,
+                isRead: false,
+                linkUrl: `/contacts/${contact.id}`,
+              })
+              .catch(console.error);
           })
           .catch(console.error);
       } else {
