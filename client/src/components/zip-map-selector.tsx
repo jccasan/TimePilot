@@ -267,12 +267,43 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
     return initial;
   });
   const [loading, setLoading] = useState(false);
+  const [textInput, setTextInput] = useState("");
+  const [inputError, setInputError] = useState<string | null>(null);
 
   function syncSelected(next: Set<string>) {
     selectedRef.current = next;
     const arr = Array.from(next).sort();
     setSelectedZips(arr);
     onChange(arr.join(","));
+  }
+
+  function handleTextAdd() {
+    const raw = textInput.trim();
+    if (!raw) return;
+    const tokens = raw
+      .split(",")
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
+    const invalid: string[] = [];
+    const toAdd: string[] = [];
+    for (const token of tokens) {
+      if (isZip(token) || isFSA(token)) {
+        toAdd.push(token);
+      } else {
+        invalid.push(token);
+      }
+    }
+    if (invalid.length > 0) {
+      setInputError(
+        `Invalid ${invalid.length === 1 ? "code" : "codes"}: ${invalid.join(", ")}. Use 5-digit ZIP (e.g. 90210) or 3-character FSA (e.g. M5V).`
+      );
+      return;
+    }
+    setInputError(null);
+    const next = new Set(selectedRef.current);
+    toAdd.forEach((code) => next.add(code));
+    syncSelected(next);
+    setTextInput("");
   }
 
   useEffect(() => {
@@ -457,6 +488,41 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
       <p className="text-xs text-muted-foreground">
         Click {postalAreaLabel} to select your service territory. Zoom in for more detail.
       </p>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={textInput}
+          onChange={(e) => {
+            setTextInput(e.target.value);
+            if (inputError) setInputError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleTextAdd();
+            }
+          }}
+          placeholder={
+            isCanada ? "Type FSA codes, e.g. M5V, K1A" : "Type ZIP codes, e.g. 90210, 10001"
+          }
+          className="flex-1 h-8 rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          data-testid="input-postal-codes"
+        />
+        <button
+          type="button"
+          onClick={handleTextAdd}
+          className="h-8 px-3 rounded-md bg-green-700 text-white text-sm font-medium hover:bg-green-800 disabled:opacity-50 shrink-0"
+          disabled={!textInput.trim()}
+          data-testid="button-add-postal-codes"
+        >
+          Add
+        </button>
+      </div>
+      {inputError && (
+        <p className="text-xs text-destructive" data-testid="text-postal-error">
+          {inputError}
+        </p>
+      )}
       {selectedZips.length > 0 ? (
         <div className="flex items-center justify-between gap-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-md px-3 py-2">
           <div className="text-sm">
