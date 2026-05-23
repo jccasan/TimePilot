@@ -100,7 +100,25 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, _t
       );
 
       const activeSpIds = new Set(contactJobs.map((j) => j.servicePlanId).filter(Boolean));
-      const uninvoicedVisits = allUninvoicedVisits.filter((v) => activeSpIds.has(v.servicePlanId));
+
+      // Load proratedThrough for each active service plan so we can exclude visits
+      // that fall within a plan's prorated first-month window. Visits in that window
+      // are already covered by the flat prorated invoice and must not be billed again.
+      const activePlanIds = Array.from(activeSpIds).filter(Boolean) as string[];
+      const planProratedMap = new Map<string, string | null>();
+      if (activePlanIds.length > 0) {
+        const plans = await storage.getServicePlans(companyId, { contactId });
+        for (const sp of plans) {
+          planProratedMap.set(sp.id, sp.proratedThrough ?? null);
+        }
+      }
+
+      const uninvoicedVisits = allUninvoicedVisits.filter((v) => {
+        if (!activeSpIds.has(v.servicePlanId)) return false;
+        const proratedThrough = planProratedMap.get(v.servicePlanId ?? "");
+        if (proratedThrough && v.scheduledDate <= proratedThrough) return false;
+        return true;
+      });
 
       if (uninvoicedVisits.length === 0) continue;
 
@@ -235,6 +253,12 @@ export async function generateProratedInvoiceForPlan(
   planFrequency: string,
   pricePerVisit: string
 ): Promise<{ invoiceId: string; amount: number; label: string } | null> {
+  // Idempotency guard: if proratedThrough is already set on the plan, a prorated
+  // invoice was already issued — do not create a second one.
+  const allPlansForContact = await storage.getServicePlans(companyId, { contactId });
+  const matchingPlan = allPlansForContact.find((sp) => sp.id === servicePlanId);
+  if (matchingPlan?.proratedThrough) return null;
+
   const contact = await storage.getContact(contactId, companyId);
   if (!contact) return null;
   if ((contact.invoiceFrequency || "per_service") !== "per_month") return null;
