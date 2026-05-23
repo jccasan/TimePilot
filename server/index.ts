@@ -499,6 +499,10 @@ async function ensureCompanyColumns() {
       ALTER TABLE properties ADD COLUMN IF NOT EXISTS dog_breeds TEXT;
     `);
     console.log("[Migration] Property onboarding columns verified");
+    await pool.query(
+      `ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS prorated_through DATE`
+    );
+    console.log("[Migration] service_plans.prorated_through column verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure company columns:", err);
   } finally {

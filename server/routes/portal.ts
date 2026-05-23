@@ -13,6 +13,7 @@ import {
   type InvoiceLineItem,
 } from "@shared/schema";
 import { sendEmail } from "../services/email";
+import { generateProratedInvoiceForPlan } from "../jobs/auto-invoice";
 import {
   isStripeConfigured,
   getCustomerPaymentMethods,
@@ -1346,6 +1347,19 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           }
         } catch (notifyErr) {
           console.error("[portal/accept] Failed to send notification:", notifyErr);
+        }
+
+        try {
+          await generateProratedInvoiceForPlan(
+            companyId,
+            createdServicePlan.id,
+            createdServicePlan.contactId,
+            createdServicePlan.startDate,
+            createdServicePlan.frequency,
+            createdServicePlan.pricePerVisit
+          );
+        } catch (prorationErr) {
+          console.error("[portal/accept] Failed to generate prorated invoice:", prorationErr);
         }
       }
 

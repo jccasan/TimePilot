@@ -727,6 +727,7 @@ export const servicePlans = pgTable(
     }),
     estimateId: varchar("estimate_id").references(() => estimates.id, { onDelete: "set null" }),
     isStopOnly: boolean("is_stop_only").notNull().default(false),
+    proratedThrough: date("prorated_through"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
