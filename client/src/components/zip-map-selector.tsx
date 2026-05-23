@@ -288,7 +288,9 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
     const invalid: string[] = [];
     const toAdd: string[] = [];
     for (const token of tokens) {
-      if (isZip(token) || isFSA(token)) {
+      if (isCanadianPostal(token)) {
+        toAdd.push(token.slice(0, 3));
+      } else if (isZip(token) || isFSA(token)) {
         toAdd.push(token);
       } else {
         invalid.push(token);
@@ -296,7 +298,7 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
     }
     if (invalid.length > 0) {
       setInputError(
-        `Invalid ${invalid.length === 1 ? "code" : "codes"}: ${invalid.join(", ")}. Use 5-digit ZIP (e.g. 90210) or 3-character FSA (e.g. M5V).`
+        `Invalid ${invalid.length === 1 ? "code" : "codes"}: ${invalid.join(", ")}. Use 5-digit ZIP (e.g. 90210), 3-character FSA (e.g. M5V), or full Canadian postal code (e.g. M5V 3A8).`
       );
       return;
     }
