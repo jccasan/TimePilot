@@ -291,7 +291,9 @@ function CompanyProfileStep({
       name: profileDraft.name ?? companyData.name ?? "",
       email: profileDraft.email ?? companyData.email ?? "",
       phone: profileDraft.phone ?? companyData.phone ?? "",
-      country: (profileDraft.country ?? (companyData as { country?: string }).country ?? "us") as "us" | "ca",
+      country: (profileDraft.country ?? (companyData as { country?: string }).country ?? "us") as
+        | "us"
+        | "ca",
       address: profileDraft.address ?? companyData.address ?? "",
       websiteUrl: profileDraft.websiteUrl ?? companyData.websiteUrl ?? "",
       timezone:
