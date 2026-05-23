@@ -60,15 +60,37 @@ async function firstUpcomingVisitDate(
 }
 
 /**
+ * Reduce an onboarding invoice's total by the deposit already collected.
+ * Updates subtotal and total in-place; appends a credit note.
+ * No-op if depositCredit <= 0.
+ */
+async function applyDepositCredit(
+  invoiceId: string,
+  companyId: string,
+  depositCredit: number,
+  originalAmount: number
+): Promise<void> {
+  if (depositCredit <= 0) return;
+  const credited = Math.min(depositCredit, originalAmount);
+  const newTotal = Math.max(0, originalAmount - credited);
+  await storage.updateInvoice(invoiceId, companyId, {
+    subtotal: newTotal.toFixed(2),
+    total: newTotal.toFixed(2),
+    notes: `Deposit credit applied: -$${credited.toFixed(2)}`,
+  });
+}
+
+/**
  * Call this immediately after a service plan is created from quote acceptance
  * (both portal and staff CRM paths).
  *
  * For per_month contacts with company deposit enabled:
  *   - Creates a deposit invoice (status=sent) and sets stage to deposit_pending.
- *   - The prorated balance invoice is deferred until the deposit is paid.
+ *   - The balance invoice is deferred until the deposit is paid.
  *
  * For per_month contacts with deposit disabled:
  *   - Creates the prorated balance invoice immediately and sets stage to balance_pending.
+ *   - Day-1 starts get a full first-month invoice instead of skipping balance collection.
  *
  * For non-monthly contacts: falls back to creating the prorated invoice via the
  * existing utility (which is a no-op for non-monthly cadences).
@@ -102,9 +124,10 @@ export async function startBillingOnboardingSequence(
       return;
     }
 
-    // Already in onboarding — do not restart the sequence
+    // Only trigger for genuinely new clients (stage = none).
+    // active_autopay, deposit_pending, and balance_pending contacts must not re-enter.
     const existingStage = contact.billingOnboardingStage ?? "none";
-    if (existingStage !== "none" && existingStage !== "active_autopay") return;
+    if (existingStage !== "none") return;
 
     const company = await storage.getCompany(companyId);
     if (!company) return;
@@ -119,12 +142,11 @@ export async function startBillingOnboardingSequence(
 
       if (depositAmt <= 0) {
         // Deposit configured but results in $0 — fall through to balance-only path
-        await _createBalanceInvoice(contactId, companyId, servicePlan);
+        await _createBalanceInvoice(contactId, companyId, servicePlan, 0);
         return;
       }
 
       const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
-      // Deposit due in 7 days from plan start, or plan start date, whichever is sooner
       const dueDate = new Date(servicePlan.startDate);
       dueDate.setDate(dueDate.getDate() + 7);
       const dueDateStr = dueDate.toISOString().split("T")[0];
@@ -174,19 +196,27 @@ export async function startBillingOnboardingSequence(
         })
         .catch(console.error);
     } else {
-      // No deposit — create prorated balance invoice immediately
-      await _createBalanceInvoice(contactId, companyId, servicePlan);
+      // No deposit — create prorated balance invoice immediately (no deposit credit)
+      await _createBalanceInvoice(contactId, companyId, servicePlan, 0);
     }
   } catch (err) {
     console.error("[billing-onboarding] startBillingOnboardingSequence error:", err);
   }
 }
 
+/**
+ * Create the onboarding balance invoice for a service plan.
+ * Handles both mid-month starts (prorated) and day-1 starts (full first month).
+ * depositCredit: amount already collected as deposit, deducted from the balance total.
+ */
 async function _createBalanceInvoice(
   contactId: string,
   companyId: string,
-  servicePlan: { id: string; startDate: string; frequency: string; pricePerVisit: string }
+  servicePlan: { id: string; startDate: string; frequency: string; pricePerVisit: string },
+  depositCredit: number
 ): Promise<void> {
+  const contact = await storage.getContact(contactId, companyId);
+
   const result = await generateProratedInvoiceForPlan(
     companyId,
     servicePlan.id,
@@ -196,10 +226,8 @@ async function _createBalanceInvoice(
     servicePlan.pricePerVisit
   );
 
-  const contact = await storage.getContact(contactId, companyId);
-
   if (result) {
-    // Set due date to first scheduled visit date so payment is collected before service starts
+    // Mid-month start — prorated invoice created. Apply deposit credit and set due date.
     const firstVisit = await firstUpcomingVisitDate(
       companyId,
       servicePlan.id,
@@ -212,23 +240,28 @@ async function _createBalanceInvoice(
       dueUpdates.dueDate = firstVisit;
     }
     await storage.updateInvoice(result.invoiceId, companyId, dueUpdates);
+    if (depositCredit > 0) {
+      await applyDepositCredit(result.invoiceId, companyId, depositCredit, result.amount);
+    }
     await storage.updateContact(contactId, companyId, {
       billingOnboardingStage: "balance_pending",
     });
+    const displayAmt = Math.max(0, result.amount - depositCredit);
     storage
       .createNotification({
         companyId,
         type: "general",
         title: "Client Onboarding — Balance Due",
-        message: `Prorated balance invoice for $${result.amount.toFixed(2)} created for ${contact?.firstName ?? ""} ${contact?.lastName ?? ""}. Autopay will be armed on payment.`,
+        message: `Balance invoice for $${displayAmt.toFixed(2)} created for ${contact?.firstName ?? ""} ${contact?.lastName ?? ""}. Autopay will be armed on payment.`,
         isRead: false,
         linkUrl: `/invoices`,
       })
       .catch(console.error);
   } else if (!isProratable(servicePlan.startDate, "per_month")) {
-    // Plan starts on the 1st — no partial-month proration, but we still owe a full first month.
-    // Create a full first-month invoice so the client pays before autopay is armed.
+    // Day-1 start — no partial-month proration, but first full month must still be paid.
+    // Net amount = monthly rate minus any deposit credit already collected.
     const monthlyRate = monthlyRateForPlan(servicePlan.pricePerVisit, servicePlan.frequency);
+    const netAmt = Math.max(0, monthlyRate - depositCredit);
     if (monthlyRate > 0) {
       const invoiceNumber = await storage.getNextInvoiceNumber(companyId);
       const eom = endOfMonth(servicePlan.startDate);
@@ -238,17 +271,21 @@ async function _createBalanceInvoice(
         servicePlan.startDate
       );
       const dueDate = firstVisit ?? eom;
-      const label = `First month — ${servicePlan.startDate} to ${eom}`;
+      const depositNote =
+        depositCredit > 0
+          ? ` (deposit credit: -$${Math.min(depositCredit, monthlyRate).toFixed(2)})`
+          : "";
+      const label = `First month — ${servicePlan.startDate} to ${eom}${depositNote}`;
 
-      const inv = await storage.createInvoiceWithLineItems(
+      await storage.createInvoiceWithLineItems(
         {
           companyId,
           contactId,
           invoiceNumber,
           dueDate,
-          subtotal: monthlyRate.toFixed(2),
+          subtotal: netAmt.toFixed(2),
           tax: "0",
-          total: monthlyRate.toFixed(2),
+          total: netAmt.toFixed(2),
           status: "sent",
           autoGenerated: true,
           source: "prorated",
@@ -260,14 +297,14 @@ async function _createBalanceInvoice(
           {
             description: label,
             quantity: 1,
-            unitPrice: monthlyRate.toFixed(2),
-            total: monthlyRate.toFixed(2),
+            unitPrice: netAmt.toFixed(2),
+            total: netAmt.toFixed(2),
             visitId: null,
           },
         ]
       );
 
-      // Mark the plan's proratedThrough so the nightly sweep does not double-bill this month
+      // Mark proratedThrough so the nightly sweep does not double-bill this month
       await storage.updateServicePlan(servicePlan.id, companyId, { proratedThrough: eom });
 
       await storage.updateContact(contactId, companyId, {
@@ -278,7 +315,7 @@ async function _createBalanceInvoice(
           companyId,
           type: "general",
           title: "Client Onboarding — First Month Due",
-          message: `First-month invoice (#${inv.invoiceNumber}) for $${monthlyRate.toFixed(2)} created for ${contact?.firstName ?? ""} ${contact?.lastName ?? ""}. Autopay will be armed on payment.`,
+          message: `First-month invoice (#${invoiceNumber}) for $${netAmt.toFixed(2)} created for ${contact?.firstName ?? ""} ${contact?.lastName ?? ""}. Autopay will be armed on payment.`,
           isRead: false,
           linkUrl: `/invoices`,
         })
@@ -306,15 +343,17 @@ export async function advanceBillingOnboarding(
     const stage = contact.billingOnboardingStage ?? "none";
 
     if (stage === "deposit_pending" && contact.depositInvoiceId === invoiceId) {
-      // Deposit paid — create the prorated balance invoice now
-      await storage.updateContact(contact.id, companyId, {
-        depositPaidAt: new Date(),
-      });
+      // Deposit paid — record payment date and create balance invoice(s) with deposit credit.
+      await storage.updateContact(contact.id, companyId, { depositPaidAt: new Date() });
 
+      const depositPaid = parseFloat(contact.depositAmount ?? "0");
       const plans = await storage.getServicePlans(companyId, { contactId: contact.id });
       const unprorated = plans.filter((sp) => sp.isActive && !sp.proratedThrough);
 
+      // Distribute deposit credit across plans proportionally (simple: apply to first plan)
+      let remainingCredit = depositPaid;
       let balanceCreated = false;
+
       for (const sp of unprorated) {
         const result = await generateProratedInvoiceForPlan(
           companyId,
@@ -324,22 +363,44 @@ export async function advanceBillingOnboarding(
           sp.frequency,
           sp.pricePerVisit
         );
+
         if (result) {
-          // Set due date to first scheduled visit so payment is before service
+          // Set due date to first scheduled visit
           const firstVisit = await firstUpcomingVisitDate(companyId, sp.id, sp.startDate);
           const dueUpdates: Parameters<typeof storage.updateInvoice>[2] = {
             isOnboardingInvoice: true,
           };
-          if (firstVisit) {
-            dueUpdates.dueDate = firstVisit;
-          }
+          if (firstVisit) dueUpdates.dueDate = firstVisit;
           await storage.updateInvoice(result.invoiceId, companyId, dueUpdates);
+
+          // Apply deposit credit (consume credit against this plan's balance)
+          if (remainingCredit > 0) {
+            const creditApplied = Math.min(remainingCredit, result.amount);
+            await applyDepositCredit(result.invoiceId, companyId, creditApplied, result.amount);
+            remainingCredit -= creditApplied;
+          }
+
+          balanceCreated = true;
+        } else if (!isProratable(sp.startDate, "per_month")) {
+          // Day-1 start: create a full first-month invoice minus any remaining deposit credit
+          await _createBalanceInvoice(
+            contact.id,
+            companyId,
+            {
+              id: sp.id,
+              startDate: sp.startDate,
+              frequency: sp.frequency,
+              pricePerVisit: sp.pricePerVisit,
+            },
+            remainingCredit
+          );
+          const monthlyRate = monthlyRateForPlan(sp.pricePerVisit, sp.frequency);
+          remainingCredit = Math.max(0, remainingCredit - monthlyRate);
           balanceCreated = true;
         }
       }
 
       if (balanceCreated) {
-        // Balance invoice created — wait for it to be paid before arming autopay
         await storage.updateContact(contact.id, companyId, {
           billingOnboardingStage: "balance_pending",
         });
@@ -348,13 +409,13 @@ export async function advanceBillingOnboarding(
             companyId,
             type: "general",
             title: "Deposit Received",
-            message: `Deposit paid for ${contact.firstName} ${contact.lastName}. Prorated balance invoice created — autopay will be armed on payment.`,
+            message: `Deposit paid for ${contact.firstName} ${contact.lastName}. Balance invoice created — autopay will be armed on payment.`,
             isRead: false,
             linkUrl: `/contacts/${contact.id}`,
           })
           .catch(console.error);
       } else {
-        // No proratable balance (e.g. plan starts on day 1 of month) — arm autopay immediately
+        // No balance needed (deposit >= full month, or zero-rate plan) — arm autopay
         await storage.updateContact(contact.id, companyId, {
           autoPayEnabled: true,
           invoiceFrequency: "per_month",
@@ -365,14 +426,14 @@ export async function advanceBillingOnboarding(
             companyId,
             type: "general",
             title: "Autopay Armed",
-            message: `${contact.firstName} ${contact.lastName} deposit received. No prorated balance due — monthly autopay is now active.`,
+            message: `${contact.firstName} ${contact.lastName} deposit received. No balance due — monthly autopay is now active.`,
             isRead: false,
             linkUrl: `/contacts/${contact.id}`,
           })
           .catch(console.error);
       }
     } else if (stage === "balance_pending" && contact.depositInvoiceId !== invoiceId) {
-      // Balance invoice paid — check that ALL onboarding balance invoices are now paid
+      // Balance invoice paid — verify ALL onboarding balance invoices are paid
       // before arming autopay (handles multi-plan contacts).
       const contactInvoices = await storage.getInvoices(companyId, { contactId: contact.id });
       const unpaidBalance = contactInvoices.filter(
@@ -381,7 +442,7 @@ export async function advanceBillingOnboarding(
       );
 
       if (unpaidBalance.length > 0) {
-        // Still outstanding onboarding balance invoices — wait for all to be paid
+        // Still outstanding — wait for all to be paid
         return;
       }
 
