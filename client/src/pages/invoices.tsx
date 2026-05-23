@@ -2870,10 +2870,9 @@ export default function Invoices() {
             Charge Autopay
             {autopayEligibleInvoices.length > 0 && (
               <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0 h-4">
-                $
-                {autopayEligibleInvoices
-                  .reduce((s, inv) => s + Number(inv.total), 0)
-                  .toLocaleString("en-US", { maximumFractionDigits: 0 })}{" "}
+                {formatMoney(
+                  Math.round(autopayEligibleInvoices.reduce((s, inv) => s + Number(inv.total), 0))
+                ).replace(/\.\d+$/, "")}{" "}
                 · {autopayEligibleInvoices.length}
               </Badge>
             )}
@@ -4376,14 +4375,14 @@ export default function Invoices() {
                       <tr style={{ borderBottom: `1px solid ${editTheme.borderColor}` }}>
                         <td className="py-1">Weekly Yard Cleanup</td>
                         <td className="text-right py-1">4</td>
-                        <td className="text-right py-1">$35.00</td>
-                        <td className="text-right py-1">$140.00</td>
+                        <td className="text-right py-1">{formatMoney(35)}</td>
+                        <td className="text-right py-1">{formatMoney(140)}</td>
                       </tr>
                       <tr style={{ borderBottom: `1px solid ${editTheme.borderColor}` }}>
                         <td className="py-1">Initial Deep Clean</td>
                         <td className="text-right py-1">1</td>
-                        <td className="text-right py-1">$75.00</td>
-                        <td className="text-right py-1">$75.00</td>
+                        <td className="text-right py-1">{formatMoney(75)}</td>
+                        <td className="text-right py-1">{formatMoney(75)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -4396,10 +4395,10 @@ export default function Invoices() {
                     }}
                   >
                     <p style={{ color: editTheme.mutedColor }} className="text-xs">
-                      Subtotal: $215.00
+                      Subtotal: {formatMoney(215)}
                     </p>
                     <p className="font-bold" style={{ color: editTheme.accentColor }}>
-                      Total: $215.00
+                      Total: {formatMoney(215)}
                     </p>
                   </div>
                 </div>
