@@ -189,6 +189,8 @@ async function _createBalanceInvoice(
     servicePlan.pricePerVisit
   );
 
+  const contact = await storage.getContact(contactId, companyId);
+
   if (result) {
     // Set due date to first scheduled visit date so payment is collected before service starts
     const firstVisit = await firstUpcomingVisitDate(
@@ -206,8 +208,6 @@ async function _createBalanceInvoice(
     await storage.updateContact(contactId, companyId, {
       billingOnboardingStage: "balance_pending",
     });
-
-    const contact = await storage.getContact(contactId, companyId);
     storage
       .createNotification({
         companyId,
@@ -216,6 +216,23 @@ async function _createBalanceInvoice(
         message: `Prorated balance invoice for $${result.amount.toFixed(2)} created for ${contact?.firstName ?? ""} ${contact?.lastName ?? ""}. Autopay will be armed on payment.`,
         isRead: false,
         linkUrl: `/invoices`,
+      })
+      .catch(console.error);
+  } else {
+    // No proratable balance (e.g. plan starts on day 1 of month) — arm autopay immediately
+    await storage.updateContact(contactId, companyId, {
+      autoPayEnabled: true,
+      invoiceFrequency: "per_month",
+      billingOnboardingStage: "active_autopay",
+    });
+    storage
+      .createNotification({
+        companyId,
+        type: "general",
+        title: "Autopay Armed",
+        message: `${contact?.firstName ?? ""} ${contact?.lastName ?? ""} — no prorated balance due. Monthly autopay is now active.`,
+        isRead: false,
+        linkUrl: `/contacts/${contactId}`,
       })
       .catch(console.error);
   }
@@ -305,8 +322,8 @@ export async function advanceBillingOnboarding(
           })
           .catch(console.error);
       }
-    } else if (stage === "balance_pending") {
-      // Balance paid — arm autopay and mark onboarding complete
+    } else if (stage === "balance_pending" && contact.depositInvoiceId !== invoiceId) {
+      // Balance invoice paid (guard: must not be the deposit invoice itself) — arm autopay
       await storage.updateContact(contact.id, companyId, {
         autoPayEnabled: true,
         invoiceFrequency: "per_month",

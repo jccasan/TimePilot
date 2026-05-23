@@ -4111,6 +4111,22 @@ const ONBOARDING_STAGE_CONFIG: Record<
 
 function BillingOnboardingStage({ contact }: { contact: Contact }) {
   const stage = contact.billingOnboardingStage ?? "none";
+  const [, navigate] = useLocation();
+
+  const { data: allInvoices = [] } = useQuery<Invoice[]>({
+    queryKey: ["/api/invoices", "contact", contact.id],
+    queryFn: async () => {
+      const headers: Record<string, string> = {};
+      const res = await fetch(`/api/invoices?contactId=${contact.id}`, {
+        credentials: "include",
+        headers,
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: stage !== "none" && stage !== "",
+  });
+
   if (stage === "none" || stage === "") return null;
 
   const config = ONBOARDING_STAGE_CONFIG[stage];
@@ -4118,6 +4134,13 @@ function BillingOnboardingStage({ contact }: { contact: Contact }) {
 
   const steps = ["deposit_pending", "balance_pending", "active_autopay"];
   const currentIdx = steps.indexOf(stage);
+
+  const depositInvoice = contact.depositInvoiceId
+    ? allInvoices.find((inv) => inv.id === contact.depositInvoiceId)
+    : null;
+  const balanceInvoices = allInvoices.filter(
+    (inv) => inv.isOnboardingInvoice && inv.source !== "onboarding_deposit"
+  );
 
   return (
     <div
@@ -4140,6 +4163,40 @@ function BillingOnboardingStage({ contact }: { contact: Contact }) {
           />
         ))}
       </div>
+      {(depositInvoice || balanceInvoices.length > 0) && (
+        <div className="pt-1 space-y-1">
+          {depositInvoice && (
+            <button
+              className="flex items-center justify-between w-full text-xs rounded px-2 py-1 bg-background border hover:bg-muted/50 transition-colors"
+              onClick={() => navigate(`/invoices?selected=${depositInvoice.id}`)}
+              data-testid={`link-onboarding-deposit-invoice-${depositInvoice.id}`}
+            >
+              <span className="text-muted-foreground">Deposit #{depositInvoice.invoiceNumber}</span>
+              <span
+                className={`font-medium ${depositInvoice.status === "paid" ? "text-green-600" : "text-foreground"}`}
+              >
+                ${parseFloat(depositInvoice.total).toFixed(2)}{" "}
+                <span className="capitalize">{depositInvoice.status}</span>
+              </span>
+            </button>
+          )}
+          {balanceInvoices.map((inv) => (
+            <button
+              key={inv.id}
+              className="flex items-center justify-between w-full text-xs rounded px-2 py-1 bg-background border hover:bg-muted/50 transition-colors"
+              onClick={() => navigate(`/invoices?selected=${inv.id}`)}
+              data-testid={`link-onboarding-balance-invoice-${inv.id}`}
+            >
+              <span className="text-muted-foreground">Balance #{inv.invoiceNumber}</span>
+              <span
+                className={`font-medium ${inv.status === "paid" ? "text-green-600" : "text-foreground"}`}
+              >
+                ${parseFloat(inv.total).toFixed(2)} <span className="capitalize">{inv.status}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
