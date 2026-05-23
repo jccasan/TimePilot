@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useRoute } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { formatMoneyForCurrency } from "@/hooks/use-currency";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,6 +122,7 @@ type CompanyInfo = {
   lrPricingTiers: LrPricingTier[] | null;
   pricingRules: { yardSizeTiers: PricingRulesYardTier[] } | null;
   country?: string;
+  currency?: string;
 };
 
 type QuoteResult = {
@@ -197,7 +199,7 @@ const LAST_CLEANUP_OPTIONS = [
   { value: "never", label: "Never / Not sure", multiplier: 3.0 },
 ];
 
-function parsePricingData(pricing: PricingItem[]) {
+function parsePricingData(pricing: PricingItem[], currencySymbol = "$") {
   const recurring = pricing.filter((p) => p.category === "recurring_service");
   const addons = pricing.filter((p) => p.category === "add_on");
 
@@ -264,7 +266,7 @@ function parsePricingData(pricing: PricingItem[]) {
         tiers.push({
           label:
             surcharge > 0
-              ? `${first.dogCount}-${second.dogCount} dogs (+$${(surcharge / 100).toFixed(0)})`
+              ? `${first.dogCount}-${second.dogCount} dogs (+${currencySymbol}${(surcharge / 100).toFixed(0)})`
               : `${first.dogCount}-${second.dogCount} dogs (Base Price)`,
           value: String(first.dogCount),
           dogCount: first.dogCount,
@@ -276,7 +278,7 @@ function parsePricingData(pricing: PricingItem[]) {
         tiers.push({
           label:
             surcharge > 0
-              ? `${first.dogCount} dog${first.dogCount > 1 ? "s" : ""} (+$${(surcharge / 100).toFixed(0)})`
+              ? `${first.dogCount} dog${first.dogCount > 1 ? "s" : ""} (+${currencySymbol}${(surcharge / 100).toFixed(0)})`
               : `${first.dogCount} dog${first.dogCount > 1 ? "s" : ""} (Base Price)`,
           value: String(first.dogCount),
           dogCount: first.dogCount,
@@ -293,7 +295,7 @@ function parsePricingData(pricing: PricingItem[]) {
         label: plus.callForQuote
           ? `${plus.dogCount}+ dogs (Call for Quote)`
           : surcharge > 0
-            ? `${plus.dogCount}+ dogs (+$${(surcharge / 100).toFixed(0)})`
+            ? `${plus.dogCount}+ dogs (+${currencySymbol}${(surcharge / 100).toFixed(0)})`
             : `${plus.dogCount}+ dogs`,
         value: String(plus.dogCount),
         dogCount: plus.dogCount,
@@ -320,7 +322,10 @@ function parsePricingData(pricing: PricingItem[]) {
     const acreMatch = item.name.match(/([\d.]+)\s*acre/i);
     const acre = acreMatch ? parseFloat(acreMatch[1]) : 0;
     lotAddons.push({
-      label: price > 0 ? `${item.name} (+$${price.toFixed(0)}/visit)` : `${item.name} (Base price)`,
+      label:
+        price > 0
+          ? `${item.name} (+${currencySymbol}${price.toFixed(0)}/visit)`
+          : `${item.name} (Base price)`,
       value: String(acre || item.sortOrder),
       surcharge: Math.round(price * 100),
       callForQuote: false,
@@ -744,8 +749,9 @@ export default function SignupWidget() {
 
   const parsed = useMemo(() => {
     if (!company?.pricing) return null;
-    return parsePricingData(company.pricing);
-  }, [company?.pricing]);
+    const sym = (company?.currency || "usd").toLowerCase() === "cad" ? "CA$" : "$";
+    return parsePricingData(company.pricing, sym);
+  }, [company?.pricing, company?.currency]);
 
   const hasPricing = !!(parsed && parsed.availableFreqs.length > 0);
 
@@ -793,6 +799,8 @@ export default function SignupWidget() {
   }, [livePrice, lastCleanup, quoteResult]);
 
   const isCanadian = (company?.country || "us").toLowerCase() === "ca";
+  const currency = (company?.currency || "usd").toLowerCase();
+  const currencySymbol = currency === "cad" ? "CA$" : "$";
 
   const normalizeZipForApi = (raw: string): string => {
     if (isCanadian) {
@@ -1114,7 +1122,6 @@ export default function SignupWidget() {
 
   if (quoteResult) {
     const isCallForQuote = quoteResult.quote.callForQuote;
-    const priceDollars = (quoteResult.quote.recommendedPriceCents / 100).toFixed(2);
     const freqLabel = selectedFreq ? FREQ_DISPLAY[selectedFreq] || selectedFreq : "visit";
 
     return (
@@ -1185,7 +1192,10 @@ export default function SignupWidget() {
                       style={{ color: brandStyles.accentText }}
                       data-testid="text-quote-price"
                     >
-                      ${priceDollars}
+                      {formatMoneyForCurrency(
+                        quoteResult.quote.recommendedPriceCents / 100,
+                        currency
+                      )}
                     </div>
                     <p className="text-muted-foreground" data-testid="text-quote-frequency">
                       per cleanup visit
@@ -1206,8 +1216,8 @@ export default function SignupWidget() {
                     Initial Cleanup Estimate
                   </p>
                   <p className="text-lg font-bold">
-                    ${(initialCleanupRange.low / 100).toFixed(2)} - $
-                    {(initialCleanupRange.high / 100).toFixed(2)}
+                    {formatMoneyForCurrency(initialCleanupRange.low / 100, currency)} -{" "}
+                    {formatMoneyForCurrency(initialCleanupRange.high / 100, currency)}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Based on time since last cleanup
@@ -1726,13 +1736,13 @@ export default function SignupWidget() {
                                 if (matchedItem) {
                                   priceLabel = matchedItem.callForQuote
                                     ? "Call for Quote"
-                                    : `$${(matchedItem.price / 100).toFixed(2)}/visit`;
+                                    : `${currencySymbol}${(matchedItem.price / 100).toFixed(2)}/visit`;
                                 }
                               }
                               if (!priceLabel) {
                                 const baseItem = items.find((i) => !i.callForQuote);
                                 priceLabel = baseItem
-                                  ? `from $${(baseItem.price / 100).toFixed(2)}/visit`
+                                  ? `from ${currencySymbol}${(baseItem.price / 100).toFixed(2)}/visit`
                                   : "";
                               }
                               return (
@@ -1798,7 +1808,9 @@ export default function SignupWidget() {
                               <span className="text-sm flex-1">{tier.label}</span>
                               {tier.price > 0 && (
                                 <span className="text-sm text-muted-foreground ml-2">
-                                  {tier.isAddon ? "+" : ""}${tier.price.toFixed(0)}
+                                  {tier.isAddon ? "+" : ""}
+                                  {currencySymbol}
+                                  {tier.price.toFixed(0)}
                                 </span>
                               )}
                             </RadioOption>
@@ -1926,7 +1938,7 @@ export default function SignupWidget() {
                             style={{ color: brandStyles.accentText }}
                             data-testid="text-live-price"
                           >
-                            ${(livePrice.cents / 100).toFixed(2)}
+                            {formatMoneyForCurrency(livePrice.cents / 100, currency)}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">per visit</p>
                         </>
@@ -2370,13 +2382,13 @@ export default function SignupWidget() {
                               if (matchedItem) {
                                 priceLabel = matchedItem.callForQuote
                                   ? "Call for Quote"
-                                  : `$${(matchedItem.price / 100).toFixed(2)}/visit`;
+                                  : `${currencySymbol}${(matchedItem.price / 100).toFixed(2)}/visit`;
                               }
                             }
                             if (!priceLabel) {
                               const baseItem = items.find((i) => !i.callForQuote);
                               priceLabel = baseItem
-                                ? `from $${(baseItem.price / 100).toFixed(2)}/visit`
+                                ? `from ${currencySymbol}${(baseItem.price / 100).toFixed(2)}/visit`
                                 : "";
                             }
                             return (
@@ -2441,7 +2453,9 @@ export default function SignupWidget() {
                             <span className="text-sm flex-1">{tier.label}</span>
                             {tier.price > 0 && (
                               <span className="text-sm text-muted-foreground ml-2">
-                                {tier.isAddon ? "+" : ""}${tier.price.toFixed(0)}
+                                {tier.isAddon ? "+" : ""}
+                                {currencySymbol}
+                                {tier.price.toFixed(0)}
                               </span>
                             )}
                           </RadioOption>
@@ -2573,7 +2587,7 @@ export default function SignupWidget() {
                           style={{ color: brandStyles.accentText }}
                           data-testid="text-live-price"
                         >
-                          ${(livePrice.cents / 100).toFixed(2)}
+                          {formatMoneyForCurrency(livePrice.cents / 100, currency)}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">per visit</p>
                       </>
@@ -2705,7 +2719,8 @@ export default function SignupWidget() {
                           className="text-sm font-medium"
                           style={{ color: brandStyles.accentText }}
                         >
-                          Your Estimate: ${(livePrice.cents / 100).toFixed(2)}/visit
+                          Your Estimate: {formatMoneyForCurrency(livePrice.cents / 100, currency)}
+                          /visit
                         </span>
                       </div>
                     </div>

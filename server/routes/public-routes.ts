@@ -644,6 +644,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         primaryColor,
         quoteFormLayout: company.quoteFormLayout || "stepper",
         country: company.country || "us",
+        currency: company.currency || "usd",
         requireCardOnSignup: company.requireCardOnSignup ?? true,
         widgetFieldConfig: company.widgetFieldConfig ?? null,
         yardSizeTierConfig: company.yardSizeTierConfig ?? null,
