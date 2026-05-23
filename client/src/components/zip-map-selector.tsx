@@ -269,6 +269,7 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
   const [loading, setLoading] = useState(false);
   const [textInput, setTextInput] = useState("");
   const [inputError, setInputError] = useState<string | null>(null);
+  const [canadaNoData, setCanadaNoData] = useState(false);
 
   function syncSelected(next: Set<string>) {
     selectedRef.current = next;
@@ -319,15 +320,19 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
       if (!mapRef.current || loadingRef.current || mapRef.current.getZoom() < 8) return;
       loadingRef.current = true;
       setLoading(true);
+      setCanadaNoData(false);
       try {
         const b = mapRef.current.getBounds();
-        const geo = await fetchZipPolygonsInViewport(
-          b.getWest(),
-          b.getSouth(),
-          b.getEast(),
-          b.getNorth()
-        );
+        const w = b.getWest(),
+          s = b.getSouth(),
+          e = b.getEast(),
+          n = b.getNorth();
+        const isCanadaViewport = viewportIsMostlyCanada(w, s, e, n);
+        const geo = await fetchZipPolygonsInViewport(w, s, e, n);
         if (cancelled) return;
+        if (isCanadaViewport && geo.features.length === 0) {
+          setCanadaNoData(true);
+        }
         geo.features.forEach((feat) => {
           if (!mapRef.current) return;
           const zip = (feat.properties as any)?.ZIP_CODE as string;
@@ -482,6 +487,15 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
         {loading && (
           <div className="absolute top-2 right-2 z-[1000] bg-white/90 text-xs text-muted-foreground px-2 py-1 rounded shadow">
             Loading {postalPlural}…
+          </div>
+        )}
+        {canadaNoData && !loading && (
+          <div
+            className="absolute bottom-2 left-2 right-2 z-[1000] bg-white/95 dark:bg-gray-900/95 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-300 px-3 py-2 rounded shadow"
+            data-testid="canada-no-data-notice"
+          >
+            Postal boundary shapes are not available for this area. You can type FSA codes manually
+            in the field below.
           </div>
         )}
       </div>
