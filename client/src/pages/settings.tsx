@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -909,6 +910,7 @@ const companyFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
   email: z.string().email("Invalid email").or(z.literal("")).optional(),
   phone: z.string().optional(),
+  country: z.enum(["us", "ca"]).default("us"),
   address: z.string().optional(),
   startAddress: z.string().optional(),
   startLatitude: z.string().optional(),
@@ -7976,6 +7978,7 @@ export default function Settings() {
       name: company?.name || "",
       email: company?.email || "",
       phone: company?.phone || "",
+      country: (company?.country === "ca" ? "ca" : "us") as "us" | "ca",
       address: company?.address || "",
       startAddress: company?.startAddress || "",
       startLatitude: company?.startLatitude || "",
@@ -7985,7 +7988,8 @@ export default function Settings() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: CompanyFormValues) => {
-      const res = await apiRequest("PATCH", "/api/company", data);
+      const currency = data.country === "ca" ? "cad" : "usd";
+      const res = await apiRequest("PATCH", "/api/company", { ...data, currency });
       return res.json();
     },
     onSuccess: () => {
@@ -8191,6 +8195,30 @@ export default function Settings() {
                               />
                             </div>
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="country"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Country</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-company-country">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="us">United States</SelectItem>
+                              <SelectItem value="ca">Canada</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormDescription className="text-xs">
+                            Sets currency (USD/CAD) and address search region
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
