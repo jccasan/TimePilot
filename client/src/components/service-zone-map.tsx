@@ -176,16 +176,15 @@ export function ServiceZoneMap({
     return raw.replace(/\D/g, "").slice(0, 5);
   };
 
-  const formatCanadianPostal = (raw: string): string => {
+  const normalizeCanadianToFSA = (raw: string): string => {
     const clean = raw.replace(/\s/g, "").toUpperCase();
-    if (clean.length === 6) return clean.slice(0, 3) + " " + clean.slice(3);
-    return clean;
+    return clean.slice(0, 3);
   };
 
   const isValidPostal = (zip: string): boolean => {
     if (isCanadian) {
       const clean = zip.replace(/\s/g, "").toUpperCase();
-      return /^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(clean);
+      return /^[A-Z]\d[A-Z](\d[A-Z]\d)?$/.test(clean);
     }
     return /^\d{5}$/.test(zip);
   };
@@ -212,7 +211,7 @@ export function ServiceZoneMap({
     const zip = zipInput.trim();
     if (!zip) return;
     if (!isValidPostal(zip)) return;
-    const normalized = isCanadian ? formatCanadianPostal(zip) : zip;
+    const normalized = isCanadian ? normalizeCanadianToFSA(zip) : zip;
     if (zones.some((z) => z.zipCode === normalized)) {
       setZipInput("");
       return;
@@ -266,7 +265,9 @@ export function ServiceZoneMap({
           <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder={
-              isCanadian ? "Enter postal code (e.g. V6B 2X3)" : "Enter zip code (e.g. 22031)"
+              isCanadian
+                ? "Enter FSA or postal code (e.g. M5V or M5V 3A8)"
+                : "Enter zip code (e.g. 22031)"
             }
             className="pl-8"
             value={zipInput}

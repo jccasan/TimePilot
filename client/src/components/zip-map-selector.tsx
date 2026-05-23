@@ -260,7 +260,11 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
     const initial = value
       ? value
           .split(",")
-          .map((z) => z.trim())
+          .map((z) => {
+            const t = z.trim().toUpperCase();
+            if (isCanadianPostal(t)) return t.replace(/\s/g, "").slice(0, 3);
+            return z.trim().toUpperCase();
+          })
           .filter(isPostal)
       : [];
     selectedRef.current = new Set(initial);
