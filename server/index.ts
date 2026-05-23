@@ -499,10 +499,21 @@ async function ensureCompanyColumns() {
       ALTER TABLE properties ADD COLUMN IF NOT EXISTS dog_breeds TEXT;
     `);
     console.log("[Migration] Property onboarding columns verified");
-    await pool.query(
-      `ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS prorated_through DATE`
+    await pool.query(`ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS prorated_through DATE`);
+    // Backfill: mark every plan that started before the current calendar month as already-handled
+    // so the nightly proration sweep never retroactively invoices historical plans.
+    await pool.query(`
+      UPDATE service_plans
+      SET prorated_through = (
+        DATE_TRUNC('month', start_date::date) + INTERVAL '1 month - 1 day'
+      )::date
+      WHERE prorated_through IS NULL
+        AND EXTRACT(DAY FROM start_date::date) != 1
+        AND start_date < DATE_TRUNC('month', CURRENT_DATE)
+    `);
+    console.log(
+      "[Migration] service_plans.prorated_through column and historical backfill verified"
     );
-    console.log("[Migration] service_plans.prorated_through column verified");
   } catch (err) {
     console.error("[Migration] Failed to ensure company columns:", err);
   } finally {

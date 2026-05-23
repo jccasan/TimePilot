@@ -1,11 +1,10 @@
 import { storage } from "../storage";
+import { db } from "../db";
+import { visits } from "@shared/schema";
+import { and, eq, isNull, lte } from "drizzle-orm";
 import { getCompanyToday } from "../utils/company-date";
 import { upsertHealthCheckResult } from "./system-health-check";
-import {
-  calculateProratedAmount,
-  monthlyRateForPlan,
-  isProratable,
-} from "../services/proration";
+import { calculateProratedAmount, monthlyRateForPlan, isProratable } from "../services/proration";
 
 export async function runAutoInvoice() {
   console.log(`[auto-invoice] Starting auto-invoice run`);
@@ -279,18 +278,45 @@ export async function generateProratedInvoiceForPlan(
     proratedThrough: proration.proratedThrough,
   });
 
+  // Claim any completed visits that fall within the prorated period so the nightly
+  // per_month invoice run does not bill them again on the 1st.
+  const proratedPeriodVisits = await db
+    .select({ id: visits.id })
+    .from(visits)
+    .where(
+      and(
+        eq(visits.servicePlanId, servicePlanId),
+        eq(visits.companyId, companyId),
+        eq(visits.status, "completed"),
+        lte(visits.scheduledDate, proration.proratedThrough),
+        isNull(visits.invoiceId)
+      )
+    );
+
+  for (const v of proratedPeriodVisits) {
+    await storage.updateVisit(v.id, companyId, { invoiceId: invoice.id });
+  }
+
   return { invoiceId: invoice.id, amount: proration.amount, label: proration.label };
 }
 
-async function generateProratedInvoicesForCompany(
-  companyId: string
-): Promise<number> {
+async function generateProratedInvoicesForCompany(companyId: string): Promise<number> {
   let count = 0;
   try {
+    const now = new Date();
+    // Only consider plans that started in the current calendar month.
+    // Plans from prior months are backfilled by the startup migration with a
+    // proratedThrough value so they are never touched here.
+    const firstOfCurrentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
     const allPlans = await storage.getServicePlans(companyId, { isActive: true });
-    const unprorated = allPlans.filter(
-      (sp) => !sp.proratedThrough && sp.startDate && isProratable(sp.startDate, "per_month")
-    );
+    const unprorated = allPlans.filter((sp) => {
+      if (!sp.startDate || sp.proratedThrough) return false;
+      if (!isProratable(sp.startDate, "per_month")) return false;
+      // Guard: plan must have started in the current calendar month
+      const startObj = new Date(sp.startDate + "T00:00:00Z");
+      return startObj >= firstOfCurrentMonth;
+    });
     if (unprorated.length === 0) return 0;
 
     for (const sp of unprorated) {

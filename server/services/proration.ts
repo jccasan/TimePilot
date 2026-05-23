@@ -1,17 +1,4 @@
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export interface ProratedResult {
   amount: number;
@@ -20,10 +7,7 @@ export interface ProratedResult {
   regularBillingStartDate: string;
 }
 
-export function calculateProratedAmount(
-  startDate: string,
-  monthlyRate: number
-): ProratedResult {
+export function calculateProratedAmount(startDate: string, monthlyRate: number): ProratedResult {
   const start = new Date(startDate + "T00:00:00Z");
   const dayOfMonth = start.getUTCDate();
   const year = start.getUTCFullYear();
