@@ -43,12 +43,13 @@ export async function registerPropertiesRoutes(app: Express): Promise<void> {
       const parsed = insertPropertySchema.parse({ ...req.body, companyId });
       let geocodeFailed = false;
       if (!parsed.latitude && !parsed.longitude && parsed.streetAddress) {
+        const company = await storage.getCompany(companyId);
         const coords = await geocodeAddress(
           parsed.streetAddress,
           parsed.city,
           parsed.state,
           parsed.zipCode,
-          null,
+          company?.country ?? null,
           companyId
         );
         if (coords) {
@@ -86,12 +87,13 @@ export async function registerPropertiesRoutes(app: Express): Promise<void> {
           zipCode: req.body.zipCode ?? existing.zipCode,
         };
         if (merged.streetAddress) {
+          const company = await storage.getCompany(companyId);
           const coords = await geocodeAddress(
             merged.streetAddress,
             merged.city,
             merged.state,
             merged.zipCode,
-            null,
+            company?.country ?? null,
             companyId
           );
           if (coords) {

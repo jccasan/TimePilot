@@ -5,6 +5,7 @@ import { Link, useParams, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { isValidPostalCode } from "@shared/postal";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
@@ -146,8 +147,11 @@ const statusColors: Record<string, string> = {
 const propertyFormSchema = z.object({
   streetAddress: z.string().min(1, "Street address is required"),
   city: z.string().min(1, "City is required"),
-  state: z.string().min(1, "State is required"),
-  zipCode: z.string().min(1, "Zip code is required"),
+  state: z.string().min(1, "State/Province is required"),
+  zipCode: z
+    .string()
+    .min(1, "Zip/Postal code is required")
+    .refine(isValidPostalCode, "Enter a valid ZIP code (e.g. 12345) or postal code (e.g. V6B 2X3)"),
   numberOfDogs: z.coerce.number().min(0).optional(),
   yardSize: z.string().optional(),
   yardDifficulty: z.enum(["flat", "moderate", "difficult"]).optional(),
@@ -164,7 +168,7 @@ export default function ContactDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { stateLabel, zipLabel } = useAddressLabels();
+  const { stateLabel, zipLabel, country } = useAddressLabels();
   const [editing, setEditing] = useState(false);
   const [propertyDialogOpen, setPropertyDialogOpen] = useState(false);
   const [measurePropertyId, setMeasurePropertyId] = useState<string | null>(null);
@@ -384,8 +388,16 @@ export default function ContactDetail() {
   const editAddressSchema = z.object({
     streetAddress: z.string().min(1, "Street address is required"),
     city: z.string().min(1, "City is required"),
-    state: z.string().min(1, "State is required"),
-    zipCode: z.string().min(1, "Zip code is required"),
+    state: z.string().min(1, `${stateLabel} is required`),
+    zipCode: z
+      .string()
+      .min(1, `${zipLabel} is required`)
+      .refine(
+        isValidPostalCode,
+        country === "ca"
+          ? "Enter a valid postal code (e.g. V6B 2X3)"
+          : "Enter a valid ZIP code (e.g. 12345) or postal code (e.g. V6B 2X3)"
+      ),
   });
 
   const editAddressForm = useForm<z.infer<typeof editAddressSchema>>({

@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { isValidPostalCode } from "@shared/postal";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -69,7 +70,14 @@ const contactFormSchema = z
     address2: z.string().optional().or(z.literal("")),
     city: z.string().optional().or(z.literal("")),
     state: z.string().optional().or(z.literal("")),
-    zipCode: z.string().optional().or(z.literal("")),
+    zipCode: z
+      .string()
+      .optional()
+      .or(z.literal(""))
+      .refine(
+        (v) => !v || isValidPostalCode(v),
+        "Enter a valid ZIP or postal code (e.g. 12345 or V6B 2X3)"
+      ),
     serviceFrequency: z.string().optional().or(z.literal("")),
     numberOfDogs: z.number().min(0).optional(),
     serviceDay: z.string().optional().or(z.literal("")),

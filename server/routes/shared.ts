@@ -421,7 +421,8 @@ export async function resolveCoordinatesForAddress(
     zipCode?: string | null;
     latitude?: string | null;
     longitude?: string | null;
-  }[]
+  }[],
+  country?: string | null
 ): Promise<{ latitude: string; longitude: string } | null> {
   const properties = existingProperties ?? (await storage.getProperties(companyId));
   const normalizedStreet = streetAddress.trim().toLowerCase();
@@ -437,30 +438,36 @@ export async function resolveCoordinatesForAddress(
   if (match) {
     return { latitude: match.latitude!, longitude: match.longitude! };
   }
-  return geocodeAddress(streetAddress, city, state, zipCode);
+  return geocodeAddress(streetAddress, city, state, zipCode, country);
 }
 
-export async function createPropertyWithGeocode(data: {
-  companyId: string;
-  contactId: string;
-  streetAddress: string;
-  city?: string | null;
-  state?: string | null;
-  zipCode?: string | null;
-  numberOfDogs?: number | null;
-  yardSize?: string | null;
-  latitude?: string | null;
-  longitude?: string | null;
-  gateCode?: string | null;
-  specialInstructions?: string | null;
-}) {
+export async function createPropertyWithGeocode(
+  data: {
+    companyId: string;
+    contactId: string;
+    streetAddress: string;
+    city?: string | null;
+    state?: string | null;
+    zipCode?: string | null;
+    numberOfDogs?: number | null;
+    yardSize?: string | null;
+    latitude?: string | null;
+    longitude?: string | null;
+    gateCode?: string | null;
+    specialInstructions?: string | null;
+  },
+  country?: string | null
+) {
   if (!data.latitude && !data.longitude && data.streetAddress) {
+    const resolvedCountry = country ?? (await storage.getCompany(data.companyId))?.country ?? null;
     const coords = await resolveCoordinatesForAddress(
       data.companyId,
       data.streetAddress,
       data.city,
       data.state,
-      data.zipCode
+      data.zipCode,
+      undefined,
+      resolvedCountry
     );
     if (coords) {
       data.latitude = coords.latitude;

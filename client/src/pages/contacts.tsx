@@ -53,6 +53,7 @@ import { DialogFooter } from "@/components/ui/dialog";
 import { AddContactDialog } from "@/components/add-contact-dialog";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
+import { useAddressLabels } from "@/hooks/use-address-labels";
 import { BulkServicePlanSetup } from "@/components/bulk-service-plan-setup";
 
 type OnboardingStatus = { pending: boolean; completed: boolean } | null;
@@ -131,6 +132,7 @@ function ContactTypeBadge({ type, testId }: { type: string | null | undefined; t
 export default function Contacts() {
   const { toast } = useToast();
   const { startTutorial, isTutorialCompleted } = useTutorialContext();
+  const { zipLabel, stateLabel } = useAddressLabels();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(getInitialStatusFilter);
@@ -900,7 +902,11 @@ export default function Contacts() {
                         <SelectItem value="__skip__">-- Skip this column --</SelectItem>
                         {CONTACT_FIELDS.map((f) => (
                           <SelectItem key={f.key} value={f.key}>
-                            {f.label}
+                            {f.key === "zipCode"
+                              ? zipLabel
+                              : f.key === "state"
+                                ? stateLabel
+                                : f.label}
                           </SelectItem>
                         ))}
                       </SelectContent>

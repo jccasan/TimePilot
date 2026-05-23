@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, Suspense, lazy } from "react";
+import { useState, useCallback, useRef, useEffect, Suspense, lazy, useMemo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -55,6 +55,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAddressLabels } from "@/hooks/use-address-labels";
 
 const RouteMapView = lazy(() => import("@/components/route-map-view"));
 
@@ -1907,7 +1908,15 @@ export function ImportWizard({
     >
   >({});
 
-  const targetFields = SCHEMA_FIELDS[targetSchema] || [];
+  const { zipLabel, stateLabel } = useAddressLabels();
+  const targetFields = useMemo(() => {
+    const fields = SCHEMA_FIELDS[targetSchema] || [];
+    return fields.map((f) => {
+      if (f.field === "zipCode") return { ...f, label: zipLabel };
+      if (f.field === "state") return { ...f, label: stateLabel };
+      return f;
+    });
+  }, [targetSchema, zipLabel, stateLabel]);
 
   // Clear any pending debounce timers when the component unmounts to prevent
   // stale geocode requests from firing after navigation away from the wizard.

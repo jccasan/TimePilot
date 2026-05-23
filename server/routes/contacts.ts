@@ -10,6 +10,7 @@ import {
   insertTagSchema,
   insertServicePlanSchema,
 } from "@shared/schema";
+import { isValidPostalCode } from "@shared/postal";
 
 import {
   isAuthenticated,
@@ -366,16 +367,19 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
           } as unknown as import("@shared/schema").InsertContact);
 
           if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
-            await createPropertyWithGeocode({
-              companyId,
-              contactId: contact.id,
-              streetAddress: contact.streetAddress,
-              city: contact.city,
-              state: contact.state,
-              zipCode: contact.zipCode,
-              numberOfDogs: contact.numberOfDogs ?? 1,
-              yardSize: contact.yardSize ?? null,
-            });
+            await createPropertyWithGeocode(
+              {
+                companyId,
+                contactId: contact.id,
+                streetAddress: contact.streetAddress,
+                city: contact.city,
+                state: contact.state,
+                zipCode: contact.zipCode,
+                numberOfDogs: contact.numberOfDogs ?? 1,
+                yardSize: contact.yardSize ?? null,
+              },
+              _importCompany?.country ?? null
+            );
           }
 
           imported.push(contact);
@@ -496,16 +500,19 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
           } as unknown as import("@shared/schema").InsertContact);
 
           if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
-            await createPropertyWithGeocode({
-              companyId,
-              contactId: contact.id,
-              streetAddress: contact.streetAddress,
-              city: contact.city,
-              state: contact.state,
-              zipCode: contact.zipCode,
-              numberOfDogs: contact.numberOfDogs ?? 1,
-              yardSize: contact.yardSize ?? null,
-            });
+            await createPropertyWithGeocode(
+              {
+                companyId,
+                contactId: contact.id,
+                streetAddress: contact.streetAddress,
+                city: contact.city,
+                state: contact.state,
+                zipCode: contact.zipCode,
+                numberOfDogs: contact.numberOfDogs ?? 1,
+                yardSize: contact.yardSize ?? null,
+              },
+              _csvImportCompany?.country ?? null
+            );
           }
 
           imported.push(contact);
@@ -764,6 +771,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
         }
       }
       const parsed = insertContactSchema.parse({ ...cleanedBody, companyId });
+      if (parsed.zipCode && !isValidPostalCode(parsed.zipCode)) {
+        return res.status(400).json({ error: "Invalid ZIP or postal code format." });
+      }
       const contact = await storage.createContact(parsed);
 
       let propertyCreated = false;
@@ -776,16 +786,19 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       const hasPartialAddress = !!contact.streetAddress && !hasFullAddress;
 
       if (hasFullAddress) {
-        await createPropertyWithGeocode({
-          companyId,
-          contactId: contact.id,
-          streetAddress: contact.streetAddress!,
-          city: contact.city,
-          state: contact.state,
-          zipCode: contact.zipCode,
-          numberOfDogs: contact.numberOfDogs ?? 1,
-          yardSize: contact.yardSize ?? null,
-        });
+        await createPropertyWithGeocode(
+          {
+            companyId,
+            contactId: contact.id,
+            streetAddress: contact.streetAddress!,
+            city: contact.city,
+            state: contact.state,
+            zipCode: contact.zipCode,
+            numberOfDogs: contact.numberOfDogs ?? 1,
+            yardSize: contact.yardSize ?? null,
+          },
+          _company?.country ?? null
+        );
         propertyCreated = true;
       }
 
@@ -862,6 +875,9 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
           delete safeBody[field];
         }
       }
+      if (safeBody.zipCode && !isValidPostalCode(safeBody.zipCode)) {
+        return res.status(400).json({ error: "Invalid ZIP or postal code format." });
+      }
       const contact = await storage.updateContact(p(req.params.id), companyId, safeBody);
       auditLog(
         companyId,
@@ -876,16 +892,20 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
       if (contact.streetAddress && contact.city && contact.state && contact.zipCode) {
         const existingProperties = await storage.getProperties(companyId, contact.id);
         if (existingProperties.length === 0) {
-          await createPropertyWithGeocode({
-            companyId,
-            contactId: contact.id,
-            streetAddress: contact.streetAddress,
-            city: contact.city,
-            state: contact.state,
-            zipCode: contact.zipCode,
-            numberOfDogs: contact.numberOfDogs ?? 1,
-            yardSize: contact.yardSize ?? null,
-          });
+          const companyForGeo = await storage.getCompany(companyId);
+          await createPropertyWithGeocode(
+            {
+              companyId,
+              contactId: contact.id,
+              streetAddress: contact.streetAddress,
+              city: contact.city,
+              state: contact.state,
+              zipCode: contact.zipCode,
+              numberOfDogs: contact.numberOfDogs ?? 1,
+              yardSize: contact.yardSize ?? null,
+            },
+            companyForGeo?.country ?? null
+          );
         }
       }
 
