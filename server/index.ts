@@ -502,14 +502,20 @@ async function ensureCompanyColumns() {
     await pool.query(`ALTER TABLE service_plans ADD COLUMN IF NOT EXISTS prorated_through DATE`);
     // Backfill: mark every plan that started before the current calendar month as already-handled
     // so the nightly proration sweep never retroactively invoices historical plans.
+    // Restrict backfill to plans whose contacts use per_month invoicing.
+    // Plans for per_service/per_week contacts must never have prorated_through set
+    // or their uninvoiced visits may be silently excluded by the billing filter.
     await pool.query(`
-      UPDATE service_plans
+      UPDATE service_plans sp
       SET prorated_through = (
-        DATE_TRUNC('month', start_date::date) + INTERVAL '1 month - 1 day'
+        DATE_TRUNC('month', sp.start_date::date) + INTERVAL '1 month - 1 day'
       )::date
-      WHERE prorated_through IS NULL
-        AND EXTRACT(DAY FROM start_date::date) != 1
-        AND start_date < DATE_TRUNC('month', CURRENT_DATE)
+      FROM contacts c
+      WHERE sp.contact_id = c.id
+        AND sp.prorated_through IS NULL
+        AND EXTRACT(DAY FROM sp.start_date::date) != 1
+        AND sp.start_date < DATE_TRUNC('month', CURRENT_DATE)
+        AND c.invoice_frequency = 'per_month'
     `);
     console.log(
       "[Migration] service_plans.prorated_through column and historical backfill verified"

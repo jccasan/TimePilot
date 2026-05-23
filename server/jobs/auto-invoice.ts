@@ -1,7 +1,7 @@
 import { storage } from "../storage";
 import { db } from "../db";
 import { visits } from "@shared/schema";
-import { and, eq, isNull, lte } from "drizzle-orm";
+import { and, eq, gte, isNull, lte } from "drizzle-orm";
 import { getCompanyToday } from "../utils/company-date";
 import { upsertHealthCheckResult } from "./system-health-check";
 import { calculateProratedAmount, monthlyRateForPlan, isProratable } from "../services/proration";
@@ -101,12 +101,15 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, _t
 
       const activeSpIds = new Set(contactJobs.map((j) => j.servicePlanId).filter(Boolean));
 
-      // Load proratedThrough for each active service plan so we can exclude visits
+      // For per_month contacts: load proratedThrough per plan and exclude visits
       // that fall within a plan's prorated first-month window. Visits in that window
       // are already covered by the flat prorated invoice and must not be billed again.
+      // This filter is intentionally skipped for per_service / per_week contacts so
+      // their normal visit-based invoicing is never affected by the prorated_through marker.
       const activePlanIds = Array.from(activeSpIds).filter(Boolean) as string[];
       const planProratedMap = new Map<string, string | null>();
-      if (activePlanIds.length > 0) {
+      const isMonthlyBilled = (contact.invoiceFrequency || "per_service") === "per_month";
+      if (isMonthlyBilled && activePlanIds.length > 0) {
         const plans = await storage.getServicePlans(companyId, { contactId });
         for (const sp of plans) {
           planProratedMap.set(sp.id, sp.proratedThrough ?? null);
@@ -115,8 +118,10 @@ async function processCompanyAutoInvoice(companyId: string, todayStr: string, _t
 
       const uninvoicedVisits = allUninvoicedVisits.filter((v) => {
         if (!activeSpIds.has(v.servicePlanId)) return false;
-        const proratedThrough = planProratedMap.get(v.servicePlanId ?? "");
-        if (proratedThrough && v.scheduledDate <= proratedThrough) return false;
+        if (isMonthlyBilled) {
+          const proratedThrough = planProratedMap.get(v.servicePlanId ?? "");
+          if (proratedThrough && v.scheduledDate <= proratedThrough) return false;
+        }
         return true;
       });
 
@@ -302,8 +307,9 @@ export async function generateProratedInvoiceForPlan(
     proratedThrough: proration.proratedThrough,
   });
 
-  // Claim any completed visits that fall within the prorated period so the nightly
-  // per_month invoice run does not bill them again on the 1st.
+  // Claim completed visits within the exact prorated window [planStartDate, proratedThrough]
+  // so the nightly per_month invoice run does not bill them again on the 1st.
+  // Lower bound (>= planStartDate) prevents accidentally claiming stray pre-start visits.
   const proratedPeriodVisits = await db
     .select({ id: visits.id })
     .from(visits)
@@ -313,6 +319,7 @@ export async function generateProratedInvoiceForPlan(
         eq(visits.companyId, companyId),
         eq(visits.status, "completed"),
         lte(visits.scheduledDate, proration.proratedThrough),
+        gte(visits.scheduledDate, planStartDate),
         isNull(visits.invoiceId)
       )
     );
