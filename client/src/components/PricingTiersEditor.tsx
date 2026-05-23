@@ -1,5 +1,7 @@
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { X, Plus } from "lucide-react";
 
 export interface PricingTier {
   label: string;
@@ -20,8 +22,7 @@ export interface PricingTiersEditorProps {
   errors?: Record<string, string>;
 }
 
-const TIER_LABELS = ["Tier 1", "Tier 2", "Tier 3", "Tier 4", "Tier 5", "Tier 6"];
-const REQUIRED_TIERS = 3;
+export const REQUIRED_TIERS = 3;
 
 function parseMoney(raw: string): number | null {
   const n = parseFloat(raw);
@@ -31,6 +32,10 @@ function parseMoney(raw: string): number | null {
 function formatMoney(v: number | null): string {
   if (v === null || v === undefined) return "";
   return String(v);
+}
+
+function tierLabel(i: number): string {
+  return `Tier ${i + 1}`;
 }
 
 export function PricingTiersEditor({
@@ -46,10 +51,12 @@ export function PricingTiersEditor({
   initialTiers,
   errors = {},
 }: PricingTiersEditorProps) {
-  const tiers: PricingTier[] = Array.from({ length: 6 }, (_, i) => ({
-    label: value[i]?.label ?? initialTiers?.[i]?.label ?? "",
-    pricePerVisit: value[i]?.pricePerVisit ?? initialTiers?.[i]?.pricePerVisit ?? null,
-  }));
+  const tiers: PricingTier[] =
+    value.length > 0
+      ? value
+      : initialTiers && initialTiers.length > 0
+        ? initialTiers
+        : Array.from({ length: REQUIRED_TIERS }, () => ({ label: "", pricePerVisit: null }));
 
   function updateTier(index: number, field: keyof PricingTier, raw: string) {
     const next = tiers.map((t) => ({ ...t }));
@@ -61,6 +68,15 @@ export function PricingTiersEditor({
     onChange(next);
   }
 
+  function addTier() {
+    onChange([...tiers, { label: "", pricePerVisit: null }]);
+  }
+
+  function removeTier(index: number) {
+    if (index < REQUIRED_TIERS) return;
+    onChange(tiers.filter((_, i) => i !== index));
+  }
+
   return (
     <div className="space-y-4">
       <div className="space-y-3">
@@ -70,10 +86,10 @@ export function PricingTiersEditor({
           const priceKey = `tier_${i + 1}_price`;
 
           return (
-            <div key={i} className="grid grid-cols-2 gap-3 items-start">
+            <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-3 items-start">
               <div className="space-y-1">
                 <Label className="text-xs" htmlFor={`tier-label-${i}`}>
-                  {TIER_LABELS[i]} Label
+                  {tierLabel(i)} Label
                   {isRequired && <span className="text-red-500 ml-0.5">*</span>}
                 </Label>
                 <Input
@@ -108,10 +124,39 @@ export function PricingTiersEditor({
                 </div>
                 {errors[priceKey] && <p className="text-xs text-red-500">{errors[priceKey]}</p>}
               </div>
+              <div className="pt-5">
+                {!isRequired ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                    onClick={() => removeTier(i)}
+                    data-testid={`button-remove-tier-${i + 1}`}
+                    aria-label={`Remove ${tierLabel(i)}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <div className="h-9 w-9" />
+                )}
+              </div>
             </div>
           );
         })}
       </div>
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={addTier}
+        data-testid="button-add-tier"
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Add Tier
+      </Button>
 
       <div className="border-t pt-4 space-y-3">
         <div className="grid grid-cols-2 gap-3 items-start">

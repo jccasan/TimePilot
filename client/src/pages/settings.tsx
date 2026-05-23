@@ -875,7 +875,7 @@ function LeadResponseSection(_props: { company: Company | null }) {
           <p className="text-xs text-muted-foreground mt-0.5">
             {isScenarioA()
               ? "Tiers 1–4 are pre-filled from your SP pricing. Review and adjust before saving."
-              : "Define up to 6 pricing tiers. Tiers 1–3 are required."}
+              : "Define your pricing tiers. Tiers 1–3 are required."}
           </p>
         </div>
         <PricingTiersEditor
