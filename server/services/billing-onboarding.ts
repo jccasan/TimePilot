@@ -4,6 +4,8 @@ import { visits } from "@shared/schema";
 import { and, eq, gte, asc } from "drizzle-orm";
 import { generateProratedInvoiceForPlan } from "../jobs/auto-invoice";
 import { monthlyRateForPlan, isProratable } from "./proration";
+import { sendInvoiceEmail, getAppBaseUrl } from "./invoice-email";
+import { isSmsConfiguredForCompany, sendSmsForCompany } from "./sms";
 
 /** Last calendar day of the month containing dateStr (YYYY-MM-DD). */
 function endOfMonth(dateStr: string): string {
@@ -163,16 +165,61 @@ export async function startBillingOnboardingSequence(
         depositInvoiceId: depositInvoice.id,
       });
 
-      storage
-        .createNotification({
-          companyId,
-          type: "general",
-          title: "Client Onboarding Started",
-          message: `Deposit invoice #${invoiceNumber} for $${depositAmt.toFixed(2)} created and sent for ${contact.firstName} ${contact.lastName}. Awaiting deposit payment.`,
-          isRead: false,
-          linkUrl: `/invoices`,
+      // Auto-send deposit invoice via email (fire-and-forget, non-blocking)
+      const baseUrl = getAppBaseUrl();
+
+      sendInvoiceEmail(depositInvoice.id, companyId, { baseUrl })
+        .then(async (emailResult) => {
+          const emailSent = emailResult.success;
+          let smsSent = false;
+
+          // Optionally send SMS payment link if contact has a phone and SMS is configured
+          if (contact.phone) {
+            try {
+              const smsConfigured = await isSmsConfiguredForCompany(companyId);
+              if (smsConfigured && emailResult.paymentUrl) {
+                const smsResult = await sendSmsForCompany({
+                  to: contact.phone,
+                  body: `Hi ${contact.firstName}, your deposit invoice (#${invoiceNumber}) for $${depositAmt.toFixed(2)} is ready. Pay here: ${emailResult.paymentUrl}`,
+                  companyId,
+                  contactId,
+                });
+                smsSent = smsResult.success;
+              }
+            } catch (smsErr) {
+              console.error("[billing-onboarding] SMS send error:", smsErr);
+            }
+          }
+
+          const sentVia = [emailSent ? "email" : null, smsSent ? "SMS" : null]
+            .filter(Boolean)
+            .join(" and ");
+          const sentNote = sentVia ? ` Sent to client via ${sentVia}.` : "";
+
+          storage
+            .createNotification({
+              companyId,
+              type: "general",
+              title: "Client Onboarding Started",
+              message: `Deposit invoice #${invoiceNumber} for $${depositAmt.toFixed(2)} created for ${contact.firstName} ${contact.lastName}.${sentNote} Awaiting deposit payment.`,
+              isRead: false,
+              linkUrl: `/invoices`,
+            })
+            .catch(console.error);
         })
-        .catch(console.error);
+        .catch((err) => {
+          console.error("[billing-onboarding] sendInvoiceEmail error:", err);
+          storage
+            .createNotification({
+              companyId,
+              type: "general",
+              title: "Client Onboarding Started",
+              message: `Deposit invoice #${invoiceNumber} for $${depositAmt.toFixed(2)} created for ${contact.firstName} ${contact.lastName}. Awaiting deposit payment.`,
+              isRead: false,
+              linkUrl: `/invoices`,
+            })
+            .catch(console.error);
+        });
     } else {
       await _createBalanceInvoice(contactId, companyId, servicePlan);
     }
