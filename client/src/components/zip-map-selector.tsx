@@ -17,6 +17,14 @@ function isZip(s: string) {
   return /^\d{5}$/.test(s);
 }
 
+function isCanadianPostal(s: string) {
+  return /^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/.test(s);
+}
+
+function isPostal(s: string) {
+  return isZip(s) || isCanadianPostal(s);
+}
+
 async function geocodeAddress(address: string): Promise<L.LatLngExpression | null> {
   try {
     const r = await fetch(
@@ -82,7 +90,7 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
       ? value
           .split(",")
           .map((z) => z.trim())
-          .filter(isZip)
+          .filter(isPostal)
       : [];
     selectedRef.current = new Set(initial);
     return initial;
