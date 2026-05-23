@@ -20,6 +20,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -139,6 +146,7 @@ const profileSchema = z.object({
   name: z.string().min(1, "Company name is required"),
   email: z.string().email("Valid email is required"),
   phone: z.string().optional().or(z.literal("")),
+  country: z.enum(["us", "ca"]).default("us"),
   address: z.string().optional().or(z.literal("")),
   websiteUrl: z.string().optional().or(z.literal("")),
   timezone: z.string().optional().or(z.literal("")),
@@ -283,6 +291,7 @@ function CompanyProfileStep({
       name: profileDraft.name ?? companyData.name ?? "",
       email: profileDraft.email ?? companyData.email ?? "",
       phone: profileDraft.phone ?? companyData.phone ?? "",
+      country: (profileDraft.country ?? (companyData as { country?: string }).country ?? "us") as "us" | "ca",
       address: profileDraft.address ?? companyData.address ?? "",
       websiteUrl: profileDraft.websiteUrl ?? companyData.websiteUrl ?? "",
       timezone:
@@ -402,6 +411,28 @@ function CompanyProfileStep({
                     data-testid="input-company-phone"
                   />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="country"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Country</FormLabel>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <FormControl>
+                    <SelectTrigger data-testid="select-company-country">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="us">United States</SelectItem>
+                    <SelectItem value="ca">Canada</SelectItem>
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}

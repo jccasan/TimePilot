@@ -263,6 +263,8 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
         }
 
         if (step === 0 && data) {
+          const country = data.country === "ca" ? "ca" : "us";
+          const currency = country === "ca" ? "cad" : "usd";
           await db.execute(sql`UPDATE companies SET
           name = ${data.name || sql`name`},
           email = ${data.email || sql`email`},
@@ -270,6 +272,8 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
           address = ${data.address || sql`address`},
           website_url = ${data.websiteUrl || null},
           timezone = ${data.timezone || sql`timezone`},
+          country = ${country},
+          currency = ${currency},
           business_onboarding_step = ${step + 1}
           WHERE id = ${companyId}`);
         } else if (step === 1 && data) {
