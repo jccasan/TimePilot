@@ -383,6 +383,9 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "requireCardOnSignup",
         "widgetFieldConfig",
         "yardSizeTierConfig",
+        "newClientDepositEnabled",
+        "newClientDepositType",
+        "newClientDepositValue",
       ];
       const updates: Partial<Record<keyof InsertCompany, unknown>> = {};
       for (const key of allowed as (keyof InsertCompany)[]) {
@@ -390,6 +393,24 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       }
       if (updates.timezone && !validTimezones.includes(updates.timezone as string)) {
         return res.status(400).json({ error: "Invalid timezone" });
+      }
+      if (
+        updates.newClientDepositType !== undefined &&
+        updates.newClientDepositType !== null &&
+        !["flat", "percent"].includes(updates.newClientDepositType as string)
+      ) {
+        return res.status(400).json({ error: "Invalid newClientDepositType" });
+      }
+      if (updates.newClientDepositValue !== undefined && updates.newClientDepositValue !== null) {
+        const dv = parseFloat(updates.newClientDepositValue as string);
+        if (isNaN(dv) || dv < 0) {
+          return res
+            .status(400)
+            .json({ error: "newClientDepositValue must be a non-negative number" });
+        }
+        if (updates.newClientDepositType === "percent" && dv > 100) {
+          return res.status(400).json({ error: "Deposit percentage cannot exceed 100" });
+        }
       }
       const validBillingCadences = ["per_visit", "weekly", "monthly", "manual"];
       const validBillingTriggers = ["after_job", "end_of_week", "end_of_month", "manual"];
