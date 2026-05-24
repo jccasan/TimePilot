@@ -4,15 +4,7 @@ import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import {
-  Download,
-  Upload,
-  FileText,
-  CheckCircle2,
-  AlertCircle,
-  ArrowLeft,
-  RotateCcw,
-} from "lucide-react";
+import { Download, Upload, FileText, CheckCircle2, AlertCircle, ArrowLeft, RotateCcw, ShieldAlert } from "lucide-react";
 
 interface SkippedRow {
   row: number;
@@ -33,6 +25,12 @@ interface PreviewData {
   totalRows: number;
 }
 
+interface CellError {
+  message: string;
+}
+
+type ValidationErrors = Record<number, Record<string, CellError>>;
+
 interface CrmImportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -45,6 +43,83 @@ interface CrmImportModalProps {
 }
 
 const PREVIEW_LIMIT = 10;
+
+// ── Validators ────────────────────────────────────────────────────────────────
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const NUMERIC_RE = /^-?\d+(\.\d+)?$/;
+const PHONE_DIGIT_RE = /\d/g;
+const ZIP_RE = /^\d{5}(-\d{4})?$/;
+
+function isEmailField(name: string) {
+  return /email/i.test(name);
+}
+function isPhoneField(name: string) {
+  return /phone|mobile|cell/i.test(name);
+}
+function isNumericField(name: string) {
+  return /price|rate|amount|cost|fee|revenue|balance|charge|total|qty|quantity/i.test(name);
+}
+function isZipField(name: string) {
+  return /zip|postal/i.test(name);
+}
+
+function validateCell(header: string, value: string, required: boolean): CellError | null {
+  const empty = value.trim() === "";
+
+  if (required && empty) {
+    return { message: `Required — "${header}" must not be blank` };
+  }
+  if (empty) return null;
+
+  if (isEmailField(header)) {
+    if (!EMAIL_RE.test(value.trim())) {
+      return { message: `Invalid email format: "${value}"` };
+    }
+  }
+
+  if (isPhoneField(header)) {
+    const digits = (value.match(PHONE_DIGIT_RE) ?? []).length;
+    if (digits < 7) {
+      return { message: `Phone number looks too short: "${value}"` };
+    }
+  }
+
+  if (isNumericField(header)) {
+    const stripped = value.replace(/[$,\s]/g, "");
+    if (!NUMERIC_RE.test(stripped)) {
+      return { message: `Expected a number: "${value}"` };
+    }
+  }
+
+  if (isZipField(header)) {
+    if (!ZIP_RE.test(value.trim())) {
+      return { message: `Expected a 5-digit ZIP code: "${value}"` };
+    }
+  }
+
+  return null;
+}
+
+function validatePreview(
+  data: PreviewData,
+  requiredFields: string[],
+): ValidationErrors {
+  const errors: ValidationErrors = {};
+  data.rows.forEach((row, rowIdx) => {
+    data.headers.forEach((header) => {
+      const isRequired = requiredFields.includes(header);
+      const err = validateCell(header, row[header] ?? "", isRequired);
+      if (err) {
+        if (!errors[rowIdx]) errors[rowIdx] = {};
+        errors[rowIdx][header] = err;
+      }
+    });
+  });
+  return errors;
+}
+
+// ── CSV helpers ───────────────────────────────────────────────────────────────
 
 function splitCSVLine(line: string): string[] {
   const result: string[] = [];
@@ -117,6 +192,8 @@ function downloadCsv(content: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function CrmImportModal({
   open,
   onOpenChange,
@@ -125,13 +202,14 @@ export function CrmImportModal({
   importUrl,
   invalidateKeys,
   knownFields,
-  requiredFields,
+  requiredFields = [],
 }: CrmImportModalProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [step, setStep] = useState<"select" | "preview" | "result">("select");
   const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
@@ -140,6 +218,7 @@ export function CrmImportModal({
     setSelectedFile(file);
     setResult(null);
     setPreview(null);
+    setValidationErrors({});
   }
 
   function handleClose(val: boolean) {
@@ -147,6 +226,7 @@ export function CrmImportModal({
       setSelectedFile(null);
       setResult(null);
       setPreview(null);
+      setValidationErrors({});
       setStep("select");
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -165,13 +245,16 @@ export function CrmImportModal({
       });
       return;
     }
+    const errors = validatePreview(data, requiredFields);
     setPreview(data);
+    setValidationErrors(errors);
     setStep("preview");
   }
 
   function handleRetry() {
     setResult(null);
     setSelectedFile(null);
+    setValidationErrors({});
     setStep("select");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -237,12 +320,12 @@ export function CrmImportModal({
   const unknownColumns =
     knownFields && preview ? preview.headers.filter((h) => !knownFields.includes(h)) : [];
 
-  function rowIsMissingRequired(row: Record<string, string>): boolean {
-    if (!requiredFields || requiredFields.length === 0) return false;
-    return requiredFields.some((f) => !row[f]);
-  }
-
-  const skippedPreviewCount = preview ? preview.rows.filter(rowIsMissingRequired).length : 0;
+  // Summarise validation errors across all preview rows
+  const totalErrorCells = Object.values(validationErrors).reduce(
+    (sum, rowErrs) => sum + Object.keys(rowErrs).length,
+    0,
+  );
+  const errorRowCount = Object.keys(validationErrors).length;
 
   const isWide = step === "preview";
 
@@ -313,23 +396,55 @@ export function CrmImportModal({
 
         {step === "preview" && preview && (
           <div className="space-y-4 pt-1">
+            {/* Row / column summary */}
             <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground">
                 Showing <span className="font-medium text-foreground">{preview.rows.length}</span>{" "}
                 of <span className="font-medium text-foreground">{preview.totalRows}</span> rows
                 {preview.totalRows > PREVIEW_LIMIT && " (first 10 shown)"}
               </div>
-              {unknownColumns.length > 0 && (
-                <Badge
-                  variant="outline"
-                  className="text-amber-600 border-amber-300 dark:border-amber-700 dark:text-amber-400 text-xs gap-1"
-                >
-                  <AlertCircle className="w-3 h-3" />
-                  {unknownColumns.length} unknown column{unknownColumns.length !== 1 ? "s" : ""}
-                </Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {totalErrorCells > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="text-destructive border-destructive/40 dark:border-destructive/50 text-xs gap-1"
+                    data-testid="badge-crm-preview-validation-errors"
+                  >
+                    <ShieldAlert className="w-3 h-3" />
+                    {totalErrorCells} issue{totalErrorCells !== 1 ? "s" : ""}
+                  </Badge>
+                )}
+                {unknownColumns.length > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="text-amber-600 border-amber-300 dark:border-amber-700 dark:text-amber-400 text-xs gap-1"
+                  >
+                    <AlertCircle className="w-3 h-3" />
+                    {unknownColumns.length} unknown column{unknownColumns.length !== 1 ? "s" : ""}
+                  </Badge>
+                )}
+              </div>
             </div>
 
+            {/* Validation summary banner */}
+            {totalErrorCells > 0 && (
+              <div
+                className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive space-y-1"
+                data-testid="banner-crm-preview-validation"
+              >
+                <p className="font-medium flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                  {totalErrorCells} formatting issue{totalErrorCells !== 1 ? "s" : ""} detected in{" "}
+                  {errorRowCount} row{errorRowCount !== 1 ? "s" : ""} (highlighted below)
+                </p>
+                <p className="text-destructive/80">
+                  Fix these in your CSV for best results. The server will perform its own checks and
+                  skip any rows it cannot process.
+                </p>
+              </div>
+            )}
+
+            {/* Unknown column warning */}
             {unknownColumns.length > 0 && (
               <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-700 dark:text-amber-400 space-y-1">
                 <p className="font-medium">Column mapping notes:</p>
@@ -340,6 +455,7 @@ export function CrmImportModal({
               </div>
             )}
 
+            {/* Preview table */}
             <div className="overflow-auto rounded-lg border border-border/60 max-h-72">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
@@ -349,23 +465,21 @@ export function CrmImportModal({
                     </th>
                     {preview.headers.map((h) => {
                       const isUnknown = knownFields ? !knownFields.includes(h) : false;
-                      const isRequired = requiredFields?.includes(h) ?? false;
+                      const isRequired = requiredFields.includes(h);
                       return (
                         <th
                           key={h}
                           className={`px-2 py-1.5 text-left font-medium border-b border-border/60 whitespace-nowrap ${
                             isUnknown
                               ? "text-amber-600 dark:text-amber-400"
-                              : isRequired
-                                ? "text-foreground"
-                                : "text-muted-foreground"
+                              : "text-muted-foreground"
                           }`}
                           data-testid={`th-crm-preview-col-${h}`}
                         >
                           {h}
                           {isRequired && (
                             <span
-                              className="ml-0.5 text-red-500 dark:text-red-400"
+                              className="ml-1 text-destructive"
                               title="Required field"
                             >
                               *
@@ -380,47 +494,46 @@ export function CrmImportModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {preview.rows.map((row, i) => {
-                    const missing = rowIsMissingRequired(row);
+                  {preview.rows.map((row, rowIdx) => {
+                    const rowErrors = validationErrors[rowIdx] ?? {};
+                    const hasRowError = Object.keys(rowErrors).length > 0;
                     return (
                       <tr
-                        key={i}
+                        key={rowIdx}
                         className={`border-b border-border/40 last:border-0 ${
-                          missing
-                            ? "bg-red-50 dark:bg-red-950/30 hover:bg-red-100/60 dark:hover:bg-red-950/50"
-                            : "hover:bg-muted/30"
+                          hasRowError ? "bg-destructive/5 hover:bg-destructive/10" : "hover:bg-muted/30"
                         }`}
-                        data-testid={`row-crm-preview-${i}`}
+                        data-testid={`row-crm-preview-${rowIdx}`}
                       >
-                        <td
-                          className={`px-2 py-1.5 font-mono ${missing ? "text-red-500 dark:text-red-400" : "text-muted-foreground"}`}
-                        >
-                          {i + 2}
+                        <td className="px-2 py-1.5 text-muted-foreground font-mono">
+                          {rowIdx + 2}
                         </td>
                         {preview.headers.map((h) => {
-                          const isRequired = requiredFields?.includes(h) ?? false;
-                          const isEmpty = !row[h];
-                          const isBadCell = isRequired && isEmpty;
+                          const cellErr = rowErrors[h];
                           return (
                             <td
                               key={h}
                               className={`px-2 py-1.5 max-w-[180px] truncate ${
-                                isBadCell
-                                  ? "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400"
+                                cellErr
+                                  ? "text-destructive font-medium bg-destructive/10 rounded"
                                   : ""
                               }`}
-                              title={row[h]}
-                              data-testid={isBadCell ? `cell-crm-missing-${i}-${h}` : undefined}
+                              title={cellErr ? cellErr.message : (row[h] || undefined)}
+                              data-testid={
+                                cellErr
+                                  ? `cell-crm-preview-error-${rowIdx}-${h}`
+                                  : undefined
+                              }
                             >
                               {row[h] || (
                                 <span
                                   className={
-                                    isBadCell
-                                      ? "italic font-medium"
+                                    cellErr
+                                      ? "italic text-destructive/60"
                                       : "text-muted-foreground/50 italic"
                                   }
                                 >
-                                  {isBadCell ? "required" : "—"}
+                                  —
                                 </span>
                               )}
                             </td>
@@ -433,28 +546,7 @@ export function CrmImportModal({
               </table>
             </div>
 
-            {skippedPreviewCount > 0 && (
-              <div
-                className="flex items-center gap-2 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-xs text-red-700 dark:text-red-400"
-                data-testid="text-crm-import-skip-warning"
-              >
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>
-                  <span className="font-medium">
-                    {skippedPreviewCount} row{skippedPreviewCount !== 1 ? "s" : ""}
-                  </span>{" "}
-                  {preview.totalRows > PREVIEW_LIMIT
-                    ? "in this preview are"
-                    : preview.totalRows === skippedPreviewCount
-                      ? "will be"
-                      : "will be"}{" "}
-                  skipped — missing required field
-                  {requiredFields && requiredFields.length > 1 ? "s" : ""} (
-                  {requiredFields?.join(", ")}). Fix your CSV before importing.
-                </span>
-              </div>
-            )}
-
+            {/* Actions */}
             <div className="flex gap-2 pt-1">
               <Button
                 variant="outline"
