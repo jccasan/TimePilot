@@ -166,7 +166,7 @@ function parseCSVPreview(raw: string): PreviewData {
   const allDataLines = lines.slice(1).filter((l) => l.trim() !== "");
   const totalRows = allDataLines.length;
   const rows: Record<string, string>[] = [];
-  for (let i = 0; i < Math.min(PREVIEW_LIMIT, allDataLines.length); i++) {
+  for (let i = 0; i < allDataLines.length; i++) {
     const vals = splitCSVLine(allDataLines[i]);
     const row: Record<string, string> = {};
     headers.forEach((h, idx) => {
@@ -445,12 +445,16 @@ export function CrmImportModal({
       )
     : {};
 
-  // Summarise validation errors across all preview rows
+  // Summarise validation errors across ALL rows (full file)
   const totalErrorCells = Object.values(validationErrors).reduce(
     (sum, rowErrs) => sum + Object.keys(rowErrs).length,
     0
   );
   const errorRowCount = Object.keys(validationErrors).length;
+  // Errors visible in the preview table (first PREVIEW_LIMIT rows only)
+  const visibleErrorRowCount = Object.keys(validationErrors).filter(
+    (k) => Number(k) < PREVIEW_LIMIT
+  ).length;
 
   const isWide = step === "preview";
 
@@ -524,7 +528,10 @@ export function CrmImportModal({
             {/* Row / column summary */}
             <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground">
-                Showing <span className="font-medium text-foreground">{preview.rows.length}</span>{" "}
+                Showing{" "}
+                <span className="font-medium text-foreground">
+                  {Math.min(PREVIEW_LIMIT, preview.totalRows)}
+                </span>{" "}
                 of <span className="font-medium text-foreground">{preview.totalRows}</span> rows
                 {preview.totalRows > PREVIEW_LIMIT && " (first 10 shown)"}
               </div>
@@ -561,8 +568,11 @@ export function CrmImportModal({
               >
                 <p className="font-medium flex items-center gap-1.5">
                   <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                  {totalErrorCells} formatting issue{totalErrorCells !== 1 ? "s" : ""} detected in{" "}
-                  {errorRowCount} row{errorRowCount !== 1 ? "s" : ""} (highlighted below)
+                  {totalErrorCells} formatting issue{totalErrorCells !== 1 ? "s" : ""} across{" "}
+                  {errorRowCount} row{errorRowCount !== 1 ? "s" : ""} in the full file
+                  {visibleErrorRowCount < errorRowCount &&
+                    ` (${visibleErrorRowCount} visible in preview)`}
+                  {visibleErrorRowCount === errorRowCount && " (highlighted below)"}
                 </p>
                 <p className="text-destructive/80">
                   Fix these in your CSV for best results. The server will perform its own checks and
@@ -693,7 +703,7 @@ export function CrmImportModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {effectiveRows.map((row, rowIdx) => {
+                  {effectiveRows.slice(0, PREVIEW_LIMIT).map((row, rowIdx) => {
                     const rowErrors = validationErrors[rowIdx] ?? {};
                     const hasRowError = Object.keys(rowErrors).length > 0;
                     return (
