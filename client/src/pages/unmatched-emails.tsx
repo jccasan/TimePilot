@@ -14,7 +14,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Inbox, Link2, EyeOff, Search, ChevronLeft, ChevronRight, Mail } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import {
+  Inbox,
+  Link2,
+  EyeOff,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Mail,
+  UserPlus,
+} from "lucide-react";
 import { useQuery as useContactSearch } from "@tanstack/react-query";
 import { format } from "date-fns";
 
@@ -35,6 +45,85 @@ interface ContactResult {
   firstName: string | null;
   lastName: string | null;
   email: string | null;
+}
+
+const PERSONAL_DOMAINS = new Set([
+  "gmail.com",
+  "yahoo.com",
+  "hotmail.com",
+  "outlook.com",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "comcast.net",
+  "aol.com",
+  "live.com",
+  "msn.com",
+  "ymail.com",
+  "protonmail.com",
+  "proton.me",
+  "googlemail.com",
+]);
+
+const BUSINESS_KEYWORDS =
+  /\b(llc|inc|corp|co|ltd|limited|group|associates|solutions|services|consulting|enterprises|partners)\b/i;
+
+function parseSenderInfo(
+  fromName: string | null,
+  fromAddress: string
+): {
+  firstName: string;
+  lastName: string;
+  companyName: string;
+} {
+  const domain = fromAddress.split("@")[1]?.toLowerCase() ?? "";
+  const isPersonalDomain = PERSONAL_DOMAINS.has(domain);
+
+  let firstName = "";
+  let lastName = "";
+  let companyName = "";
+
+  if (fromName && fromName.trim()) {
+    const name = fromName.trim();
+
+    // "Last, First" format
+    const commaMatch = name.match(/^([^,]+),\s*(.+)$/);
+    if (commaMatch) {
+      firstName = commaMatch[2].trim();
+      lastName = commaMatch[1].trim();
+    } else {
+      const parts = name.split(/\s+/);
+      firstName = parts[0] ?? "";
+      lastName = parts.slice(1).join(" ");
+    }
+
+    // If the name looks like a business and the domain is not personal, pre-fill company
+    if (!isPersonalDomain && (BUSINESS_KEYWORDS.test(name) || name.split(/\s+/).length > 2)) {
+      companyName = name;
+      // Still try to derive a first name from email local part as fallback
+      if (!firstName || BUSINESS_KEYWORDS.test(firstName)) {
+        const localPart = fromAddress.split("@")[0] ?? "";
+        const derived = localPart.split(/[._-]/)[0] ?? "";
+        firstName = derived.charAt(0).toUpperCase() + derived.slice(1);
+        lastName = "";
+        // company stays as the full name
+      }
+    }
+  } else {
+    // No display name — derive from email local part
+    const localPart = fromAddress.split("@")[0] ?? "";
+    const parts = localPart.split(/[._-]/);
+    firstName = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : "";
+    lastName = parts[1] ? parts[1].charAt(0).toUpperCase() + parts[1].slice(1) : "";
+
+    // If the domain is not personal, suggest it as a company name
+    if (!isPersonalDomain) {
+      const domainName = domain.split(".")[0] ?? "";
+      companyName = domainName.charAt(0).toUpperCase() + domainName.slice(1);
+    }
+  }
+
+  return { firstName, lastName, companyName };
 }
 
 function ContactPicker({
@@ -105,14 +194,162 @@ function ContactPicker({
   );
 }
 
+interface CreateContactFormValues {
+  firstName: string;
+  lastName: string;
+  email: string;
+  companyName: string;
+}
+
+function CreateContactModal({
+  email,
+  onSuccess,
+  onClose,
+}: {
+  email: InboundEmail;
+  onSuccess: (contactId: string) => void;
+  onClose: () => void;
+}) {
+  const defaults = parseSenderInfo(email.fromName, email.fromAddress);
+  const [values, setValues] = useState<CreateContactFormValues>({
+    firstName: defaults.firstName,
+    lastName: defaults.lastName,
+    email: email.fromAddress,
+    companyName: defaults.companyName,
+  });
+  const [errors, setErrors] = useState<Partial<Record<keyof CreateContactFormValues, string>>>({});
+
+  const { toast } = useToast();
+
+  const createMutation = useMutation({
+    mutationFn: async (formValues: CreateContactFormValues) => {
+      const payload: Record<string, unknown> = {
+        firstName: formValues.firstName.trim(),
+        lastName: formValues.lastName.trim(),
+        email: formValues.email.trim(),
+        status: "lead",
+        contactType: formValues.companyName.trim() ? "commercial" : "residential",
+      };
+      if (formValues.companyName.trim()) {
+        payload.companyName = formValues.companyName.trim();
+      }
+      const res = await apiRequest("POST", "/api/contacts", payload);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || "Failed to create contact");
+      }
+      return res.json();
+    },
+    onSuccess: (contact: { id: string }) => {
+      onSuccess(contact.id);
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Failed to create contact",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  function validate(): boolean {
+    const errs: Partial<Record<keyof CreateContactFormValues, string>> = {};
+    if (!values.firstName.trim()) errs.firstName = "First name is required";
+    if (!values.email.trim()) {
+      errs.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) {
+      errs.email = "Enter a valid email address";
+    }
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!validate()) return;
+    createMutation.mutate(values);
+  }
+
+  function field(
+    id: keyof CreateContactFormValues,
+    label: string,
+    required = false,
+    autoFocus = false
+  ) {
+    return (
+      <div className="space-y-1.5">
+        <Label htmlFor={`create-contact-${id}`} className="text-sm font-medium">
+          {label}
+          {required && <span className="text-destructive ml-0.5">*</span>}
+        </Label>
+        <Input
+          id={`create-contact-${id}`}
+          value={values[id]}
+          onChange={(e) => {
+            setValues((v) => ({ ...v, [id]: e.target.value }));
+            if (errors[id]) setErrors((er) => ({ ...er, [id]: undefined }));
+          }}
+          autoFocus={autoFocus}
+          data-testid={`input-create-contact-${id}`}
+          aria-invalid={!!errors[id]}
+        />
+        {errors[id] && (
+          <p className="text-xs text-destructive" data-testid={`error-create-contact-${id}`}>
+            {errors[id]}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <DialogContent className="max-w-sm">
+      <DialogHeader>
+        <DialogTitle>Create Contact</DialogTitle>
+      </DialogHeader>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <p className="text-xs text-muted-foreground -mt-1">
+          Pre-filled from the email sender. Edit any field before saving.
+        </p>
+        {field("firstName", "First Name", true, true)}
+        {field("lastName", "Last Name")}
+        {field("email", "Email", true)}
+        {field("companyName", "Company Name")}
+        <DialogFooter className="pt-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            disabled={createMutation.isPending}
+            data-testid="button-create-contact-cancel"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={createMutation.isPending}
+            data-testid="button-create-contact-save"
+          >
+            {createMutation.isPending ? "Creating..." : "Create & Link"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  );
+}
+
 function EmailRow({
   email,
   onLink,
   onIgnore,
+  onCreateContact,
 }: {
   email: InboundEmail;
   onLink: (email: InboundEmail) => void;
   onIgnore: (email: InboundEmail) => void;
+  onCreateContact: (email: InboundEmail) => void;
 }) {
   const preview = email.bodyText?.replace(/\s+/g, " ").trim().slice(0, 120) || "";
   const fromDisplay = email.fromName
@@ -151,6 +388,15 @@ function EmailRow({
         <Button
           variant="outline"
           size="sm"
+          onClick={() => onCreateContact(email)}
+          data-testid={`button-create-contact-email-${email.id}`}
+        >
+          <UserPlus className="h-3.5 w-3.5 mr-1" />
+          Create Contact
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => onLink(email)}
           data-testid={`button-link-email-${email.id}`}
         >
@@ -177,6 +423,7 @@ export default function UnmatchedEmailsPage() {
   const [page, setPage] = useState(1);
   const [showIgnored, setShowIgnored] = useState(false);
   const [linkTarget, setLinkTarget] = useState<InboundEmail | null>(null);
+  const [createTarget, setCreateTarget] = useState<InboundEmail | null>(null);
   const limit = 25;
 
   const { data: ignoredCountData } = useQuery<{ total: number }>({
@@ -226,6 +473,29 @@ export default function UnmatchedEmailsPage() {
     onError: () => toast({ title: "Failed to ignore email", variant: "destructive" }),
   });
 
+  const createAndLinkMutation = useMutation({
+    mutationFn: ({ emailId, contactId }: { emailId: string; contactId: string }) =>
+      apiRequest("POST", `/api/email/unmatched/${emailId}/link`, {
+        contact_id: contactId,
+      }).then((r) => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/email/unmatched"] });
+      qc.invalidateQueries({ queryKey: ["/api/contacts"] });
+      setCreateTarget(null);
+      toast({ title: "Contact created and email linked" });
+    },
+    onError: () => {
+      toast({
+        title: "Contact created but email link failed",
+        description: "The contact was saved. You can link the email manually.",
+        variant: "destructive",
+      });
+      qc.invalidateQueries({ queryKey: ["/api/email/unmatched"] });
+      qc.invalidateQueries({ queryKey: ["/api/contacts"] });
+      setCreateTarget(null);
+    },
+  });
+
   const totalPages = data ? Math.ceil(data.total / limit) : 1;
   const emails = data?.data ?? [];
 
@@ -257,8 +527,8 @@ export default function UnmatchedEmailsPage() {
                 Unmatched Emails
               </CardTitle>
               <CardDescription className="mt-1">
-                Link an email to a contact to add it to their activity timeline, or ignore it to
-                remove it from this queue.
+                Create a new contact or link to an existing one. Linked emails appear in the
+                contact's activity timeline.
               </CardDescription>
             </div>
             <Button
@@ -302,6 +572,7 @@ export default function UnmatchedEmailsPage() {
                     email={email}
                     onLink={setLinkTarget}
                     onIgnore={(e) => ignoreMutation.mutate(e.id)}
+                    onCreateContact={setCreateTarget}
                   />
                 ))}
               </div>
@@ -344,6 +615,18 @@ export default function UnmatchedEmailsPage() {
               linkMutation.mutate({ id: linkTarget.id, contactId: contact.id })
             }
             onClose={() => setLinkTarget(null)}
+          />
+        )}
+      </Dialog>
+
+      <Dialog open={!!createTarget} onOpenChange={(o) => !o && setCreateTarget(null)}>
+        {createTarget && (
+          <CreateContactModal
+            email={createTarget}
+            onSuccess={(contactId) =>
+              createAndLinkMutation.mutate({ emailId: createTarget.id, contactId })
+            }
+            onClose={() => setCreateTarget(null)}
           />
         )}
       </Dialog>
