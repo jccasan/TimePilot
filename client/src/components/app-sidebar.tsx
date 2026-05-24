@@ -92,7 +92,7 @@ const LR_OPERATOR_NAV: {
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
   { title: "Lead Response", url: "/lead-response", icon: PhoneIncoming },
-  { title: "Contacts", url: "/contacts?leadSource=lead_response", icon: ContactRound },
+  { title: "Contacts and Leads", url: "/contacts?leadSource=lead_response", icon: ContactRound },
   { title: "Messages", url: "/communications", icon: MessageSquare },
   { title: "Settings", url: "/settings", icon: Settings },
   { title: "Billing", url: "/billing", icon: CreditCard },
@@ -184,7 +184,7 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
     key: "crm",
     items: [
       { title: "CRM Dashboard", url: "/crm", icon: Kanban, requiresSubscription: true },
-      { title: "Contacts", url: "/crm/contacts", icon: Users2, requiresSubscription: true },
+      { title: "Contacts and Leads", url: "/crm/contacts", icon: Users2, requiresSubscription: true },
       { title: "Companies", url: "/crm/companies", icon: Building2, requiresSubscription: true },
       { title: "Deals", url: "/crm/deals", icon: DollarSign, requiresSubscription: true },
       { title: "Pipeline", url: "/crm/pipeline", icon: BarChart3, requiresSubscription: true },

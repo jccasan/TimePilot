@@ -34,7 +34,7 @@ const WELCOME_TOUR: TourDefinition = {
     },
     {
       target: '[data-testid="link-contacts"]',
-      title: "Contacts",
+      title: "Contacts and Leads",
       content:
         "Manage all your clients here. Add contacts, set service statuses, track properties, and view full service history.",
       placement: "right",

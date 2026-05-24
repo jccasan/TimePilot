@@ -32,7 +32,7 @@ export default function CrmDashboard() {
 
   const tiles = [
     {
-      label: "Contacts",
+      label: "Contacts and Leads",
       value: stats?.contacts ?? 0,
       icon: Users,
       href: "/crm/contacts",

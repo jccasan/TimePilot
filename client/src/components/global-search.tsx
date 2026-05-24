@@ -18,7 +18,7 @@ interface GroupedResults {
 }
 
 const typeConfig = {
-  contacts: { icon: Users, label: "Contacts", path: "/contacts" },
+  contacts: { icon: Users, label: "Contacts and Leads", path: "/contacts" },
   properties: { icon: Home, label: "Properties", path: "/contacts" },
   invoices: { icon: FileText, label: "Invoices", path: "/invoices" },
   routes: { icon: MapPin, label: "Routes", path: "/routes" },
