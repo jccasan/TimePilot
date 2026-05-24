@@ -4,7 +4,13 @@ import crypto from "crypto";
 import { storage } from "../storage";
 import { db } from "../db";
 import { sql, eq, and } from "drizzle-orm";
-import { companies, contacts, quoteFormEvents, servicePlans } from "@shared/schema";
+import {
+  companies,
+  contacts,
+  quoteFormEvents,
+  DEFAULT_PRICING_RULES,
+  type PricingRulesConfig,
+} from "@shared/schema";
 import { calculatePrice, type PriceCalculatorInputs } from "../services/pricing-calculator";
 import { z } from "zod";
 import {
@@ -833,91 +839,47 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
   const DEFAULT_SMS_QUOTE_TEMPLATE =
     "Hi {firstName}! Thanks for your interest in our pet waste removal service. Based on {dogs} dog(s) with {frequency} service, your estimated price is ${price}/visit. Reply YES to get started!";
 
-  async function lookupRealPrice(
-    companyId: string,
-    dogs: number,
+  function calculatePriceFromRules(
+    pricingRules: PricingRulesConfig,
     frequency: string,
-    yardSize?: string
-  ): Promise<{ priceCents: number; callForQuote: boolean }> {
-    const pricingItems = await storage.getServicePricing(companyId);
-    const activeRecurring = pricingItems.filter(
-      (p) => p.isActive && p.category === "recurring_service"
-    );
-    const activeAddOns = pricingItems.filter((p) => p.isActive && p.category === "add_on");
-
-    if (activeRecurring.length === 0) return { priceCents: 0, callForQuote: false };
-
-    const freqMap: Record<string, string[]> = {
-      twice_weekly: ["twice weekly", "twice-weekly", "two times", "2x", "twice per week"],
-      weekly: ["weekly", "once a week", "once per week"],
-      biweekly: ["bi-weekly", "bi weekly", "every other week", "biweekly"],
-      monthly: ["monthly"],
-      onetime: ["one-time", "one time", "onetime"],
-    };
-    const twiceWeeklyKeys = freqMap["twice_weekly"];
-
-    const matchFreq = (name: string, freq: string): boolean => {
-      const lower = name.toLowerCase();
-      if (freq === "weekly") {
-        if (twiceWeeklyKeys.some((k) => lower.includes(k))) return false;
-        if ((freqMap["biweekly"] || []).some((k) => lower.includes(k))) return false;
-      }
-      return (freqMap[freq] || [freq]).some((k) => lower.includes(k));
-    };
-
-    const freqItems = activeRecurring.filter((p) => matchFreq(p.name, frequency));
-
-    const matchDog = (name: string, d: number): boolean => {
-      const lower = name.toLowerCase();
-      const rangeMatch = lower.match(/(\d+)\s*[-–]\s*(\d+)\s*dog/);
-      if (rangeMatch) return d >= parseInt(rangeMatch[1]) && d <= parseInt(rangeMatch[2]);
-      const plusMatch = lower.match(/(\d+)\s*\+\s*dog/);
-      if (plusMatch) return d >= parseInt(plusMatch[1]);
-      if (lower.includes(`${d}+`) || lower.includes(`${d} +`)) return true;
-      if (lower.includes(`${d} dog`)) return true;
-      return false;
-    };
-
-    let matched = freqItems.find((p) => matchDog(p.name, dogs));
-    if (!matched) {
-      const plusItems = freqItems.filter((p) => {
-        const m = p.name.match(/(\d+)\+/);
-        return m && dogs >= parseInt(m[1]);
-      });
-      if (plusItems.length > 0) matched = plusItems[plusItems.length - 1];
-    }
-
-    if (!matched) return { priceCents: 0, callForQuote: false };
-    const matchedMeta = matched.metadata as { callForQuote?: boolean } | null;
-    if (matchedMeta?.callForQuote) return { priceCents: 0, callForQuote: true };
-
-    let priceCents = Math.round(parseFloat(matched.basePrice) * 100);
-
-    const lotSizeAddOns = activeAddOns.filter(
-      (p) => p.name.toLowerCase().includes("lot size") || p.name.toLowerCase().includes("acre")
-    );
-    const yardAcreMap: Record<string, number> = {
-      tier_1: 0.1,
-      tier_2: 0.2,
-      tier_3: 0.35,
-      tier_4: 0.5,
-      tier_5: 0.75,
-      tier_6: 1.0,
-    };
-    const acreage = yardAcreMap[yardSize || "tier_3"] ?? 0.35;
-    let bestAddon: (typeof activeAddOns)[0] | null = null;
-    for (const addon of lotSizeAddOns.sort((a, b) => a.sortOrder - b.sortOrder)) {
-      const acreMatch = addon.name.match(/([\d.]+)\s*acre/i);
-      if (acreMatch && acreage <= parseFloat(acreMatch[1])) {
-        bestAddon = addon;
+    dogCount: number,
+    yardSizeTierName?: string
+  ): number {
+    let basePrice: number;
+    switch (frequency) {
+      case "twice_weekly":
+        basePrice = pricingRules.basePrices.twiceWeekly;
         break;
-      }
+      case "weekly":
+        basePrice = pricingRules.basePrices.weekly;
+        break;
+      case "biweekly":
+        basePrice = pricingRules.basePrices.biWeekly;
+        break;
+      case "monthly":
+        basePrice = pricingRules.basePrices.monthly ?? pricingRules.basePrices.biWeekly;
+        break;
+      case "onetime":
+        basePrice = pricingRules.basePrices.oneTime ?? pricingRules.basePrices.weekly;
+        break;
+      default:
+        basePrice = pricingRules.basePrices.weekly;
     }
-    if (!bestAddon && lotSizeAddOns.length > 0) bestAddon = lotSizeAddOns[lotSizeAddOns.length - 1];
-    if (bestAddon && parseFloat(bestAddon.basePrice) > 0)
-      priceCents += Math.round(parseFloat(bestAddon.basePrice) * 100);
 
-    return { priceCents, callForQuote: false };
+    let tierSurcharge = 0;
+    if (yardSizeTierName && pricingRules.yardSizeTiers.length > 0) {
+      const tier = pricingRules.yardSizeTiers.find(
+        (t) => t.name?.toLowerCase() === yardSizeTierName.toLowerCase()
+      );
+      if (tier) tierSurcharge = tier.surcharge;
+    }
+
+    const { incrementDogs, surchargeAmount, maxDogs } = pricingRules.perDogRule;
+    const extraDogs = Math.min(Math.max(dogCount - 1, 0), Math.max(maxDogs - 1, 0));
+    const increments = Math.floor(extraDogs / Math.max(incrementDogs, 1));
+    const dogSurcharge = increments * surchargeAmount;
+
+    return Math.round((basePrice + tierSurcharge + dogSurcharge) * 100);
   }
 
   async function sendAutoQuoteSms(
@@ -942,36 +904,11 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       | "monthly"
       | "onetime";
 
-    const pricingItems = await storage.getServicePricing(company.id);
-    const hasActiveRecurring = pricingItems.some(
-      (p) => p.isActive && p.category === "recurring_service"
-    );
-
-    let priceDollars: string;
-    if (hasActiveRecurring) {
-      const realPrice = await lookupRealPrice(company.id, dogs, frequency, yardSize);
-      if (realPrice.priceCents > 0 && !realPrice.callForQuote) {
-        priceDollars = (realPrice.priceCents / 100).toFixed(2);
-      } else {
-        priceDollars = "Call for Quote";
-      }
-    } else {
-      const yardSizeMap: Record<string, number> = {
-        small: 0.05,
-        medium: 0.1,
-        large: 0.2,
-        "extra-large": 0.35,
-      };
-      const pricingInputs: PriceCalculatorInputs = {
-        yardSizeAcres: yardSizeMap[yardSize || "medium"] || 0.1,
-        dogCount: dogs,
-        serviceFrequency: frequency,
-        yardDifficulty: "flat",
-        distanceFromNearestStopMiles: 0.5,
-      };
-      const priceResult = calculatePrice(pricingInputs, company.pricingConfig);
-      priceDollars = (priceResult.recommendedPriceCents / 100).toFixed(2);
-    }
+    const smsRules =
+      (company.pricingConfig as { pricingRules?: PricingRulesConfig } | null)?.pricingRules ??
+      DEFAULT_PRICING_RULES;
+    const smsPriceCents = calculatePriceFromRules(smsRules, frequency, dogs, yardSize);
+    const priceDollars = (smsPriceCents / 100).toFixed(2);
 
     const template = company.leadWebhookSmsTemplate || DEFAULT_SMS_QUOTE_TEMPLATE;
     const body = template
@@ -1485,8 +1422,6 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         yardSize,
         serviceFrequency,
         serviceDay,
-        pricingItemId,
-        lotAddonId,
         lastCleanup,
         notes,
         smsOptIn,
@@ -1639,71 +1574,16 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         );
       }
 
-      let quotePriceCents: number | null = null;
-      let callForQuote = false;
-
-      const pricingItems = await storage.getServicePricing(company.id);
-      const hasActiveRecurring = pricingItems.some(
-        (p) => p.isActive && p.category === "recurring_service"
+      const pricingRules =
+        (company.pricingConfig as { pricingRules?: PricingRulesConfig } | null)?.pricingRules ??
+        DEFAULT_PRICING_RULES;
+      let quotePriceCents: number = calculatePriceFromRules(
+        pricingRules,
+        serviceFrequency,
+        numberOfDogs,
+        yardSize
       );
-
-      if (pricingItemId) {
-        const selectedItem = pricingItems.find(
-          (p) => p.id === pricingItemId && p.isActive && p.category === "recurring_service"
-        );
-        if (selectedItem) {
-          const meta = selectedItem.metadata as { callForQuote?: boolean } | null;
-          if (meta?.callForQuote) {
-            callForQuote = true;
-          } else {
-            quotePriceCents = Math.round(parseFloat(selectedItem.basePrice) * 100);
-          }
-          if (lotAddonId && quotePriceCents !== null) {
-            const lotItem = pricingItems.find(
-              (p) => p.id === lotAddonId && p.isActive && p.category === "add_on"
-            );
-            if (lotItem && parseFloat(lotItem.basePrice) > 0) {
-              quotePriceCents += Math.round(parseFloat(lotItem.basePrice) * 100);
-            }
-          }
-        }
-      }
-
-      if (quotePriceCents === null && !callForQuote && hasActiveRecurring) {
-        const realPrice = await lookupRealPrice(
-          company.id,
-          numberOfDogs,
-          serviceFrequency,
-          yardSize
-        );
-        if (realPrice.callForQuote) {
-          callForQuote = true;
-        } else if (realPrice.priceCents > 0) {
-          quotePriceCents = realPrice.priceCents;
-        } else {
-          callForQuote = true;
-        }
-      }
-
-      if (quotePriceCents === null && !callForQuote && !hasActiveRecurring) {
-        const yardSizeMap: Record<string, number> = {
-          tier_1: 0.05,
-          tier_2: 0.1,
-          tier_3: 0.2,
-          tier_4: 0.35,
-          tier_5: 0.5,
-          tier_6: 0.75,
-        };
-        const pricingInputs: PriceCalculatorInputs = {
-          yardSizeAcres: yardSizeMap[yardSize ?? "tier_2"] ?? 0.1,
-          dogCount: numberOfDogs,
-          serviceFrequency: serviceFrequency as (typeof servicePlans.$inferSelect)["frequency"],
-          yardDifficulty: "flat",
-          distanceFromNearestStopMiles: 0.5,
-        };
-        const priceResult = calculatePrice(pricingInputs, company.pricingConfig);
-        quotePriceCents = priceResult.recommendedPriceCents;
-      }
+      const callForQuote = false;
 
       let zoneSurchargePercent = 0;
       if (zipCode && quotePriceCents !== null && !callForQuote) {

@@ -120,7 +120,21 @@ type CompanyInfo = {
   widgetFieldConfig: WidgetFieldConfig | null;
   yardSizeTierConfig: YardSizeTierConfig | null;
   lrPricingTiers: LrPricingTier[] | null;
-  pricingRules: { yardSizeTiers: PricingRulesYardTier[] } | null;
+  pricingRules: {
+    basePrices: {
+      weekly: number;
+      biWeekly: number;
+      twiceWeekly: number;
+      monthly?: number;
+      oneTime?: number;
+    };
+    perDogRule: {
+      incrementDogs: number;
+      surchargeAmount: number;
+      maxDogs: number;
+    };
+    yardSizeTiers: PricingRulesYardTier[];
+  } | null;
   country?: string;
   currency?: string;
 };
@@ -770,20 +784,47 @@ export default function SignupWidget() {
     return parsed.lotAddons.find((l) => l.value === selectedLot) || null;
   }, [parsed, selectedLot]);
 
-  const freqBasePrice = useMemo(() => {
-    if (!parsed || !selectedFreq || !parsed.freqGroups[selectedFreq]) return 0;
-    const items = parsed.freqGroups[selectedFreq];
-    const first = items.find((i) => !i.callForQuote);
-    return first ? first.price : 0;
-  }, [parsed, selectedFreq]);
-
   const livePrice = useMemo(() => {
-    if (!hasPricing || !currentTier) return null;
-    if (currentTier.callForQuote) return { callForQuote: true, cents: 0 };
-    const base = freqBasePrice + currentTier.surcharge;
-    const lotSurcharge = currentLot ? currentLot.surcharge : 0;
-    return { callForQuote: false, cents: base + lotSurcharge };
-  }, [hasPricing, currentTier, freqBasePrice, currentLot]);
+    const rules = company?.pricingRules;
+    if (!rules?.basePrices || !selectedFreq) return null;
+    if (hasPricing && !currentTier) return null;
+    const backendFreq = BACKEND_FREQ_MAP[selectedFreq] || selectedFreq;
+    let basePrice: number;
+    switch (backendFreq) {
+      case "twice_weekly":
+        basePrice = rules.basePrices.twiceWeekly;
+        break;
+      case "weekly":
+        basePrice = rules.basePrices.weekly;
+        break;
+      case "biweekly":
+        basePrice = rules.basePrices.biWeekly;
+        break;
+      case "monthly":
+        basePrice = rules.basePrices.monthly ?? 0;
+        break;
+      case "onetime":
+        basePrice = rules.basePrices.oneTime ?? rules.basePrices.weekly;
+        break;
+      default:
+        basePrice = 0;
+    }
+    if (!basePrice) return null;
+    let tierSurcharge = 0;
+    if (selectedLot && rules.yardSizeTiers.length > 0) {
+      const tier = rules.yardSizeTiers.find((t) => (t.name || "") === selectedLot);
+      if (tier) tierSurcharge = tier.surcharge;
+    }
+    const dogCount = currentTier?.dogCount ?? 1;
+    const { incrementDogs, surchargeAmount, maxDogs } = rules.perDogRule;
+    const extraDogs = Math.min(Math.max(dogCount - 1, 0), Math.max(maxDogs - 1, 0));
+    const increments = Math.floor(extraDogs / Math.max(incrementDogs, 1));
+    const dogSurcharge = increments * surchargeAmount;
+    return {
+      callForQuote: false,
+      cents: Math.round((basePrice + tierSurcharge + dogSurcharge) * 100),
+    };
+  }, [company?.pricingRules, selectedFreq, selectedLot, currentTier, hasPricing]);
 
   const initialCleanupRange = useMemo(() => {
     if (!lastCleanup) return null;
@@ -982,8 +1023,6 @@ export default function SignupWidget() {
   const hasLotAddons = parsed && parsed.lotAddons.length > 0;
 
   const yardSizeTiers = useMemo(() => {
-    // pricingRules.yardSizeTiers is the canonical source — it's what the backend
-    // uses for pricing, so the form options must match it exactly.
     if (company?.pricingRules?.yardSizeTiers && company.pricingRules.yardSizeTiers.length > 0) {
       return company.pricingRules.yardSizeTiers.map((t, i) => ({
         value: t.name || `Tier ${i + 1}`,
@@ -992,27 +1031,12 @@ export default function SignupWidget() {
         isAddon: true,
       }));
     }
-    // LR tiers fallback (lead-response override)
-    if (company?.lrPricingTiers && company.lrPricingTiers.length > 0) {
-      return company.lrPricingTiers.map((t, i) => ({
-        value: `tier_${i + 1}`,
-        label: t.label.trim(),
-        price: t.pricePerVisit ?? 0,
-        isAddon: false,
-      }));
-    }
     return [];
-  }, [company?.pricingRules?.yardSizeTiers, company?.lrPricingTiers]);
+  }, [company?.pricingRules?.yardSizeTiers]);
 
   const hasYardSizeTiers = yardSizeTiers.length > 0;
 
-  // When LR tiers are configured (and pricingRules tiers aren't overriding them)
-  // but fewer than 3 are valid, block the form
-  const lrTiersInactive =
-    !company?.pricingRules?.yardSizeTiers?.length &&
-    company?.lrPricingTiers !== undefined &&
-    company.lrPricingTiers !== null &&
-    yardSizeTiers.length < 3;
+  const lrTiersInactive = false;
 
   const isStep2Valid = !!selectedFreq && !!selectedDogTier && !!lastCleanup;
 
