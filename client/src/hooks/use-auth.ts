@@ -6,6 +6,7 @@ import { setUserContext, clearUserContext } from "@/lib/errorReporter";
 type SafeUser = Omit<User, "passwordHash"> & {
   role?: string;
   companyId?: string | null;
+  isPlatformAdmin?: boolean;
   setupDone?: boolean;
   sessionToken?: string;
   importMode?: boolean;

@@ -60,7 +60,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       // CRM access is immediately available without needing the company switcher.
       let preferredMembership = memberships.length > 0 ? memberships[0] : null;
       const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
-      if (adminEmail && result.user.email.toLowerCase() === adminEmail) {
+      if (adminEmail && result.user.email && result.user.email.toLowerCase() === adminEmail) {
         const hqCompany = await storage.getCompanyBySlug("scoopilot-hq");
         if (hqCompany) {
           const hqMembership = memberships.find((m) => m.companyId === hqCompany.id);
@@ -92,6 +92,11 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       console.log(
         `[auth] login success | user=${result.user.id} sid=${req.sessionID.substring(0, 8)}... ua=${(req.headers["user-agent"] || "").substring(0, 80)}`
       );
+      const isPlatformAdmin = !!(
+        adminEmail &&
+        result.user.email &&
+        result.user.email.toLowerCase() === adminEmail
+      );
       return res.json({
         ...safeUser,
         importMode,
@@ -101,6 +106,7 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         sessionToken: req.sessionID,
         subscriptionStatus,
         voicePlanStatus,
+        isPlatformAdmin,
       });
     } catch (err) {
       handleError(res, err);
@@ -163,7 +169,20 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         subscriptionStatus = company?.subscriptionStatus ?? null;
         voicePlanStatus = company?.voicePlanStatus ?? null;
       }
-      return res.json({ ...safeUser, role, companyId, subscriptionStatus, voicePlanStatus });
+      const hqAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+      const isPlatformAdmin = !!(
+        hqAdminEmail &&
+        user.email &&
+        user.email.toLowerCase() === hqAdminEmail
+      );
+      return res.json({
+        ...safeUser,
+        role,
+        companyId,
+        subscriptionStatus,
+        voicePlanStatus,
+        isPlatformAdmin,
+      });
     } catch (err) {
       handleError(res, err);
     }

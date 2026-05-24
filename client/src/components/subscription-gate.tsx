@@ -16,6 +16,8 @@ export function SubscriptionGate({
 
   if (!user) return <>{children}</>;
 
+  if (user.isPlatformAdmin) return <>{children}</>;
+
   if (type === "voice") {
     const hasVoice = user.voicePlanStatus === "active";
     if (!hasVoice) {

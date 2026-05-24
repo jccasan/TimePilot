@@ -255,9 +255,11 @@ export function AppSidebar({
   const isLeadResponseOperator = user?.role === "lead_response_operator";
 
   // Determine plan access
+  const isPlatformAdmin = user?.isPlatformAdmin ?? false;
   const subscriptionStatus = user?.subscriptionStatus;
   const voicePlanStatus = user?.voicePlanStatus;
-  const hasMainSubscription = subscriptionStatus === "active" || subscriptionStatus === "trialing";
+  const hasMainSubscription =
+    isPlatformAdmin || subscriptionStatus === "active" || subscriptionStatus === "trialing";
   const hasVoicePlan = voicePlanStatus === "active";
 
   const { data: company } = useQuery<{ logoUrl: string | null; name: string }>({

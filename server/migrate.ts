@@ -1113,7 +1113,10 @@ export async function runStartupMigrations(): Promise<void> {
           (gen_random_uuid(), 'ScooPilot HQ', $1, 'scoopilot-hq',
            'active'::subscription_status, 'tier_10_plus'::subscription_tier,
            NOW(), NOW())
-        ON CONFLICT (slug) DO NOTHING
+        ON CONFLICT (slug) DO UPDATE
+          SET subscription_status = 'active'::subscription_status,
+              subscription_tier   = 'tier_10_plus'::subscription_tier,
+              updated_at          = NOW()
       `,
         [hqAdminEmail.toLowerCase()]
       );
