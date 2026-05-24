@@ -4,7 +4,16 @@ import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Download, Upload, FileText, CheckCircle2, AlertCircle, ArrowLeft, RotateCcw, ShieldAlert } from "lucide-react";
+import {
+  Download,
+  Upload,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  ArrowLeft,
+  RotateCcw,
+  ShieldAlert,
+} from "lucide-react";
 
 interface SkippedRow {
   row: number;
@@ -101,10 +110,7 @@ function validateCell(header: string, value: string, required: boolean): CellErr
   return null;
 }
 
-function validatePreview(
-  data: PreviewData,
-  requiredFields: string[],
-): ValidationErrors {
+function validatePreview(data: PreviewData, requiredFields: string[]): ValidationErrors {
   const errors: ValidationErrors = {};
   data.rows.forEach((row, rowIdx) => {
     data.headers.forEach((header) => {
@@ -296,16 +302,13 @@ export function CrmImportModal({
         const parts: string[] = [];
         if (createdCount > 0) parts.push(`${createdCount} created`);
         if (updatedCount > 0) parts.push(`${updatedCount} updated`);
-        if (data.skipped.length > 0)
-          parts.push(`${data.skipped.length} skipped`);
+        if (data.skipped.length > 0) parts.push(`${data.skipped.length} skipped`);
         toast({ title: "Import complete", description: parts.join(", ") });
       } else {
         toast({
           title: "No records imported",
           description:
-            data.skipped.length > 0
-              ? `${data.skipped.length} rows skipped`
-              : "File appears empty",
+            data.skipped.length > 0 ? `${data.skipped.length} rows skipped` : "File appears empty",
           variant: "destructive",
         });
       }
@@ -323,7 +326,7 @@ export function CrmImportModal({
   // Summarise validation errors across all preview rows
   const totalErrorCells = Object.values(validationErrors).reduce(
     (sum, rowErrs) => sum + Object.keys(rowErrs).length,
-    0,
+    0
   );
   const errorRowCount = Object.keys(validationErrors).length;
 
@@ -478,10 +481,7 @@ export function CrmImportModal({
                         >
                           {h}
                           {isRequired && (
-                            <span
-                              className="ml-1 text-destructive"
-                              title="Required field"
-                            >
+                            <span className="ml-1 text-destructive" title="Required field">
                               *
                             </span>
                           )}
@@ -501,7 +501,9 @@ export function CrmImportModal({
                       <tr
                         key={rowIdx}
                         className={`border-b border-border/40 last:border-0 ${
-                          hasRowError ? "bg-destructive/5 hover:bg-destructive/10" : "hover:bg-muted/30"
+                          hasRowError
+                            ? "bg-destructive/5 hover:bg-destructive/10"
+                            : "hover:bg-muted/30"
                         }`}
                         data-testid={`row-crm-preview-${rowIdx}`}
                       >
@@ -518,11 +520,9 @@ export function CrmImportModal({
                                   ? "text-destructive font-medium bg-destructive/10 rounded"
                                   : ""
                               }`}
-                              title={cellErr ? cellErr.message : (row[h] || undefined)}
+                              title={cellErr ? cellErr.message : row[h] || undefined}
                               data-testid={
-                                cellErr
-                                  ? `cell-crm-preview-error-${rowIdx}-${h}`
-                                  : undefined
+                                cellErr ? `cell-crm-preview-error-${rowIdx}-${h}` : undefined
                               }
                             >
                               {row[h] || (
@@ -583,9 +583,7 @@ export function CrmImportModal({
                 )}
                 Import Results
               </div>
-              <div
-                className={`grid gap-3 text-sm ${showUpdated ? "grid-cols-3" : "grid-cols-2"}`}
-              >
+              <div className={`grid gap-3 text-sm ${showUpdated ? "grid-cols-3" : "grid-cols-2"}`}>
                 <div className="rounded bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 px-3 py-2 text-center">
                   <p
                     className="text-2xl font-bold text-green-700 dark:text-green-400"
@@ -607,10 +605,7 @@ export function CrmImportModal({
                   </div>
                 )}
                 <div className="rounded bg-muted border border-border px-3 py-2 text-center">
-                  <p
-                    className="text-2xl font-bold"
-                    data-testid="text-crm-import-skipped"
-                  >
+                  <p className="text-2xl font-bold" data-testid="text-crm-import-skipped">
                     {result.skipped.length}
                   </p>
                   <p className="text-xs text-muted-foreground">Skipped</p>
@@ -638,7 +633,9 @@ export function CrmImportModal({
                         className="flex items-start gap-2 text-xs bg-muted/50 rounded px-2 py-1"
                         data-testid={`text-crm-import-skip-${idx}`}
                       >
-                        <span className="font-mono shrink-0 text-muted-foreground">Row {s.row}:</span>
+                        <span className="font-mono shrink-0 text-muted-foreground">
+                          Row {s.row}:
+                        </span>
                         <span
                           className={
                             s.reason.startsWith("Duplicate:")

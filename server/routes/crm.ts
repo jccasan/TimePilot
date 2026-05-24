@@ -506,6 +506,7 @@ export function registerCrmRoutes(app: Express) {
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
     const imported: string[] = [];
+    let duplicates = 0;
     const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -552,6 +553,16 @@ export function registerCrmRoutes(app: Express) {
         });
         continue;
       }
+      const normalizedEmail = r.email.trim().toLowerCase();
+      const [existing] = await db
+        .select({ id: crmContacts.id })
+        .from(crmContacts)
+        .where(and(eq(crmContacts.companyId, companyId), eq(crmContacts.email, normalizedEmail)))
+        .limit(1);
+      if (existing) {
+        duplicates++;
+        continue;
+      }
       try {
         const tags = r.tags
           ? r.tags
@@ -565,7 +576,7 @@ export function registerCrmRoutes(app: Express) {
             companyId,
             firstName: r.first_name,
             lastName: r.last_name,
-            email: r.email.trim().toLowerCase(),
+            email: normalizedEmail,
             phone: normalizedPhone,
             company: r.company || null,
             title: r.title || null,
@@ -581,7 +592,7 @@ export function registerCrmRoutes(app: Express) {
         skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
-    res.json({ imported: imported.length, skipped });
+    res.json({ created: imported.length, duplicates, skipped });
   });
 
   // ─── CRM Companies ────────────────────────────────────
@@ -672,7 +683,6 @@ export function registerCrmRoutes(app: Express) {
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
     const created: string[] = [];
-    let duplicates = 0;
     const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -937,7 +947,6 @@ export function registerCrmRoutes(app: Express) {
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
     const created: string[] = [];
-    let duplicates = 0;
     const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
