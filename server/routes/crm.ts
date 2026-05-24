@@ -812,7 +812,7 @@ export function registerCrmRoutes(app: Express) {
         skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
-    res.json({ created: created.length, updated: duplicates, skipped });
+    res.json({ created: created.length, updated: 0, skipped });
   });
 
   app.post("/api/crm/companies/import/retry", csvUpload.single("file"), async (req, res) => {
@@ -1197,7 +1197,7 @@ export function registerCrmRoutes(app: Express) {
         skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
-    res.json({ created: created.length, updated: duplicates, skipped });
+    res.json({ created: created.length, updated: 0, skipped });
   });
 
   app.post("/api/crm/deals/import/retry", csvUpload.single("file"), async (req, res) => {

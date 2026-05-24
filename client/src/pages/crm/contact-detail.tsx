@@ -10,6 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -30,6 +37,25 @@ import {
 } from "lucide-react";
 import type { CrmContact, CrmDeal, CrmTask, CrmNote, CrmEmail } from "@shared/crm-schema";
 
+const contactStatuses = ["active", "inactive", "lead", "customer", "archived"];
+const contactSources = ["manual", "web_form", "import", "referral", "campaign", "auto-sync"];
+
+function _statusBadgeClass(status: string): string {
+  switch (status) {
+    case "customer":
+      return "border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-400";
+    case "lead":
+      return "border-blue-400 text-blue-700 bg-blue-50 dark:bg-blue-950 dark:text-blue-400";
+    case "active":
+      return "border-green-400 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-400";
+    case "inactive":
+    case "archived":
+      return "border-muted-foreground/40 text-muted-foreground";
+    default:
+      return "";
+  }
+}
+
 export default function CrmContactDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
@@ -37,6 +63,8 @@ export default function CrmContactDetail() {
   const [taskOpen, setTaskOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState<Partial<CrmContact>>({});
 
   const { data: contact, isLoading } = useQuery<CrmContact>({
     queryKey: ["/api/crm/contacts", id],
@@ -116,6 +144,18 @@ export default function CrmContactDetail() {
     },
   });
 
+  const updateContactMutation = useMutation({
+    mutationFn: async (payload: Partial<CrmContact>) => {
+      const res = await apiRequest("PATCH", `/api/crm/contacts/${id}`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/contacts", id] });
+      setIsEditing(false);
+      toast({ title: "Contact updated" });
+    },
+  });
+
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading...</div>;
   if (!contact) return <div className="p-6 text-muted-foreground">Contact not found.</div>;
 
@@ -145,6 +185,55 @@ export default function CrmContactDetail() {
           {contact.status}
         </Badge>
         <div className="ml-auto flex items-center gap-2">
+          {isEditing ? (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1"
+                onClick={() => {
+                  setIsEditing(false);
+                  setFormData({});
+                }}
+                data-testid="button-crm-cancel-edit-contact"
+              >
+                <X className="w-4 h-4" /> Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="gap-1"
+                onClick={() => updateContactMutation.mutate(formData)}
+                disabled={updateContactMutation.isPending}
+                data-testid="button-crm-save-contact"
+              >
+                <Check className="w-4 h-4" /> Save
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1"
+              onClick={() => {
+                setFormData({
+                  firstName: contact.firstName,
+                  lastName: contact.lastName,
+                  email: contact.email ?? "",
+                  phone: contact.phone ?? "",
+                  title: contact.title ?? "",
+                  company: contact.company ?? "",
+                  status: contact.status,
+                  source: contact.source ?? "manual",
+                  leadScore: contact.leadScore ?? 0,
+                  assignedTo: contact.assignedTo ?? "",
+                });
+                setIsEditing(true);
+              }}
+              data-testid="button-crm-edit-contact"
+            >
+              <Pencil className="w-4 h-4" /> Edit
+            </Button>
+          )}
           <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
             <DialogTrigger asChild>
               <Button
@@ -235,41 +324,167 @@ export default function CrmContactDetail() {
             <CardTitle className="text-sm">Contact Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div>
-              <span className="text-muted-foreground">Email: </span>
-              {contact.email}
-            </div>
-            {contact.phone && (
-              <div>
-                <span className="text-muted-foreground">Phone: </span>
-                {contact.phone}
+            {isEditing ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">First Name</Label>
+                    <Input
+                      value={formData.firstName ?? ""}
+                      onChange={(e) => setFormData((d) => ({ ...d, firstName: e.target.value }))}
+                      data-testid="input-crm-edit-firstName"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Last Name</Label>
+                    <Input
+                      value={formData.lastName ?? ""}
+                      onChange={(e) => setFormData((d) => ({ ...d, lastName: e.target.value }))}
+                      data-testid="input-crm-edit-lastName"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Email</Label>
+                  <Input
+                    type="email"
+                    value={formData.email ?? ""}
+                    onChange={(e) => setFormData((d) => ({ ...d, email: e.target.value }))}
+                    data-testid="input-crm-edit-email"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Phone</Label>
+                    <Input
+                      value={formData.phone ?? ""}
+                      onChange={(e) => setFormData((d) => ({ ...d, phone: e.target.value }))}
+                      data-testid="input-crm-edit-phone"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Title</Label>
+                    <Input
+                      value={formData.title ?? ""}
+                      onChange={(e) => setFormData((d) => ({ ...d, title: e.target.value }))}
+                      data-testid="input-crm-edit-title"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Company</Label>
+                  <Input
+                    value={formData.company ?? ""}
+                    onChange={(e) => setFormData((d) => ({ ...d, company: e.target.value }))}
+                    data-testid="input-crm-edit-company"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Status</Label>
+                    <Select
+                      value={formData.status ?? "active"}
+                      onValueChange={(v) => setFormData((d) => ({ ...d, status: v }))}
+                    >
+                      <SelectTrigger data-testid="select-crm-edit-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {contactStatuses.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Source</Label>
+                    <Select
+                      value={formData.source ?? "manual"}
+                      onValueChange={(v) => setFormData((d) => ({ ...d, source: v }))}
+                    >
+                      <SelectTrigger data-testid="select-crm-edit-source">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {contactSources.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Lead Score</Label>
+                    <Input
+                      type="number"
+                      value={formData.leadScore ?? 0}
+                      onChange={(e) =>
+                        setFormData((d) => ({ ...d, leadScore: parseInt(e.target.value) || 0 }))
+                      }
+                      data-testid="input-crm-edit-leadScore"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Assigned To</Label>
+                    <Input
+                      value={formData.assignedTo ?? ""}
+                      onChange={(e) => setFormData((d) => ({ ...d, assignedTo: e.target.value }))}
+                      data-testid="input-crm-edit-assignedTo"
+                    />
+                  </div>
+                </div>
               </div>
-            )}
-            {contact.title && (
-              <div>
-                <span className="text-muted-foreground">Title: </span>
-                {contact.title}
-              </div>
-            )}
-            {contact.company && (
-              <div>
-                <span className="text-muted-foreground">Company: </span>
-                {contact.company}
-              </div>
-            )}
-            <div>
-              <span className="text-muted-foreground">Source: </span>
-              {contact.source || "manual"}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Lead Score: </span>
-              <span className="font-semibold">{contact.leadScore || 0}</span>
-            </div>
-            {contact.assignedTo && (
-              <div>
-                <span className="text-muted-foreground">Assigned To: </span>
-                {contact.assignedTo}
-              </div>
+            ) : (
+              <>
+                <div>
+                  <span className="text-muted-foreground">Email: </span>
+                  {contact.email}
+                </div>
+                {contact.phone && (
+                  <div>
+                    <span className="text-muted-foreground">Phone: </span>
+                    {contact.phone}
+                  </div>
+                )}
+                {contact.title && (
+                  <div>
+                    <span className="text-muted-foreground">Title: </span>
+                    {contact.title}
+                  </div>
+                )}
+                {contact.company && (
+                  <div>
+                    <span className="text-muted-foreground">Company: </span>
+                    {contact.company}
+                  </div>
+                )}
+                <div>
+                  <span className="text-muted-foreground">Source: </span>
+                  {contact.source || "manual"}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Lead Score: </span>
+                  <span className="font-semibold">{contact.leadScore || 0}</span>
+                </div>
+                {contact.assignedTo && (
+                  <div>
+                    <span className="text-muted-foreground">Assigned To: </span>
+                    {contact.assignedTo}
+                  </div>
+                )}
+                <div className="pt-1 flex flex-wrap gap-1">
+                  {(contact.tags || []).map((tag) => (
+                    <Badge key={tag} variant="secondary" className="text-[10px]">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
