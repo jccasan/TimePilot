@@ -494,7 +494,7 @@ export function registerCrmRoutes(app: Express) {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
-    const imported: string[] = [];
+    const created: string[] = [];
     let duplicates = 0;
     const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
@@ -505,6 +505,13 @@ export function registerCrmRoutes(app: Express) {
         last_name: r.last_name || "",
         email: r.email || "",
         phone: r.phone || "",
+        company: r.company || "",
+        title: r.title || "",
+        status: r.status || "",
+        source: r.source || "",
+        lead_score: r.lead_score || "",
+        assigned_to: r.assigned_to || "",
+        tags: r.tags || "",
       };
       if (!r.first_name) {
         skipped.push({ row: rowNum, reason: "Missing first_name", data: rowData });
@@ -576,12 +583,103 @@ export function registerCrmRoutes(app: Express) {
             tags,
           })
           .returning({ id: crmContacts.id });
-        imported.push(ct.id);
+        created.push(ct.id);
       } catch (e: unknown) {
         skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
-    res.json({ created: imported.length, duplicates, skipped });
+    res.json({ created: created.length, duplicates, skipped });
+  });
+
+  app.post("/api/crm/contacts/import/retry", csvUpload.single("file"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const companyId = getCompanyId(req);
+    const rows = parseCSV(req.file.buffer.toString("utf-8"));
+    const created: string[] = [];
+    const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNum = i + 2;
+      const rowData = {
+        first_name: r.first_name || "",
+        last_name: r.last_name || "",
+        email: r.email || "",
+        phone: r.phone || "",
+        company: r.company || "",
+        title: r.title || "",
+        status: r.status || "",
+        source: r.source || "",
+        lead_score: r.lead_score || "",
+        assigned_to: r.assigned_to || "",
+        tags: r.tags || "",
+      };
+      if (!r.first_name) {
+        skipped.push({ row: rowNum, reason: "Missing first_name", data: rowData });
+        continue;
+      }
+      if (!r.last_name) {
+        skipped.push({ row: rowNum, reason: "Missing last_name", data: rowData });
+        continue;
+      }
+      if (!r.email) {
+        skipped.push({ row: rowNum, reason: "Missing email", data: rowData });
+        continue;
+      }
+      if (!isValidEmail(r.email)) {
+        skipped.push({ row: rowNum, reason: `Invalid email format: "${r.email}"`, data: rowData });
+        continue;
+      }
+      let normalizedPhone: string | null = null;
+      if (r.phone) {
+        normalizedPhone = normalizePhone(r.phone);
+        if (normalizedPhone === null) {
+          skipped.push({
+            row: rowNum,
+            reason: `Invalid phone number: "${r.phone}" — expected 10 digits (US) or leave blank`,
+            data: rowData,
+          });
+          continue;
+        }
+      }
+      if (r.lead_score && !isValidNumericValue(r.lead_score)) {
+        skipped.push({
+          row: rowNum,
+          reason: `lead_score must be a number, got: "${r.lead_score}"`,
+          data: rowData,
+        });
+        continue;
+      }
+      try {
+        const tags = r.tags
+          ? r.tags
+              .split(";")
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : [];
+        const [ct] = await db
+          .insert(crmContacts)
+          .values({
+            companyId,
+            firstName: r.first_name,
+            lastName: r.last_name,
+            email: r.email.trim().toLowerCase(),
+            phone: normalizedPhone,
+            company: r.company || null,
+            title: r.title || null,
+            status: r.status || "active",
+            source: r.source || "import",
+            leadScore: r.lead_score ? parseInt(r.lead_score) || 0 : 0,
+            assignedTo: r.assigned_to || null,
+            tags,
+          })
+          .returning({ id: crmContacts.id });
+        created.push(ct.id);
+      } catch (e: unknown) {
+        skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
+      }
+    }
+    res.json({ created: created.length, updated: 0, skipped });
+  });
   });
 
   // ─── CRM Companies ────────────────────────────────────
@@ -676,7 +774,64 @@ export function registerCrmRoutes(app: Express) {
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rowNum = i + 2;
-      const rowData = { name: r.name || "", domain: r.domain || "" };
+      const rowData = {
+        name: r.name || "",
+        domain: r.domain || "",
+        industry: r.industry || "",
+        size: r.size || "",
+        status: r.status || "",
+      };
+      if (!r.name) {
+        skipped.push({ row: rowNum, reason: "Missing name", data: rowData });
+        continue;
+      }
+      if (
+        r.domain &&
+        !/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/.test(r.domain.trim())
+      ) {
+        skipped.push({
+          row: rowNum,
+          reason: `Invalid domain format: "${r.domain}"`,
+          data: rowData,
+        });
+        continue;
+      }
+      try {
+        const [co] = await db
+          .insert(crmCompanies)
+          .values({
+            companyId,
+            name: r.name,
+            domain: r.domain || null,
+            industry: r.industry || null,
+            size: r.size || null,
+            status: r.status || "active",
+          })
+          .returning({ id: crmCompanies.id });
+        created.push(co.id);
+      } catch (e: unknown) {
+        skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
+      }
+    }
+    res.json({ created: created.length, updated: duplicates, skipped });
+  });
+
+  app.post("/api/crm/companies/import/retry", csvUpload.single("file"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const companyId = getCompanyId(req);
+    const rows = parseCSV(req.file.buffer.toString("utf-8"));
+    const created: string[] = [];
+    const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNum = i + 2;
+      const rowData = {
+        name: r.name || "",
+        domain: r.domain || "",
+        industry: r.industry || "",
+        size: r.size || "",
+        status: r.status || "",
+      };
       if (!r.name) {
         skipped.push({ row: rowNum, reason: "Missing name", data: rowData });
         continue;
@@ -698,7 +853,7 @@ export function registerCrmRoutes(app: Express) {
           .from(crmCompanies)
           .where(and(eq(crmCompanies.companyId, companyId), ilike(crmCompanies.name, r.name)));
         if (existing) {
-          skipped.push({ row: rowNum, reason: "Duplicate: company already exists" });
+          skipped.push({ row: rowNum, reason: "Duplicate: company already exists", data: rowData });
           continue;
         }
         const [co] = await db
@@ -943,7 +1098,129 @@ export function registerCrmRoutes(app: Express) {
       const rowData = {
         title: r.title || "",
         value: r.value || "",
+        stage: r.stage || "",
+        probability: r.probability || "",
+        expected_close_date: r.expected_close_date || "",
+        currency: r.currency || "",
+        description: r.description || "",
+        assigned_to: r.assigned_to || "",
         contact_email: r.contact_email || "",
+        company_name: r.company_name || "",
+      };
+      if (!r.title) {
+        skipped.push({ row: rowNum, reason: "Missing title", data: rowData });
+        continue;
+      }
+      if (r.value && !isValidNumericValue(r.value)) {
+        skipped.push({
+          row: rowNum,
+          reason: `value must be a number, got: "${r.value}"`,
+          data: rowData,
+        });
+        continue;
+      }
+      if (r.probability) {
+        if (!isValidNumericValue(r.probability)) {
+          skipped.push({
+            row: rowNum,
+            reason: `probability must be a number (0–100), got: "${r.probability}"`,
+            data: rowData,
+          });
+          continue;
+        }
+        const probNum = parseFloat(r.probability);
+        if (probNum < 0 || probNum > 100) {
+          skipped.push({
+            row: rowNum,
+            reason: `probability must be between 0 and 100, got: "${r.probability}"`,
+            data: rowData,
+          });
+          continue;
+        }
+      }
+      if (r.contact_email && !isValidEmail(r.contact_email)) {
+        skipped.push({
+          row: rowNum,
+          reason: `Invalid contact_email format: "${r.contact_email}"`,
+          data: rowData,
+        });
+        continue;
+      }
+      if (r.expected_close_date && isNaN(Date.parse(r.expected_close_date))) {
+        skipped.push({
+          row: rowNum,
+          reason: `Invalid expected_close_date: "${r.expected_close_date}" — use YYYY-MM-DD`,
+          data: rowData,
+        });
+        continue;
+      }
+      try {
+        let contactId: string | null = null;
+        if (r.contact_email) {
+          const [ct] = await db
+            .select({ id: crmContacts.id })
+            .from(crmContacts)
+            .where(
+              and(eq(crmContacts.companyId, companyId), eq(crmContacts.email, r.contact_email))
+            );
+          if (ct) contactId = ct.id;
+        }
+        let crmCompanyId: string | null = null;
+        if (r.company_name) {
+          const [co] = await db
+            .select({ id: crmCompanies.id })
+            .from(crmCompanies)
+            .where(
+              and(eq(crmCompanies.companyId, companyId), ilike(crmCompanies.name, r.company_name))
+            );
+          if (co) crmCompanyId = co.id;
+        }
+        const valueInCents = r.value ? Math.round(parseFloat(r.value) * 100) : 0;
+        const expectedCloseDate = r.expected_close_date ? new Date(r.expected_close_date) : null;
+        const [deal] = await db
+          .insert(crmDeals)
+          .values({
+            companyId,
+            title: r.title,
+            value: valueInCents,
+            currency: r.currency || "USD",
+            stage: r.stage || "lead",
+            probability: r.probability ? parseInt(r.probability) || 0 : 0,
+            expectedCloseDate,
+            description: r.description || null,
+            assignedTo: r.assigned_to || null,
+            contactId,
+            crmCompanyId,
+          })
+          .returning({ id: crmDeals.id });
+        created.push(deal.id);
+      } catch (e: unknown) {
+        skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
+      }
+    }
+    res.json({ created: created.length, updated: duplicates, skipped });
+  });
+
+  app.post("/api/crm/deals/import/retry", csvUpload.single("file"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const companyId = getCompanyId(req);
+    const rows = parseCSV(req.file.buffer.toString("utf-8"));
+    const created: string[] = [];
+    const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNum = i + 2;
+      const rowData = {
+        title: r.title || "",
+        value: r.value || "",
+        stage: r.stage || "",
+        probability: r.probability || "",
+        expected_close_date: r.expected_close_date || "",
+        currency: r.currency || "",
+        description: r.description || "",
+        assigned_to: r.assigned_to || "",
+        contact_email: r.contact_email || "",
+        company_name: r.company_name || "",
       };
       if (!r.title) {
         skipped.push({ row: rowNum, reason: "Missing title", data: rowData });
@@ -1013,7 +1290,7 @@ export function registerCrmRoutes(app: Express) {
           .from(crmDeals)
           .where(and(...dupConditions));
         if (existingDeal) {
-          skipped.push({ row: rowNum, reason: "Duplicate: deal already exists for this contact" });
+          skipped.push({ row: rowNum, reason: "Duplicate: deal already exists for this contact", data: rowData });
           continue;
         }
         let crmCompanyId: string | null = null;
@@ -1135,16 +1412,22 @@ export function registerCrmRoutes(app: Express) {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
-    const imported: string[] = [];
+    const created: string[] = [];
     const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rowNum = i + 2;
       const rowData = {
         title: r.title || "",
-        contact_email: r.contact_email || "",
-        assigned_to: r.assigned_to || "",
+        description: r.description || "",
+        type: r.type || "",
+        priority: r.priority || "",
+        status: r.status || "",
         due_date: r.due_date || "",
+        assigned_to: r.assigned_to || "",
+        contact_email: r.contact_email || "",
+        deal_title: r.deal_title || "",
+        company_name: r.company_name || "",
       };
       if (!r.title) {
         skipped.push({ row: rowNum, reason: "Missing title", data: rowData });
@@ -1174,6 +1457,8 @@ export function registerCrmRoutes(app: Express) {
         });
         continue;
       }
+        continue;
+      }
       try {
         let contactId: string | null = null;
         if (r.contact_email) {
@@ -1195,7 +1480,7 @@ export function registerCrmRoutes(app: Express) {
           .from(crmTasks)
           .where(and(...dupConditions));
         if (existingTask) {
-          skipped.push({ row: rowNum, reason: "Duplicate: task already exists for this contact" });
+          skipped.push({ row: rowNum, reason: "Duplicate: task already exists for this contact", data: rowData });
           continue;
         }
         let dealId: string | null = null;
@@ -1233,12 +1518,91 @@ export function registerCrmRoutes(app: Express) {
             crmCompanyId,
           })
           .returning({ id: crmTasks.id });
-        imported.push(task.id);
+        created.push(task.id);
       } catch (e: unknown) {
         skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
-    res.json({ imported: imported.length, skipped });
+    res.json({ created: created.length, updated: 0, skipped });
+  });
+
+  app.post("/api/crm/tasks/import/retry", csvUpload.single("file"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const companyId = getCompanyId(req);
+    const rows = parseCSV(req.file.buffer.toString("utf-8"));
+    const created: string[] = [];
+    const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNum = i + 2;
+      const rowData = {
+        title: r.title || "",
+        description: r.description || "",
+        type: r.type || "",
+        priority: r.priority || "",
+        status: r.status || "",
+        due_date: r.due_date || "",
+        assigned_to: r.assigned_to || "",
+        contact_email: r.contact_email || "",
+        deal_title: r.deal_title || "",
+        company_name: r.company_name || "",
+      };
+      if (!r.title) {
+        skipped.push({ row: rowNum, reason: "Missing title", data: rowData });
+        continue;
+      }
+      try {
+        let contactId: string | null = null;
+        if (r.contact_email) {
+          const [ct] = await db
+            .select({ id: crmContacts.id })
+            .from(crmContacts)
+            .where(
+              and(eq(crmContacts.companyId, companyId), eq(crmContacts.email, r.contact_email))
+            );
+          if (ct) contactId = ct.id;
+        }
+        let dealId: string | null = null;
+        if (r.deal_title) {
+          const [dl] = await db
+            .select({ id: crmDeals.id })
+            .from(crmDeals)
+            .where(and(eq(crmDeals.companyId, companyId), ilike(crmDeals.title, r.deal_title)));
+          if (dl) dealId = dl.id;
+        }
+        let crmCompanyId: string | null = null;
+        if (r.company_name) {
+          const [co] = await db
+            .select({ id: crmCompanies.id })
+            .from(crmCompanies)
+            .where(
+              and(eq(crmCompanies.companyId, companyId), ilike(crmCompanies.name, r.company_name))
+            );
+          if (co) crmCompanyId = co.id;
+        }
+        const dueDate = r.due_date ? new Date(r.due_date) : null;
+        const [task] = await db
+          .insert(crmTasks)
+          .values({
+            companyId,
+            title: r.title,
+            description: r.description || null,
+            type: r.type || "todo",
+            priority: r.priority || "medium",
+            status: r.status || "pending",
+            dueDate,
+            assignedTo: r.assigned_to || null,
+            contactId,
+            dealId,
+            crmCompanyId,
+          })
+          .returning({ id: crmTasks.id });
+        created.push(task.id);
+      } catch (e: unknown) {
+        skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
+      }
+    }
+    res.json({ created: created.length, updated: 0, skipped });
   });
 
   // ─── CRM Notes ────────────────────────────────────────

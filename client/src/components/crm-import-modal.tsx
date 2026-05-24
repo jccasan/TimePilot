@@ -204,7 +204,7 @@ function buildPreviewErrorCsv(data: PreviewData, errors: ValidationErrors): stri
 
 function buildErrorCsv(skipped: SkippedRow[]): string {
   const dataKeys = skipped.length > 0 && skipped[0].data ? Object.keys(skipped[0].data) : [];
-  const headers = ["row", ...dataKeys, "error_reason"];
+  const headers = [...dataKeys, "error_reason"];
   const escapeCell = (val: string) => {
     if (val.includes(",") || val.includes('"') || val.includes("\n")) {
       return `"${val.replace(/"/g, '""')}"`;
@@ -215,7 +215,7 @@ function buildErrorCsv(skipped: SkippedRow[]): string {
     headers.join(","),
     ...skipped.map((s) => {
       const dataCells = dataKeys.map((k) => escapeCell(s.data?.[k] ?? ""));
-      return [String(s.row), ...dataCells, escapeCell(s.reason)].join(",");
+      return [...dataCells, escapeCell(s.reason)].join(",");
     }),
   ];
   return lines.join("\n");
@@ -260,13 +260,19 @@ export function CrmImportModal({
 }: CrmImportModalProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const retryFileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [step, setStep] = useState<"select" | "preview" | "result">("select");
+  const [retryFile, setRetryFile] = useState<File | null>(null);
+  const [step, setStep] = useState<"select" | "preview" | "result" | "retry" | "retry-result">("select");
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [rawCsvText, setRawCsvText] = useState<string>("");
   const [columnRemap, setColumnRemap] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [retryResult, setRetryResult] = useState<ImportResult | null>(null);
+  const [errorCsvDownloaded, setErrorCsvDownloaded] = useState(false);
+
+  const retryUrl = `${importUrl}/retry`;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
@@ -277,15 +283,24 @@ export function CrmImportModal({
     setRawCsvText("");
   }
 
+  function handleRetryFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setRetryFile(file);
+  }
+
   function handleClose(val: boolean) {
     if (!val) {
       setSelectedFile(null);
+      setRetryFile(null);
       setResult(null);
+      setRetryResult(null);
       setPreview(null);
       setColumnRemap({});
       setRawCsvText("");
       setStep("select");
+      setErrorCsvDownloaded(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      if (retryFileInputRef.current) retryFileInputRef.current.value = "";
     }
     onOpenChange(val);
   }
@@ -330,6 +345,7 @@ export function CrmImportModal({
     if (!result?.skipped.length) return;
     const csv = buildErrorCsv(result.skipped);
     downloadCsv(csv, `${entityLabel.toLowerCase()}_import_errors.csv`);
+    setErrorCsvDownloaded(true);
   }
 
   function handleRemap(originalCol: string, targetField: string) {
@@ -418,6 +434,61 @@ export function CrmImportModal({
   const originallyUnknownCols =
     knownFields && preview ? preview.headers.filter((h) => !knownFields.includes(h)) : [];
 
+  async function handleRetryUpload() {
+    if (!retryFile) return;
+    setUploading(true);
+    setRetryResult(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", retryFile);
+      const res = await fetch(retryUrl, {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Upload failed" }));
+        throw new Error(err.message ?? "Upload failed");
+      }
+      const data: ImportResult = await res.json();
+      setRetryResult(data);
+      setStep("retry-result");
+      for (const key of invalidateKeys) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+      const recoveredCount = data.created ?? data.imported ?? 0;
+      if (recoveredCount > 0) {
+        toast({
+          title: `Recovered ${recoveredCount} ${entityLabel.toLowerCase()}${recoveredCount !== 1 ? "s" : ""}`,
+          description:
+            data.skipped.length > 0
+              ? `${data.skipped.length} row${data.skipped.length !== 1 ? "s" : ""} still have errors`
+              : "All corrected rows imported successfully",
+        });
+      } else {
+        toast({
+          title: "No records recovered",
+          description:
+            data.skipped.length > 0
+              ? `${data.skipped.length} rows still have errors`
+              : "File appears empty",
+          variant: "destructive",
+        });
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Retry failed";
+      toast({ title: "Retry failed", description: msg, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleDownloadRetryErrors() {
+    if (!retryResult?.skipped.length) return;
+    const csv = buildErrorCsv(retryResult.skipped);
+    downloadCsv(csv, `${entityLabel.toLowerCase()}_import_errors_retry.csv`);
+  }
+
   // Badge count: only columns not yet resolved (not remapped and not ignored)
   const unresolvedCount = originallyUnknownCols.filter((h) => !columnRemap[h]).length;
 
@@ -466,7 +537,11 @@ export function CrmImportModal({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className={isWide ? "max-w-3xl" : "max-w-md"}>
         <DialogHeader>
-          <DialogTitle>Import {entityLabel}s from CSV</DialogTitle>
+          <DialogTitle>
+            {step === "retry" || step === "retry-result"
+              ? `Fix Failed Rows — ${entityLabel}s`
+              : `Import ${entityLabel}s from CSV`}
+          </DialogTitle>
         </DialogHeader>
 
         {step === "select" && (
@@ -861,16 +936,32 @@ export function CrmImportModal({
                       </div>
                     ))}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full gap-2"
-                    onClick={handleRetry}
-                    data-testid="button-crm-import-fix-retry"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    Fix & Retry — upload a corrected file
-                  </Button>
+                  <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2">
+                    <p className="text-xs font-medium">Fix & re-submit just the failed rows</p>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>
+                        Download the error report above — it contains only the failed rows pre-filled with your data and the error reason.
+                      </li>
+                      <li>Open it in a spreadsheet, fix the issues, and delete the <span className="font-mono">error_reason</span> column.</li>
+                      <li>Save and re-upload the corrected file below.</li>
+                    </ol>
+                    <Button
+                      className="gap-2 w-full mt-1"
+                      size="sm"
+                      onClick={() => {
+                        if (!errorCsvDownloaded) {
+                          handleDownloadErrors();
+                        }
+                        setRetryFile(null);
+                        if (retryFileInputRef.current) retryFileInputRef.current.value = "";
+                        setStep("retry");
+                      }}
+                      data-testid="button-crm-import-start-retry"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Fix & Re-submit Failed Rows
+                    </Button>
+                  </div>
                 </div>
               )}
               <Button
@@ -879,6 +970,154 @@ export function CrmImportModal({
                 className="w-full"
                 onClick={() => handleClose(false)}
                 data-testid="button-crm-import-done"
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === "retry" && (
+          <div className="space-y-4 pt-1">
+            <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-400 space-y-1.5">
+              <p className="font-medium">How to fix and re-submit:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>
+                  {errorCsvDownloaded ? (
+                    <span>Open the error report you downloaded</span>
+                  ) : (
+                    <>
+                      <button
+                        className="underline font-medium"
+                        onClick={handleDownloadErrors}
+                        data-testid="button-crm-retry-download-errors"
+                      >
+                        Download the error report
+                      </button>
+                      {" "}— it has your failed rows pre-filled
+                    </>
+                  )}
+                </li>
+                <li>
+                  Fix the data and delete the <span className="font-mono">error_reason</span> column
+                </li>
+                <li>Re-upload the corrected file below</li>
+              </ol>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Upload corrected error report</p>
+              <input
+                ref={retryFileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-border file:text-xs file:font-medium file:bg-background file:text-foreground hover:file:bg-muted cursor-pointer"
+                onChange={handleRetryFileChange}
+                data-testid="input-crm-retry-file"
+              />
+              {retryFile && (
+                <p className="text-xs text-muted-foreground">
+                  Selected: <span className="font-mono">{retryFile.name}</span> (
+                  {(retryFile.size / 1024).toFixed(1)} KB)
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setStep("result")}
+                data-testid="button-crm-retry-back"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back
+              </Button>
+              <Button
+                className="gap-2 flex-1"
+                disabled={!retryFile || uploading}
+                onClick={handleRetryUpload}
+                data-testid="button-crm-retry-submit"
+              >
+                <Upload className="w-4 h-4" />
+                {uploading ? "Importing..." : "Submit Corrected Rows"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === "retry-result" && retryResult && (
+          <div className="space-y-4 pt-1">
+            <div className="rounded-lg border border-border/60 p-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                {(retryResult.created ?? retryResult.imported ?? 0) > 0 ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-destructive" />
+                )}
+                Retry Results
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 px-3 py-2 text-center">
+                  <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                    {retryResult.created ?? retryResult.imported ?? 0}
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-500">Recovered</p>
+                </div>
+                <div className="rounded bg-muted border border-border px-3 py-2 text-center">
+                  <p className="text-2xl font-bold">{retryResult.skipped.length}</p>
+                  <p className="text-xs text-muted-foreground">Still failed</p>
+                </div>
+              </div>
+              {retryResult.skipped.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground">Remaining errors:</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-xs gap-1"
+                      onClick={handleDownloadRetryErrors}
+                      data-testid="button-crm-retry-download-errors"
+                    >
+                      <Download className="w-3 h-3" />
+                      Error report
+                    </Button>
+                  </div>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {retryResult.skipped.map((s, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-start gap-2 text-xs text-destructive bg-destructive/5 rounded px-2 py-1"
+                        data-testid={`text-crm-retry-skip-${idx}`}
+                      >
+                        <span className="font-mono shrink-0">Row {s.row}:</span>
+                        <span>{s.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={() => {
+                      setRetryFile(null);
+                      if (retryFileInputRef.current) retryFileInputRef.current.value = "";
+                      setStep("retry");
+                    }}
+                    data-testid="button-crm-retry-again"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Fix & Retry Again
+                  </Button>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => handleClose(false)}
+                data-testid="button-crm-retry-done"
               >
                 Done
               </Button>
