@@ -1277,6 +1277,21 @@ export async function runStartupMigrations(): Promise<void> {
       }
     }
 
+    await client.query(`
+      ALTER TABLE crm_contacts
+        ADD COLUMN IF NOT EXISTS main_contact_id VARCHAR(255)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_crm_contacts_main_contact_id
+        ON crm_contacts (main_contact_id)
+        WHERE main_contact_id IS NOT NULL
+    `);
+    await client.query(`
+      ALTER TABLE crm_contacts
+        ALTER COLUMN email DROP NOT NULL
+    `);
+    console.log("[Migration] crm_contacts.main_contact_id column verified and email nullable");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

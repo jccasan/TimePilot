@@ -642,6 +642,12 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         if (contact && contact.status === "lead") {
           await storage.updateContact(quote.contactId, companyId, { status: "active" });
         }
+        if (contact) {
+          const { syncContactToCrm } = await import("../lib/crm-sync");
+          syncContactToCrm(contact, companyId).catch((err) =>
+            console.error("[crm-sync] Failed to sync contact on quote accept:", err)
+          );
+        }
       }
 
       let servicePlan = null;

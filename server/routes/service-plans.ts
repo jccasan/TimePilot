@@ -307,6 +307,15 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
           );
         }
       }
+      if (
+        contact &&
+        (contact.status === "active" || contact.status === "lead" || contact.status === "estimate")
+      ) {
+        const { syncContactToCrm } = await import("../lib/crm-sync");
+        syncContactToCrm(contact, companyId).catch((err) =>
+          console.error("[crm-sync] Failed to sync contact on service plan creation:", err)
+        );
+      }
 
       if (contact && !contact.stripeCustomerId && contact.email) {
         (async () => {
@@ -441,6 +450,16 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
 
           if (contact.status === "lead" || contact.status === "estimate") {
             await storage.updateContact(item.contactId, companyId, { status: "active" });
+          }
+          if (
+            contact.status === "active" ||
+            contact.status === "lead" ||
+            contact.status === "estimate"
+          ) {
+            const { syncContactToCrm } = await import("../lib/crm-sync");
+            syncContactToCrm(contact, companyId).catch((err) =>
+              console.error("[crm-sync] Failed to sync contact on bulk service plan creation:", err)
+            );
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -1086,6 +1105,15 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
             console.error("[auto-portal] Failed to provision portal access on job creation:", err)
           );
         }
+      }
+      if (
+        contact &&
+        (contact.status === "active" || contact.status === "lead" || contact.status === "estimate")
+      ) {
+        const { syncContactToCrm } = await import("../lib/crm-sync");
+        syncContactToCrm(contact, companyId).catch((err) =>
+          console.error("[crm-sync] Failed to sync contact on job creation:", err)
+        );
       }
 
       if (contact && !contact.stripeCustomerId && contact.email) {

@@ -3097,6 +3097,37 @@ Respond with exactly one category from the list above and nothing else.`;
     }
   );
 
+  // ================ CRM Backfill ================
+  app.post("/api/admin/crm/backfill-customers", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const { syncContactToCrm } = await import("../lib/crm-sync");
+      const allCompanies = await storage.listCompanies();
+      let synced = 0;
+      let errors = 0;
+      for (const company of allCompanies) {
+        const activeContacts = await db
+          .select()
+          .from(contacts)
+          .where(and(eq(contacts.companyId, company.id), eq(contacts.status, "active")));
+        for (const contact of activeContacts) {
+          try {
+            await syncContactToCrm(contact, company.id);
+            synced++;
+          } catch (err) {
+            console.error(
+              `[crm-backfill] Failed to sync contact ${contact.id} for company ${company.id}:`,
+              err
+            );
+            errors++;
+          }
+        }
+      }
+      res.json({ ok: true, synced, errors });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   // ================ Demo Account Management ================
   app.post("/api/admin/demo/reset", isAdmin, async (_req: Request, res: Response) => {
     try {

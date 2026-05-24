@@ -42,7 +42,23 @@ interface PaginatedResult<T> {
 }
 
 const contactStatuses = ["active", "inactive", "lead", "customer", "archived"];
-const contactSources = ["manual", "web_form", "import", "referral", "campaign"];
+const contactSources = ["manual", "web_form", "import", "referral", "campaign", "auto-sync"];
+
+function statusBadgeClass(status: string): string {
+  switch (status) {
+    case "customer":
+      return "border-emerald-500 text-emerald-700 bg-emerald-50 dark:bg-emerald-950 dark:text-emerald-400";
+    case "lead":
+      return "border-blue-400 text-blue-700 bg-blue-50 dark:bg-blue-950 dark:text-blue-400";
+    case "active":
+      return "border-green-400 text-green-700 bg-green-50 dark:bg-green-950 dark:text-green-400";
+    case "inactive":
+    case "archived":
+      return "border-muted-foreground/40 text-muted-foreground";
+    default:
+      return "";
+  }
+}
 
 function PaginationControls({
   page,
@@ -434,7 +450,10 @@ export default function CrmContacts() {
                       </Popover>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ${statusBadgeClass(contact.status)}`}
+                      >
                         {contact.status}
                       </Badge>
                     </TableCell>

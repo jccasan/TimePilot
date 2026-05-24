@@ -655,6 +655,24 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
           readyRows: 0,
         });
 
+        // Sync all committed active contacts to CRM (non-blocking, outside transaction)
+        (async () => {
+          try {
+            const { syncContactToCrm } = await import("../lib/crm-sync");
+            const importedRowsFinal = await storage.getImportRows(batch.id, companyId);
+            for (const row of importedRowsFinal) {
+              if (row.status === "imported" && row.createdContactId) {
+                const mainContact = await storage.getContactById(row.createdContactId);
+                if (mainContact) {
+                  await syncContactToCrm(mainContact, companyId);
+                }
+              }
+            }
+          } catch (syncErr) {
+            console.error("[crm-sync] Failed to sync imported contacts to CRM:", syncErr);
+          }
+        })();
+
         res.json({
           committed: true,
           createdContacts,

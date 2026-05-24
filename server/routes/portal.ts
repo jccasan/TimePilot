@@ -526,6 +526,11 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       await storage.updateContact(contactId, companyId, { status: "active" });
 
+      const { syncContactToCrm } = await import("../lib/crm-sync");
+      syncContactToCrm(contact, companyId).catch((err) =>
+        console.error("[crm-sync] Failed to sync contact on portal resume:", err)
+      );
+
       const plans = await storage.getServicePlans(companyId, { contactId });
       const reactivatedPlanIds: string[] = [];
       for (const plan of plans) {
@@ -1306,6 +1311,12 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         const contact = await storage.getContactById(contactId);
         if (contact && contact.status === "lead") {
           await storage.updateContact(contactId, companyId, { status: "active" });
+        }
+        if (contact) {
+          const { syncContactToCrm } = await import("../lib/crm-sync");
+          syncContactToCrm(contact, companyId).catch((err) =>
+            console.error("[crm-sync] Failed to sync contact on portal quote accept:", err)
+          );
         }
       }
 

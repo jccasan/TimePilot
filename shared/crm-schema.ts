@@ -11,7 +11,7 @@ export const crmContacts = pgTable("crm_contacts", {
   companyId: varchar("company_id").notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
-  email: text("email").notNull(),
+  email: text("email"),
   phone: text("phone"),
   company: text("company"),
   title: text("title"),
@@ -23,6 +23,7 @@ export const crmContacts = pgTable("crm_contacts", {
     .array()
     .default(sql`'{}'::text[]`),
   customFields: jsonb("custom_fields").default({}),
+  mainContactId: varchar("main_contact_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
