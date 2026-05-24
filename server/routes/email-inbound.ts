@@ -70,18 +70,22 @@ export async function registerEmailInboundRoutes(app: Express): Promise<void> {
 
         const updated = await storage.linkInboundEmail(p(req.params.id), companyId, contact_id);
 
-        await storage.createActivityLog({
-          companyId,
-          contactId: contact_id,
-          action: "email_inbound",
-          details: {
-            inboundEmailId: email.id,
-            subject: email.subject || "",
-            fromName: email.fromName || "",
-            fromAddress: email.fromAddress,
-            preview: (email.bodyText || "").slice(0, 200),
-          },
-        });
+        try {
+          await storage.createActivityLog({
+            companyId,
+            contactId: contact_id,
+            action: "email_inbound",
+            details: {
+              inboundEmailId: email.id,
+              subject: email.subject || "",
+              fromName: email.fromName || "",
+              fromAddress: email.fromAddress,
+              preview: (email.bodyText || "").slice(0, 200),
+            },
+          });
+        } catch (logErr) {
+          console.warn("[email-inbound] Activity log insert failed (non-fatal):", logErr);
+        }
 
         res.json(updated);
       } catch (err) {
