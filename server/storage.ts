@@ -223,6 +223,9 @@ import {
   inboundEmails,
   type InboundEmail,
   type InsertInboundEmail,
+  depots,
+  type Depot,
+  type InsertDepot,
 } from "@shared/schema";
 
 export interface CustomerProfitabilityEntry {
@@ -354,6 +357,15 @@ export interface IStorage {
   ): Promise<{ movedCount: number; targetRouteId: string }>;
   renumberRouteStops(routeId: string, companyId: string): Promise<void>;
   reorderRouteStops(routeId: string, companyId: string, orderedIds: string[]): Promise<void>;
+
+  // Depots
+  getDepots(companyId: string): Promise<Depot[]>;
+  getDepotById(id: string, companyId: string): Promise<Depot | undefined>;
+  getPrimaryDepot(companyId: string): Promise<Depot | undefined>;
+  createDepot(data: InsertDepot): Promise<Depot>;
+  updateDepot(id: string, companyId: string, data: Partial<InsertDepot>): Promise<Depot>;
+  deleteDepot(id: string, companyId: string): Promise<void>;
+  setPrimaryDepot(id: string, companyId: string): Promise<Depot>;
 
   // Agreements
   getAgreement(id: string, companyId: string): Promise<Agreement | undefined>;
@@ -1857,6 +1869,64 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(agreements)
       .where(and(eq(agreements.id, id), eq(agreements.companyId, companyId)));
+  }
+
+  // ================ Depots ================
+  async getDepots(companyId: string): Promise<Depot[]> {
+    return db
+      .select()
+      .from(depots)
+      .where(eq(depots.companyId, companyId))
+      .orderBy(desc(depots.isPrimary), asc(depots.name));
+  }
+
+  async getDepotById(id: string, companyId: string): Promise<Depot | undefined> {
+    const [d] = await db
+      .select()
+      .from(depots)
+      .where(and(eq(depots.id, id), eq(depots.companyId, companyId)));
+    return d;
+  }
+
+  async getPrimaryDepot(companyId: string): Promise<Depot | undefined> {
+    const [d] = await db
+      .select()
+      .from(depots)
+      .where(and(eq(depots.companyId, companyId), eq(depots.isPrimary, true)));
+    return d;
+  }
+
+  async createDepot(data: InsertDepot): Promise<Depot> {
+    const [d] = await db.insert(depots).values(data).returning();
+    return d;
+  }
+
+  async updateDepot(id: string, companyId: string, data: Partial<InsertDepot>): Promise<Depot> {
+    const [d] = await db
+      .update(depots)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(depots.id, id), eq(depots.companyId, companyId)))
+      .returning();
+    return d;
+  }
+
+  async deleteDepot(id: string, companyId: string): Promise<void> {
+    await db.delete(depots).where(and(eq(depots.id, id), eq(depots.companyId, companyId)));
+  }
+
+  async setPrimaryDepot(id: string, companyId: string): Promise<Depot> {
+    return db.transaction(async (tx) => {
+      await tx
+        .update(depots)
+        .set({ isPrimary: false, updatedAt: new Date() })
+        .where(eq(depots.companyId, companyId));
+      const [d] = await tx
+        .update(depots)
+        .set({ isPrimary: true, updatedAt: new Date() })
+        .where(and(eq(depots.id, id), eq(depots.companyId, companyId)))
+        .returning();
+      return d;
+    });
   }
 
   async getAgreementByServicePlanId(servicePlanId: string): Promise<Agreement | undefined> {

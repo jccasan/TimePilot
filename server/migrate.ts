@@ -1292,6 +1292,54 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] crm_contacts.main_contact_id column verified and email nullable");
 
+    // ---- Depots (named starting points per company) ----
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS depots (
+        id          VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id  VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        name        VARCHAR(255) NOT NULL,
+        address     TEXT NOT NULL,
+        latitude    NUMERIC(10,7) NOT NULL,
+        longitude   NUMERIC(10,7) NOT NULL,
+        is_primary  BOOLEAN NOT NULL DEFAULT false,
+        created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_depots_company   ON depots (company_id)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_depots_primary   ON depots (company_id, is_primary)
+    `);
+    await client.query(`
+      ALTER TABLE routes
+        ADD COLUMN IF NOT EXISTS depot_id VARCHAR REFERENCES depots(id) ON DELETE SET NULL
+    `);
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS default_depot_id VARCHAR REFERENCES depots(id) ON DELETE SET NULL
+    `);
+
+    // Seed primary depot from company start coords (one-time, only if none yet exist)
+    await client.query(`
+      INSERT INTO depots (company_id, name, address, latitude, longitude, is_primary)
+      SELECT
+        c.id,
+        'Main Depot',
+        COALESCE(c.start_address, c.address, ''),
+        c.start_latitude::NUMERIC,
+        c.start_longitude::NUMERIC,
+        true
+      FROM companies c
+      WHERE c.start_latitude IS NOT NULL
+        AND c.start_longitude IS NOT NULL
+        AND c.start_latitude <> ''
+        AND c.start_longitude <> ''
+        AND NOT EXISTS (SELECT 1 FROM depots d WHERE d.company_id = c.id)
+    `);
+    console.log("[Migration] depots table and depot_id/default_depot_id columns verified");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

@@ -664,6 +664,37 @@ export const properties = pgTable(
   ]
 );
 
+export const depots = pgTable(
+  "depots",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    companyId: varchar("company_id")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 255 }).notNull(),
+    address: text("address").notNull(),
+    latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
+    longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_depots_company").on(table.companyId),
+    index("idx_depots_primary").on(table.companyId, table.isPrimary),
+  ]
+);
+
+export const insertDepotSchema = createInsertSchema(depots).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type Depot = typeof depots.$inferSelect;
+export type InsertDepot = z.infer<typeof insertDepotSchema>;
+
 export const routes = pgTable(
   "routes",
   {
@@ -677,6 +708,7 @@ export const routes = pgTable(
     dayOfWeek: dayOfWeekEnum("day_of_week"),
     date: date("date"),
     technicianId: varchar("technician_id").references(() => users.id),
+    depotId: varchar("depot_id").references(() => depots.id, { onDelete: "set null" }),
     color: varchar("color", { length: 7 }).default("#3b82f6"),
     isLocked: boolean("is_locked").default(false).notNull(),
     lastOptimizedAt: timestamp("last_optimized_at"),

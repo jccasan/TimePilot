@@ -14,6 +14,12 @@ export type RouteStop = {
   routeColor?: string;
 };
 
+export type DepotPin = {
+  latitude: number;
+  longitude: number;
+  name: string;
+};
+
 type RouteMapViewProps = {
   stops: RouteStop[];
   routeName: string;
@@ -21,10 +27,18 @@ type RouteMapViewProps = {
   onStopClick?: (id: string) => void;
   companyLatitude?: number | null;
   companyLongitude?: number | null;
+  depots?: DepotPin[];
+  /** @deprecated use depots[] instead */
+  depotLatitude?: number | null;
+  /** @deprecated use depots[] instead */
+  depotLongitude?: number | null;
+  /** @deprecated use depots[] instead */
+  depotName?: string | null;
 };
 
 const DEFAULT_COLOR = "#22c55e";
 const SELECTED_COLOR = "#f59e0b";
+const DEPOT_COLOR = "#7c3aed";
 
 export default function RouteMapView({
   stops,
@@ -33,6 +47,10 @@ export default function RouteMapView({
   onStopClick,
   companyLatitude,
   companyLongitude,
+  depots,
+  depotLatitude,
+  depotLongitude,
+  depotName,
 }: RouteMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -83,6 +101,54 @@ export default function RouteMapView({
         setMapLoaded(true);
 
         const validStops = stops.filter((s) => s.latitude && s.longitude);
+
+        // Render depot markers (purple square "D") for each unique starting point.
+        // Supports both the new depots[] array and the legacy single-depot props.
+        const depotList: DepotPin[] =
+          depots && depots.length > 0
+            ? depots
+            : depotLatitude != null &&
+                Number.isFinite(depotLatitude) &&
+                depotLongitude != null &&
+                Number.isFinite(depotLongitude)
+              ? [
+                  {
+                    latitude: depotLatitude!,
+                    longitude: depotLongitude!,
+                    name: depotName || "Depot",
+                  },
+                ]
+              : [];
+
+        depotList.forEach((depot, idx) => {
+          const depotEl = document.createElement("div");
+          depotEl.setAttribute("data-testid", `marker-depot-${idx}`);
+          depotEl.style.width = "32px";
+          depotEl.style.height = "32px";
+          depotEl.style.borderRadius = "6px";
+          depotEl.style.backgroundColor = DEPOT_COLOR;
+          depotEl.style.color = "white";
+          depotEl.style.display = "flex";
+          depotEl.style.alignItems = "center";
+          depotEl.style.justifyContent = "center";
+          depotEl.style.fontSize = "16px";
+          depotEl.style.fontWeight = "bold";
+          depotEl.style.border = "2px solid white";
+          depotEl.style.boxShadow = "0 2px 6px rgba(0,0,0,0.4)";
+          depotEl.textContent = "D";
+
+          const depotPopupEl = document.createElement("div");
+          depotPopupEl.style.padding = "4px";
+          const depotLabel = document.createElement("strong");
+          depotLabel.textContent = depot.name;
+          depotPopupEl.appendChild(depotLabel);
+          const depotPopup = new mapboxgl.Popup({ offset: 25 }).setDOMContent(depotPopupEl);
+
+          new mapboxgl.Marker({ element: depotEl })
+            .setLngLat([depot.longitude, depot.latitude])
+            .setPopup(depotPopup)
+            .addTo(map);
+        });
 
         validStops.forEach((stop) => {
           const color = stop.routeColor || DEFAULT_COLOR;

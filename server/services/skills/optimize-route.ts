@@ -13,6 +13,7 @@ import { routificOptimize } from "../routific";
 import { geocodeAddress } from "../geocode";
 import { getCompanyToday } from "../../utils/company-date";
 import { registerSkill, type SkillContext, type SkillResult } from "./index";
+import { getUserById } from "../app-auth";
 
 function computeStopHash(stopIds: string[]): string {
   const sorted = [...stopIds].sort().join(",");
@@ -116,8 +117,36 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
     };
   }
 
+  // Depot resolution chain:
+  // 1. Route's assigned depot
+  // 2. Assigned technician's default depot
+  // 3. Company's primary depot
+  // 4. Legacy company start coordinates
   let startPoint: { latitude: number; longitude: number } | undefined;
-  if (company?.startLatitude && company?.startLongitude) {
+
+  let resolvedDepot:
+    | Awaited<ReturnType<typeof storage.getDepotById>>
+    | Awaited<ReturnType<typeof storage.getPrimaryDepot>> = undefined;
+
+  if (route.depotId) {
+    resolvedDepot = await storage.getDepotById(route.depotId, companyId);
+  }
+  if (!resolvedDepot && route.technicianId) {
+    const techUser = await getUserById(route.technicianId);
+    if (techUser?.defaultDepotId) {
+      resolvedDepot = await storage.getDepotById(techUser.defaultDepotId, companyId);
+    }
+  }
+  if (!resolvedDepot) {
+    resolvedDepot = await storage.getPrimaryDepot(companyId);
+  }
+
+  if (resolvedDepot) {
+    startPoint = {
+      latitude: parseFloat(String(resolvedDepot.latitude)),
+      longitude: parseFloat(String(resolvedDepot.longitude)),
+    };
+  } else if (company?.startLatitude && company?.startLongitude) {
     startPoint = {
       latitude: parseFloat(String(company.startLatitude)),
       longitude: parseFloat(String(company.startLongitude)),

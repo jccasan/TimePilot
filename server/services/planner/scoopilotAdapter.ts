@@ -109,9 +109,20 @@ async function buildSettings(companyId: string): Promise<RoutePlannerSettings> {
   const vehicleCostPerMile =
     pricing.vehicleMPG === null ? pricing.vehicleCostPerMileCents / 100 : undefined;
 
-  // Company start location (if configured).
+  // Company start location — prefer primary depot, fall back to legacy company coords.
   let companyStartLocation: CompanyLocation | undefined;
-  if (company.startLatitude && company.startLongitude) {
+  const primaryDepot = await storage.getPrimaryDepot(companyId);
+  if (primaryDepot) {
+    companyStartLocation = {
+      id: primaryDepot.id,
+      name: primaryDepot.name,
+      address: primaryDepot.address,
+      latitude: parseFloat(String(primaryDepot.latitude)),
+      longitude: parseFloat(String(primaryDepot.longitude)),
+      coordinateSource: "owner_confirmed_location",
+      isDefaultStartLocation: true,
+    };
+  } else if (company.startLatitude && company.startLongitude) {
     companyStartLocation = {
       id: company.id,
       name: company.name,

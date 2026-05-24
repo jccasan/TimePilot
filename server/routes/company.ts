@@ -698,6 +698,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
               lastName: user?.lastName || "",
               email: user?.email || "",
               profileImageUrl: user?.profileImageUrl || null,
+              defaultDepotId: user?.defaultDepotId ?? null,
             };
           })
       );

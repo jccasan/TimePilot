@@ -178,7 +178,9 @@ function parseCSVPreview(raw: string): PreviewData {
 }
 
 function buildPreviewErrorCsv(data: PreviewData, errors: ValidationErrors): string {
-  const errorRowIndices = Object.keys(errors).map(Number).sort((a, b) => a - b);
+  const errorRowIndices = Object.keys(errors)
+    .map(Number)
+    .sort((a, b) => a - b);
   const headers = [...data.headers, "error_reason"];
   const escapeCell = (val: string) => {
     if (val.includes(",") || val.includes('"') || val.includes("\n")) {
@@ -194,10 +196,7 @@ function buildPreviewErrorCsv(data: PreviewData, errors: ValidationErrors): stri
       const reason = Object.values(rowErrors)
         .map((e) => e.message)
         .join("; ");
-      return [
-        ...data.headers.map((h) => escapeCell(row[h] ?? "")),
-        escapeCell(reason),
-      ].join(",");
+      return [...data.headers.map((h) => escapeCell(row[h] ?? "")), escapeCell(reason)].join(",");
     }),
   ];
   return lines.join("\n");
@@ -347,7 +346,7 @@ export function CrmImportModal({
 
   function getEffectiveRows(
     rows: Record<string, string>[],
-    headers: string[],
+    headers: string[]
   ): Record<string, string>[] {
     const effectiveHeaders = getEffectiveHeaders(headers);
     return rows.map((row) => {
@@ -424,13 +423,13 @@ export function CrmImportModal({
 
   // Fields already chosen as remap targets by other columns (prevent duplicate targets)
   const alreadyRemappedTo = new Set(
-    Object.values(columnRemap).filter((v) => v && v !== IGNORE_SENTINEL),
+    Object.values(columnRemap).filter((v) => v && v !== IGNORE_SENTINEL)
   );
 
   // Recognized fields already present as original headers — remapping another column
   // to one of these would create a duplicate header.
   const recognizedOriginalHeaders = new Set(
-    preview?.headers.filter((h) => knownFields?.includes(h)) ?? [],
+    preview?.headers.filter((h) => knownFields?.includes(h)) ?? []
   );
 
   // Effective headers/rows after applying column remappings
@@ -440,7 +439,10 @@ export function CrmImportModal({
   // Validation runs against the effective (post-remap) data so errors reflect
   // the field names the server will actually see.
   const validationErrors: ValidationErrors = preview
-    ? validatePreview({ headers: effectiveHeaders, rows: effectiveRows, totalRows: preview.totalRows }, requiredFields)
+    ? validatePreview(
+        { headers: effectiveHeaders, rows: effectiveRows, totalRows: preview.totalRows },
+        requiredFields
+      )
     : {};
 
   // Summarise validation errors across all preview rows
@@ -592,7 +594,7 @@ export function CrmImportModal({
                       knownFields?.filter(
                         (f) =>
                           !recognizedOriginalHeaders.has(f) &&
-                          (!alreadyRemappedTo.has(f) || currentValue === f),
+                          (!alreadyRemappedTo.has(f) || currentValue === f)
                       ) ?? [];
                     return (
                       <div key={col} className="flex items-center gap-2">
@@ -605,10 +607,7 @@ export function CrmImportModal({
                         <span className="text-xs text-amber-600/70 dark:text-amber-500/70 shrink-0">
                           →
                         </span>
-                        <Select
-                          value={currentValue}
-                          onValueChange={(val) => handleRemap(col, val)}
-                        >
+                        <Select value={currentValue} onValueChange={(val) => handleRemap(col, val)}>
                           <SelectTrigger
                             className="h-7 text-xs flex-1 min-w-0 border-amber-300 dark:border-amber-700 bg-white dark:bg-background"
                             data-testid={`select-remap-col-${col}`}

@@ -206,6 +206,7 @@ type TeamMember = {
   lastName: string;
   email: string;
   profileImageUrl: string | null;
+  defaultDepotId?: string | null;
 };
 
 type FailedStop = {
@@ -1357,6 +1358,7 @@ function RouteFormDialog({
     dayOfWeek: string;
     technicianId: string | null;
     color: string;
+    depotId: string | null;
   }) => void;
   isSubmitting: boolean;
 }) {
@@ -1364,6 +1366,11 @@ function RouteFormDialog({
   const [dayOfWeek, setDayOfWeek] = useState<string>("monday");
   const [technicianId, setTechnicianId] = useState<string>("");
   const [color, setColor] = useState(ROUTE_COLORS[0]);
+  const [depotId, setDepotId] = useState<string>("");
+
+  const { data: depots = [] } = useQuery<
+    { id: string; name: string; address: string; isPrimary: boolean }[]
+  >({ queryKey: ["/api/depots"] });
 
   useEffect(() => {
     if (open) {
@@ -1372,14 +1379,25 @@ function RouteFormDialog({
         setDayOfWeek(editingRoute.dayOfWeek ?? "monday");
         setTechnicianId(editingRoute.technicianId || "");
         setColor(editingRoute.color || ROUTE_COLORS[0]);
+        setDepotId((editingRoute as any).depotId || "");
       } else {
         setName("");
         setDayOfWeek("monday");
         setTechnicianId("");
         setColor(ROUTE_COLORS[Math.floor(Math.random() * ROUTE_COLORS.length)]);
+        setDepotId("");
       }
     }
   }, [open, editingRoute]);
+
+  // Auto-select tech's default depot when technician changes
+  useEffect(() => {
+    if (!technicianId || editingRoute?.depotId) return;
+    const member = team.find((t) => t.id === technicianId);
+    if (member && (member as any).defaultDepotId) {
+      setDepotId((member as any).defaultDepotId);
+    }
+  }, [technicianId, team, editingRoute]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1432,6 +1450,28 @@ function RouteFormDialog({
               </SelectContent>
             </Select>
           </div>
+          {depots.length > 0 && (
+            <div className="space-y-2">
+              <Label>Starting Point (Depot)</Label>
+              <Select
+                value={depotId || "none"}
+                onValueChange={(v) => setDepotId(v === "none" ? "" : v)}
+              >
+                <SelectTrigger data-testid="select-route-depot">
+                  <SelectValue placeholder="Company default" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Company default</SelectItem>
+                  {depots.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.name}
+                      {d.isPrimary ? " (primary)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Color</Label>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1459,7 +1499,13 @@ function RouteFormDialog({
           <Button
             disabled={!name.trim() || isSubmitting}
             onClick={() =>
-              onSubmit({ name: name.trim(), dayOfWeek, technicianId: technicianId || null, color })
+              onSubmit({
+                name: name.trim(),
+                dayOfWeek,
+                technicianId: technicianId || null,
+                color,
+                depotId: depotId || null,
+              })
             }
             data-testid="button-save-route"
           >
@@ -1639,6 +1685,18 @@ export default function RoutesPage() {
     startLatitude?: string | null;
     startLongitude?: string | null;
   }>({ queryKey: ["/api/company"] });
+
+  const { data: allDepots = [] } = useQuery<
+    {
+      id: string;
+      name: string;
+      address: string;
+      isPrimary: boolean;
+      latitude: string;
+      longitude: string;
+    }[]
+  >({ queryKey: ["/api/depots"] });
+  const primaryDepot = allDepots.find((d) => d.isPrimary);
 
   const { data: mapboxTokenData } = useQuery<{ token: string }>({
     queryKey: ["/api/mapbox-token"],
@@ -1978,6 +2036,36 @@ export default function RoutesPage() {
     return forDay.filter((r) => !r.date);
   }, [allRoutes, selectedDay, currentWeekRange, dayVisits]);
 
+  const routeDayDepots = useMemo(() => {
+    const seen = new Map<string, { latitude: number; longitude: number; name: string }>();
+    for (const route of routesForDay) {
+      const routeDepotId = (route as Route & { depotId?: string | null }).depotId;
+      let resolved = routeDepotId ? allDepots.find((d) => d.id === routeDepotId) : undefined;
+      if (!resolved && route.technicianId) {
+        const tech = team.find((t) => t.id === route.technicianId);
+        if (tech?.defaultDepotId) {
+          resolved = allDepots.find((d) => d.id === tech.defaultDepotId);
+        }
+      }
+      if (!resolved) resolved = primaryDepot;
+      if (resolved && !seen.has(resolved.id)) {
+        seen.set(resolved.id, {
+          latitude: parseFloat(resolved.latitude),
+          longitude: parseFloat(resolved.longitude),
+          name: resolved.name,
+        });
+      }
+    }
+    if (seen.size === 0 && primaryDepot) {
+      seen.set(primaryDepot.id, {
+        latitude: parseFloat(primaryDepot.latitude),
+        longitude: parseFloat(primaryDepot.longitude),
+        name: primaryDepot.name,
+      });
+    }
+    return Array.from(seen.values());
+  }, [routesForDay, allDepots, primaryDepot, team]);
+
   const weekStartStr = useMemo(
     () => toLocalDateString(currentWeekRange.start, tz),
     [currentWeekRange, tz]
@@ -2186,6 +2274,7 @@ export default function RoutesPage() {
       dayOfWeek: string;
       technicianId: string | null;
       color: string;
+      depotId: string | null;
     }) => {
       const res = await apiRequest("POST", "/api/routes", data);
       return res.json();
@@ -2209,6 +2298,7 @@ export default function RoutesPage() {
       dayOfWeek: string;
       technicianId: string | null;
       color: string;
+      depotId: string | null;
     }) => {
       const res = await apiRequest("PATCH", `/api/routes/${id}`, data);
       return res.json();
@@ -2577,6 +2667,7 @@ export default function RoutesPage() {
     dayOfWeek: string;
     technicianId: string | null;
     color: string;
+    depotId: string | null;
   }) {
     if (editingRoute) updateRouteMutation.mutate({ id: editingRoute.id, ...data });
     else createRouteMutation.mutate(data);
@@ -3283,6 +3374,7 @@ export default function RoutesPage() {
                   companyLongitude={
                     company?.startLongitude != null ? parseFloat(company.startLongitude) : null
                   }
+                  depots={routeDayDepots}
                 />
               </Suspense>
             </div>

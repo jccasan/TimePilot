@@ -1,11 +1,14 @@
 import type { Express, Request, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
+import { db } from "../db";
 import { z } from "zod";
+import { eq, and } from "drizzle-orm";
 import { getCompanyToday, getCompanyWeekStart } from "../utils/company-date";
 import { getRouteMetricsWithLegs } from "../services/route-optimizer";
 import { geocodeAddress } from "../services/geocode";
-import { insertRouteSchema, type InsertRoute } from "@shared/schema";
+import { insertRouteSchema, type InsertRoute, companyUsers } from "@shared/schema";
+import { users } from "@shared/models/auth";
 
 import {
   isAuthenticated,
@@ -15,6 +18,60 @@ import {
   p,
   clearRouteOptimizationState,
 } from "./shared";
+
+/**
+ * Resolve the route start point using the full priority chain:
+ *  1. Route's explicitly assigned depot
+ *  2. Assigned technician's default depot
+ *  3. Company's primary depot
+ *  4. Legacy company start coordinates
+ */
+async function resolveStartPoint(
+  companyId: string,
+  routeDepotId: string | null | undefined,
+  technicianId: string | null | undefined,
+  company: { startLatitude?: string | null; startLongitude?: string | null }
+): Promise<{ latitude: number; longitude: number } | undefined> {
+  if (routeDepotId) {
+    const depot = await storage.getDepotById(routeDepotId, companyId);
+    if (depot) {
+      return {
+        latitude: parseFloat(String(depot.latitude)),
+        longitude: parseFloat(String(depot.longitude)),
+      };
+    }
+  }
+  if (technicianId) {
+    const [techUser] = await db
+      .select({ defaultDepotId: users.defaultDepotId })
+      .from(users)
+      .where(eq(users.id, technicianId))
+      .limit(1);
+    if (techUser?.defaultDepotId) {
+      const depot = await storage.getDepotById(techUser.defaultDepotId, companyId);
+      if (depot) {
+        return {
+          latitude: parseFloat(String(depot.latitude)),
+          longitude: parseFloat(String(depot.longitude)),
+        };
+      }
+    }
+  }
+  const primaryDepot = await storage.getPrimaryDepot(companyId);
+  if (primaryDepot) {
+    return {
+      latitude: parseFloat(String(primaryDepot.latitude)),
+      longitude: parseFloat(String(primaryDepot.longitude)),
+    };
+  }
+  if (company.startLatitude && company.startLongitude) {
+    return {
+      latitude: parseFloat(String(company.startLatitude)),
+      longitude: parseFloat(String(company.startLongitude)),
+    };
+  }
+  return undefined;
+}
 
 export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
   // ================ Route Routes ================
@@ -67,6 +124,13 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const body = { ...req.body, companyId };
       if (body.technicianId === "") body.technicianId = null;
       const parsed = insertRouteSchema.parse(body);
+      if (parsed.depotId) {
+        const depot = await storage.getDepotById(parsed.depotId, companyId);
+        if (!depot)
+          return res
+            .status(400)
+            .json({ error: "Invalid depotId: depot not found for this company" });
+      }
       const route = await storage.createRoute(parsed);
       res.status(201).json(route);
     } catch (err) {
@@ -166,10 +230,17 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           .status(400)
           .json({ error: `Invalid dayOfWeek. Must be one of: ${validDays.join(", ")}` });
       }
-      const allowed = ["name", "dayOfWeek", "technicianId", "color"];
+      const allowed = ["name", "dayOfWeek", "technicianId", "color", "depotId"];
       const updates: Partial<Record<string, unknown>> = {};
       for (const key of allowed) {
         if (req.body[key] !== undefined) updates[key] = req.body[key];
+      }
+      if (updates.depotId && typeof updates.depotId === "string") {
+        const depot = await storage.getDepotById(updates.depotId, companyId);
+        if (!depot)
+          return res
+            .status(400)
+            .json({ error: "Invalid depotId: depot not found for this company" });
       }
       const route = await storage.updateRoute(
         p(req.params.id),
@@ -422,13 +493,12 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         "#f97316",
       ];
 
-      let startPoint: { latitude: number; longitude: number } | undefined;
-      if (company.startLatitude && company.startLongitude) {
-        startPoint = {
-          latitude: parseFloat(String(company.startLatitude)),
-          longitude: parseFloat(String(company.startLongitude)),
-        };
-      }
+      const startPoint = await resolveStartPoint(
+        companyId,
+        (route as Record<string, unknown>).depotId as string | null | undefined,
+        route.technicianId ?? null,
+        company
+      );
 
       const newRoutes: { id: string; name: string; stopCount: number }[] = [];
       const allAffectedPlanIds: string[] = [];
@@ -455,12 +525,17 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         } else {
           const suffix = suffixLetters[ci - 1] || String(ci + 1);
           const newName = `${route.name}-${suffix}`;
+          const sourceDepotId = (route as Record<string, unknown>).depotId as
+            | string
+            | null
+            | undefined;
           const newRoute = await storage.createRoute({
             companyId,
             name: newName,
             dayOfWeek: route.dayOfWeek || undefined,
             technicianId: route.technicianId || undefined,
             color: splitColors[(ci - 1) % splitColors.length],
+            ...(sourceDepotId ? { depotId: sourceDepotId } : {}),
           });
           targetRouteId = newRoute.id;
           newRoutes.push({ id: newRoute.id, name: newRoute.name, stopCount: cluster.length });
@@ -615,14 +690,6 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const allProperties = await storage.getProperties(companyId);
       const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
-      let startPoint: { latitude: number; longitude: number } | undefined;
-      if (company.startLatitude && company.startLongitude) {
-        startPoint = {
-          latitude: parseFloat(String(company.startLatitude)),
-          longitude: parseFloat(String(company.startLongitude)),
-        };
-      }
-
       const suffixLetters = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
       const splitColors = [
         "#ef4444",
@@ -644,6 +711,12 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
 
       for (const route of oversized) {
         try {
+          const startPoint = await resolveStartPoint(
+            companyId,
+            (route as Record<string, unknown>).depotId as string | null | undefined,
+            route.technicianId ?? null,
+            company
+          );
           const routePlans = plansByRoute.get(route.id) || [];
 
           const weeklyStops = routePlans
@@ -684,12 +757,17 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
               targetRouteId = route.id;
             } else {
               const suffix = suffixLetters[ci - 1] || String(ci + 1);
+              const bulkSourceDepotId = (route as Record<string, unknown>).depotId as
+                | string
+                | null
+                | undefined;
               const newRoute = await storage.createRoute({
                 companyId,
                 name: `${route.name}-${suffix}`,
                 dayOfWeek: route.dayOfWeek || undefined,
                 technicianId: route.technicianId || undefined,
                 color: splitColors[(ci - 1) % splitColors.length],
+                ...(bulkSourceDepotId ? { depotId: bulkSourceDepotId } : {}),
               });
               targetRouteId = newRoute.id;
               subRoutesCreated++;
@@ -921,13 +999,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         });
       }
 
-      let startPoint: { latitude: number; longitude: number } | undefined;
-      if (company.startLatitude && company.startLongitude) {
-        startPoint = {
-          latitude: parseFloat(String(company.startLatitude)),
-          longitude: parseFloat(String(company.startLongitude)),
-        };
-      }
+      const startPoint = await resolveStartPoint(companyId, null, null, company);
 
       let zones: { zipCode: string; dayOfWeek: string }[] = [];
       if (respectZones) {
@@ -1134,13 +1206,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         const allContacts = await storage.getContacts(companyId);
         const contactMap = new Map(allContacts.map((c) => [c.id, c]));
 
-        let startPoint: { latitude: number; longitude: number } | undefined;
-        if (company.startLatitude && company.startLongitude) {
-          startPoint = {
-            latitude: parseFloat(String(company.startLatitude)),
-            longitude: parseFloat(String(company.startLongitude)),
-          };
-        }
+        const startPoint = await resolveStartPoint(companyId, null, null, company);
 
         let zones: { zipCode: string; dayOfWeek: string }[] = [];
         if (respectZones) {
@@ -1700,10 +1766,14 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       }
 
       const company = await storage.getCompany(companyId);
-      const startPoint =
-        company?.startLatitude && company?.startLongitude
-          ? { latitude: Number(company.startLatitude), longitude: Number(company.startLongitude) }
-          : undefined;
+      const startPoint = company
+        ? await resolveStartPoint(
+            companyId,
+            (route as Record<string, unknown>).depotId as string | null | undefined,
+            route.technicianId ?? null,
+            company
+          )
+        : undefined;
 
       const metrics = await getRouteMetricsWithLegs(stops, startPoint);
 
@@ -1880,4 +1950,156 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
+
+  // ================ Depot Routes ================
+
+  app.get("/api/depots", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const list = await storage.getDepots(companyId);
+      res.json(list);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/depots", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const schema = z.object({
+        name: z.string().min(1),
+        address: z.string().min(1),
+        latitude: z.coerce.number(),
+        longitude: z.coerce.number(),
+        isPrimary: z.boolean().optional().default(false),
+      });
+      const body = schema.parse(req.body);
+
+      // If this is the first depot or isPrimary requested, manage primary flag
+      const existing = await storage.getDepots(companyId);
+      const shouldBePrimary = body.isPrimary || existing.length === 0;
+
+      const depot = await storage.createDepot({
+        companyId,
+        name: body.name,
+        address: body.address,
+        latitude: String(body.latitude),
+        longitude: String(body.longitude),
+        isPrimary: shouldBePrimary,
+      });
+
+      // If this depot is primary, clear primary flag from others
+      if (shouldBePrimary && existing.length > 0) {
+        await storage.setPrimaryDepot(depot.id, companyId);
+      }
+
+      res.status(201).json(depot);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.patch("/api/depots/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const existing = await storage.getDepotById(p(req.params.id), companyId);
+      if (!existing) return res.status(404).json({ error: "Depot not found" });
+
+      const schema = z.object({
+        name: z.string().min(1).optional(),
+        address: z.string().min(1).optional(),
+        latitude: z.coerce.number().optional(),
+        longitude: z.coerce.number().optional(),
+      });
+      const body = schema.parse(req.body);
+      const updates: { name?: string; address?: string; latitude?: string; longitude?: string } =
+        {};
+      if (body.name !== undefined) updates.name = body.name;
+      if (body.address !== undefined) updates.address = body.address;
+      if (body.latitude !== undefined) updates.latitude = String(body.latitude);
+      if (body.longitude !== undefined) updates.longitude = String(body.longitude);
+
+      const depot = await storage.updateDepot(p(req.params.id), companyId, updates);
+      res.json(depot);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.delete("/api/depots/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const existing = await storage.getDepotById(p(req.params.id), companyId);
+      if (!existing) return res.status(404).json({ error: "Depot not found" });
+      if (existing.isPrimary) {
+        return res
+          .status(400)
+          .json({ error: "Cannot delete the primary depot. Set another depot as primary first." });
+      }
+      await storage.deleteDepot(p(req.params.id), companyId);
+      res.json({ success: true });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/depots/:id/set-primary", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const existing = await storage.getDepotById(p(req.params.id), companyId);
+      if (!existing) return res.status(404).json({ error: "Depot not found" });
+      const depot = await storage.setPrimaryDepot(p(req.params.id), companyId);
+      res.json(depot);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // Update technician default depot
+  app.patch(
+    "/api/team/:userId/default-depot",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+
+        const targetUserId = p(req.params.userId);
+
+        // Verify target user belongs to caller's company
+        const [membership] = await db
+          .select({ userId: companyUsers.userId })
+          .from(companyUsers)
+          .where(
+            and(
+              eq(companyUsers.userId, targetUserId),
+              eq(companyUsers.companyId, companyId),
+              eq(companyUsers.isActive, true)
+            )
+          );
+        if (!membership) return res.status(404).json({ error: "Team member not found" });
+
+        const schema = z.object({ depotId: z.string().nullable() });
+        const { depotId } = schema.parse(req.body);
+
+        // Verify depot belongs to this company (if not null)
+        if (depotId) {
+          const depot = await storage.getDepotById(depotId, companyId);
+          if (!depot) return res.status(404).json({ error: "Depot not found" });
+        }
+
+        await db
+          .update(users)
+          .set({ defaultDepotId: depotId, updatedAt: new Date() })
+          .where(eq(users.id, targetUserId));
+        res.json({ success: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 }

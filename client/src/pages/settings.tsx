@@ -1174,6 +1174,14 @@ const SETTINGS_BLOCK_DEFS: {
     minW: 4,
     minH: 6,
   },
+  {
+    id: "starting_points",
+    label: "Starting Points (Depots)",
+    defaultW: 6,
+    defaultH: 7,
+    minW: 4,
+    minH: 5,
+  },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -1208,6 +1216,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "lead_response",
   "calendar_sync",
   "email_forwarding",
+  "starting_points",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -1247,6 +1256,7 @@ type TeamMember = {
   lastName: string;
   email: string;
   profileImageUrl: string | null;
+  defaultDepotId?: string | null;
 };
 
 const roleIcons: Record<string, typeof Crown> = {
@@ -7519,6 +7529,322 @@ function NewClientDepositSettings({ company }: { company: Company | null | undef
   );
 }
 
+type Depot = {
+  id: string;
+  name: string;
+  address: string;
+  latitude: string;
+  longitude: string;
+  isPrimary: boolean;
+};
+
+function DepotsSettingsBlock() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: depots = [], isLoading } = useQuery<Depot[]>({
+    queryKey: ["/api/depots"],
+  });
+
+  const [showForm, setShowForm] = useState(false);
+  const [editingDepot, setEditingDepot] = useState<Depot | null>(null);
+  const [depotName, setDepotName] = useState("");
+  const [depotAddress, setDepotAddress] = useState("");
+  const [depotLat, setDepotLat] = useState("");
+  const [depotLng, setDepotLng] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Depot | null>(null);
+
+  function openCreate() {
+    setEditingDepot(null);
+    setDepotName("");
+    setDepotAddress("");
+    setDepotLat("");
+    setDepotLng("");
+    setShowForm(true);
+  }
+
+  function openEdit(d: Depot) {
+    setEditingDepot(d);
+    setDepotName(d.name);
+    setDepotAddress(d.address);
+    setDepotLat(d.latitude);
+    setDepotLng(d.longitude);
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingDepot(null);
+  }
+
+  const createMutation = useMutation({
+    mutationFn: (body: object) => apiRequest("POST", "/api/depots", body).then((r) => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/depots"] });
+      toast({ title: "Depot created" });
+      closeForm();
+    },
+    onError: (e: Error) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & object) =>
+      apiRequest("PATCH", `/api/depots/${id}`, body).then((r) => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/depots"] });
+      toast({ title: "Depot updated" });
+      closeForm();
+    },
+    onError: (e: Error) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/depots/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/depots"] });
+      toast({ title: "Depot removed" });
+      setDeleteTarget(null);
+    },
+    onError: (e: Error) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const setPrimaryMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("POST", `/api/depots/${id}/set-primary`).then((r) => r.json()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/depots"] });
+      toast({ title: "Primary depot updated" });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  function handleSave() {
+    const lat = parseFloat(depotLat);
+    const lng = parseFloat(depotLng);
+    if (!depotName.trim() || !depotAddress.trim()) {
+      toast({ title: "Name and address are required", variant: "destructive" });
+      return;
+    }
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      toast({ title: "Valid latitude and longitude are required", variant: "destructive" });
+      return;
+    }
+    const body = {
+      name: depotName.trim(),
+      address: depotAddress.trim(),
+      latitude: lat,
+      longitude: lng,
+    };
+    if (editingDepot) {
+      updateMutation.mutate({ id: editingDepot.id, ...body });
+    } else {
+      createMutation.mutate(body);
+    }
+  }
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  return (
+    <Card className="h-full overflow-auto">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5" />
+              Starting Points (Depots)
+            </CardTitle>
+            <CardDescription>
+              Named addresses routes can start from. Assign a depot to a route to override the
+              default company start address.
+            </CardDescription>
+          </div>
+          {!showForm && (
+            <Button size="sm" variant="outline" onClick={openCreate} data-testid="button-add-depot">
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {showForm && (
+          <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+            <p className="text-sm font-medium">{editingDepot ? "Edit Depot" : "New Depot"}</p>
+            <div className="space-y-2">
+              <Label htmlFor="depot-name">Name</Label>
+              <Input
+                id="depot-name"
+                placeholder="e.g. Main Office"
+                value={depotName}
+                onChange={(e) => setDepotName(e.target.value)}
+                data-testid="input-depot-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="depot-address">Address</Label>
+              <AddressAutocomplete
+                value={depotAddress}
+                onChange={setDepotAddress}
+                onSelect={(parsed) => {
+                  const full = [parsed.streetAddress, parsed.city, parsed.state, parsed.zipCode]
+                    .filter(Boolean)
+                    .join(", ");
+                  setDepotAddress(full || depotAddress);
+                  if (parsed.latitude) setDepotLat(parsed.latitude);
+                  if (parsed.longitude) setDepotLng(parsed.longitude);
+                }}
+                placeholder="123 Main St, City, ST 12345"
+                data-testid="input-depot-address"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="depot-lat">Latitude</Label>
+                <Input
+                  id="depot-lat"
+                  placeholder="40.7128"
+                  value={depotLat}
+                  onChange={(e) => setDepotLat(e.target.value)}
+                  data-testid="input-depot-lat"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="depot-lng">Longitude</Label>
+                <Input
+                  id="depot-lng"
+                  placeholder="-74.0060"
+                  value={depotLng}
+                  onChange={(e) => setDepotLng(e.target.value)}
+                  data-testid="input-depot-lng"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={isSaving}
+                data-testid="button-save-depot"
+              >
+                {isSaving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                {editingDepot ? "Save Changes" : "Create Depot"}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={closeForm}
+                data-testid="button-cancel-depot"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        ) : depots.length === 0 && !showForm ? (
+          <p className="text-sm text-muted-foreground py-2">
+            No depots configured. Add one to assign specific starting points to routes.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {depots.map((d) => (
+              <div
+                key={d.id}
+                className="flex items-start justify-between gap-2 rounded-md border px-3 py-2.5"
+                data-testid={`depot-row-${d.id}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium truncate">{d.name}</span>
+                    {d.isPrimary && (
+                      <Badge
+                        variant="secondary"
+                        className="shrink-0 text-xs"
+                        data-testid={`badge-primary-${d.id}`}
+                      >
+                        Primary
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">{d.address}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {!d.isPrimary && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setPrimaryMutation.mutate(d.id)}
+                      disabled={setPrimaryMutation.isPending}
+                      data-testid={`button-set-primary-${d.id}`}
+                    >
+                      Set Primary
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    onClick={() => openEdit(d)}
+                    data-testid={`button-edit-depot-${d.id}`}
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(d)}
+                    data-testid={`button-delete-depot-${d.id}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-delete-depot">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Depot</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove &quot;{deleteTarget?.name}&quot;? Routes assigned to this depot will fall back
+              to the company default starting point.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-depot">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-depot"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { stateLabel, zipLabel } = useAddressLabels();
   const contactFields = CONTACT_FIELDS.map((f) => {
@@ -7580,6 +7906,10 @@ export default function Settings() {
   const { data: team, isLoading: loadingTeam } = useQuery<TeamMember[]>({
     queryKey: ["/api/company/team"],
   });
+
+  const { data: settingsDepots = [] } = useQuery<
+    { id: string; name: string; isPrimary: boolean }[]
+  >({ queryKey: ["/api/depots"] });
 
   const { data: leadSources = [], isLoading: loadingLeadSources } = useQuery<
     { id: string; name: string }[]
@@ -8530,6 +8860,38 @@ export default function Settings() {
                             <KeyRound className="h-4 w-4" />
                           </Button>
                         )}
+                        {currentUser?.role !== "tech" && settingsDepots.length > 0 && (
+                          <Select
+                            value={member.defaultDepotId || "none"}
+                            onValueChange={(v) => {
+                              const newDepotId = v === "none" ? null : v;
+                              apiRequest("PATCH", `/api/team/${member.id}/default-depot`, {
+                                depotId: newDepotId,
+                              }).then(() => {
+                                queryClient.invalidateQueries({
+                                  queryKey: ["/api/company/team"],
+                                });
+                                toast({ title: "Default depot updated" });
+                              });
+                            }}
+                          >
+                            <SelectTrigger
+                              className="h-7 text-xs w-32"
+                              data-testid={`select-depot-${member.id}`}
+                            >
+                              <SelectValue placeholder="Depot" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No depot</SelectItem>
+                              {settingsDepots.map((d) => (
+                                <SelectItem key={d.id} value={d.id}>
+                                  {d.name}
+                                  {d.isPrimary ? " (primary)" : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                         {canRemove && (
                           <Button
                             variant="ghost"
@@ -9372,6 +9734,8 @@ export default function Settings() {
             </CardContent>
           </Card>
         );
+      case "starting_points":
+        return <DepotsSettingsBlock />;
       default:
         return null;
     }
