@@ -153,6 +153,8 @@ interface HealthData {
 }
 
 const FREQUENCY_OPTIONS = ["weekly", "biweekly", "monthly", "as-needed"];
+const YARD_TIER_OPTIONS = ["1", "2", "3", "4", "5", "6"];
+const BILLING_TERMS_OPTIONS = ["prepay", "postpay"];
 const DAY_OPTIONS = [
   "monday",
   "tuesday",
@@ -242,6 +244,8 @@ export default function ImportResolverPage() {
   const [bulkDay, setBulkDay] = useState("");
   const [bulkPrice, setBulkPrice] = useState("");
   const [bulkBillingRule, setBulkBillingRule] = useState("");
+  const [bulkYardTier, setBulkYardTier] = useState("");
+  const [bulkBillingTerms, setBulkBillingTerms] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [allRowsSearch, setAllRowsSearch] = useState("");
   const [sortField, setSortField] = useState<string | null>(null);
@@ -456,6 +460,8 @@ export default function ImportResolverPage() {
     if (bulkDay) updates.serviceDay = bulkDay;
     if (bulkPrice) updates.price = parseFloat(bulkPrice);
     if (bulkBillingRule) updates.billingRule = bulkBillingRule;
+    if (bulkYardTier) updates.yardSizeTier = parseInt(bulkYardTier, 10);
+    if (bulkBillingTerms) updates.billingTerms = bulkBillingTerms;
     if (Object.keys(updates).length === 0) {
       toast({ title: "No changes to apply", variant: "destructive" });
       return;
@@ -736,6 +742,30 @@ export default function ImportResolverPage() {
                   {BILLING_OPTIONS.map((b) => (
                     <SelectItem key={b} value={b}>
                       {b}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={bulkYardTier} onValueChange={setBulkYardTier}>
+                <SelectTrigger className="w-28 h-8 text-xs" data-testid="select-bulk-yard-tier">
+                  <SelectValue placeholder="Yard Tier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {YARD_TIER_OPTIONS.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      Tier {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={bulkBillingTerms} onValueChange={setBulkBillingTerms}>
+                <SelectTrigger className="w-32 h-8 text-xs" data-testid="select-bulk-billing-terms">
+                  <SelectValue placeholder="Pre/Postpay" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BILLING_TERMS_OPTIONS.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
                     </SelectItem>
                   ))}
                 </SelectContent>

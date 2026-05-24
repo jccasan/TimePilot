@@ -296,6 +296,8 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
             price?: number;
             billingRule?: string;
             status?: string;
+            yardSizeTier?: number;
+            billingTerms?: string;
           };
         };
 
@@ -326,9 +328,12 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
           if (updates.serviceDay) updatedService.serviceDay = updates.serviceDay;
           if (updates.price != null) updatedService.priceCents = Math.round(updates.price * 100);
           if (updates.billingRule) updatedService.billingRule = updates.billingRule;
+          if (updates.billingTerms) updatedService.billingTerms = updates.billingTerms;
 
           const currentContact = (row.mappedContactJson || {}) as Record<string, unknown>;
-          const missingFields = recomputeMissingFields(currentContact, updatedService);
+          const updatedContact = { ...currentContact };
+          if (updates.yardSizeTier != null) updatedContact.yardSizeTier = updates.yardSizeTier;
+          const missingFields = recomputeMissingFields(updatedContact, updatedService);
 
           const newStatus: ImportRowStatus =
             (updates.status as ImportRowStatus) ||
@@ -339,6 +344,7 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
                 : "needs_review");
 
           await storage.updateImportRow(rowId, companyId, {
+            mappedContactJson: updatedContact,
             mappedServiceJson: updatedService,
             missingFields,
             status: newStatus,
