@@ -680,7 +680,6 @@ export function registerCrmRoutes(app: Express) {
     }
     res.json({ created: created.length, updated: 0, skipped });
   });
-  });
 
   // ─── CRM Companies ────────────────────────────────────
   app.get("/api/crm/companies", async (req, res) => {
@@ -1455,8 +1454,6 @@ export function registerCrmRoutes(app: Express) {
           reason: `Invalid due_date: "${r.due_date}" — use YYYY-MM-DD`,
           data: rowData,
         });
-        continue;
-      }
         continue;
       }
       try {
