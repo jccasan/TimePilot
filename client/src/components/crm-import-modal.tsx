@@ -169,6 +169,32 @@ function parseCSVPreview(raw: string): PreviewData {
   return { headers, rows, totalRows };
 }
 
+function buildPreviewErrorCsv(data: PreviewData, errors: ValidationErrors): string {
+  const errorRowIndices = Object.keys(errors).map(Number).sort((a, b) => a - b);
+  const headers = [...data.headers, "error_reason"];
+  const escapeCell = (val: string) => {
+    if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+      return `"${val.replace(/"/g, '""')}"`;
+    }
+    return val;
+  };
+  const lines = [
+    headers.map(escapeCell).join(","),
+    ...errorRowIndices.map((rowIdx) => {
+      const row = data.rows[rowIdx];
+      const rowErrors = errors[rowIdx];
+      const reason = Object.values(rowErrors)
+        .map((e) => e.message)
+        .join("; ");
+      return [
+        ...data.headers.map((h) => escapeCell(row[h] ?? "")),
+        escapeCell(reason),
+      ].join(",");
+    }),
+  ];
+  return lines.join("\n");
+}
+
 function buildErrorCsv(skipped: SkippedRow[]): string {
   const dataKeys = skipped.length > 0 && skipped[0].data ? Object.keys(skipped[0].data) : [];
   const headers = ["row", ...dataKeys, "error_reason"];
@@ -266,6 +292,12 @@ export function CrmImportModal({
       fileInputRef.current.value = "";
       fileInputRef.current.click();
     }
+  }
+
+  function handleDownloadPreviewErrors() {
+    if (!preview || errorRowCount === 0) return;
+    const csv = buildPreviewErrorCsv(preview, validationErrors);
+    downloadCsv(csv, `${entityLabel.toLowerCase()}_preview_errors.csv`);
   }
 
   function handleDownloadErrors() {
@@ -432,7 +464,7 @@ export function CrmImportModal({
             {/* Validation summary banner */}
             {totalErrorCells > 0 && (
               <div
-                className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive space-y-1"
+                className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive space-y-2"
                 data-testid="banner-crm-preview-validation"
               >
                 <p className="font-medium flex items-center gap-1.5">
@@ -444,6 +476,16 @@ export function CrmImportModal({
                   Fix these in your CSV for best results. The server will perform its own checks and
                   skip any rows it cannot process.
                 </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive h-7 text-xs"
+                  onClick={handleDownloadPreviewErrors}
+                  data-testid="button-crm-preview-download-errors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download rows with issues ({errorRowCount})
+                </Button>
               </div>
             )}
 
