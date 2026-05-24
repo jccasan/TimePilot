@@ -21,7 +21,9 @@ interface SkippedRow {
 }
 
 interface ImportResult {
-  imported: number;
+  imported?: number;
+  created?: number;
+  updated?: number;
   skipped: SkippedRow[];
 }
 
@@ -205,20 +207,21 @@ export function CrmImportModal({
       for (const key of invalidateKeys) {
         queryClient.invalidateQueries({ queryKey: [key] });
       }
-      if (data.imported > 0) {
-        toast({
-          title: `Imported ${data.imported} ${entityLabel.toLowerCase()}${data.imported !== 1 ? "s" : ""}`,
-          description:
-            data.skipped.length > 0
-              ? `${data.skipped.length} row${data.skipped.length !== 1 ? "s" : ""} skipped`
-              : "All rows imported successfully",
-        });
+      const createdCount = data.created ?? data.imported ?? 0;
+      const updatedCount = data.updated ?? 0;
+      if (createdCount > 0 || updatedCount > 0) {
+        const parts: string[] = [];
+        if (createdCount > 0) parts.push(`${createdCount} created`);
+        if (updatedCount > 0) parts.push(`${updatedCount} updated`);
+        if (data.skipped.length > 0)
+          parts.push(`${data.skipped.length} skipped`);
+        toast({ title: "Import complete", description: parts.join(", ") });
       } else {
         toast({
           title: "No records imported",
           description:
             data.skipped.length > 0
-              ? `${data.skipped.length} rows had errors`
+              ? `${data.skipped.length} rows skipped`
               : "File appears empty",
           variant: "destructive",
         });
@@ -242,6 +245,10 @@ export function CrmImportModal({
   const skippedPreviewCount = preview ? preview.rows.filter(rowIsMissingRequired).length : 0;
 
   const isWide = step === "preview";
+
+  const createdCount = result ? (result.created ?? result.imported ?? 0) : 0;
+  const updatedCount = result?.updated ?? 0;
+  const showUpdated = updatedCount > 0;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -477,22 +484,43 @@ export function CrmImportModal({
           <div className="space-y-4 pt-1">
             <div className="rounded-lg border border-border/60 p-4 space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium">
-                {result.imported > 0 ? (
+                {createdCount > 0 || updatedCount > 0 ? (
                   <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
                 ) : (
                   <AlertCircle className="w-4 h-4 text-destructive" />
                 )}
                 Import Results
               </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div
+                className={`grid gap-3 text-sm ${showUpdated ? "grid-cols-3" : "grid-cols-2"}`}
+              >
                 <div className="rounded bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 px-3 py-2 text-center">
-                  <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                    {result.imported}
+                  <p
+                    className="text-2xl font-bold text-green-700 dark:text-green-400"
+                    data-testid="text-crm-import-created"
+                  >
+                    {createdCount}
                   </p>
-                  <p className="text-xs text-green-600 dark:text-green-500">Imported</p>
+                  <p className="text-xs text-green-600 dark:text-green-500">Created</p>
                 </div>
+                {showUpdated && (
+                  <div className="rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-3 py-2 text-center">
+                    <p
+                      className="text-2xl font-bold text-blue-700 dark:text-blue-400"
+                      data-testid="text-crm-import-updated"
+                    >
+                      {updatedCount}
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-500">Updated</p>
+                  </div>
+                )}
                 <div className="rounded bg-muted border border-border px-3 py-2 text-center">
-                  <p className="text-2xl font-bold">{result.skipped.length}</p>
+                  <p
+                    className="text-2xl font-bold"
+                    data-testid="text-crm-import-skipped"
+                  >
+                    {result.skipped.length}
+                  </p>
                   <p className="text-xs text-muted-foreground">Skipped</p>
                 </div>
               </div>
@@ -515,11 +543,19 @@ export function CrmImportModal({
                     {result.skipped.map((s, idx) => (
                       <div
                         key={idx}
-                        className="flex items-start gap-2 text-xs text-destructive bg-destructive/5 rounded px-2 py-1"
+                        className="flex items-start gap-2 text-xs bg-muted/50 rounded px-2 py-1"
                         data-testid={`text-crm-import-skip-${idx}`}
                       >
-                        <span className="font-mono shrink-0">Row {s.row}:</span>
-                        <span>{s.reason}</span>
+                        <span className="font-mono shrink-0 text-muted-foreground">Row {s.row}:</span>
+                        <span
+                          className={
+                            s.reason.startsWith("Duplicate:")
+                              ? "text-amber-700 dark:text-amber-400"
+                              : "text-destructive"
+                          }
+                        >
+                          {s.reason}
+                        </span>
                       </div>
                     ))}
                   </div>

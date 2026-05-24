@@ -1,7 +1,7 @@
 import type { Express, Request } from "express";
 import multer from "multer";
 import { db } from "../db";
-import { sql, eq, and, ilike, desc, or } from "drizzle-orm";
+import { sql, eq, and, ilike, desc, or, isNull } from "drizzle-orm";
 import { isAuthenticated, getCompanyContext } from "./shared";
 
 const csvUpload = multer({
@@ -671,7 +671,8 @@ export function registerCrmRoutes(app: Express) {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
-    const imported: string[] = [];
+    const created: string[] = [];
+    let duplicates = 0;
     const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -693,6 +694,14 @@ export function registerCrmRoutes(app: Express) {
         continue;
       }
       try {
+        const [existing] = await db
+          .select({ id: crmCompanies.id })
+          .from(crmCompanies)
+          .where(and(eq(crmCompanies.companyId, companyId), ilike(crmCompanies.name, r.name)));
+        if (existing) {
+          skipped.push({ row: rowNum, reason: "Duplicate: company already exists" });
+          continue;
+        }
         const [co] = await db
           .insert(crmCompanies)
           .values({
@@ -704,12 +713,12 @@ export function registerCrmRoutes(app: Express) {
             status: r.status || "active",
           })
           .returning({ id: crmCompanies.id });
-        imported.push(co.id);
+        created.push(co.id);
       } catch (e: unknown) {
         skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
-    res.json({ imported: imported.length, skipped });
+    res.json({ created: created.length, updated: 0, skipped });
   });
 
   app.get("/api/crm/companies/:id/contacts", async (req, res) => {
@@ -927,7 +936,8 @@ export function registerCrmRoutes(app: Express) {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
-    const imported: string[] = [];
+    const created: string[] = [];
+    let duplicates = 0;
     const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -995,6 +1005,19 @@ export function registerCrmRoutes(app: Express) {
             );
           if (ct) contactId = ct.id;
         }
+        const dupConditions = [
+          eq(crmDeals.companyId, companyId),
+          ilike(crmDeals.title, r.title),
+          contactId ? eq(crmDeals.contactId, contactId) : isNull(crmDeals.contactId),
+        ];
+        const [existingDeal] = await db
+          .select({ id: crmDeals.id })
+          .from(crmDeals)
+          .where(and(...dupConditions));
+        if (existingDeal) {
+          skipped.push({ row: rowNum, reason: "Duplicate: deal already exists for this contact" });
+          continue;
+        }
         let crmCompanyId: string | null = null;
         if (r.company_name) {
           const [co] = await db
@@ -1023,12 +1046,12 @@ export function registerCrmRoutes(app: Express) {
             crmCompanyId,
           })
           .returning({ id: crmDeals.id });
-        imported.push(deal.id);
+        created.push(deal.id);
       } catch (e: unknown) {
         skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
-    res.json({ imported: imported.length, skipped });
+    res.json({ created: created.length, updated: 0, skipped });
   });
 
   // ─── CRM Tasks ────────────────────────────────────────
@@ -1114,7 +1137,7 @@ export function registerCrmRoutes(app: Express) {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
-    const imported: string[] = [];
+    const created: string[] = [];
     const skipped: { row: number; reason: string }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -1133,6 +1156,19 @@ export function registerCrmRoutes(app: Express) {
               and(eq(crmContacts.companyId, companyId), eq(crmContacts.email, r.contact_email))
             );
           if (ct) contactId = ct.id;
+        }
+        const dupConditions = [
+          eq(crmTasks.companyId, companyId),
+          ilike(crmTasks.title, r.title),
+          contactId ? eq(crmTasks.contactId, contactId) : isNull(crmTasks.contactId),
+        ];
+        const [existingTask] = await db
+          .select({ id: crmTasks.id })
+          .from(crmTasks)
+          .where(and(...dupConditions));
+        if (existingTask) {
+          skipped.push({ row: rowNum, reason: "Duplicate: task already exists for this contact" });
+          continue;
         }
         let dealId: string | null = null;
         if (r.deal_title) {
@@ -1169,12 +1205,12 @@ export function registerCrmRoutes(app: Express) {
             crmCompanyId,
           })
           .returning({ id: crmTasks.id });
-        imported.push(task.id);
+        created.push(task.id);
       } catch (e: unknown) {
         skipped.push({ row: rowNum, reason: safeImportError(e) });
       }
     }
-    res.json({ imported: imported.length, skipped });
+    res.json({ created: created.length, updated: 0, skipped });
   });
 
   // ─── CRM Notes ────────────────────────────────────────
