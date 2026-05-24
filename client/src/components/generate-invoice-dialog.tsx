@@ -386,7 +386,7 @@ export function GenerateInvoiceDialog({
         {!activeContactId ? (
           <div
             className="text-center py-8 text-muted-foreground"
-            data-testid="text-select-client-prompt"
+            data-testid="text-select-customer-prompt"
           >
             <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-40" />
             <p>Select a customer to see their uninvoiced completed work.</p>

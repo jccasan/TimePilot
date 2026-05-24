@@ -63,7 +63,7 @@ export default function TechCustomers() {
 
   return (
     <div className="p-4 space-y-4 overflow-auto h-full">
-      <h1 className="text-xl font-bold" data-testid="text-tech-clients-heading">
+      <h1 className="text-xl font-bold" data-testid="text-tech-customers-heading">
         Customers
       </h1>
 
@@ -169,7 +169,7 @@ export default function TechCustomers() {
         <Card>
           <CardContent
             className="p-8 text-center text-muted-foreground"
-            data-testid="text-no-clients"
+            data-testid="text-no-customers"
           >
             {searchTerm ? "No customers matching your search" : "No customers found"}
           </CardContent>

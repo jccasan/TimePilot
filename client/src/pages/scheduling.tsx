@@ -1460,14 +1460,14 @@ export default function Scheduling() {
           ))}
         </div>
 
-        <div className="relative w-48" data-testid="filter-client-name">
+        <div className="relative w-48" data-testid="filter-customer-name">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder="Filter by customer..."
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
             className="pl-8 h-8 text-sm"
-            data-testid="input-client-filter"
+            data-testid="input-customer-filter"
           />
         </div>
 

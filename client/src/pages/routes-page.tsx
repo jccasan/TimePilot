@@ -371,7 +371,7 @@ function DraggableStop({
                   <Badge
                     variant="secondary"
                     className="text-[10px] bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                    data-testid={`badge-new-client-${stop.id}`}
+                    data-testid={`badge-new-customer-${stop.id}`}
                   >
                     New Customer
                   </Badge>
