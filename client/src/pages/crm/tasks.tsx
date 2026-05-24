@@ -375,6 +375,18 @@ export default function CrmTasks() {
         templateUrl="/api/crm/tasks/import/template"
         importUrl="/api/crm/tasks/import"
         invalidateKeys={["/api/crm/tasks", "/api/crm/stats"]}
+        knownFields={[
+          "title",
+          "description",
+          "type",
+          "priority",
+          "status",
+          "due_date",
+          "assigned_to",
+          "contact_email",
+          "deal_title",
+          "company_name",
+        ]}
       />
     </div>
   );

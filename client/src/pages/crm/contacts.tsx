@@ -490,6 +490,19 @@ export default function CrmContacts() {
         templateUrl="/api/crm/contacts/import/template"
         importUrl="/api/crm/contacts/import"
         invalidateKeys={["/api/crm/contacts", "/api/crm/stats"]}
+        knownFields={[
+          "first_name",
+          "last_name",
+          "email",
+          "phone",
+          "company",
+          "title",
+          "status",
+          "source",
+          "lead_score",
+          "assigned_to",
+          "tags",
+        ]}
       />
     </div>
   );

@@ -373,6 +373,18 @@ export default function CrmDeals() {
         templateUrl="/api/crm/deals/import/template"
         importUrl="/api/crm/deals/import"
         invalidateKeys={["/api/crm/deals", "/api/crm/stats"]}
+        knownFields={[
+          "title",
+          "value",
+          "currency",
+          "stage",
+          "probability",
+          "expected_close_date",
+          "description",
+          "assigned_to",
+          "contact_email",
+          "company_name",
+        ]}
       />
     </div>
   );

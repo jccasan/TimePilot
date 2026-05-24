@@ -356,6 +356,7 @@ export default function CrmCompanies() {
         templateUrl="/api/crm/companies/import/template"
         importUrl="/api/crm/companies/import"
         invalidateKeys={["/api/crm/companies", "/api/crm/stats"]}
+        knownFields={["name", "domain", "industry", "size", "status"]}
       />
     </div>
   );
