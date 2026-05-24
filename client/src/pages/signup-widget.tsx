@@ -825,6 +825,12 @@ export default function SignupWidget() {
 
   const currentTier = useMemo(() => {
     if (!selectedDogTier) return null;
+    if (company?.pricingRules) {
+      if (pricingRulesDogTiers && pricingRulesDogTiers.length > 0) {
+        return pricingRulesDogTiers.find((t) => t.value === selectedDogTier) || null;
+      }
+      return null;
+    }
     if (dogTiers.length > 0) {
       return dogTiers.find((t) => t.value === selectedDogTier) || null;
     }
@@ -832,7 +838,7 @@ export default function SignupWidget() {
       return pricingRulesDogTiers.find((t) => t.value === selectedDogTier) || null;
     }
     return null;
-  }, [dogTiers, pricingRulesDogTiers, selectedDogTier]);
+  }, [company?.pricingRules, dogTiers, pricingRulesDogTiers, selectedDogTier]);
 
   const currentLot = useMemo(() => {
     if (!parsed || !selectedLot) return null;
@@ -842,7 +848,7 @@ export default function SignupWidget() {
   const livePrice = useMemo(() => {
     const rules = company?.pricingRules;
     if (!rules?.basePrices || !selectedFreq) return null;
-    if (hasPricing && !currentTier) return null;
+    if (hasPricing && !company?.pricingRules && !currentTier) return null;
     const backendFreq = BACKEND_FREQ_MAP[selectedFreq] || selectedFreq;
     let basePrice: number;
     switch (backendFreq) {
@@ -1785,7 +1791,7 @@ export default function SignupWidget() {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">How Many Dogs? *</Label>
                       <div className="space-y-1.5">
-                        {hasPricing && parsed
+                        {hasPricing && parsed && !company?.pricingRules
                           ? (dogTiers.length > 0
                               ? dogTiers
                               : parsed.buildDogTiers(
@@ -1855,7 +1861,7 @@ export default function SignupWidget() {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">Cleanup Frequency *</Label>
                       <div className="space-y-1.5">
-                        {hasPricing && parsed
+                        {hasPricing && parsed && !company?.pricingRules
                           ? parsed.availableFreqs.map((freq) => {
                               const items = parsed.freqGroups[freq];
                               let priceLabel = "";
@@ -2492,7 +2498,7 @@ export default function SignupWidget() {
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">How Many Dogs? *</Label>
                     <div className="space-y-1.5">
-                      {hasPricing && parsed
+                      {hasPricing && parsed && !company?.pricingRules
                         ? (dogTiers.length > 0
                             ? dogTiers
                             : parsed.buildDogTiers(
@@ -2562,7 +2568,7 @@ export default function SignupWidget() {
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Cleanup Frequency *</Label>
                     <div className="space-y-1.5">
-                      {hasPricing && parsed
+                      {hasPricing && parsed && !company?.pricingRules
                         ? parsed.availableFreqs.map((freq) => {
                             const items = parsed.freqGroups[freq];
                             let priceLabel = "";
@@ -2866,7 +2872,9 @@ export default function SignupWidget() {
                   >
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Dogs</span>
-                      <span className="font-medium">{currentTier?.label || selectedDogTier || "—"}</span>
+                      <span className="font-medium">
+                        {currentTier?.label || selectedDogTier || "—"}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Frequency</span>
@@ -2879,7 +2887,8 @@ export default function SignupWidget() {
                         <span className="text-muted-foreground">Yard Size</span>
                         <span className="font-medium">
                           {hasYardSizeTiers
-                            ? yardSizeTiers.find((t) => t.value === selectedLot)?.label || selectedLot
+                            ? yardSizeTiers.find((t) => t.value === selectedLot)?.label ||
+                              selectedLot
                             : selectedLot}
                         </span>
                       </div>
@@ -2899,7 +2908,8 @@ export default function SignupWidget() {
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Last Cleanup</span>
                         <span className="font-medium">
-                          {LAST_CLEANUP_OPTIONS.find((o) => o.value === lastCleanup)?.label || lastCleanup}
+                          {LAST_CLEANUP_OPTIONS.find((o) => o.value === lastCleanup)?.label ||
+                            lastCleanup}
                         </span>
                       </div>
                     )}
