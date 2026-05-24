@@ -1,4 +1,5 @@
 import { pool } from "./db";
+import crypto from "crypto";
 
 export async function runStartupMigrations(): Promise<void> {
   const client = await pool.connect();
@@ -1090,6 +1091,90 @@ export async function runStartupMigrations(): Promise<void> {
         correct
           ? "[Migration] ScoopIt.Dog country/currency/Stripe Connect fix verified OK"
           : `[Migration] ScoopIt.Dog fix MISMATCH — got: ${JSON.stringify(row)}`
+      );
+    }
+
+    // ── ScooPilot HQ company + admin regular-user account (Task #1008) ──────────
+    // The platform admin uses a separate adminUsers/adminSessions auth system for
+    // the /admin/* dashboard.  To use the B2B CRM they also need a regular user
+    // account scoped to the "ScooPilot HQ" company (subscription_status=active).
+    // This block is idempotent — safe to run on every startup.
+    // It syncs the password to ADMIN_INITIAL_PASSWORD on every boot, matching
+    // the same behaviour as seedAdminUser() in admin-auth.ts.
+    const hqAdminEmail = process.env.ADMIN_EMAIL;
+    const hqAdminPassword = process.env.ADMIN_INITIAL_PASSWORD;
+    if (hqAdminEmail && hqAdminPassword) {
+      // 1. Ensure ScooPilot HQ company exists
+      await client.query(`
+        INSERT INTO companies
+          (id, name, email, slug, subscription_status, subscription_tier, created_at, updated_at)
+        VALUES
+          (gen_random_uuid(), 'ScooPilot HQ', $1, 'scoopilot-hq',
+           'active'::subscription_status, 'tier_10_plus'::subscription_tier,
+           NOW(), NOW())
+        ON CONFLICT (slug) DO NOTHING
+      `, [hqAdminEmail.toLowerCase()]);
+
+      const hqRow = await client.query(
+        `SELECT id FROM companies WHERE slug = 'scoopilot-hq' LIMIT 1`
+      );
+      const hqCompanyId: string | null = hqRow.rows[0]?.id ?? null;
+
+      if (hqCompanyId) {
+        // 2. Hash the admin password (scrypt, same salt:hash format as app-auth.ts)
+        const salt = crypto.randomBytes(16).toString("hex");
+        const derivedKey = await new Promise<Buffer>((resolve, reject) => {
+          crypto.scrypt(hqAdminPassword, salt, 64, (err, key) =>
+            err ? reject(err) : resolve(key as Buffer)
+          );
+        });
+        const passwordHash = `${salt}:${derivedKey.toString("hex")}`;
+
+        // 3. Upsert the admin's regular user account.
+        //    last_login_at is set to NOW() so the first login does not trigger
+        //    the "import mode" auto-enable that fires for brand-new accounts.
+        await client.query(`
+          INSERT INTO users
+            (id, email, password_hash, first_name, last_name,
+             must_change_password, import_mode, last_login_at,
+             created_at, updated_at)
+          VALUES
+            (gen_random_uuid(), $1, $2, 'Platform', 'Admin',
+             false, false, NOW(),
+             NOW(), NOW())
+          ON CONFLICT (email) DO UPDATE
+            SET password_hash     = EXCLUDED.password_hash,
+                must_change_password = false,
+                updated_at        = NOW()
+        `, [hqAdminEmail.toLowerCase(), passwordHash]);
+
+        const userRow = await client.query(
+          `SELECT id FROM users WHERE email = $1 LIMIT 1`,
+          [hqAdminEmail.toLowerCase()]
+        );
+        const hqUserId: string | null = userRow.rows[0]?.id ?? null;
+
+        if (hqUserId) {
+          // 4. Link user → ScooPilot HQ company as owner
+          await client.query(`
+            INSERT INTO company_users
+              (id, company_id, user_id, role, is_active, invite_pending, created_at, updated_at)
+            VALUES
+              (gen_random_uuid(), $1, $2, 'owner', true, false, NOW(), NOW())
+            ON CONFLICT (company_id, user_id) DO UPDATE
+              SET role         = 'owner',
+                  is_active    = true,
+                  updated_at   = NOW()
+          `, [hqCompanyId, hqUserId]);
+
+          console.log(
+            `[Migration] ScooPilot HQ CRM account ready — company=${hqCompanyId} user=${hqUserId}`
+          );
+        }
+      }
+    } else {
+      console.log(
+        "[Migration] ADMIN_EMAIL or ADMIN_INITIAL_PASSWORD not set — skipping ScooPilot HQ CRM bootstrap"
       );
     }
 
