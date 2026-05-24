@@ -3,28 +3,17 @@ import multer from "multer";
 import { db } from "../db";
 import { sql, eq, and, ilike, desc, or, isNull } from "drizzle-orm";
 import { isAuthenticated, getCompanyContext } from "./shared";
+import {
+  isValidEmail,
+  normalizePhone,
+  isValidNumericValue,
+  isValidDate,
+} from "../lib/import-validators";
 
 const csvUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
 });
-
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-}
-
-function normalizePhone(phone: string): string | null {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length === 10) return digits;
-  if (digits.length === 11 && digits[0] === "1") return digits.slice(1);
-  if (digits.length === 0) return null;
-  return null;
-}
-
-function isValidNumericValue(val: string): boolean {
-  if (!val || val.trim() === "") return true;
-  return !isNaN(parseFloat(val.trim())) && isFinite(Number(val.trim()));
-}
 
 function parseCSV(raw: string): Record<string, string>[] {
   const lines = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
@@ -995,7 +984,7 @@ export function registerCrmRoutes(app: Express) {
         });
         continue;
       }
-      if (r.expected_close_date && isNaN(Date.parse(r.expected_close_date))) {
+      if (r.expected_close_date && !isValidDate(r.expected_close_date)) {
         skipped.push({
           row: rowNum,
           reason: `Invalid expected_close_date: "${r.expected_close_date}" — use YYYY-MM-DD`,
@@ -1146,13 +1135,43 @@ export function registerCrmRoutes(app: Express) {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
-    const created: string[] = [];
-    const skipped: { row: number; reason: string }[] = [];
+    const imported: string[] = [];
+    const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rowNum = i + 2;
+      const rowData = {
+        title: r.title || "",
+        contact_email: r.contact_email || "",
+        assigned_to: r.assigned_to || "",
+        due_date: r.due_date || "",
+      };
       if (!r.title) {
-        skipped.push({ row: rowNum, reason: "Missing title" });
+        skipped.push({ row: rowNum, reason: "Missing title", data: rowData });
+        continue;
+      }
+      if (r.contact_email && !isValidEmail(r.contact_email)) {
+        skipped.push({
+          row: rowNum,
+          reason: `Invalid contact_email format: "${r.contact_email}"`,
+          data: rowData,
+        });
+        continue;
+      }
+      if (r.assigned_to && !isValidEmail(r.assigned_to)) {
+        skipped.push({
+          row: rowNum,
+          reason: `Invalid assigned_to email format: "${r.assigned_to}"`,
+          data: rowData,
+        });
+        continue;
+      }
+      if (r.due_date && !isValidDate(r.due_date)) {
+        skipped.push({
+          row: rowNum,
+          reason: `Invalid due_date: "${r.due_date}" — use YYYY-MM-DD`,
+          data: rowData,
+        });
         continue;
       }
       try {
@@ -1214,12 +1233,12 @@ export function registerCrmRoutes(app: Express) {
             crmCompanyId,
           })
           .returning({ id: crmTasks.id });
-        created.push(task.id);
+        imported.push(task.id);
       } catch (e: unknown) {
-        skipped.push({ row: rowNum, reason: safeImportError(e) });
+        skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
-    res.json({ created: created.length, updated: 0, skipped });
+    res.json({ imported: imported.length, skipped });
   });
 
   // ─── CRM Notes ────────────────────────────────────────
