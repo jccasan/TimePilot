@@ -955,27 +955,27 @@ export default function SignupWidget() {
     mutationFn: async () => {
       const numberOfDogs = currentTier ? currentTier.dogCount : 1;
       const backendFreq = BACKEND_FREQ_MAP[selectedFreq] || selectedFreq || "weekly";
-      let yardSize: string;
-      if (hasYardSizeTiers && selectedLot) {
-        const idxMatch = selectedLot.match(/^tier_(\d+)$/);
-        if (idxMatch) {
-          const idx = parseInt(idxMatch[1]);
-          const tierData = company?.pricingRules?.yardSizeTiers[idx];
-          yardSize = tierData?.name || "";
-        } else {
+      let yardSize = "";
+      if (selectedLot) {
+        if (hasYardSizeTiers) {
+          const idxMatch = selectedLot.match(/^tier_(\d+)$/);
+          if (idxMatch) {
+            const idx = parseInt(idxMatch[1]);
+            const tierData = company?.pricingRules?.yardSizeTiers[idx];
+            yardSize = tierData?.name || "";
+          } else {
+            yardSize = selectedLot;
+          }
+        } else if (["small", "medium", "large", "extra-large"].includes(selectedLot)) {
           yardSize = selectedLot;
-        }
-      } else if (["small", "medium", "large", "extra-large"].includes(selectedLot)) {
-        yardSize = selectedLot;
-      } else {
-        const acreVal = parseFloat(selectedLot);
-        if (!isNaN(acreVal)) {
-          if (acreVal <= 0.25) yardSize = "small";
-          else if (acreVal <= 0.5) yardSize = "medium";
-          else if (acreVal <= 0.75) yardSize = "large";
-          else yardSize = "extra-large";
         } else {
-          yardSize = "medium";
+          const acreVal = parseFloat(selectedLot);
+          if (!isNaN(acreVal)) {
+            if (acreVal <= 0.25) yardSize = "small";
+            else if (acreVal <= 0.5) yardSize = "medium";
+            else if (acreVal <= 0.75) yardSize = "large";
+            else yardSize = "extra-large";
+          }
         }
       }
       const pricingItemId = currentTier?.pricingItemId || undefined;
@@ -2856,6 +2856,55 @@ export default function SignupWidget() {
                   }}
                   className="space-y-4"
                 >
+                  <div
+                    className="rounded-lg border p-3 space-y-2 text-sm"
+                    style={{
+                      borderColor: brandStyles.lightBorder,
+                      backgroundColor: brandStyles.lightBg,
+                    }}
+                    data-testid="review-summary"
+                  >
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Dogs</span>
+                      <span className="font-medium">{currentTier?.label || selectedDogTier || "—"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Frequency</span>
+                      <span className="font-medium">
+                        {FREQ_DISPLAY[selectedFreq] || selectedFreq || "—"}
+                      </span>
+                    </div>
+                    {selectedLot ? (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Yard Size</span>
+                        <span className="font-medium">
+                          {hasYardSizeTiers
+                            ? yardSizeTiers.find((t) => t.value === selectedLot)?.label || selectedLot
+                            : selectedLot}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Yard Size</span>
+                        <span className="font-medium text-muted-foreground">Not provided</span>
+                      </div>
+                    )}
+                    {serviceDay && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Preferred Day</span>
+                        <span className="font-medium capitalize">{serviceDay}</span>
+                      </div>
+                    )}
+                    {lastCleanup && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Last Cleanup</span>
+                        <span className="font-medium">
+                          {LAST_CLEANUP_OPTIONS.find((o) => o.value === lastCleanup)?.label || lastCleanup}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="mt-2">
                     <label
                       className="flex items-start gap-2.5 cursor-pointer"
