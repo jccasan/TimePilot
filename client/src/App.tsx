@@ -520,7 +520,7 @@ function AuthenticatedLayout() {
             {importModeActive && isOwnerOrAdmin && (
               <ImportModeBanner onTurnOff={() => setImportModeActive(false)} />
             )}
-            <main className="flex-1 overflow-hidden">
+            <main className="flex-1 overflow-y-auto">
               <Router />
             </main>
           </div>
@@ -624,7 +624,7 @@ function TechnicianLayout() {
           </Button>
         </div>
       </header>
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-y-auto">
         <Suspense fallback={<PageLoader />}>
           <Switch>
             <Route path="/" component={TechRoutes} />
