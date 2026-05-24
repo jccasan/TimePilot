@@ -1334,8 +1334,6 @@ export async function runStartupMigrations(): Promise<void> {
       FROM companies c
       WHERE c.start_latitude IS NOT NULL
         AND c.start_longitude IS NOT NULL
-        AND c.start_latitude <> ''
-        AND c.start_longitude <> ''
         AND NOT EXISTS (SELECT 1 FROM depots d WHERE d.company_id = c.id)
     `);
     console.log("[Migration] depots table and depot_id/default_depot_id columns verified");
