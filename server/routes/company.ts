@@ -23,7 +23,7 @@ import {
   getCompanyWeekEnd,
 } from "../utils/company-date";
 import { reportMeteredUsageSet } from "../services/stripe";
-import { TIER_CONFIG } from "@shared/schema";
+import { TIER_CONFIG, DEFAULT_PRICING_RULES } from "@shared/schema";
 
 import {
   isAuthenticated,
@@ -382,6 +382,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "passStripeFees",
         "requireCardOnSignup",
         "widgetFieldConfig",
+        "yardSizeTierConfig",
         "newClientDepositEnabled",
         "newClientDepositType",
         "newClientDepositValue",
@@ -553,6 +554,51 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
           return res.status(400).json({ error: "maxRouteDurationHours must be at least 1" });
         }
       }
+
+      // Convert yardSizeTierConfig into pricingConfig.pricingRules.yardSizeTiers
+      // so the Customer Signup Widget (which reads from pricingRules) picks it up.
+      if (updates.yardSizeTierConfig !== undefined) {
+        const config = updates.yardSizeTierConfig as Record<
+          string,
+          { label?: string; price?: number }
+        >;
+        const DEFAULT_BOUNDARIES = [0.25, 0.5, 0.75, 1.0, 1.25];
+        const newTiers: Array<{ name: string; upToAcres: number | null; surcharge: number }> = [];
+        let boundIdx = 0;
+        for (let i = 1; i <= 6; i++) {
+          const entry = config[`tier${i}`];
+          if (!entry?.label?.trim()) continue;
+          newTiers.push({
+            name: entry.label.trim(),
+            upToAcres: boundIdx < DEFAULT_BOUNDARIES.length ? DEFAULT_BOUNDARIES[boundIdx++] : null,
+            surcharge: entry.price ?? 0,
+          });
+        }
+        const existingPricingConfig = (existing?.pricingConfig || {}) as Record<string, unknown>;
+        const existingRules = (existingPricingConfig.pricingRules || {}) as Record<string, unknown>;
+        const basePrices = (existingRules.basePrices || {}) as Record<string, number>;
+        if (!basePrices.weekly && !basePrices.biWeekly) {
+          basePrices.weekly = DEFAULT_PRICING_RULES.basePrices.weekly;
+          basePrices.biWeekly = DEFAULT_PRICING_RULES.basePrices.biWeekly;
+          basePrices.twiceWeekly = DEFAULT_PRICING_RULES.basePrices.twiceWeekly;
+        }
+        const perDogRule = (existingRules.perDogRule || {}) as Record<string, number>;
+        if (!perDogRule.incrementDogs) {
+          perDogRule.incrementDogs = DEFAULT_PRICING_RULES.perDogRule.incrementDogs;
+          perDogRule.surchargeAmount = DEFAULT_PRICING_RULES.perDogRule.surchargeAmount;
+          perDogRule.maxDogs = DEFAULT_PRICING_RULES.perDogRule.maxDogs;
+        }
+        updates.pricingConfig = {
+          ...existingPricingConfig,
+          pricingRules: {
+            ...existingRules,
+            basePrices,
+            perDogRule,
+            yardSizeTiers: newTiers,
+          },
+        };
+      }
+
       const company = await storage.updateCompany(companyId, updates as Partial<InsertCompany>);
       // Provision inbound email when phone is first saved (lazy provision on phone add).
       if (updates.phone && company.phone && existing && !existing.inboundEmail) {

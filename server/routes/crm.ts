@@ -1289,7 +1289,11 @@ export function registerCrmRoutes(app: Express) {
           .from(crmDeals)
           .where(and(...dupConditions));
         if (existingDeal) {
-          skipped.push({ row: rowNum, reason: "Duplicate: deal already exists for this contact", data: rowData });
+          skipped.push({
+            row: rowNum,
+            reason: "Duplicate: deal already exists for this contact",
+            data: rowData,
+          });
           continue;
         }
         let crmCompanyId: string | null = null;
@@ -1477,7 +1481,11 @@ export function registerCrmRoutes(app: Express) {
           .from(crmTasks)
           .where(and(...dupConditions));
         if (existingTask) {
-          skipped.push({ row: rowNum, reason: "Duplicate: task already exists for this contact", data: rowData });
+          skipped.push({
+            row: rowNum,
+            reason: "Duplicate: task already exists for this contact",
+            data: rowData,
+          });
           continue;
         }
         let dealId: string | null = null;

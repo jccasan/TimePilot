@@ -785,7 +785,8 @@ export default function SignupWidget() {
       { key: "oneTime", value: "onetime" },
     ];
     return FREQ_ORDER.filter(({ key }) => {
-      if (key === "monthly" || key === "oneTime") return ((basePrices[key] as number | undefined) ?? 0) > 0;
+      if (key === "monthly" || key === "oneTime")
+        return ((basePrices[key] as number | undefined) ?? 0) > 0;
       return true;
     }).map(({ key, value }) => ({
       value,
@@ -804,8 +805,7 @@ export default function SignupWidget() {
       const extraDogs = count - 1;
       const increments = Math.floor(extraDogs / Math.max(incrementDogs, 1));
       const surcharge = increments * surchargeAmount;
-      const surchargeLabel =
-        surcharge > 0 ? `+${sym}${surcharge.toFixed(0)}/visit` : "Base Price";
+      const surchargeLabel = surcharge > 0 ? `+${sym}${surcharge.toFixed(0)}/visit` : "Base Price";
       tiers.push({
         label: `${count} dog${count !== 1 ? "s" : ""} (${surchargeLabel})`,
         value: String(count),
@@ -1776,7 +1776,8 @@ export default function SignupWidget() {
                     >
                       <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
                       <p className="text-sm text-amber-800">
-                        Pricing will be shown once configured. You can still submit your information and we'll follow up with a custom quote.
+                        Pricing will be shown once configured. You can still submit your information
+                        and we'll follow up with a custom quote.
                       </p>
                     </div>
                   )}
@@ -1801,12 +1802,43 @@ export default function SignupWidget() {
                                 <span className="text-sm flex-1">{tier.label}</span>
                               </RadioOption>
                             ))
-                          : (pricingRulesDogTiers ?? [
-                              { value: "1", label: "1-2 dogs", dogCount: 1, surcharge: 0, callForQuote: false, pricingItemId: "" },
-                              { value: "3", label: "3-4 dogs", dogCount: 3, surcharge: 0, callForQuote: false, pricingItemId: "" },
-                              { value: "5", label: "5-6 dogs", dogCount: 5, surcharge: 0, callForQuote: false, pricingItemId: "" },
-                              { value: "7", label: "7+ dogs", dogCount: 7, surcharge: 0, callForQuote: false, pricingItemId: "" },
-                            ] as DogTier[]).map((opt) => (
+                          : (
+                              pricingRulesDogTiers ??
+                              ([
+                                {
+                                  value: "1",
+                                  label: "1-2 dogs",
+                                  dogCount: 1,
+                                  surcharge: 0,
+                                  callForQuote: false,
+                                  pricingItemId: "",
+                                },
+                                {
+                                  value: "3",
+                                  label: "3-4 dogs",
+                                  dogCount: 3,
+                                  surcharge: 0,
+                                  callForQuote: false,
+                                  pricingItemId: "",
+                                },
+                                {
+                                  value: "5",
+                                  label: "5-6 dogs",
+                                  dogCount: 5,
+                                  surcharge: 0,
+                                  callForQuote: false,
+                                  pricingItemId: "",
+                                },
+                                {
+                                  value: "7",
+                                  label: "7+ dogs",
+                                  dogCount: 7,
+                                  surcharge: 0,
+                                  callForQuote: false,
+                                  pricingItemId: "",
+                                },
+                              ] as DogTier[])
+                            ).map((opt) => (
                               <RadioOption
                                 key={opt.value}
                                 isSelected={selectedDogTier === opt.value}
@@ -1870,11 +1902,13 @@ export default function SignupWidget() {
                                 </RadioOption>
                               );
                             })
-                          : (pricingRulesFreqs ?? [
-                              { value: "weekly", basePrice: 0, sym: "$" },
-                              { value: "biweekly", basePrice: 0, sym: "$" },
-                              { value: "onetime", basePrice: 0, sym: "$" },
-                            ]).map((opt) => (
+                          : (
+                              pricingRulesFreqs ?? [
+                                { value: "weekly", basePrice: 0, sym: "$" },
+                                { value: "biweekly", basePrice: 0, sym: "$" },
+                                { value: "onetime", basePrice: 0, sym: "$" },
+                              ]
+                            ).map((opt) => (
                               <RadioOption
                                 key={opt.value}
                                 isSelected={selectedFreq === opt.value}
@@ -1882,10 +1916,13 @@ export default function SignupWidget() {
                                 testId={`radio-freq-${opt.value}`}
                                 onClick={() => setSelectedFreq(opt.value)}
                               >
-                                <span className="flex-1 text-sm">{FREQ_DISPLAY[opt.value] || opt.value}</span>
+                                <span className="flex-1 text-sm">
+                                  {FREQ_DISPLAY[opt.value] || opt.value}
+                                </span>
                                 {opt.basePrice > 0 && (
                                   <span className="text-xs text-muted-foreground font-medium">
-                                    from {opt.sym}{opt.basePrice.toFixed(2)}/visit
+                                    from {opt.sym}
+                                    {opt.basePrice.toFixed(2)}/visit
                                   </span>
                                 )}
                               </RadioOption>
@@ -1910,7 +1947,9 @@ export default function SignupWidget() {
                               <div className="flex flex-col flex-1">
                                 <span className="text-sm">{tier.label}</span>
                                 {tier.sizeLabel && (
-                                  <span className="text-xs text-muted-foreground">{tier.sizeLabel}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {tier.sizeLabel}
+                                  </span>
                                 )}
                               </div>
                               {tier.price > 0 && (
@@ -2443,7 +2482,8 @@ export default function SignupWidget() {
                   >
                     <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
                     <p className="text-sm text-amber-800">
-                      Pricing will be shown once configured. You can still submit your information and we'll follow up with a custom quote.
+                      Pricing will be shown once configured. You can still submit your information
+                      and we'll follow up with a custom quote.
                     </p>
                   </div>
                 )}
@@ -2469,12 +2509,43 @@ export default function SignupWidget() {
                               <span className="text-sm flex-1">{tier.label}</span>
                             </RadioOption>
                           ))
-                        : (pricingRulesDogTiers ?? [
-                            { value: "1", label: "1-2 dogs", dogCount: 1, surcharge: 0, callForQuote: false, pricingItemId: "" },
-                            { value: "3", label: "3-4 dogs", dogCount: 3, surcharge: 0, callForQuote: false, pricingItemId: "" },
-                            { value: "5", label: "5-6 dogs", dogCount: 5, surcharge: 0, callForQuote: false, pricingItemId: "" },
-                            { value: "7", label: "7+ dogs", dogCount: 7, surcharge: 0, callForQuote: false, pricingItemId: "" },
-                          ] as DogTier[]).map((opt) => (
+                        : (
+                            pricingRulesDogTiers ??
+                            ([
+                              {
+                                value: "1",
+                                label: "1-2 dogs",
+                                dogCount: 1,
+                                surcharge: 0,
+                                callForQuote: false,
+                                pricingItemId: "",
+                              },
+                              {
+                                value: "3",
+                                label: "3-4 dogs",
+                                dogCount: 3,
+                                surcharge: 0,
+                                callForQuote: false,
+                                pricingItemId: "",
+                              },
+                              {
+                                value: "5",
+                                label: "5-6 dogs",
+                                dogCount: 5,
+                                surcharge: 0,
+                                callForQuote: false,
+                                pricingItemId: "",
+                              },
+                              {
+                                value: "7",
+                                label: "7+ dogs",
+                                dogCount: 7,
+                                surcharge: 0,
+                                callForQuote: false,
+                                pricingItemId: "",
+                              },
+                            ] as DogTier[])
+                          ).map((opt) => (
                             <RadioOption
                               key={opt.value}
                               isSelected={selectedDogTier === opt.value}
@@ -2537,11 +2608,13 @@ export default function SignupWidget() {
                               </RadioOption>
                             );
                           })
-                        : (pricingRulesFreqs ?? [
-                            { value: "weekly", basePrice: 0, sym: "$" },
-                            { value: "biweekly", basePrice: 0, sym: "$" },
-                            { value: "onetime", basePrice: 0, sym: "$" },
-                          ]).map((opt) => (
+                        : (
+                            pricingRulesFreqs ?? [
+                              { value: "weekly", basePrice: 0, sym: "$" },
+                              { value: "biweekly", basePrice: 0, sym: "$" },
+                              { value: "onetime", basePrice: 0, sym: "$" },
+                            ]
+                          ).map((opt) => (
                             <RadioOption
                               key={opt.value}
                               isSelected={selectedFreq === opt.value}
@@ -2549,10 +2622,13 @@ export default function SignupWidget() {
                               testId={`radio-freq-${opt.value}`}
                               onClick={() => setSelectedFreq(opt.value)}
                             >
-                              <span className="flex-1 text-sm">{FREQ_DISPLAY[opt.value] || opt.value}</span>
+                              <span className="flex-1 text-sm">
+                                {FREQ_DISPLAY[opt.value] || opt.value}
+                              </span>
                               {opt.basePrice > 0 && (
                                 <span className="text-xs text-muted-foreground font-medium">
-                                  from {opt.sym}{opt.basePrice.toFixed(2)}/visit
+                                  from {opt.sym}
+                                  {opt.basePrice.toFixed(2)}/visit
                                 </span>
                               )}
                             </RadioOption>
@@ -2577,7 +2653,9 @@ export default function SignupWidget() {
                             <div className="flex flex-col flex-1">
                               <span className="text-sm">{tier.label}</span>
                               {tier.sizeLabel && (
-                                <span className="text-xs text-muted-foreground">{tier.sizeLabel}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {tier.sizeLabel}
+                                </span>
                               )}
                             </div>
                             {tier.price > 0 && (

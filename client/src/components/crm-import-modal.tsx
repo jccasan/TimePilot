@@ -263,7 +263,9 @@ export function CrmImportModal({
   const retryFileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [retryFile, setRetryFile] = useState<File | null>(null);
-  const [step, setStep] = useState<"select" | "preview" | "result" | "retry" | "retry-result">("select");
+  const [step, setStep] = useState<"select" | "preview" | "result" | "retry" | "retry-result">(
+    "select"
+  );
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [rawCsvText, setRawCsvText] = useState<string>("");
   const [columnRemap, setColumnRemap] = useState<Record<string, string>>({});
@@ -321,18 +323,6 @@ export function CrmImportModal({
     setColumnRemap({});
     setPreview(data);
     setStep("preview");
-  }
-
-  function handleRetry() {
-    setResult(null);
-    setSelectedFile(null);
-    setColumnRemap({});
-    setRawCsvText("");
-    setStep("select");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-      fileInputRef.current.click();
-    }
   }
 
   function handleDownloadPreviewErrors() {
@@ -940,9 +930,13 @@ export function CrmImportModal({
                     <p className="text-xs font-medium">Fix & re-submit just the failed rows</p>
                     <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
                       <li>
-                        Download the error report above — it contains only the failed rows pre-filled with your data and the error reason.
+                        Download the error report above — it contains only the failed rows
+                        pre-filled with your data and the error reason.
                       </li>
-                      <li>Open it in a spreadsheet, fix the issues, and delete the <span className="font-mono">error_reason</span> column.</li>
+                      <li>
+                        Open it in a spreadsheet, fix the issues, and delete the{" "}
+                        <span className="font-mono">error_reason</span> column.
+                      </li>
                       <li>Save and re-upload the corrected file below.</li>
                     </ol>
                     <Button
@@ -993,8 +987,8 @@ export function CrmImportModal({
                         data-testid="button-crm-retry-download-errors"
                       >
                         Download the error report
-                      </button>
-                      {" "}— it has your failed rows pre-filled
+                      </button>{" "}
+                      — it has your failed rows pre-filled
                     </>
                   )}
                 </li>

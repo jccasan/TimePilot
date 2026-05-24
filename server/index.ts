@@ -2605,7 +2605,9 @@ async function ensureInboundEmailsTable() {
   try {
     await pool.query(`ALTER TYPE activity_action ADD VALUE IF NOT EXISTS 'email_inbound'`);
     await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS inbound_email text UNIQUE`);
-    await pool.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS inbound_email_slug text UNIQUE`);
+    await pool.query(
+      `ALTER TABLE companies ADD COLUMN IF NOT EXISTS inbound_email_slug text UNIQUE`
+    );
     await pool.query(`
       DO $$ BEGIN
         CREATE TYPE inbound_email_status AS ENUM ('matched', 'unmatched', 'ignored');
