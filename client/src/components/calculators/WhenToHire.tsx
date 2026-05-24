@@ -173,22 +173,22 @@ export default function WhenToHire({
                   Step-Off-The-Truck Threshold
                 </p>
                 <p className="text-4xl font-bold mt-1" data-testid="text-hire-threshold">
-                  {threshold} clients
+                  {threshold} customers
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
                   {pastThreshold
-                    ? "You have enough clients to hire your first tech and stop scooping."
-                    : `${threshold - clientsNum} more clients until you hit solo capacity.`}
+                    ? "You have enough customers to hire your first tech and stop scooping."
+                    : `${threshold - clientsNum} more customers until you hit solo capacity.`}
                 </p>
                 {result.financialBreakEven != null && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Financial break-even: {result.financialBreakEven} clients covers tech cost
+                    Financial break-even: {result.financialBreakEven} customers covers tech cost
                   </p>
                 )}
               </div>
               <div className="text-right sm:text-left sm:min-w-[180px]">
                 <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                  <span>{clientsNum} clients</span>
+                  <span>{clientsNum} customers</span>
                   <span>{threshold} capacity</span>
                 </div>
                 <Progress
@@ -235,7 +235,7 @@ export default function WhenToHire({
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="hire-clients">Current Clients</Label>
+                  <Label htmlFor="hire-clients">Current Customers</Label>
                   <Input
                     id="hire-clients"
                     type="number"
@@ -314,7 +314,7 @@ export default function WhenToHire({
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Solo capacity: {result.ownerWeeklyCapacity} clients/week
+                Solo capacity: {result.ownerWeeklyCapacity} customers/week
               </p>
             </CardContent>
           </Card>
@@ -466,7 +466,7 @@ export default function WhenToHire({
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm">
-                      {clientsNum} clients / {result.ownerWeeklyCapacity} capacity
+                      {clientsNum} customers / {result.ownerWeeklyCapacity} capacity
                     </span>
                     <Badge
                       variant="outline"
@@ -499,7 +499,7 @@ export default function WhenToHire({
             <div className="grid grid-cols-3 gap-3">
               <ScenarioColumn
                 title="Solo"
-                subtitle="Owner services all clients, no tech"
+                subtitle="Owner services all customers, no tech"
                 income={result.soloIncome}
                 data-testid="text-hire-solo-income"
               />
@@ -511,7 +511,7 @@ export default function WhenToHire({
               />
               <ScenarioColumn
                 title="Owner Manages"
-                subtitle="Tech handles full client book; owner off the truck"
+                subtitle="Tech handles full customer book; owner off the truck"
                 income={result.withTechOwnerManage}
                 highlight
                 data-testid="text-hire-manager-income"

@@ -296,7 +296,7 @@ export function BulkActionPreflightModal({
           {!hasMissingEmail && (
             <div className="flex items-center gap-2 p-3 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 text-sm">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
-              <span>All {s.totalInvoices} clients have email addresses on file.</span>
+              <span>All {s.totalInvoices} customers have email addresses on file.</span>
             </div>
           )}
         </div>

@@ -1463,7 +1463,7 @@ export default function Scheduling() {
         <div className="relative w-48" data-testid="filter-client-name">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Filter by client..."
+            placeholder="Filter by customer..."
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
             className="pl-8 h-8 text-sm"
@@ -2364,7 +2364,7 @@ function VisitDetailSheet({
                     <div className="flex items-start gap-3">
                       <User className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                       <div>
-                        <p className="text-xs text-muted-foreground">Client</p>
+                        <p className="text-xs text-muted-foreground">Customer</p>
                         <Link href={`/contacts/${contact.id}`}>
                           <span
                             className="text-sm font-medium hover:underline cursor-pointer"

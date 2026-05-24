@@ -1899,8 +1899,8 @@ export default function Communications() {
                   {addrData.inbound_email}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Clients can forward emails here and they will appear automatically in this inbox,
-                  linked to their contact record.
+                  Customers can forward emails here and they will appear automatically in this
+                  inbox, linked to their contact record.
                 </p>
               </div>
               <button

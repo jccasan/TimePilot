@@ -117,7 +117,7 @@ export default function GrowthScorecard({
       {/* Breakeven Gap Tile */}
       <ScorecardTile
         title="Breakeven Gap"
-        subtitle="Clients above or below breakeven"
+        subtitle="Customers above or below breakeven"
         linkTo="/profitability?tab=breakeven"
         linkLabel="Breakeven Calculator"
       >
@@ -132,7 +132,7 @@ export default function GrowthScorecard({
               {gapClients != null && gapClients >= 0 ? `+${gapClients}` : gapClients}
             </p>
             <p className="text-sm text-muted-foreground">
-              {gapClients != null && gapClients >= 0 ? "clients above" : "clients to go"}
+              {gapClients != null && gapClients >= 0 ? "customers above" : "customers to go"}
             </p>
             {gapDollars != null && (
               <p
@@ -151,7 +151,7 @@ export default function GrowthScorecard({
       {/* Step-Off Threshold Tile */}
       <ScorecardTile
         title="Step-Off-The-Truck"
-        subtitle="Clients needed before owner can stop scooping"
+        subtitle="Customers needed before owner can stop scooping"
         linkTo="/growth-tools#hire"
         linkLabel="Hire Calculator"
       >

@@ -137,7 +137,7 @@ export default function LTVCalculator({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="ltv-avg-revenue">Avg Monthly Revenue / Client ($)</Label>
+              <Label htmlFor="ltv-avg-revenue">Avg Monthly Revenue / Customer ($)</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
                   $
@@ -232,7 +232,7 @@ export default function LTVCalculator({
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Marketing spend ÷ new clients acquired
+                Marketing spend ÷ new customers acquired
               </p>
             </div>
           </CardContent>
@@ -244,7 +244,7 @@ export default function LTVCalculator({
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Your current margin means each client costs you money over their lifetime. Fix
+                Your current margin means each customer costs you money over their lifetime. Fix
                 pricing before optimizing acquisition.
               </AlertDescription>
             </Alert>

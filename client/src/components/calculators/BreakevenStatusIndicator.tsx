@@ -65,7 +65,7 @@ export default function BreakevenStatusIndicator({
             <p className="text-sm font-semibold" data-testid="text-breakeven-headline">
               You are{" "}
               <strong>
-                {Math.abs(gapClients)} {Math.abs(gapClients) === 1 ? "client" : "clients"}
+                {Math.abs(gapClients)} {Math.abs(gapClients) === 1 ? "customer" : "customers"}
               </strong>{" "}
               {isAbove ? "above" : "below"} breakeven
             </p>

@@ -781,7 +781,7 @@ export default function Contacts() {
           <DialogHeader>
             <DialogTitle data-testid="text-bulk-edit-title">Update Service Plans</DialogTitle>
             <DialogDescription>
-              Update active service plans for {selectedIds.size} selected client
+              Update active service plans for {selectedIds.size} selected customer
               {selectedIds.size !== 1 ? "s" : ""}. Leave a field blank to keep it unchanged.
             </DialogDescription>
           </DialogHeader>

@@ -60,7 +60,7 @@ async function buildLineItems(
 registerSkill({
   name: "generate_invoice",
   description:
-    "Generate draft invoice(s) for completed, uninvoiced visits. Supply contactId to invoice a single client, or allPending: true to invoice every client with outstanding uninvoiced work.",
+    "Generate draft invoice(s) for completed, uninvoiced visits. Supply contactId to invoice a single customer, or allPending: true to invoice every customer with outstanding uninvoiced work.",
   parameterSchema: z
     .object({
       contactId: z.string().optional(),

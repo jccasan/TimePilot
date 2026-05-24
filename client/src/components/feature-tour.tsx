@@ -28,7 +28,7 @@ const WELCOME_TOUR: TourDefinition = {
       target: '[data-testid="link-dashboard"]',
       title: "Dashboard",
       content:
-        "Your command center. See today's visits, revenue, pending invoices, and client requests all in one place.",
+        "Your command center. See today's visits, revenue, pending invoices, and customer requests all in one place.",
       placement: "right",
       disableBeacon: true,
     },
@@ -36,7 +36,7 @@ const WELCOME_TOUR: TourDefinition = {
       target: '[data-testid="link-contacts"]',
       title: "Contacts and Leads",
       content:
-        "Manage all your clients here. Add contacts, set service statuses, track properties, and view full service history.",
+        "Manage all your customers here. Add contacts, set service statuses, track properties, and view full service history.",
       placement: "right",
       disableBeacon: true,
     },
@@ -44,7 +44,7 @@ const WELCOME_TOUR: TourDefinition = {
       target: '[data-testid="link-pipeline"]',
       title: "Pipeline",
       content:
-        "Track your leads through every stage — from first contact to signed client — on a visual Kanban board.",
+        "Track your leads through every stage — from first contact to signed customer — on a visual Kanban board.",
       placement: "right",
       disableBeacon: true,
     },
@@ -60,7 +60,7 @@ const WELCOME_TOUR: TourDefinition = {
       target: '[data-testid="link-messages"]',
       title: "Messages",
       content:
-        "All your SMS and email conversations in one inbox. Reply to clients, view automated messages, and see full conversation history.",
+        "All your SMS and email conversations in one inbox. Reply to customers, view automated messages, and see full conversation history.",
       placement: "right",
       disableBeacon: true,
     },
@@ -84,7 +84,7 @@ const WELCOME_TOUR: TourDefinition = {
       target: '[data-testid="link-invoices"]',
       title: "Invoices",
       content:
-        "Create, send, and track invoices with a live revenue dashboard. Use the Generate button to bill clients for completed visits, batch-send or charge all outstanding invoices at once, and monitor autopay health from the Billing Health tab.",
+        "Create, send, and track invoices with a live revenue dashboard. Use the Generate button to bill customers for completed visits, batch-send or charge all outstanding invoices at once, and monitor autopay health from the Billing Health tab.",
       placement: "right",
       disableBeacon: true,
     },
@@ -227,7 +227,7 @@ const WHATS_NEW_TOURS: TourDefinition[] = [
         target: '[data-testid="link-invoices"]',
         title: "Generate Invoices from Completed Work",
         content:
-          "The new Generate button on the Invoices page lets you bill any client for their completed, uninvoiced visits in seconds. Filter by date range — this month, last month, or a custom window — pick which visits to include, and create the invoice with one click. Use the Uninvoiced tab to quickly spot clients ready to bill.",
+          "The new Generate button on the Invoices page lets you bill any customer for their completed, uninvoiced visits in seconds. Filter by date range — this month, last month, or a custom window — pick which visits to include, and create the invoice with one click. Use the Uninvoiced tab to quickly spot customers ready to bill.",
         placement: "right",
         disableBeacon: true,
       },
@@ -235,7 +235,7 @@ const WHATS_NEW_TOURS: TourDefinition[] = [
         target: '[data-testid="link-invoices"]',
         title: "Billing Health Dashboard",
         content:
-          "The new Billing Health tab on the Invoices page shows your full autopay picture in one place: which clients are enrolled, who's missing a payment method, upcoming scheduled charges, and any failed payments — all with quick-action buttons to fix issues immediately.",
+          "The new Billing Health tab on the Invoices page shows your full autopay picture in one place: which customers are enrolled, who's missing a payment method, upcoming scheduled charges, and any failed payments — all with quick-action buttons to fix issues immediately.",
         placement: "right",
         disableBeacon: true,
       },

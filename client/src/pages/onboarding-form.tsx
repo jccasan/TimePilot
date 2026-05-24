@@ -483,7 +483,7 @@ export default function OnboardingForm() {
           )}
           <div>
             <h1 className="font-bold text-base leading-tight">{data.company.name}</h1>
-            <p className="text-xs opacity-80">New Client Onboarding</p>
+            <p className="text-xs opacity-80">New Customer Onboarding</p>
           </div>
         </div>
       </div>

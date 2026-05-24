@@ -405,7 +405,7 @@ export default function FieldView() {
                     className="text-2xl font-bold leading-tight"
                     data-testid={`text-client-name-${current.id}`}
                   >
-                    {contact ? `${contact.firstName} ${contact.lastName}` : "Unknown Client"}
+                    {contact ? `${contact.firstName} ${contact.lastName}` : "Unknown Customer"}
                   </p>
                   {prop && (
                     <div className="flex items-start gap-1.5 mt-1">

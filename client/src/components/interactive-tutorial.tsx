@@ -112,7 +112,7 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
   version: "1.3",
   title: "Creating Invoices",
   description:
-    "Learn how to manually create a custom invoice — for one-off charges, service add-ons, or any amount you want to bill. To bill clients for completed service visits, use the Generate Invoices tutorial instead.",
+    "Learn how to manually create a custom invoice — for one-off charges, service add-ons, or any amount you want to bill. To bill customers for completed service visits, use the Generate Invoices tutorial instead.",
   requiredPage: "/invoices",
   steps: [
     {
@@ -127,7 +127,7 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
       target: '[data-testid="tab-invoice-uninvoiced"]',
       title: "Uninvoiced Tab",
       content:
-        "Before creating anything, check the Uninvoiced tab. It shows every client who has completed service visits that haven't been billed yet. Use the Generate button to create invoices from those visits — it's faster than building them manually.",
+        "Before creating anything, check the Uninvoiced tab. It shows every customer who has completed service visits that haven't been billed yet. Use the Generate button to create invoices from those visits — it's faster than building them manually.",
       action: "observe",
       waitForElement: true,
     },
@@ -150,7 +150,7 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
       target: '[data-testid="select-invoice-contact"]',
       title: "Select a Customer",
       content:
-        "Choose which customer to bill. The invoice will be linked to their account and they can view and pay it through the client portal.",
+        "Choose which customer to bill. The invoice will be linked to their account and they can view and pay it through the customer portal.",
       action: "select",
     },
     {
@@ -192,7 +192,7 @@ const INVOICE_CREATION_TUTORIAL: TutorialDefinition = {
       target: '[data-testid="button-send-invoice-email"]',
       title: "Send to Customer",
       content:
-        "Click to email the invoice to your customer. They'll receive a link to view and pay online through the client portal.",
+        "Click to email the invoice to your customer. They'll receive a link to view and pay online through the customer portal.",
       action: "click",
       waitForElement: true,
     },
@@ -204,14 +204,14 @@ const GENERATE_INVOICES_TUTORIAL: TutorialDefinition = {
   version: "1.0",
   title: "Generating Invoices from Visits",
   description:
-    "Learn how to bill clients for their completed service visits using the Generate flow — the fastest way to invoice your whole customer base at month-end.",
+    "Learn how to bill customers for their completed service visits using the Generate flow — the fastest way to invoice your whole customer base at month-end.",
   requiredPage: "/invoices",
   steps: [
     {
       target: '[data-testid="tab-invoice-uninvoiced"]',
       title: "The Uninvoiced Tab",
       content:
-        "Start here. The Uninvoiced tab shows every client who has completed visits that haven't been billed yet, along with the total amount ready to invoice. Use this as your billing checklist at the end of each month.",
+        "Start here. The Uninvoiced tab shows every customer who has completed visits that haven't been billed yet, along with the total amount ready to invoice. Use this as your billing checklist at the end of each month.",
       action: "observe",
       waitForElement: true,
     },
@@ -219,7 +219,7 @@ const GENERATE_INVOICES_TUTORIAL: TutorialDefinition = {
       target: '[data-testid="button-generate-dropdown-trigger"]',
       title: "Open the Generate Menu",
       content:
-        "Click the Generate dropdown button. You'll see two options: Generate for a single client (pick which visits to include) or Generate by Date Range (invoice all clients for a specific billing period at once).",
+        "Click the Generate dropdown button. You'll see two options: Generate for a single customer (pick which visits to include) or Generate by Date Range (invoice all customers for a specific billing period at once).",
       action: "click",
       waitForElement: true,
     },
@@ -227,7 +227,7 @@ const GENERATE_INVOICES_TUTORIAL: TutorialDefinition = {
       target: '[data-testid="text-generate-invoice-title"]',
       title: "Generate Invoice Dialog",
       content:
-        "This dialog lets you build an invoice from completed, uninvoiced visits for one client. First, pick the client you want to bill from the dropdown.",
+        "This dialog lets you build an invoice from completed, uninvoiced visits for one customer. First, pick the customer you want to bill from the dropdown.",
       action: "observe",
       waitForElement: true,
     },

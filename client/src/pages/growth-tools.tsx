@@ -91,7 +91,7 @@ export default function GrowthTools() {
       <section id="hire">
         <h2 className="text-base font-semibold mb-3">When to Hire</h2>
         <p className="text-sm text-muted-foreground mb-4">
-          Calculate the client count at which hiring your first technician makes financial sense,
+          Calculate the customer count at which hiring your first technician makes financial sense,
           and see how your income changes across scenarios.
         </p>
         <WhenToHire

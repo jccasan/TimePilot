@@ -246,7 +246,7 @@ export default function Analytics() {
           trendLabel="vs last month"
         />
         <KpiCard
-          title="Active Clients"
+          title="Active Customers"
           value={String(kpis.activeContacts)}
           subtitle={`${kpis.totalContacts} total contacts`}
           icon={Users}
@@ -314,7 +314,7 @@ export default function Analytics() {
               <Users className="h-4 w-4" />
               Customer Acquisition
             </CardTitle>
-            <CardDescription>New clients added and running total</CardDescription>
+            <CardDescription>New customers added and running total</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
@@ -341,7 +341,7 @@ export default function Analytics() {
                 <Bar
                   yAxisId="left"
                   dataKey="newClients"
-                  name="New Clients"
+                  name="New Customers"
                   fill="hsl(var(--chart-2))"
                   radius={[4, 4, 0, 0]}
                 />
@@ -349,7 +349,7 @@ export default function Analytics() {
                   yAxisId="right"
                   type="monotone"
                   dataKey="total"
-                  name="Total Clients"
+                  name="Total Customers"
                   stroke="hsl(var(--chart-1))"
                   strokeWidth={2}
                   dot={false}
@@ -469,7 +469,7 @@ export default function Analytics() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <PieChartIcon className="h-4 w-4" />
-              Client Retention
+              Customer Retention
             </CardTitle>
             <CardDescription>
               {data.clientRetention.retentionRate}% retention rate ({data.clientRetention.active}{" "}
@@ -526,7 +526,7 @@ export default function Analytics() {
               <Target className="h-4 w-4" />
               Lead Sources
             </CardTitle>
-            <CardDescription>Where your clients are coming from</CardDescription>
+            <CardDescription>Where your customers are coming from</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={220}>
@@ -553,7 +553,7 @@ export default function Analytics() {
                 />
                 <Bar
                   dataKey="count"
-                  name="Clients"
+                  name="Customers"
                   fill="hsl(var(--chart-2))"
                   radius={[0, 4, 4, 0]}
                 >
@@ -572,7 +572,7 @@ export default function Analytics() {
               <CalendarCheck className="h-4 w-4" />
               Service Day Distribution
             </CardTitle>
-            <CardDescription>Clients assigned per day of week</CardDescription>
+            <CardDescription>Customers assigned per day of week</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={220}>
@@ -590,7 +590,7 @@ export default function Analytics() {
                 <Tooltip content={<ChartTooltipContent />} />
                 <Bar
                   dataKey="count"
-                  name="Clients"
+                  name="Customers"
                   fill="hsl(var(--chart-1))"
                   radius={[4, 4, 0, 0]}
                 />

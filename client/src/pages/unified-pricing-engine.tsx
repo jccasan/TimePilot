@@ -3376,8 +3376,8 @@ export default function UnifiedPricingEngine() {
           <TabsContent value="ltv" className="mt-0">
             <div className="space-y-2 mb-4">
               <p className="text-sm text-muted-foreground">
-                Calculate lifetime client value and set a rational ceiling on what you should spend
-                to acquire a customer.
+                Calculate lifetime customer value and set a rational ceiling on what you should
+                spend to acquire a customer.
               </p>
             </div>
             <LTVCalculator

@@ -2094,7 +2094,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         checks.push({
           id: "plans_no_schedule",
           severity: "warning",
-          message: `${plansNoScheduleCount} active recurring plan${plansNoScheduleCount === 1 ? "" : "s"} have no scheduled day — clients may miss service`,
+          message: `${plansNoScheduleCount} active recurring plan${plansNoScheduleCount === 1 ? "" : "s"} have no scheduled day — customers may miss service`,
           actionPath: "/contacts?status=active",
           count: plansNoScheduleCount,
         });
@@ -2124,7 +2124,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         checks.push({
           id: "invoicing_no_history",
           severity: "warning",
-          message: `${invoicingNoHistoryCount} active client${invoicingNoHistoryCount === 1 ? "" : "s"} are set up for invoicing but have no completed visit history`,
+          message: `${invoicingNoHistoryCount} active customer${invoicingNoHistoryCount === 1 ? "" : "s"} are set up for invoicing but have no completed visit history`,
           actionPath: "/contacts?status=active",
           count: invoicingNoHistoryCount,
         });
@@ -2140,7 +2140,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         checks.push({
           id: "unsent_invoices",
           severity: "warning",
-          message: `${unsentInvoicesCount} invoice${unsentInvoicesCount === 1 ? "" : "s"} created but never sent to clients`,
+          message: `${unsentInvoicesCount} invoice${unsentInvoicesCount === 1 ? "" : "s"} created but never sent to customers`,
           actionPath: "/invoices",
           count: unsentInvoicesCount,
         });
@@ -2163,7 +2163,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         checks.push({
           id: "autopay_no_payment",
           severity: "error",
-          message: `${autopayNoPaymentCount} client${autopayNoPaymentCount === 1 ? "" : "s"} have autopay enabled but no Stripe customer profile — payment will fail`,
+          message: `${autopayNoPaymentCount} customer${autopayNoPaymentCount === 1 ? "" : "s"} have autopay enabled but no Stripe customer profile — payment will fail`,
           actionPath: "/contacts?status=active",
           count: autopayNoPaymentCount,
         });
@@ -2195,7 +2195,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         checks.push({
           id: "route_no_schedule",
           severity: "warning",
-          message: `${routeNoScheduleCount} client${routeNoScheduleCount === 1 ? "" : "s"} assigned to a route but have no upcoming service scheduled`,
+          message: `${routeNoScheduleCount} customer${routeNoScheduleCount === 1 ? "" : "s"} assigned to a route but have no upcoming service scheduled`,
           actionPath: "/routes",
           count: routeNoScheduleCount,
         });

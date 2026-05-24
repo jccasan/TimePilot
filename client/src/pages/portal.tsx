@@ -77,7 +77,7 @@ export default function Portal() {
   return (
     <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
       <h1 className="text-2xl font-bold" data-testid="text-portal-heading">
-        Client Portal
+        Customer Portal
       </h1>
 
       <Card>

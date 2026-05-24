@@ -2242,7 +2242,7 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
       queryClient.invalidateQueries({ queryKey: ["/api/contacts", contactId] });
       toast({
         title: "Portal enabled",
-        description: "Customer can now log into the client portal.",
+        description: "Customer can now log into the customer portal.",
       });
     },
     onError: (error: Error) => {
@@ -2293,7 +2293,7 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
       setPortalConfirmPassword("");
       toast({
         title: "Password updated",
-        description: "The client's portal password has been changed.",
+        description: "The customer's portal password has been changed.",
       });
     },
     onError: (error: Error) => {
@@ -2306,7 +2306,7 @@ function PortalAccessCard({ contact, contactId }: { contact: Contact; contactId:
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-lg flex items-center gap-2">
-            <Shield className="h-5 w-5" /> Client Portal
+            <Shield className="h-5 w-5" /> Customer Portal
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -2539,13 +2539,13 @@ function OnboardingCard({
       if (data.emailed) {
         toast({
           title: "Onboarding email sent",
-          description: "An email with the onboarding form link has been sent to the client.",
+          description: "An email with the onboarding form link has been sent to the customer.",
         });
       } else if (data.noEmail) {
         toast({
           title: "No email address on file",
           description:
-            "This client has no email address. Copy the link below and share it manually.",
+            "This customer has no email address. Copy the link below and share it manually.",
           variant: "destructive",
         });
       } else {
@@ -2573,7 +2573,7 @@ function OnboardingCard({
       if (data.emailed) {
         toast({
           title: "Link regenerated & sent",
-          description: "The old link is now invalid. A new link has been emailed to the client.",
+          description: "The old link is now invalid. A new link has been emailed to the customer.",
         });
       } else {
         toast({
@@ -2601,7 +2601,7 @@ function OnboardingCard({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-lg flex items-center gap-2">
-            <ClipboardList className="h-5 w-5" /> Client Onboarding
+            <ClipboardList className="h-5 w-5" /> Customer Onboarding
           </CardTitle>
           <div className="flex items-center gap-2">
             {onboardingCompleted && (
@@ -2637,8 +2637,8 @@ function OnboardingCard({
             {onboardingCompleted
               ? `Completed on ${new Date(firstProperty!.onboardingCompletedAt!).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
               : onboardingPending
-                ? "An onboarding link has been sent. Waiting for the client to complete the form."
-                : "Send the client a form to collect dog details, gate codes, access instructions, and contact preferences before their first visit."}
+                ? "An onboarding link has been sent. Waiting for the customer to complete the form."
+                : "Send the customer a form to collect dog details, gate codes, access instructions, and contact preferences before their first visit."}
           </p>
           {onboardingCompleted && (
             <div className="space-y-3 pt-1">
@@ -2803,7 +2803,7 @@ function OnboardingCard({
                   }}
                   data-testid="button-open-onboarding"
                 >
-                  <ExternalLink className="mr-1 h-4 w-4" /> Fill Out for Client
+                  <ExternalLink className="mr-1 h-4 w-4" /> Fill Out for Customer
                 </Button>
               )}
             </div>
@@ -4183,7 +4183,7 @@ function BillingOnboardingStage({ contact }: { contact: Contact }) {
       data-testid="section-billing-onboarding-stage"
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium">Client Onboarding</p>
+        <p className="text-xs font-medium">Customer Onboarding</p>
         <Badge variant={config.variant} className="text-xs" data-testid="badge-onboarding-stage">
           {config.label}
         </Badge>

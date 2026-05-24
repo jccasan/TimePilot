@@ -134,7 +134,7 @@ const EXPORT_INSTRUCTIONS = {
     bgColor: "bg-emerald-50 dark:bg-emerald-950/30",
     files: [
       {
-        label: "Residential Client List",
+        label: "Residential Customer List",
         nav: "Clients → Residential → CSV",
         required: true,
         steps: [
@@ -180,7 +180,7 @@ const EXPORT_INSTRUCTIONS = {
     emailNote: "Jobber emails your exports. Watch for an email at the address you use to log in.",
     files: [
       {
-        label: "Client List",
+        label: "Customer List",
         nav: "Clients → More Actions → Export Clients → CSV",
         required: true,
         steps: [

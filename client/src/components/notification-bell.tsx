@@ -131,12 +131,12 @@ export function NotificationBell() {
           <>
             <DropdownMenuItem
               className="flex items-center gap-2 p-2 text-xs cursor-pointer bg-muted/50"
-              onClick={() => navigate("/#client-requests")}
+              onClick={() => navigate("/#customer-requests")}
               data-testid="link-client-requests"
             >
               <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
               <span className="font-medium">
-                {clientRequestCount} client request{clientRequestCount !== 1 ? "s" : ""} pending
+                {clientRequestCount} customer request{clientRequestCount !== 1 ? "s" : ""} pending
               </span>
             </DropdownMenuItem>
           </>

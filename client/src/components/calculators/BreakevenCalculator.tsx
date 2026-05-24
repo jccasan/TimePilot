@@ -362,8 +362,10 @@ export default function BreakevenCalculator({
               <CardContent>
                 <div className="space-y-4">
                   <KeyNumber
-                    label="Breakeven Clients (current routes)"
-                    value={calc.breakevenClients != null ? `${calc.breakevenClients} clients` : "—"}
+                    label="Breakeven Customers (current routes)"
+                    value={
+                      calc.breakevenClients != null ? `${calc.breakevenClients} customers` : "—"
+                    }
                     sub={
                       calc.breakevenRevenue != null
                         ? `${fmtCurrency(calc.breakevenRevenue)}/mo revenue`
@@ -379,27 +381,29 @@ export default function BreakevenCalculator({
                     }
                   />
                   <KeyNumber
-                    label="Breakeven Clients (target route density)"
+                    label="Breakeven Customers (target route density)"
                     value={
                       calc.breakevenClientsDense != null
-                        ? `${calc.breakevenClientsDense} clients`
+                        ? `${calc.breakevenClientsDense} customers`
                         : "—"
                     }
                     sub="Lower cost per stop from denser routes"
                     data-testid="text-be-breakeven-dense"
                   />
                   <KeyNumber
-                    label={`Clients for ${fmtCurrency(parseFloat(revenueTarget) || 0)}/mo revenue target`}
+                    label={`Customers for ${fmtCurrency(parseFloat(revenueTarget) || 0)}/mo revenue target`}
                     value={
-                      calc.clientsForRevTarget != null ? `${calc.clientsForRevTarget} clients` : "—"
+                      calc.clientsForRevTarget != null
+                        ? `${calc.clientsForRevTarget} customers`
+                        : "—"
                     }
                     data-testid="text-be-clients-revenue-target"
                   />
                   <KeyNumber
-                    label={`Clients for ${parseFloat(marginTarget) || 0}% margin target`}
+                    label={`Customers for ${parseFloat(marginTarget) || 0}% margin target`}
                     value={
                       calc.clientsForMarginTarget != null
-                        ? `${calc.clientsForMarginTarget} clients`
+                        ? `${calc.clientsForMarginTarget} customers`
                         : "—"
                     }
                     data-testid="text-be-clients-margin-target"
@@ -409,7 +413,7 @@ export default function BreakevenCalculator({
                 {activeClients > 0 && calc.breakevenClients != null && (
                   <div className="mt-4 pt-4 border-t">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Current clients</span>
+                      <span className="text-muted-foreground">Current customers</span>
                       <span className="font-semibold">{activeClients}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm mt-1">
@@ -435,7 +439,7 @@ export default function BreakevenCalculator({
       {!calc.invalid && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Revenue vs. Total Cost by Client Count</CardTitle>
+            <CardTitle className="text-base">Revenue vs. Total Cost by Customer Count</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={280}>
@@ -444,7 +448,7 @@ export default function BreakevenCalculator({
                 <XAxis
                   dataKey="clients"
                   tick={{ fontSize: 11 }}
-                  label={{ value: "Clients", position: "insideBottom", offset: -2, fontSize: 11 }}
+                  label={{ value: "Customers", position: "insideBottom", offset: -2, fontSize: 11 }}
                   height={36}
                 />
                 <YAxis tickFormatter={fmtAxisY} tick={{ fontSize: 11 }} width={52} />

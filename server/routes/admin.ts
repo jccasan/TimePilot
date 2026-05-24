@@ -2689,12 +2689,12 @@ Respond with exactly one category from the list above and nothing else.`;
     {
       keywords: ["dashboard", "overview", "home", "main"],
       answer:
-        "The Dashboard is your home screen showing key metrics like active clients, scheduled visits, revenue, and recent activity. It gives you a quick snapshot of your business operations.",
+        "The Dashboard is your home screen showing key metrics like active customers, scheduled visits, revenue, and recent activity. It gives you a quick snapshot of your business operations.",
     },
     {
-      keywords: ["contact", "client", "crm", "lead", "customer"],
+      keywords: ["contact", "customer", "crm", "lead"],
       answer:
-        "The Contacts section is your CRM hub. You can add and manage clients, track their status (lead, estimate, active, paused, cancelled), assign properties, add tags, and manage their scheduled services. Use the search bar to find contacts quickly.",
+        "The Contacts section is your CRM hub. You can add and manage customers, track their status (lead, estimate, active, paused, cancelled), assign properties, add tags, and manage their scheduled services. Use the search bar to find contacts quickly.",
     },
     {
       keywords: ["property", "address", "yard", "dog", "location"],
@@ -2709,27 +2709,27 @@ Respond with exactly one category from the list above and nothing else.`;
     {
       keywords: ["schedule", "service plan", "recurring", "visit", "appointment", "job"],
       answer:
-        "Jobs set up recurring or one-off schedules for your clients (weekly, biweekly, monthly, or one-time). Each job auto-generates visits that appear on routes and auto-assigns to the least-loaded route for their day.",
+        "Jobs set up recurring or one-off schedules for your customers (weekly, biweekly, monthly, or one-time). Each job auto-generates visits that appear on routes and auto-assigns to the least-loaded route for their day.",
     },
     {
       keywords: ["invoice", "billing", "payment", "charge", "stripe"],
       answer:
-        "The Invoicing section lets you create and manage invoices with line items, tax, and discounts. Invoices can be sent to clients and paid via Stripe. You can also void invoices and track payment status.",
+        "The Invoicing section lets you create and manage invoices with line items, tax, and discounts. Invoices can be sent to customers and paid via Stripe. You can also void invoices and track payment status.",
     },
     {
       keywords: ["technician", "tech", "field", "mobile", "crew"],
       answer:
-        "Technicians use a simplified mobile view showing only their assigned routes and client info. They can mark visits as complete, add notes, and upload proof-of-service photos. Invite technicians from the Settings page.",
+        "Technicians use a simplified mobile view showing only their assigned routes and customer info. They can mark visits as complete, add notes, and upload proof-of-service photos. Invite technicians from the Settings page.",
     },
     {
-      keywords: ["portal", "client portal", "self-service"],
+      keywords: ["portal", "customer portal", "self-service"],
       answer:
-        "The Client Portal gives your customers a self-service view where they can see their schedule, past visits, invoices, pause/resume service, and send messages to you. Enable portal access from a contact's detail page.",
+        "The Customer Portal gives your customers a self-service view where they can see their schedule, past visits, invoices, pause/resume service, and send messages to you. Enable portal access from a contact's detail page.",
     },
     {
       keywords: ["email", "sms", "text", "message", "communicate"],
       answer:
-        "Communication tools let you send emails and SMS messages to clients. All communications are logged in the Messages tab. You can set up automation rules to send messages automatically on events like new leads or completed services.",
+        "Communication tools let you send emails and SMS messages to customers. All communications are logged in the Messages tab. You can set up automation rules to send messages automatically on events like new leads or completed services.",
     },
     {
       keywords: ["automation", "rule", "trigger", "automatic"],
@@ -2779,7 +2779,7 @@ Respond with exactly one category from the list above and nothing else.`;
     {
       keywords: ["proof", "photo", "picture", "evidence"],
       answer:
-        "Technicians can upload proof-of-service photos when completing visits. These photos are attached to the visit record and visible in the visit history for the client's property.",
+        "Technicians can upload proof-of-service photos when completing visits. These photos are attached to the visit record and visible in the visit history for the customer's property.",
     },
   ];
 

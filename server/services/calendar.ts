@@ -186,7 +186,7 @@ function generateDetailedEvents(
   for (const v of visits) {
     const contactName = v.contact
       ? `${v.contact.firstName} ${v.contact.lastName}`.trim()
-      : "Client";
+      : "Customer";
     const street = v.property?.streetAddress ?? "Unknown address";
     const summary = `${contactName} — ${street}`;
 

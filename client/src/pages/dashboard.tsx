@@ -510,9 +510,9 @@ const WIDGET_DEFS: {
   },
   {
     id: "active_clients",
-    label: "Active Clients",
+    label: "Active Customers",
     icon: Users,
-    description: "Total active client count",
+    description: "Total active customer count",
     defaultW: 4,
     defaultH: 2,
     minW: 3,
@@ -677,7 +677,7 @@ const WIDGET_DEFS: {
     id: "growth_opportunities",
     label: "Growth Opportunities",
     icon: TrendingUp,
-    description: "Top clients flagged as upgrade or add-on candidates",
+    description: "Top customers flagged as upgrade or add-on candidates",
     defaultW: 6,
     defaultH: 4,
     minW: 4,
@@ -885,11 +885,11 @@ function ClientRequestsCard() {
 
   if (isLoading) {
     return (
-      <Card data-testid="widget-client-requests" id="client-requests">
+      <Card data-testid="widget-client-requests" id="customer-requests">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <Inbox className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Client Requests</CardTitle>
+            <CardTitle className="text-lg">Customer Requests</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
@@ -904,11 +904,11 @@ function ClientRequestsCard() {
 
   if (inboxItems.length === 0) {
     return (
-      <Card data-testid="widget-client-requests" id="client-requests">
+      <Card data-testid="widget-client-requests" id="customer-requests">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <Inbox className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Client Requests</CardTitle>
+            <CardTitle className="text-lg">Customer Requests</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
@@ -924,12 +924,12 @@ function ClientRequestsCard() {
   }
 
   return (
-    <Card data-testid="widget-client-requests" id="client-requests">
+    <Card data-testid="widget-client-requests" id="customer-requests">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Inbox className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Client Requests</CardTitle>
+            <CardTitle className="text-lg">Customer Requests</CardTitle>
             <Badge variant="secondary" data-testid="badge-request-count">
               {inboxItems.length}
             </Badge>
@@ -1062,11 +1062,11 @@ function ClientRequestsCard() {
                   {msg.contactId ? (
                     <Link href={`/contacts/${msg.contactId}`}>
                       <span className="font-medium text-primary hover:underline cursor-pointer">
-                        {msg.contactName || "Client"}
+                        {msg.contactName || "Customer"}
                       </span>
                     </Link>
                   ) : (
-                    <span className="font-medium">{msg.contactName || "Client"}</span>
+                    <span className="font-medium">{msg.contactName || "Customer"}</span>
                   )}
                   {msg.subject && (
                     <span className="text-muted-foreground ml-1">-- {msg.subject}</span>
@@ -1851,7 +1851,7 @@ function BusinessPerformance({ data }: { data: PipelineData }) {
       return res.json();
     },
     onSuccess: (_, _contactId) => {
-      toast({ title: "Reminder sent", description: "Payment reminder sent to client." });
+      toast({ title: "Reminder sent", description: "Payment reminder sent to customer." });
       setRemindingId(null);
     },
     onError: (err: Error, _contactId) => {
@@ -3481,7 +3481,7 @@ export default function Dashboard() {
         return (
           <Card className="h-full flex flex-col" data-testid="widget-active-clients">
             <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
-              <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
+              <CardTitle className="text-sm font-medium">Active Customers</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-center px-4 pb-4 pt-0">

@@ -389,7 +389,7 @@ function SectionHeader({
   );
 }
 
-export default function PortalClient() {
+export default function PortalCustomer() {
   const tz = useCompanyTimezone();
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -1154,7 +1154,7 @@ export default function PortalClient() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="font-bold text-xl text-foreground" data-testid="text-portal-welcome">
-                {profile?.companyName || "Client Portal"}
+                {profile?.companyName || "Customer Portal"}
               </h1>
               <p className="text-sm text-muted-foreground">
                 Welcome, {profile?.firstName} {profile?.lastName}

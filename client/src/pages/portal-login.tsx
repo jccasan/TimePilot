@@ -46,7 +46,7 @@ export default function PortalLogin() {
       const data = await res.json();
       sessionStorage.setItem("portalToken", data.token);
       sessionStorage.setItem("portalContactId", data.contactId);
-      navigate("/portal/client");
+      navigate("/portal/customer");
     } catch (err: any) {
       toast({ title: "Login failed", description: err.message, variant: "destructive" });
     } finally {
@@ -167,7 +167,7 @@ export default function PortalLogin() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl" data-testid="text-portal-login-title">
-            Client Portal
+            Customer Portal
           </CardTitle>
           <CardDescription>
             Sign in to view your service schedule, invoices, and manage your account.

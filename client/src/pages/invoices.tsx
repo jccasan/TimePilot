@@ -101,7 +101,7 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { ClientInfoPopover } from "@/components/client-info-popover";
+import { CustomerInfoPopover } from "@/components/customer-info-popover";
 import {
   GenerateInvoiceDialog,
   GenerateByDateRangeDialog,
@@ -427,7 +427,7 @@ function CollectionsPanel({
 
         {contactReminderLogs.length === 0 && (
           <p className="text-xs text-muted-foreground italic">
-            No reminder history for this client.
+            No reminder history for this customer.
           </p>
         )}
       </CardContent>
@@ -1337,7 +1337,7 @@ export default function Invoices() {
       });
       const desc = data?.paymentUrl
         ? "Invoice emailed with a payment link."
-        : "Invoice emailed to the client.";
+        : "Invoice emailed to the customer.";
       toast({ title: "Invoice sent", description: desc });
     },
     onError: (error: Error) => {
@@ -2178,11 +2178,11 @@ export default function Invoices() {
           <TableCell>
             <div className="flex items-center gap-1.5">
               {contact ? (
-                <ClientInfoPopover contactId={contact.id}>
+                <CustomerInfoPopover contactId={contact.id}>
                   <span className="hover:underline">
                     {contact.firstName} {contact.lastName}
                   </span>
-                </ClientInfoPopover>
+                </CustomerInfoPopover>
               ) : (
                 <span className="text-muted-foreground">Unknown</span>
               )}
@@ -2358,7 +2358,7 @@ export default function Invoices() {
                   />
                 </TableHead>
                 <SortHeader field="invoiceNumber">Invoice</SortHeader>
-                <SortHeader field="contact">Client</SortHeader>
+                <SortHeader field="contact">Customer</SortHeader>
                 <SortHeader field="createdAt">Created</SortHeader>
                 <SortHeader field="dueDate">Due Date</SortHeader>
                 <SortHeader field="total">Amount</SortHeader>
@@ -3287,7 +3287,7 @@ export default function Invoices() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Control when automatic payment reminders are sent to clients with outstanding
+              Control when automatic payment reminders are sent to customers with outstanding
               invoices.
             </p>
           </CardHeader>
@@ -3752,7 +3752,7 @@ export default function Invoices() {
                   />
                 </TableHead>
                 <SortHeader field="invoiceNumber">Invoice</SortHeader>
-                <SortHeader field="contact">Client</SortHeader>
+                <SortHeader field="contact">Customer</SortHeader>
                 <SortHeader field="createdAt">Created</SortHeader>
                 <SortHeader field="dueDate">Due Date</SortHeader>
                 <SortHeader field="total">Amount</SortHeader>
@@ -3814,11 +3814,11 @@ export default function Invoices() {
                     <TableCell>
                       <div className="flex items-center gap-1.5">
                         {contact ? (
-                          <ClientInfoPopover contactId={contact.id}>
+                          <CustomerInfoPopover contactId={contact.id}>
                             <span className="hover:underline">
                               {contact.firstName} {contact.lastName}
                             </span>
-                          </ClientInfoPopover>
+                          </CustomerInfoPopover>
                         ) : (
                           <span className="text-muted-foreground">Unknown</span>
                         )}
@@ -4450,12 +4450,12 @@ export default function Invoices() {
                 <div className="flex items-center gap-1">
                   <span className="text-muted-foreground">Contact: </span>
                   {contactMap[selectedInvoice.contactId] ? (
-                    <ClientInfoPopover contactId={selectedInvoice.contactId}>
+                    <CustomerInfoPopover contactId={selectedInvoice.contactId}>
                       <span>
                         {contactMap[selectedInvoice.contactId].firstName}{" "}
                         {contactMap[selectedInvoice.contactId].lastName}
                       </span>
-                    </ClientInfoPopover>
+                    </CustomerInfoPopover>
                   ) : (
                     <span>Unknown</span>
                   )}
@@ -4869,7 +4869,7 @@ export default function Invoices() {
                         ) : (
                           <Mail className="mr-1 h-3 w-3" />
                         )}{" "}
-                        Send to Client
+                        Send to Customer
                       </Button>
                     )}
                   </div>

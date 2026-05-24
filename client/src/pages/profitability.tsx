@@ -46,7 +46,7 @@ import {
   Zap,
   ExternalLink,
 } from "lucide-react";
-import { ClientInfoPopover } from "@/components/client-info-popover";
+import { CustomerInfoPopover } from "@/components/customer-info-popover";
 import type { Route as RouteRecord } from "@shared/schema";
 import BreakevenCalculator from "@/components/calculators/BreakevenCalculator";
 import BreakevenStatusIndicator from "@/components/calculators/BreakevenStatusIndicator";
@@ -467,7 +467,7 @@ export default function Profitability() {
               ? "Analyze profit and loss across your customer base"
               : viewMode === "routes"
                 ? "Analyze profit and loss across your routes"
-                : "See how many clients you need to cover your costs"}
+                : "See how many customers you need to cover your costs"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -840,11 +840,11 @@ export default function Profitability() {
                                   className="pl-8 text-sm"
                                   data-testid={`text-route-customer-name-${customer.contactId}`}
                                 >
-                                  <ClientInfoPopover contactId={customer.contactId}>
+                                  <CustomerInfoPopover contactId={customer.contactId}>
                                     <span>
                                       {customer.firstName} {customer.lastName}
                                     </span>
-                                  </ClientInfoPopover>
+                                  </CustomerInfoPopover>
                                 </TableCell>
                                 <TableCell></TableCell>
                                 <TableCell></TableCell>
@@ -1015,9 +1015,9 @@ export default function Profitability() {
                             className="font-medium"
                             data-testid={`text-customer-name-${customer.contactId}`}
                           >
-                            <ClientInfoPopover contactId={customer.contactId}>
+                            <CustomerInfoPopover contactId={customer.contactId}>
                               <span>{customer.contactName}</span>
-                            </ClientInfoPopover>
+                            </CustomerInfoPopover>
                           </TableCell>
                           <TableCell
                             className="text-center"
@@ -1197,9 +1197,9 @@ export default function Profitability() {
                       data-testid={`row-recommendation-${idx}`}
                     >
                       <TableCell className="font-medium" data-testid={`text-rec-customer-${idx}`}>
-                        <ClientInfoPopover contactId={rec.contactId}>
+                        <CustomerInfoPopover contactId={rec.contactId}>
                           <span>{rec.contactName}</span>
-                        </ClientInfoPopover>
+                        </CustomerInfoPopover>
                       </TableCell>
                       <TableCell
                         className="text-sm text-muted-foreground max-w-48 truncate"

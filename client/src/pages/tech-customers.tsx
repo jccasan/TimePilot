@@ -35,7 +35,7 @@ const frequencyLabels: Record<string, string> = {
   monthly: "Monthly",
 };
 
-export default function TechClients() {
+export default function TechCustomers() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const { data: contacts, isLoading } = useQuery<Contact[]>({
@@ -64,7 +64,7 @@ export default function TechClients() {
   return (
     <div className="p-4 space-y-4 overflow-auto h-full">
       <h1 className="text-xl font-bold" data-testid="text-tech-clients-heading">
-        Clients
+        Customers
       </h1>
 
       <div className="relative">
@@ -171,7 +171,7 @@ export default function TechClients() {
             className="p-8 text-center text-muted-foreground"
             data-testid="text-no-clients"
           >
-            {searchTerm ? "No clients matching your search" : "No clients found"}
+            {searchTerm ? "No customers matching your search" : "No customers found"}
           </CardContent>
         </Card>
       )}

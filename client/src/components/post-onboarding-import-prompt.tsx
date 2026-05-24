@@ -55,12 +55,12 @@ export function PostOnboardingImportPrompt({ open, onDismiss }: PostOnboardingIm
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
-            Import your existing clients?
+            Import your existing customers?
           </DialogTitle>
           <DialogDescription>
-            If you are switching from another system, we can pull in your client list, service
-            plans, pricing, and dog info automatically. Client notifications will stay off until you
-            are ready to send them.
+            If you are switching from another system, we can pull in your customer list, service
+            plans, pricing, and dog info automatically. Customer notifications will stay off until
+            you are ready to send them.
           </DialogDescription>
         </DialogHeader>
 
@@ -72,7 +72,7 @@ export function PostOnboardingImportPrompt({ open, onDismiss }: PostOnboardingIm
             data-testid="button-start-import"
           >
             <Upload className="h-4 w-4 mr-2" />
-            {isPending ? "Setting up..." : "Yes, import my clients"}
+            {isPending ? "Setting up..." : "Yes, import my customers"}
           </Button>
           <Button
             variant="ghost"
@@ -81,7 +81,7 @@ export function PostOnboardingImportPrompt({ open, onDismiss }: PostOnboardingIm
             className="w-full"
             data-testid="button-skip-import"
           >
-            No thanks, I will add clients manually
+            No thanks, I will add customers manually
           </Button>
         </div>
       </DialogContent>

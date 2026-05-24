@@ -512,7 +512,7 @@ export default function Quotes() {
             Quotes & Proposals
           </h1>
           <p className="text-muted-foreground text-sm">
-            Create and manage service quotes for residential and commercial clients
+            Create and manage service quotes for residential and commercial customers
           </p>
         </div>
         <Button
@@ -683,7 +683,7 @@ export default function Quotes() {
                 {filteredQuotes.map((quote) => {
                   const cfg =
                     quote.status === "accepted" && (quote as any).acceptedVia === "portal"
-                      ? { label: "Approved by Client", variant: "default" as const }
+                      ? { label: "Approved by Customer", variant: "default" as const }
                       : statusConfig[quote.status] || statusConfig.draft;
                   return (
                     <TableRow key={quote.id} data-testid={`row-quote-${quote.id}`}>
@@ -903,7 +903,7 @@ export default function Quotes() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Send Quote</DialogTitle>
-            <DialogDescription>Choose how to deliver this quote to the client.</DialogDescription>
+            <DialogDescription>Choose how to deliver this quote to the customer.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <Select value={sendVia} onValueChange={setSendVia}>
@@ -918,9 +918,9 @@ export default function Quotes() {
             </Select>
             <div className="flex items-center justify-between rounded-md border px-3 py-2.5">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">Enable client approval</p>
+                <p className="text-sm font-medium">Enable customer approval</p>
                 <p className="text-xs text-muted-foreground">
-                  Client can pick a start date &amp; approve the service directly
+                  Customer can pick a start date &amp; approve the service directly
                 </p>
               </div>
               <button
@@ -2817,12 +2817,12 @@ function CreateEditQuoteDialog({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label>Client-Facing Notes</Label>
+              <Label>Customer-Facing Notes</Label>
               <Textarea
                 data-testid="input-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Notes visible to the client..."
+                placeholder="Notes visible to the customer..."
                 rows={3}
               />
             </div>
@@ -2832,7 +2832,7 @@ function CreateEditQuoteDialog({
                 data-testid="input-internal-notes"
                 value={internalNotes}
                 onChange={(e) => setInternalNotes(e.target.value)}
-                placeholder="Internal notes (not visible to client)..."
+                placeholder="Internal notes (not visible to customer)..."
                 rows={3}
               />
             </div>

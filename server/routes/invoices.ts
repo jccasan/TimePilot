@@ -806,7 +806,7 @@ export async function registerInvoicesRoutes(app: Express): Promise<void> {
         if (contactId && inv.contactId !== contactId)
           return res
             .status(400)
-            .json({ error: "All invoices must belong to the same client to merge" });
+            .json({ error: "All invoices must belong to the same customer to merge" });
         contactId = inv.contactId;
         validInvoices.push(inv);
       }

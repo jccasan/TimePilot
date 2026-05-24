@@ -369,7 +369,7 @@ export default function CrmProjects() {
             CRM Projects
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Manage client projects and their tasks.
+            Manage customer projects and their tasks.
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>

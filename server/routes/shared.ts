@@ -837,10 +837,10 @@ export async function provisionPortalAccess(
     contactId: contactId,
     bypassClientSuppression: opts?.sendEmail === true,
     to: contact.email,
-    subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
+    subject: `Your ${company?.name || "ScooPilot"} Customer Portal Access`,
     senderName: company?.name || undefined,
     replyTo: company?.email || undefined,
-    text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\n${serviceText ? "Your Service Details:\n" + serviceText + "\n\n" : ""}Please log in and change your password.\n\nThank you!`,
+    text: `Hi ${contact.firstName},\n\nYou now have access to the customer portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\n${serviceText ? "Your Service Details:\n" + serviceText + "\n\n" : ""}Please log in and change your password.\n\nThank you!`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
@@ -848,7 +848,7 @@ export async function provisionPortalAccess(
         </div>
         <div style="padding: 20px; border: 1px solid #e5e7eb;">
           <p>Hi ${contact.firstName},</p>
-          <p>You now have access to the client portal.</p>
+          <p>You now have access to the customer portal.</p>
           <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
             <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
             <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>

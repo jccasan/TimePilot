@@ -27,20 +27,20 @@ const KNOWLEDGE_BASE = `
 ScooPilot is a vertical SaaS for pet waste removal businesses. Here's what you need to know:
 
 CORE MODULES:
-- Dashboard: Overview with key metrics (active clients, visits, revenue, recent activity). Widgets are customizable via drag-and-drop.
-- Contacts/CRM: Manage clients with statuses (lead, estimate, active, paused, cancelled). Add properties, tags, service plans.
+- Dashboard: Overview with key metrics (active customers, visits, revenue, recent activity). Widgets are customizable via drag-and-drop.
+- Contacts/CRM: Manage customers with statuses (lead, estimate, active, paused, cancelled). Add properties, tags, service plans.
 - Properties: Service locations tied to contacts. Include address, gate code, yard size, dog count, special instructions. Auto-geocoded.
 - Pipeline: Visual Kanban-style board for tracking leads through stages (new lead, contacted, quoted, won, lost).
-- Quotes & Proposals: Create and send professional service quotes to potential clients with detailed pricing breakdowns. Convert accepted quotes directly into active jobs.
-- Messages: Unified inbox for all SMS and email conversations with clients. View automated message history alongside manual replies.
+- Quotes & Proposals: Create and send professional service quotes to potential customers with detailed pricing breakdowns. Convert accepted quotes directly into active jobs.
+- Messages: Unified inbox for all SMS and email conversations with customers. View automated message history alongside manual replies.
 - Routes: Organize daily service stops. Drag-and-drop Route Builder, route optimization algorithm, dispatch to technicians. Complete visits with a proof photo or use the "No gate" option for properties without a gate or for logging past visits without a photo.
 - Scheduling: The unified hub for jobs and the service calendar. Create one-time or recurring jobs directly from this page using the "Add Job" button. When you create a job, visits are generated automatically for the next 6 months — no extra steps needed. You can set job type (recurring or one-time), assign a team member, choose frequency (weekly, biweekly, monthly, one-time), pick service days, set time windows or mark as "anytime," add visit instructions, and configure end conditions (ongoing, number of visits, or end date). The calendar view shows all upcoming visits. There is no separate Jobs page — everything is managed from Scheduling.
 - Invoicing: Create invoices with line items, tax, discounts. A live revenue dashboard at the top shows This Week's revenue, Outstanding, Overdue, and Collected totals. Invoices are grouped into sections (Overdue, Unpaid, Draft, Paid). Use batch actions — select multiple invoices and click Send All, Charge All (autopay via Stripe), or Mark Paid — to process your queue at once. Stripe payment integration. Auto-invoice capability.
 - Live Field Map: Real-time map showing all technicians' locations and stop statuses. Admins can monitor the entire crew throughout the day.
 - Command Center: Admin-only real-time operations overview showing all active routes, technician locations, and today's visit status across the entire team.
 - Reports & Analytics: Service reports, revenue analytics, visit history, and team performance trends. Export data or view charts.
-- Technician Mobile View: Simplified mobile view for technicians showing their assigned route stops, client info, gate codes, and dog count. Mark visits complete, add notes, upload proof photos, or use No Gate mode.
-- Client Portal: Self-service view for customers — schedule, visit history, invoices, pause/resume service, messaging.
+- Technician Mobile View: Simplified mobile view for technicians showing their assigned route stops, customer info, gate codes, and dog count. Mark visits complete, add notes, upload proof photos, or use No Gate mode.
+- Customer Portal: Self-service view for customers — schedule, visit history, invoices, pause/resume service, messaging.
 - Communication: Send emails and SMS. All logged in Messages tab. Automation rules for event-triggered messages.
 - Automation Rules: Trigger actions on events (new lead → welcome email, completed service → follow-up).
 - Settings: Company profile, team, service pricing, notifications, API keys, integrations, reminder configuration, Stripe connection.
@@ -73,34 +73,34 @@ KEY WORKFLOWS:
 - Completing a visit with no gate: On the Routes page, click Complete on a stop. In the dialog, check "No gate" — the proof photo becomes optional and the customer message is adjusted. Works for past dates too (no SMS will be sent for past visits).
 - Importing contacts: Go to Data Migration under Settings. Upload a CSV and map columns to contact fields using AI-assisted matching.
 
-CLIENT PORTAL API:
-The portal API lets clients (or custom client-facing apps built by the business) manage their account programmatically. It uses Bearer token auth — call POST /api/portal/login with email + password to receive a token (valid 7 days), then pass it as "Authorization: Bearer <token>" on all subsequent calls. Tokens are scoped to a single contact and cannot access staff or admin endpoints.
+CUSTOMER PORTAL API:
+The portal API lets customers (or custom customer-facing apps built by the business) manage their account programmatically. It uses Bearer token auth — call POST /api/portal/login with email + password to receive a token (valid 7 days), then pass it as "Authorization: Bearer <token>" on all subsequent calls. Tokens are scoped to a single contact and cannot access staff or admin endpoints.
 
 Auth endpoints: POST /api/portal/login (no Bearer — authenticates with email + password, returns token + contactId), POST /api/portal/logout (Bearer required — invalidates the current token), POST /api/portal/forgot-password (no Bearer — sends reset email; rate-limited to 3/hour), POST /api/portal/reset-password (no Bearer — set new password via emailed token, min 10 chars), GET /api/portal/verify-email (no Bearer — confirm email change via ?token= query param).
 
-Account & Profile (Bearer): GET /api/portal/me (returns name, email, phone, address, company name, currency, pendingEmail), PATCH /api/portal/profile (update any profile field; changing email triggers a verification flow — change is pending until the client clicks the link; can also update gate codes and special instructions for specific properties via the properties array), GET /api/portal/properties (returns all service addresses for this contact including gate codes, GPS, yard size).
+Account & Profile (Bearer): GET /api/portal/me (returns name, email, phone, address, company name, currency, pendingEmail), PATCH /api/portal/profile (update any profile field; changing email triggers a verification flow — change is pending until the customer clicks the link; can also update gate codes and special instructions for specific properties via the properties array), GET /api/portal/properties (returns all service addresses for this contact including gate codes, GPS, yard size).
 
 Schedule & Visits (Bearer): GET /api/portal/schedule (returns active service plans + upcoming visits for next 60 days), GET /api/portal/visits/history (paginated past visits for last 365 days — completed, skipped, cancelled — includes proof-of-service photo URLs; query: page, limit).
 
-Service Control (Bearer): POST /api/portal/pause (marks contact paused, deactivates all active plans, cancels all future visits, notifies staff), POST /api/portal/resume (reactivates paused plans, auto-generates visits for next 14 days, notifies staff), POST /api/portal/request-cleanup (sends a one-time cleanup request to the company — staff must schedule and price it; body: preferredDate, notes), POST /api/portal/service-change (submit a formal service change request for staff to review — does NOT change the plan directly; body: servicePlanId, requestType [frequency_change/day_change/cancel_request/other], requestedValue, note), GET /api/portal/service-changes (returns client's history of service change requests with status: pending/approved/declined and any admin response notes).
+Service Control (Bearer): POST /api/portal/pause (marks contact paused, deactivates all active plans, cancels all future visits, notifies staff), POST /api/portal/resume (reactivates paused plans, auto-generates visits for next 14 days, notifies staff), POST /api/portal/request-cleanup (sends a one-time cleanup request to the company — staff must schedule and price it; body: preferredDate, notes), POST /api/portal/service-change (submit a formal service change request for staff to review — does NOT change the plan directly; body: servicePlanId, requestType [frequency_change/day_change/cancel_request/other], requestedValue, note), GET /api/portal/service-changes (returns customer's history of service change requests with status: pending/approved/declined and any admin response notes).
 
 Billing & Payments (Bearer): GET /api/portal/invoices (returns all sent/pending/paid/failed invoices — not drafts or voided), POST /api/portal/invoices/:id/pay (creates a Stripe Checkout session; optional body: tipAmount; returns checkout URL), GET /api/portal/invoices/:id/pdf (streams a PDF download of a single invoice with line items, tax, discount, totals), GET /api/portal/billing-statement (streams a PDF billing statement for a date range showing all non-voided invoices with grand total and outstanding balance; query: startDate, endDate — defaults to past 365 days), GET /api/portal/payment-methods (saved cards + autoPayEnabled status), POST /api/portal/setup-intent (creates Stripe Checkout in setup mode to add a new card without charging; returns URL), DELETE /api/portal/payment-methods/:id (remove a saved card), PATCH /api/portal/auto-pay (enable/disable autopay; body: { enabled: true/false }).
 
 Quotes — PUBLIC, token-based (NOT Bearer): GET /api/portal/quotes/:id?token=<quoteToken> (view a proposal using the one-time token from the emailed link — returns pricing tiers, property info, expiry date, company name and logo; accessible to prospects without a portal account), POST /api/portal/quotes/:id/accept?token=<quoteToken> (accept a quote and select a tier — essential/premium/deluxe; automatically creates a service plan; upgrades lead to active; body: { tier }), POST /api/portal/quotes/:id/decline?token=<quoteToken> (decline a quote; body: reason optional).
 
-Estimates — authenticated (Bearer): GET /api/portal/estimates (upsell/add-on proposals sent by staff to authenticated clients; statuses: pending/approved/declined), POST /api/portal/estimates/:id/approve (approve a pending estimate; if a property is linked, a draft job is auto-created on Scheduling for staff to activate; body: note), POST /api/portal/estimates/:id/decline (body: reason).
+Estimates — authenticated (Bearer): GET /api/portal/estimates (upsell/add-on proposals sent by staff to authenticated customers; statuses: pending/approved/declined), POST /api/portal/estimates/:id/approve (approve a pending estimate; if a property is linked, a draft job is auto-created on Scheduling for staff to activate; body: note), POST /api/portal/estimates/:id/decline (body: reason).
 
 Notification Preferences (Bearer): GET /api/portal/notifications (returns full notification preferences: email, sms, serviceReminder, serviceCompleted, invoiceReady, invoiceDueReminder, paymentConfirmation, reminderOptOut, preferredChannel [sms/email/both], preferredTiming [24h_before/2h_before/morning_of]), PATCH /api/portal/notifications (update any subset of preferences — all fields optional).
 
 Photo Gallery (Bearer): GET /api/portal/photos (returns up to 50 completed visits with proof-of-service photos from the past 180 days; each entry has before/after photo URLs and property address).
 
-Messaging (Bearer): GET /api/portal/messages (full message thread between client and company — SMS and email — with direction, channel, subject, body, timestamp), POST /api/portal/contact-us (send a message to the company; body: subject, message; logged in the thread and notifies staff).
+Messaging (Bearer): GET /api/portal/messages (full message thread between customer and company — SMS and email — with direction, channel, subject, body, timestamp), POST /api/portal/contact-us (send a message to the company; body: subject, message; logged in the thread and notifies staff).
 
-Referrals (Bearer): GET /api/portal/referral (returns referral code + count), POST /api/portal/referral/generate (creates a referral code if the client doesn't have one — idempotent).
+Referrals (Bearer): GET /api/portal/referral (returns referral code + count), POST /api/portal/referral/generate (creates a referral code if the customer doesn't have one — idempotent).
 
-Known limitations: Clients cannot permanently cancel service via the portal API (they can only pause; cancellation requires staff action). Clients cannot create a new service plan from scratch — a staff member must send a quote (which the client accepts via the public quotes endpoint) or an estimate (approved via the estimates endpoint).
+Known limitations: Customers cannot permanently cancel service via the portal API (they can only pause; cancellation requires staff action). Customers cannot create a new service plan from scratch — a staff member must send a quote (which the customer accepts via the public quotes endpoint) or an estimate (approved via the estimates endpoint).
 
-The portal API is documented in the Settings page under the "Client Portal API" widget (add it from the widget picker if it's not visible). The full reference is also in docs/portal-api-reference.md.
+The portal API is documented in the Settings page under the "Customer Portal API" widget (add it from the widget picker if it's not visible). The full reference is also in docs/portal-api-reference.md.
 `;
 
 interface UserContext {
@@ -256,9 +256,9 @@ GUIDELINES:
 - You can query live business data using your available tools. Use them when the user asks about their specific metrics.
 - Format numbers nicely (e.g., "$1,234.56" for currency).
 - For lists, use bullet points. Keep responses under 200 words unless the topic requires more detail.
-- When a generate_invoice tool result includes a "contactName" field, always name the client in your reply (e.g., "Generated a draft invoice for Jane Doe totalling $120.00."). Never invoice silently.
-- When a generate_invoice tool result has error "AMBIGUOUS_CONTACT", do not proceed. Instead, relay the clarification question from the message field verbatim so the user can pick the right client.
-- ADDRESS CONFIRMATION GATE: When you are helping a user add a new property or collect an address for a client, you must display the full address back to the user and wait for their explicit confirmation (e.g., "yes", "confirm", "correct", "that's right") before any property creation or geocoding is triggered. Never create a property or request geocoding while the address is still being collected, edited, or clarified. Only proceed after the user has clearly confirmed the address is correct.`;
+- When a generate_invoice tool result includes a "contactName" field, always name the customer in your reply (e.g., "Generated a draft invoice for Jane Doe totalling $120.00."). Never invoice silently.
+- When a generate_invoice tool result has error "AMBIGUOUS_CONTACT", do not proceed. Instead, relay the clarification question from the message field verbatim so the user can pick the right customer.
+- ADDRESS CONFIRMATION GATE: When you are helping a user add a new property or collect an address for a customer, you must display the full address back to the user and wait for their explicit confirmation (e.g., "yes", "confirm", "correct", "that's right") before any property creation or geocoding is triggered. Never create a property or request geocoding while the address is still being collected, edited, or clarified. Only proceed after the user has clearly confirmed the address is correct.`;
 }
 
 export const ROVER_TOOLS: Anthropic.Tool[] = [
@@ -322,14 +322,14 @@ export const ROVER_TOOLS: Anthropic.Tool[] = [
      */
     name: "generate_invoice",
     description:
-      "Generate draft invoice(s) for completed, uninvoiced visits. Use when the user says something like 'generate invoices for all clients', 'invoice all pending work', or 'create an invoice for [client name/id]'. If a specific client is mentioned, supply their name or UUID as contactRef; otherwise use allPending: true to invoice everyone with outstanding work.",
+      "Generate draft invoice(s) for completed, uninvoiced visits. Use when the user says something like 'generate invoices for all customers', 'invoice all pending work', or 'create an invoice for [customer name/id]'. If a specific customer is mentioned, supply their name or UUID as contactRef; otherwise use allPending: true to invoice everyone with outstanding work.",
     input_schema: {
       type: "object",
       properties: {
         contactRef: {
           type: "string",
           description:
-            "The client to invoice — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact. Omit to invoice all pending clients.",
+            "The customer to invoice — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact. Omit to invoice all pending customers.",
         },
         allPending: {
           type: "boolean",
@@ -343,14 +343,14 @@ export const ROVER_TOOLS: Anthropic.Tool[] = [
   {
     name: "get_client_visits",
     description:
-      "Look up recent visit history for a specific client. Use when the user asks about a client's past visits, service history, or upcoming scheduled visits. Supply the client's name or UUID as contactRef.",
+      "Look up recent visit history for a specific customer. Use when the user asks about a customer's past visits, service history, or upcoming scheduled visits. Supply the customer's name or UUID as contactRef.",
     input_schema: {
       type: "object",
       properties: {
         contactRef: {
           type: "string",
           description:
-            "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
+            "The customer to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
         },
         limit: {
           type: "number",
@@ -363,14 +363,14 @@ export const ROVER_TOOLS: Anthropic.Tool[] = [
   {
     name: "get_client_service_plan",
     description:
-      "Check the active service plan(s) for a specific client — frequency, day of week, property, and whether the plan is active. Use when the user asks what schedule or plan a client is on. Supply the client's name or UUID as contactRef.",
+      "Check the active service plan(s) for a specific customer — frequency, day of week, property, and whether the plan is active. Use when the user asks what schedule or plan a customer is on. Supply the customer's name or UUID as contactRef.",
     input_schema: {
       type: "object",
       properties: {
         contactRef: {
           type: "string",
           description:
-            "The client to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
+            "The customer to look up — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
         },
       },
       required: ["contactRef"],
@@ -379,14 +379,14 @@ export const ROVER_TOOLS: Anthropic.Tool[] = [
   {
     name: "send_portal_invite",
     description:
-      "Send a client portal invite to a specific client, granting them access to the self-service portal. Use when the user asks to send a portal invite or enable portal access for a client. The client must have an email address on file. Supply the client's name or UUID as contactRef.",
+      "Send a customer portal invite to a specific customer, granting them access to the self-service portal. Use when the user asks to send a portal invite or enable portal access for a customer. The customer must have an email address on file. Supply the customer's name or UUID as contactRef.",
     input_schema: {
       type: "object",
       properties: {
         contactRef: {
           type: "string",
           description:
-            "The client to invite — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
+            "The customer to invite — can be a full name (e.g. 'Jane Doe', 'John Smith'), a partial name, or a UUID. The system will resolve this to the correct contact.",
         },
       },
       required: ["contactRef"],
@@ -395,14 +395,14 @@ export const ROVER_TOOLS: Anthropic.Tool[] = [
   {
     name: "create_contact_with_property",
     description:
-      "Create a new client contact and their service property address. IMPORTANT: You must collect the full address first, display it back to the user, and only call this tool AFTER the user has explicitly confirmed the address is correct (e.g., 'yes', 'confirm', 'that's right'). Never call this tool while the address is still being collected or clarified. The 'confirmed' field must be true — set it to false if the user has not yet confirmed.",
+      "Create a new customer contact and their service property address. IMPORTANT: You must collect the full address first, display it back to the user, and only call this tool AFTER the user has explicitly confirmed the address is correct (e.g., 'yes', 'confirm', 'that's right'). Never call this tool while the address is still being collected or clarified. The 'confirmed' field must be true — set it to false if the user has not yet confirmed.",
     input_schema: {
       type: "object",
       properties: {
-        firstName: { type: "string", description: "Client's first name." },
-        lastName: { type: "string", description: "Client's last name." },
-        email: { type: "string", description: "Client's email address (optional)." },
-        phone: { type: "string", description: "Client's phone number (optional)." },
+        firstName: { type: "string", description: "Customer's first name." },
+        lastName: { type: "string", description: "Customer's last name." },
+        email: { type: "string", description: "Customer's email address (optional)." },
+        phone: { type: "string", description: "Customer's phone number (optional)." },
         streetAddress: { type: "string", description: "Service property street address." },
         city: { type: "string", description: "City." },
         state: { type: "string", description: "State or province abbreviation." },
@@ -501,7 +501,7 @@ export async function executeToolCall(
           if (resolved.type === "not_found") {
             return JSON.stringify({
               success: false,
-              message: `Could not find a client matching "${contactRef}". Check the name and try again.`,
+              message: `Could not find a customer matching "${contactRef}". Check the name and try again.`,
               error: "CONTACT_NOT_FOUND",
             });
           }
@@ -512,7 +512,7 @@ export async function executeToolCall(
             return JSON.stringify({
               success: false,
               error: "AMBIGUOUS_CONTACT",
-              message: `Multiple clients match "${contactRef}": ${nameList}. Please provide the full name of the client you want to invoice so I can proceed with the right one.`,
+              message: `Multiple customers match "${contactRef}": ${nameList}. Please provide the full name of the customer you want to invoice so I can proceed with the right one.`,
               matches: resolved.matches,
             });
           }
@@ -564,7 +564,7 @@ export async function executeToolCall(
         if (!contactRef) {
           return JSON.stringify({
             success: false,
-            message: "A client name or ID is required.",
+            message: "A customer name or ID is required.",
             error: "MISSING_CONTACT_REF",
           });
         }
@@ -572,7 +572,7 @@ export async function executeToolCall(
         if (resolvedId.type !== "found") {
           return JSON.stringify({
             success: false,
-            message: `Could not find a client matching "${contactRef}". Check the name and try again.`,
+            message: `Could not find a customer matching "${contactRef}". Check the name and try again.`,
             error: "CONTACT_NOT_FOUND",
           });
         }
@@ -584,7 +584,7 @@ export async function executeToolCall(
         if (!contactRef) {
           return JSON.stringify({
             success: false,
-            message: "A client name or ID is required.",
+            message: "A customer name or ID is required.",
             error: "MISSING_CONTACT_REF",
           });
         }
@@ -592,7 +592,7 @@ export async function executeToolCall(
         if (resolvedId.type !== "found") {
           return JSON.stringify({
             success: false,
-            message: `Could not find a client matching "${contactRef}". Check the name and try again.`,
+            message: `Could not find a customer matching "${contactRef}". Check the name and try again.`,
             error: "CONTACT_NOT_FOUND",
           });
         }
@@ -603,7 +603,7 @@ export async function executeToolCall(
         if (!contactRef) {
           return JSON.stringify({
             success: false,
-            message: "A client name or ID is required.",
+            message: "A customer name or ID is required.",
             error: "MISSING_CONTACT_REF",
           });
         }
@@ -611,7 +611,7 @@ export async function executeToolCall(
         if (resolvedId.type !== "found") {
           return JSON.stringify({
             success: false,
-            message: `Could not find a client matching "${contactRef}". Check the name and try again.`,
+            message: `Could not find a customer matching "${contactRef}". Check the name and try again.`,
             error: "CONTACT_NOT_FOUND",
           });
         }
@@ -844,7 +844,7 @@ async function getClientVisits(
     return JSON.stringify({
       visits: [],
       total: 0,
-      note: "No service plans found for this client.",
+      note: "No service plans found for this customer.",
     });
   }
 
@@ -915,7 +915,7 @@ async function getClientServicePlan(companyId: string, contactId: string): Promi
     .where(and(eq(servicePlans.companyId, companyId), eq(servicePlans.contactId, contactId)));
 
   if (plans.length === 0) {
-    return JSON.stringify({ plans: [], note: "No service plans found for this client." });
+    return JSON.stringify({ plans: [], note: "No service plans found for this customer." });
   }
 
   const propertyIds = Array.from(new Set(plans.map((p) => p.propertyId)));
@@ -1002,10 +1002,10 @@ async function sendPortalInvite(companyId: string, contactId: string): Promise<s
     await sendEmail({
       companyId,
       to: contact.email,
-      subject: `Your ${company?.name || "ScooPilot"} Client Portal Access`,
+      subject: `Your ${company?.name || "ScooPilot"} Customer Portal Access`,
       senderName: company?.name || undefined,
       replyTo: company?.email || undefined,
-      text: `Hi ${contact.firstName},\n\nYou now have access to the client portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password.\n\nThank you!`,
+      text: `Hi ${contact.firstName},\n\nYou now have access to the customer portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\nPlease log in and change your password.\n\nThank you!`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
@@ -1013,7 +1013,7 @@ async function sendPortalInvite(companyId: string, contactId: string): Promise<s
           </div>
           <div style="padding: 20px; border: 1px solid #e5e7eb;">
             <p>Hi ${contact.firstName},</p>
-            <p>You now have access to the client portal.</p>
+            <p>You now have access to the customer portal.</p>
             <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
               <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
               <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>

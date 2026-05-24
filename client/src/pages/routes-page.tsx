@@ -373,7 +373,7 @@ function DraggableStop({
                     className="text-[10px] bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
                     data-testid={`badge-new-client-${stop.id}`}
                   >
-                    New Client
+                    New Customer
                   </Badge>
                 )}
               {displayIndex != null && (
@@ -1180,7 +1180,7 @@ function RouteVisitDetailSheet({
               <div className="flex items-start gap-3">
                 <User className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                 <div>
-                  <p className="text-xs text-muted-foreground">Client</p>
+                  <p className="text-xs text-muted-foreground">Customer</p>
                   <Link href={`/contacts/${contact.id}`}>
                     <span
                       className="text-sm font-medium hover:underline cursor-pointer"

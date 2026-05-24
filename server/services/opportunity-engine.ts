@@ -127,7 +127,7 @@ function evaluateOpportunities(profile: ContactProfile): Opportunity[] {
     opps.push({
       key: "upgrade_biweekly_to_weekly",
       label: "Upgrade to weekly service",
-      detail: `${profile.totalDogs} dogs on biweekly — high-volume clients often benefit from weekly visits`,
+      detail: `${profile.totalDogs} dogs on biweekly — high-volume customers often benefit from weekly visits`,
       estimatedMonthlyUplift: Math.max(0, uplift),
     });
   }
@@ -165,7 +165,7 @@ function evaluateOpportunities(profile: ContactProfile): Opportunity[] {
     opps.push({
       key: "add_deodorizer",
       label: "Add deodorizer service",
-      detail: `${profile.totalDogs}+ dogs — clients with 3+ dogs often add deodorizer for fresher yards`,
+      detail: `${profile.totalDogs}+ dogs — customers with 3+ dogs often add deodorizer for fresher yards`,
       estimatedMonthlyUplift: 15,
     });
   }
@@ -184,7 +184,7 @@ function evaluateOpportunities(profile: ContactProfile): Opportunity[] {
     opps.push({
       key: "loyalty_upsell",
       label: "Loyalty upgrade offer",
-      detail: `${tenureMonths}-month customer — long-term clients are strong candidates for premium service tiers`,
+      detail: `${tenureMonths}-month customer — long-term customers are strong candidates for premium service tiers`,
       estimatedMonthlyUplift: Math.round(avgPrice * 0.15 * 4),
     });
   }
@@ -200,8 +200,8 @@ function evaluateOpportunities(profile: ContactProfile): Opportunity[] {
       profile.plans.reduce((s, p) => s + p.pricePerVisit, 0) / Math.max(1, profile.plans.length);
     opps.push({
       key: "reliable_client_upgrade",
-      label: "Reliable client — consider frequency upgrade",
-      detail: `${profile.visitStats.completed}/${profile.visitStats.total} visits completed — excellent track record makes this client an ideal upgrade candidate`,
+      label: "Reliable customer — consider frequency upgrade",
+      detail: `${profile.visitStats.completed}/${profile.visitStats.total} visits completed — excellent track record makes this customer an ideal upgrade candidate`,
       estimatedMonthlyUplift: Math.round(avgPrice * 0.2 * 4),
     });
   }

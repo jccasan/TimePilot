@@ -308,7 +308,7 @@ function RuleFormFields({
                   </FormLabel>
                   <p className="text-xs text-muted-foreground">
                     Only invoice the contact who triggered this rule, instead of all pending
-                    clients.
+                    customers.
                   </p>
                 </div>
               </FormItem>

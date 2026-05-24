@@ -234,7 +234,7 @@ function EmailForwardingCard(_props: { company: Company | null }) {
             ) : (
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">
-                  Forward client emails to this address and they will automatically appear in the
+                  Forward customer emails to this address and they will automatically appear in the
                   contact activity timeline.
                 </p>
                 <div className="flex gap-2 mt-2">
@@ -345,7 +345,7 @@ function EmailForwardingCard(_props: { company: Company | null }) {
                     <p>1. Go to Settings → Mail → Forwarding.</p>
                     <p>2. Enable "Enable forwarding" and enter your inbound address.</p>
                     <p>
-                      3. Optionally create a rule (Rules → Add new rule) to forward only client
+                      3. Optionally create a rule (Rules → Add new rule) to forward only customer
                       emails.
                     </p>
                     <p className="text-amber-700 dark:text-amber-400">
@@ -1112,7 +1112,14 @@ const SETTINGS_BLOCK_DEFS: {
   { id: "venmo", label: "Venmo", defaultW: 6, defaultH: 3, minW: 4, minH: 2 },
   { id: "quickbooks", label: "QuickBooks", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "voice_api_docs", label: "Voice API Docs", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
-  { id: "portal_api_docs", label: "Client Portal API", defaultW: 6, defaultH: 5, minW: 4, minH: 3 },
+  {
+    id: "portal_api_docs",
+    label: "Customer Portal API",
+    defaultW: 6,
+    defaultH: 5,
+    minW: 4,
+    minH: 3,
+  },
   { id: "signup_widget", label: "Signup Widget", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "webhook_lead", label: "Webhook Lead", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   {
@@ -1148,7 +1155,7 @@ const SETTINGS_BLOCK_DEFS: {
   { id: "call_tracking", label: "Call Tracking", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   {
     id: "client_notifications",
-    label: "Client Notifications",
+    label: "Customer Notifications",
     defaultW: 6,
     defaultH: 5,
     minW: 4,
@@ -1589,7 +1596,7 @@ function StripeConnectSection() {
                   <div className="flex items-center gap-2">
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-medium">
-                      Pass Stripe processing fees to clients (2.9% + $0.30 per invoice)
+                      Pass Stripe processing fees to customers (2.9% + $0.30 per invoice)
                     </span>
                   </div>
                   <Switch
@@ -2576,13 +2583,13 @@ function PortalApiDocsSection() {
           method: "GET",
           path: "/api/portal/me",
           description:
-            "Returns the authenticated client's profile: name, email, phone, address, company name, currency, and any pending email change.",
+            "Returns the authenticated customer's profile: name, email, phone, address, company name, currency, and any pending email change.",
         },
         {
           method: "PATCH",
           path: "/api/portal/profile",
           description:
-            "Update profile fields (name, phone, address, email, numberOfDogs). Changing email triggers a verification email — the change is held pending until the client clicks the link. Can also update gate codes and special instructions for specific properties via the properties array.",
+            "Update profile fields (name, phone, address, email, numberOfDogs). Changing email triggers a verification email — the change is held pending until the customer clicks the link. Can also update gate codes and special instructions for specific properties via the properties array.",
         },
         {
           method: "GET",
@@ -2640,7 +2647,7 @@ function PortalApiDocsSection() {
           method: "GET",
           path: "/api/portal/service-changes",
           description:
-            "Returns the client's history of service change requests and their status (pending, approved, declined) along with any admin response notes.",
+            "Returns the customer's history of service change requests and their status (pending, approved, declined) along with any admin response notes.",
         },
       ],
     },
@@ -2657,7 +2664,7 @@ function PortalApiDocsSection() {
           method: "POST",
           path: "/api/portal/invoices/:id/pay",
           description:
-            "Create a Stripe Checkout session to pay an invoice. Optional tip via body: { tipAmount }. Returns { url } — redirect the client there to complete payment.",
+            "Create a Stripe Checkout session to pay an invoice. Optional tip via body: { tipAmount }. Returns { url } — redirect the customer there to complete payment.",
         },
         {
           method: "GET",
@@ -2681,12 +2688,12 @@ function PortalApiDocsSection() {
           method: "POST",
           path: "/api/portal/setup-intent",
           description:
-            "Creates a Stripe Checkout session in setup mode so the client can add a card without a charge. Returns { url }.",
+            "Creates a Stripe Checkout session in setup mode so the customer can add a card without a charge. Returns { url }.",
         },
         {
           method: "DELETE",
           path: "/api/portal/payment-methods/:id",
-          description: "Remove a saved card. The client must own the payment method.",
+          description: "Remove a saved card. The customer must own the payment method.",
         },
         {
           method: "PATCH",
@@ -2722,7 +2729,7 @@ function PortalApiDocsSection() {
     },
     {
       label: "Estimates (Authenticated)",
-      note: "Estimates are upsell/add-on proposals sent to authenticated clients via the portal — separate from the public quote flow above.",
+      note: "Estimates are upsell/add-on proposals sent to authenticated customers via the portal — separate from the public quote flow above.",
       endpoints: [
         {
           method: "GET",
@@ -2750,7 +2757,7 @@ function PortalApiDocsSection() {
           method: "GET",
           path: "/api/portal/notifications",
           description:
-            "Returns the client's notification preferences including channels (email/sms/both), event toggles (serviceReminder, serviceCompleted, invoiceReady, invoiceDueReminder, paymentConfirmation, reminderOptOut), and timing preference.",
+            "Returns the customer's notification preferences including channels (email/sms/both), event toggles (serviceReminder, serviceCompleted, invoiceReady, invoiceDueReminder, paymentConfirmation, reminderOptOut), and timing preference.",
         },
         {
           method: "PATCH",
@@ -2778,7 +2785,7 @@ function PortalApiDocsSection() {
           method: "GET",
           path: "/api/portal/messages",
           description:
-            "Returns the full message thread between the client and the company (SMS and email), with direction, channel, subject, body, and timestamp.",
+            "Returns the full message thread between the customer and the company (SMS and email), with direction, channel, subject, body, and timestamp.",
         },
         {
           method: "POST",
@@ -2794,13 +2801,14 @@ function PortalApiDocsSection() {
         {
           method: "GET",
           path: "/api/portal/referral",
-          description: "Returns the client's referral code and the number of successful referrals.",
+          description:
+            "Returns the customer's referral code and the number of successful referrals.",
         },
         {
           method: "POST",
           path: "/api/portal/referral/generate",
           description:
-            "Generate a unique referral code for the client (idempotent — returns the existing code if one already exists).",
+            "Generate a unique referral code for the customer (idempotent — returns the existing code if one already exists).",
         },
       ],
     },
@@ -2825,11 +2833,11 @@ curl ${baseUrl}/api/portal/me \\
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Globe className="h-5 w-5" />
-          Client Portal API
+          Customer Portal API
         </CardTitle>
         <CardDescription>
-          Build custom client-facing apps on top of ScooPilot. All portal endpoints use Bearer token
-          authentication — no staff API key required.
+          Build custom customer-facing apps on top of ScooPilot. All portal endpoints use Bearer
+          token authentication — no staff API key required.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -2842,7 +2850,8 @@ curl ${baseUrl}/api/portal/me \\
                 Call{" "}
                 <code className="bg-muted px-1 py-0.5 rounded text-xs">POST /api/portal/login</code>{" "}
                 to receive a Bearer token (valid 7 days). Pass it on every subsequent request.
-                Tokens are scoped to a single client — they cannot access staff or admin endpoints.
+                Tokens are scoped to a single customer — they cannot access staff or admin
+                endpoints.
               </p>
               <div className="space-y-1.5 pt-1">
                 {[
@@ -2886,12 +2895,12 @@ curl ${baseUrl}/api/portal/me \\
           <p className="text-sm text-amber-800 dark:text-amber-300 font-medium mb-1">Limitations</p>
           <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-1 list-disc list-inside">
             <li>
-              Clients can pause service but cannot permanently cancel — cancellation requires staff
-              action.
+              Customers can pause service but cannot permanently cancel — cancellation requires
+              staff action.
             </li>
             <li>
-              Clients cannot create a new service plan from scratch. A staff member must send an
-              estimate; the client approves it via the Estimates endpoint.
+              Customers cannot create a new service plan from scratch. A staff member must send an
+              estimate; the customer approves it via the Estimates endpoint.
             </li>
           </ul>
         </div>
@@ -3326,7 +3335,7 @@ function DocumentSigningSection({
           Document Signing
         </CardTitle>
         <CardDescription>
-          Require clients to sign documents before or after portal access is granted.
+          Require customers to sign documents before or after portal access is granted.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -3334,7 +3343,7 @@ function DocumentSigningSection({
           <div>
             <p className="font-medium text-sm">Require document signing</p>
             <p className="text-xs text-muted-foreground">
-              Auto-send a signing request when a client receives portal access.
+              Auto-send a signing request when a customer receives portal access.
             </p>
           </div>
           <Switch
@@ -3380,7 +3389,7 @@ function DocumentSigningSection({
               <FileText className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
               <p className="text-sm text-muted-foreground">No templates uploaded yet.</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Upload PDFs or Word documents that clients must sign.
+                Upload PDFs or Word documents that customers must sign.
               </p>
             </div>
           ) : (
@@ -4925,10 +4934,10 @@ function SignupWidgetSection({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Globe className="h-5 w-5" />
-          Client Signup Widget
+          Customer Signup Widget
         </CardTitle>
         <CardDescription>
-          Let potential clients request a quote and sign up from your website
+          Let potential customers request a quote and sign up from your website
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -6556,7 +6565,7 @@ function ReminderSettingsSection({
             Automated Reminders
           </CardTitle>
           <CardDescription>
-            Configure when and how clients receive service and invoice reminders
+            Configure when and how customers receive service and invoice reminders
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -6565,7 +6574,7 @@ function ReminderSettingsSection({
               <div>
                 <p className="text-sm font-medium">Enable Automated Reminders</p>
                 <p className="text-xs text-muted-foreground">
-                  When enabled, clients receive reminders based on the rules below
+                  When enabled, customers receive reminders based on the rules below
                 </p>
               </div>
               <Switch
@@ -6577,7 +6586,7 @@ function ReminderSettingsSection({
                       toast({
                         title: checked ? "Reminders enabled" : "Reminders disabled",
                         description: checked
-                          ? "Your clients will receive automated reminders."
+                          ? "Your customers will receive automated reminders."
                           : "Automated reminders have been turned off.",
                       });
                     })
@@ -6857,7 +6866,7 @@ function ReminderSettingsSection({
                 arrival window when a route is assigned.
               </p>
               <p className="flex items-center gap-1">
-                <Info className="h-3 w-3" /> Clients can override their preferred channel and opt
+                <Info className="h-3 w-3" /> Customers can override their preferred channel and opt
                 out from their portal.
               </p>
             </div>
@@ -7440,10 +7449,10 @@ function NewClientDepositSettings({ company }: { company: Company | null | undef
     <div className="space-y-3" data-testid="section-new-client-deposit">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium">New Client Deposit</p>
+          <p className="text-sm font-medium">New Customer Deposit</p>
           <p className="text-xs text-muted-foreground">
             Collect a deposit at booking before the first service invoice for monthly-billed
-            clients.
+            customers.
           </p>
         </div>
         <Switch
@@ -7488,7 +7497,7 @@ function NewClientDepositSettings({ company }: { company: Company | null | undef
             </div>
             <p className="text-xs text-muted-foreground">
               {depositType === "percent"
-                ? "Percentage of the client's first full monthly rate"
+                ? "Percentage of the customer's first full monthly rate"
                 : "Fixed dollar amount charged as a deposit on booking"}
             </p>
           </div>
@@ -7861,7 +7870,7 @@ export default function Settings() {
     },
   });
 
-  // Client Notifications (Import Mode + Onboarding Complete)
+  // Customer Notifications (Import Mode + Onboarding Complete)
   const [showOnboardingDialog, setShowOnboardingDialog] = useState(false);
   const [onboardingResults, setOnboardingResults] = useState<{
     sent: number;
@@ -7881,8 +7890,8 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
       toast({
         title: suppressed
-          ? "Import Mode enabled — client emails suppressed"
-          : "Import Mode disabled — client emails active",
+          ? "Import Mode enabled — customer emails suppressed"
+          : "Import Mode disabled — customer emails active",
       });
     },
     onError: () => {
@@ -7915,7 +7924,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
       setOnboardingResults(data);
       toast({
-        title: `Welcome emails sent to ${data.sent} client${data.sent !== 1 ? "s" : ""}`,
+        title: `Welcome emails sent to ${data.sent} customer${data.sent !== 1 ? "s" : ""}`,
         description:
           data.skipped > 0
             ? `${data.skipped} skipped due to errors.`
@@ -8866,7 +8875,7 @@ export default function Settings() {
               </CardTitle>
               <CardDescription>
                 Manage the lead sources available in contact forms. These are used to track where
-                your clients come from.
+                your customers come from.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -9234,9 +9243,9 @@ export default function Settings() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
                 <Bell className="h-5 w-5" />
-                Client Notifications
+                Customer Notifications
               </CardTitle>
-              <CardDescription>Control when emails are sent to your clients.</CardDescription>
+              <CardDescription>Control when emails are sent to your customers.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               {/* Import Mode toggle */}
@@ -9245,8 +9254,9 @@ export default function Settings() {
                   <div className="space-y-1">
                     <p className="text-sm font-semibold">Import Mode</p>
                     <p className="text-xs text-muted-foreground">
-                      Suppress all client emails (portal invites, invoices, reminders) while you're
-                      entering your existing clients. Turn this off when you're ready to go live.
+                      Suppress all customer emails (portal invites, invoices, reminders) while
+                      you're entering your existing customers. Turn this off when you're ready to go
+                      live.
                     </p>
                   </div>
                   <Switch
@@ -9259,7 +9269,7 @@ export default function Settings() {
                 {company?.clientNotificationsSuppressed && (
                   <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                    Import Mode is ON — no emails are being sent to clients
+                    Import Mode is ON — no emails are being sent to customers
                   </div>
                 )}
               </div>
@@ -9269,7 +9279,7 @@ export default function Settings() {
                 <div className="space-y-1">
                   <p className="text-sm font-semibold">Onboarding Complete</p>
                   <p className="text-xs text-muted-foreground">
-                    When you're done importing clients, send each active client a consolidated
+                    When you're done importing customers, send each active customer a consolidated
                     welcome email with their portal credentials, service day, frequency, price per
                     visit, and next scheduled visit. This can only be sent once and will also
                     disable Import Mode.
@@ -9293,7 +9303,7 @@ export default function Settings() {
                     data-testid="button-onboarding-complete"
                   >
                     <Send className="h-4 w-4 mr-2" />
-                    Send Welcome Emails to All Active Clients
+                    Send Welcome Emails to All Active Customers
                   </Button>
                 )}
               </div>
@@ -9353,7 +9363,7 @@ export default function Settings() {
                 Email Forwarding
               </CardTitle>
               <CardDescription>
-                Forward client emails to your unique CRM address to automatically log them on the
+                Forward customer emails to your unique CRM address to automatically log them on the
                 contact timeline.
               </CardDescription>
             </CardHeader>
@@ -9504,7 +9514,7 @@ export default function Settings() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-md px-3 py-2">
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
-                Sent to {onboardingResults.sent} of {onboardingResults.total} clients.
+                Sent to {onboardingResults.sent} of {onboardingResults.total} customers.
                 {onboardingResults.skipped > 0 ? ` ${onboardingResults.skipped} skipped.` : ""}{" "}
                 Import Mode is now off.
               </div>
@@ -9544,7 +9554,7 @@ export default function Settings() {
           ) : (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                This will send a one-time welcome email to every active client with an email
+                This will send a one-time welcome email to every active customer with an email
                 address, including their portal login, service day, frequency, price per visit, and
                 next scheduled visit. Import Mode will be turned off after sending.
               </p>
@@ -9556,12 +9566,12 @@ export default function Settings() {
               ) : onboardingPreviewQuery.data ? (
                 <div className="space-y-2">
                   <p className="text-sm font-medium">
-                    {onboardingPreviewQuery.data.count} client
+                    {onboardingPreviewQuery.data.count} customer
                     {onboardingPreviewQuery.data.count !== 1 ? "s" : ""} will receive an email:
                   </p>
                   {onboardingPreviewQuery.data.count === 0 ? (
                     <p className="text-xs text-muted-foreground">
-                      No active clients with email addresses found.
+                      No active customers with email addresses found.
                     </p>
                   ) : (
                     <div className="max-h-48 overflow-y-auto border rounded-md divide-y text-sm">

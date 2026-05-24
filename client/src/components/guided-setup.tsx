@@ -1078,7 +1078,7 @@ export default function GuidedSetup({ onboarding }: GuidedSetupProps) {
                 <div>
                   <p className="text-sm font-semibold">Add your Venmo handle (optional)</p>
                   <p className="text-xs text-muted-foreground">
-                    Clients will see it on invoices so they can pay you via Venmo
+                    Customers will see it on invoices so they can pay you via Venmo
                   </p>
                 </div>
               </div>

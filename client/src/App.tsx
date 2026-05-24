@@ -47,7 +47,7 @@ const Scheduling = lazy(() => import("@/pages/scheduling"));
 const RoutesPage = lazy(() => import("@/pages/routes-page"));
 const TechMobile = lazy(() => import("@/pages/tech-mobile"));
 const TechRoutes = lazy(() => import("@/pages/tech-routes"));
-const TechClients = lazy(() => import("@/pages/tech-clients"));
+const TechCustomers = lazy(() => import("@/pages/tech-customers"));
 const Invoices = lazy(() => import("@/pages/invoices"));
 const Quotes = lazy(() => import("@/pages/quotes"));
 const Billing = lazy(() => import("@/pages/billing"));
@@ -58,7 +58,7 @@ const Portal = lazy(() => import("@/pages/portal"));
 const PortalLogin = lazy(() => import("@/pages/portal-login"));
 const PortalResetPassword = lazy(() => import("@/pages/portal-reset-password"));
 const PortalVerifyEmail = lazy(() => import("@/pages/portal-verify-email"));
-const PortalClient = lazy(() => import("@/pages/portal-client"));
+const PortalCustomer = lazy(() => import("@/pages/portal-customer"));
 const PortalQuoteView = lazy(() => import("@/pages/portal-quote-view"));
 const InvoicePayPage = lazy(() => import("@/pages/invoice-pay"));
 const Pricing = lazy(() => import("@/pages/pricing"));
@@ -595,7 +595,7 @@ function TechnicianLayout() {
 
   const techTabs = [
     { label: "Overview", href: "/", icon: MapPin },
-    { label: "Clients", href: "/clients", icon: Users },
+    { label: "Customers", href: "/customers", icon: Users },
   ];
 
   return (
@@ -637,7 +637,7 @@ function TechnicianLayout() {
         <Suspense fallback={<PageLoader />}>
           <Switch>
             <Route path="/" component={TechRoutes} />
-            <Route path="/clients" component={TechClients} />
+            <Route path="/customers" component={TechCustomers} />
             <Route component={NotFound} />
           </Switch>
         </Suspense>
@@ -866,7 +866,10 @@ function PortalRouter() {
         <Route path="/portal/login" component={PortalLogin} />
         <Route path="/portal/reset-password" component={PortalResetPassword} />
         <Route path="/portal/verify-email" component={PortalVerifyEmail} />
-        <Route path="/portal/client" component={PortalClient} />
+        <Route path="/portal/customer" component={PortalCustomer} />
+        <Route path="/portal/client">
+          <Redirect to="/portal/customer" />
+        </Route>
         <Route path="/portal/:slug/quotes/:quoteId">
           {(params: any) => {
             const searchParams = new URLSearchParams(window.location.search);

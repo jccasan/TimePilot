@@ -30,7 +30,7 @@ export function ImportModeBanner({ onTurnOff }: ImportModeBannerProps) {
         <span className="text-muted-foreground font-normal text-xs sm:text-sm">
           &mdash;{" "}
           <span className="hidden sm:inline">
-            Outbound client notifications (welcome emails, service reminders) are paused until you
+            Outbound customer notifications (welcome emails, service reminders) are paused until you
             turn this off. This prevents accidental mass messaging during data import.{" "}
           </span>
           <span className="sm:hidden">Notifications paused. </span>

@@ -466,8 +466,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         invoiceNumber: invoice.invoiceNumber,
         amount: chargeAmount,
         clientName: contactName,
-        successUrl: `${baseUrl}/portal/client?paid=${invoice.id}`,
-        cancelUrl: `${baseUrl}/portal/client`,
+        successUrl: `${baseUrl}/portal/customer?paid=${invoice.id}`,
+        cancelUrl: `${baseUrl}/portal/customer`,
         tipAmount: tipAmount.toFixed(2),
         stripeConnectAccountId: connectAcct,
         tenantId: companyId,
@@ -640,11 +640,11 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         to: companyEmail,
         subject: emailSubject,
         replyTo: contact.email || undefined,
-        text: `Message from portal client: ${contact.firstName} ${contact.lastName} (${contact.email || "no email"})\n\n${message}`,
+        text: `Message from portal customer: ${contact.firstName} ${contact.lastName} (${contact.email || "no email"})\n\n${message}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background-color: #2d8a5e; padding: 16px; text-align: center;">
-              <h2 style="color: white; margin: 0;">Client Portal Message</h2>
+              <h2 style="color: white; margin: 0;">Customer Portal Message</h2>
             </div>
             <div style="padding: 20px; border: 1px solid #e5e7eb;">
               <p><strong>From:</strong> ${contact.firstName} ${contact.lastName}</p>
@@ -674,7 +674,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         "portal_message",
         `${contact.firstName} ${contact.lastName} -- Portal Message`,
         `${contact.firstName} ${contact.lastName} sent a message via the portal.`,
-        `/#client-requests`
+        `/#customer-requests`
       );
 
       res.json({ success: true, message: "Your message has been sent." });
@@ -858,7 +858,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         type: "general",
         title: `${contact.firstName} ${contact.lastName} -- One-Time Cleanup Request`,
         message: `${contact.firstName} ${contact.lastName} requested a cleanup${preferredDate ? ` on ${preferredDate}` : ""}${notes ? `: ${notes}` : ""}`,
-        linkUrl: "/#client-requests",
+        linkUrl: "/#customer-requests",
       });
       res.json({ success: true });
     } catch (err) {
@@ -903,8 +903,8 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           customer: stripeCustomerId,
           mode: "setup",
           payment_method_types: ["card"],
-          success_url: `${baseUrl}/portal/client?card_added=1`,
-          cancel_url: `${baseUrl}/portal/client`,
+          success_url: `${baseUrl}/portal/customer?card_added=1`,
+          cancel_url: `${baseUrl}/portal/customer`,
           metadata: { tenant_id: companyId, checkout_type: "portal_setup" },
         },
         setupOpts
@@ -1343,7 +1343,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
             notify(
               companyId,
               "general",
-              "Quote Approved by Client",
+              "Quote Approved by Customer",
               `${contact.firstName} ${contact.lastName} approved Quote #${quoteNumber || quoteId} — service starts ${planStartDate}.`,
               `/quotes`
             );
@@ -1497,13 +1497,13 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       const contact = await storage.getContactById(contactId);
       const senderName =
-        `${contact?.firstName || ""} ${contact?.lastName || ""}`.trim() || "A client";
+        `${contact?.firstName || ""} ${contact?.lastName || ""}`.trim() || "A customer";
       notify(
         companyId,
         "general",
         `${senderName} -- Service Change Request`,
         `${senderName} requested a ${requestType.replace(/_/g, " ")}${note ? `: ${note}` : ""}`,
-        `/#client-requests`
+        `/#customer-requests`
       );
 
       res.json({ success: true, id: request.id });
@@ -1706,7 +1706,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       doc.fontSize(12).text("Billing Statement", { align: "left" });
       doc.fontSize(10).fillColor("#666666").text(`Period: ${startDate} to ${endDate}`);
       doc.moveDown(0.5);
-      doc.text(`Client: ${contact?.firstName || ""} ${contact?.lastName || ""}`);
+      doc.text(`Customer: ${contact?.firstName || ""} ${contact?.lastName || ""}`);
       if (contact?.email) doc.text(`Email: ${contact.email}`);
       doc.moveDown(1);
 
@@ -1794,7 +1794,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       if (contact.email) {
         const company = await storage.getCompany(companyId);
-        const portalUrl = `${getBaseUrl(req)}/portal/client`;
+        const portalUrl = `${getBaseUrl(req)}/portal/customer`;
         sendEmail({
           companyId: companyId,
           contactId: contactId,
@@ -2019,7 +2019,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           action: "portal_password_reset",
           resetBy: userId,
         });
-        res.json({ success: true, message: "Client portal password has been updated." });
+        res.json({ success: true, message: "Customer portal password has been updated." });
       } catch (err) {
         handleError(res, err);
       }
@@ -2077,7 +2077,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
           senderName: company?.name || undefined,
           replyTo: company?.email || undefined,
-          text: `Hi ${contact.firstName},\n\nHere is your client portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nNew Password: ${tempPassword}\n\nThank you!`,
+          text: `Hi ${contact.firstName},\n\nHere is your customer portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nNew Password: ${tempPassword}\n\nThank you!`,
           html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
@@ -2085,7 +2085,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
             </div>
             <div style="padding: 20px; border: 1px solid #e5e7eb;">
               <p>Hi ${contact.firstName},</p>
-              <p>Here is your updated login for the client portal.</p>
+              <p>Here is your updated login for the customer portal.</p>
               <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
                 <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
                 <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>
@@ -2515,7 +2515,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
               subject: `Your ${company?.name || "ScooPilot"} Portal Login`,
               senderName: company?.name || undefined,
               replyTo: company?.email || undefined,
-              text: `Hi ${contact.firstName},\n\nHere is your client portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nPassword: ${tempPassword}\n\nThank you!`,
+              text: `Hi ${contact.firstName},\n\nHere is your customer portal link for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nPassword: ${tempPassword}\n\nThank you!`,
               html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
@@ -2523,7 +2523,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
                 </div>
                 <div style="padding: 20px; border: 1px solid #e5e7eb;">
                   <p>Hi ${contact.firstName},</p>
-                  <p>Here is your login for the client portal.</p>
+                  <p>Here is your login for the customer portal.</p>
                   <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
                     <p style="margin: 0 0 8px 0; font-weight: bold;">Your Login Credentials:</p>
                     <p style="margin: 0;">Email: <strong>${contact.email}</strong></p>

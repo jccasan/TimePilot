@@ -21,7 +21,7 @@ const features = [
   { icon: Calendar, title: "Scheduling", description: "Automate service scheduling" },
   { icon: MapPin, title: "Route Management", description: "Optimize daily routes" },
   { icon: FileText, title: "Invoicing", description: "Automated billing and payments" },
-  { icon: ExternalLink, title: "Client Portal", description: "Self-service for customers" },
+  { icon: ExternalLink, title: "Customer Portal", description: "Self-service for customers" },
 ];
 
 export default function AuthPage() {

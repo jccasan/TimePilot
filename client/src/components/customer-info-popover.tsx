@@ -45,7 +45,7 @@ const dayLabels: Record<string, string> = {
   tbd: "TBD",
 };
 
-interface ClientInfoPopoverProps {
+interface CustomerInfoPopoverProps {
   contactId: string;
   children: React.ReactNode;
   className?: string;
@@ -245,13 +245,13 @@ function PopoverBody({ contactId }: { contactId: string }) {
   );
 }
 
-export function ClientInfoPopover({
+export function CustomerInfoPopover({
   contactId,
   children,
   className,
   side = "bottom",
   align = "start",
-}: ClientInfoPopoverProps) {
+}: CustomerInfoPopoverProps) {
   const [open, setOpen] = useState(false);
 
   return (

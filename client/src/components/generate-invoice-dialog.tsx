@@ -269,10 +269,10 @@ export function GenerateInvoiceDialog({
 
         {showContactPicker && !initialContactId && (
           <div data-testid="section-contact-picker">
-            <Label>Client</Label>
+            <Label>Customer</Label>
             <Select value={selectedContactId} onValueChange={handleContactChange}>
               <SelectTrigger data-testid="select-invoice-contact">
-                <SelectValue placeholder="Select a client" />
+                <SelectValue placeholder="Select a customer" />
               </SelectTrigger>
               <SelectContent>
                 {contacts
@@ -389,7 +389,7 @@ export function GenerateInvoiceDialog({
             data-testid="text-select-client-prompt"
           >
             <DollarSign className="h-8 w-8 mx-auto mb-2 opacity-40" />
-            <p>Select a client to see their uninvoiced completed work.</p>
+            <p>Select a customer to see their uninvoiced completed work.</p>
           </div>
         ) : isError ? (
           <div className="text-center py-8 text-destructive" data-testid="text-error-uninvoiced">
@@ -406,7 +406,7 @@ export function GenerateInvoiceDialog({
           <div className="text-center py-8 text-muted-foreground" data-testid="text-no-uninvoiced">
             <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500 opacity-60" />
             <p className="font-medium">All caught up</p>
-            <p className="text-sm">No uninvoiced completed visits for this client.</p>
+            <p className="text-sm">No uninvoiced completed visits for this customer.</p>
           </div>
         ) : filteredVisits.length === 0 ? (
           <div
