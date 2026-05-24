@@ -270,9 +270,7 @@ const PLATFORM_CONFIG: Record<
 // Helpers
 
 function parseCSVClient(text: string): { headers: string[]; rows: string[][] } {
-  const lines = text
-    .split(/\r?\n/)
-    .filter((l) => l.trim() !== "" && !l.trim().startsWith("#"));
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "" && !l.trim().startsWith("#"));
   if (lines.length === 0) return { headers: [], rows: [] };
 
   const parseLine = (line: string): string[] => {

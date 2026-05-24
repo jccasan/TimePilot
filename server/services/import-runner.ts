@@ -943,8 +943,10 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
     // Parse yardSizeTier (numeric 1-6) from CSV — takes precedence over legacy yardSize text.
     const yardSizeTierRaw = t.yardSizeTier != null ? Number(t.yardSizeTier) : null;
     const yardSizeTierNum =
-      yardSizeTierRaw != null && Number.isInteger(yardSizeTierRaw) &&
-      yardSizeTierRaw >= 1 && yardSizeTierRaw <= 6
+      yardSizeTierRaw != null &&
+      Number.isInteger(yardSizeTierRaw) &&
+      yardSizeTierRaw >= 1 &&
+      yardSizeTierRaw <= 6
         ? yardSizeTierRaw
         : null;
     // Represent yardSize as "Tier N" so getAcreageSurcharge can do positional lookup.

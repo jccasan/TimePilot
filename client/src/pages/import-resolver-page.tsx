@@ -28,6 +28,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
+  ChevronsUpDown,
   EyeOff,
   Loader2,
   RefreshCw,
@@ -241,6 +244,8 @@ export default function ImportResolverPage() {
   const [bulkBillingRule, setBulkBillingRule] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [allRowsSearch, setAllRowsSearch] = useState("");
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [rowEdits, setRowEdits] = useState<Record<string, Record<string, string>>>({});
 
   const healthQuery = useQuery<HealthData>({
@@ -363,20 +368,78 @@ export default function ImportResolverPage() {
         const email = (c.email || "").toLowerCase();
         const freq = (s.serviceFrequency || "").toLowerCase();
         const day = (s.serviceDay || "").toLowerCase();
-        return name.includes(q) || addr.includes(q) || email.includes(q) || freq.includes(q) || day.includes(q);
+        return (
+          name.includes(q) ||
+          addr.includes(q) ||
+          email.includes(q) ||
+          freq.includes(q) ||
+          day.includes(q)
+        );
       });
     }
     return base;
   }, [resolverData, activeTab, allRowsSearch]);
 
-  const allSelected = displayedRows.length > 0 && selectedIds.size === displayedRows.length;
+  const DAY_ORDER = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "tbd",
+  ];
+
+  const sortedRows = useMemo(() => {
+    if (!sortField || activeTab !== "all") return displayedRows;
+    return [...displayedRows].sort((a, b) => {
+      const ac = (a.mappedContactJson || {}) as Record<string, unknown>;
+      const as_ = (a.mappedServiceJson || {}) as Record<string, unknown>;
+      const bc = (b.mappedContactJson || {}) as Record<string, unknown>;
+      const bs_ = (b.mappedServiceJson || {}) as Record<string, unknown>;
+      let av: string | number = "";
+      let bv: string | number = "";
+      if (sortField === "name") {
+        av = `${ac.firstName || ""} ${ac.lastName || ""}`.toLowerCase().trim();
+        bv = `${bc.firstName || ""} ${bc.lastName || ""}`.toLowerCase().trim();
+      } else if (sortField === "frequency") {
+        av = String(as_.serviceFrequency || ac.serviceFrequency || "").toLowerCase();
+        bv = String(bs_.serviceFrequency || bc.serviceFrequency || "").toLowerCase();
+      } else if (sortField === "day") {
+        const ai = DAY_ORDER.indexOf(String(as_.serviceDay || "").toLowerCase());
+        const bi = DAY_ORDER.indexOf(String(bs_.serviceDay || "").toLowerCase());
+        av = ai === -1 ? 99 : ai;
+        bv = bi === -1 ? 99 : bi;
+      } else if (sortField === "price") {
+        av = Number(as_.priceCents || 0);
+        bv = Number(bs_.priceCents || 0);
+      } else if (sortField === "status") {
+        const order = ["needs_review", "ready", "imported", "ignored"];
+        av = order.indexOf(a.status);
+        bv = order.indexOf(b.status);
+        if (av === -1) av = 99;
+        if (bv === -1) bv = 99;
+      }
+      const cmp =
+        typeof av === "number" && typeof bv === "number"
+          ? av - bv
+          : String(av).localeCompare(String(bv));
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [displayedRows, sortField, sortDir, activeTab]);
+
+  const allSelected =
+    (activeTab === "all" ? sortedRows : displayedRows).length > 0 &&
+    selectedIds.size === (activeTab === "all" ? sortedRows : displayedRows).length;
   const someSelected = selectedIds.size > 0;
 
   function toggleSelectAll() {
+    const rows = activeTab === "all" ? sortedRows : displayedRows;
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(displayedRows.map((r) => r.id)));
+      setSelectedIds(new Set(rows.map((r) => r.id)));
     }
   }
 
@@ -432,6 +495,24 @@ export default function ImportResolverPage() {
       ...prev,
       [rowId]: { ...(prev[rowId] || {}), [field]: value },
     }));
+  }
+
+  function toggleSort(field: string) {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  }
+
+  function SortIcon({ field }: { field: string }) {
+    if (sortField !== field) return <ChevronsUpDown className="inline w-3 h-3 ml-0.5 opacity-40" />;
+    return sortDir === "asc" ? (
+      <ChevronUp className="inline w-3 h-3 ml-0.5" />
+    ) : (
+      <ChevronDown className="inline w-3 h-3 ml-0.5" />
+    );
   }
 
   function getContactName(row: ResolverRow): string {
@@ -800,499 +881,621 @@ export default function ImportResolverPage() {
             <CardContent className="pt-3 px-0">
               <div className="overflow-x-auto">
                 {activeTab === "all" ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {!isCommitted && (
-                        <TableHead className="w-10 pl-6">
-                          <Checkbox
-                            checked={allSelected}
-                            onCheckedChange={toggleSelectAll}
-                            data-testid="checkbox-select-all"
-                          />
-                        </TableHead>
-                      )}
-                      <TableHead className="w-8">#</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Address</TableHead>
-                      <TableHead className="text-center">Dogs</TableHead>
-                      <TableHead className="text-center">Tier</TableHead>
-                      <TableHead>Frequency</TableHead>
-                      <TableHead>Day</TableHead>
-                      <TableHead>Imported $</TableHead>
-                      {health?.pricingRules && <TableHead>Expected $</TableHead>}
-                      <TableHead>Billing</TableHead>
-                      <TableHead>Terms</TableHead>
-                      <TableHead>Status</TableHead>
-                      {!isCommitted && <TableHead className="text-right pr-6">Actions</TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {displayedRows.length === 0 ? (
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell
-                          colSpan={isCommitted ? 12 : 13}
-                          className="text-center py-12 text-muted-foreground"
+                        {!isCommitted && (
+                          <TableHead className="w-10 pl-6">
+                            <Checkbox
+                              checked={allSelected}
+                              onCheckedChange={toggleSelectAll}
+                              data-testid="checkbox-select-all"
+                            />
+                          </TableHead>
+                        )}
+                        <TableHead className="w-8">#</TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none whitespace-nowrap"
+                          onClick={() => toggleSort("name")}
                         >
-                          {allRowsSearch ? "No rows match your search." : "No staged rows."}
-                        </TableCell>
+                          Contact
+                          <SortIcon field="name" />
+                        </TableHead>
+                        <TableHead>Address</TableHead>
+                        <TableHead className="text-center">Dogs</TableHead>
+                        <TableHead className="text-center">Tier</TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none whitespace-nowrap"
+                          onClick={() => toggleSort("frequency")}
+                        >
+                          Frequency
+                          <SortIcon field="frequency" />
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none whitespace-nowrap"
+                          onClick={() => toggleSort("day")}
+                        >
+                          Day
+                          <SortIcon field="day" />
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none whitespace-nowrap"
+                          onClick={() => toggleSort("price")}
+                        >
+                          Imported $
+                          <SortIcon field="price" />
+                        </TableHead>
+                        <TableHead
+                          className={`whitespace-nowrap ${!health?.pricingRules ? "text-amber-600 dark:text-amber-400" : ""}`}
+                          title={
+                            !health?.pricingRules
+                              ? "Configure pricing rules in Settings to see expected prices"
+                              : undefined
+                          }
+                        >
+                          Expected $
+                          {!health?.pricingRules && (
+                            <AlertTriangle className="inline w-3 h-3 ml-1 opacity-70" />
+                          )}
+                        </TableHead>
+                        <TableHead>Billing</TableHead>
+                        <TableHead>Terms</TableHead>
+                        <TableHead>Notes</TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none whitespace-nowrap"
+                          onClick={() => toggleSort("status")}
+                        >
+                          Status
+                          <SortIcon field="status" />
+                        </TableHead>
+                        {!isCommitted && <TableHead className="text-right pr-6">Actions</TableHead>}
                       </TableRow>
-                    ) : (
-                      displayedRows.map((row) => {
-                        const isSelected = selectedIds.has(row.id);
-                        const c = (row.mappedContactJson || {}) as Record<string, unknown>;
-                        const s = (row.mappedServiceJson || {}) as Record<string, unknown>;
-                        const importedCents = s.priceCents ? Number(s.priceCents) : null;
-                        const yardTierNum = c.yardSizeTier ? Number(c.yardSizeTier) : null;
-                        const dogsNum = c.numberOfDogs ? Number(c.numberOfDogs) : null;
-                        const freq = String(s.serviceFrequency || c.serviceFrequency || "") || null;
-                        const expectedCents = computeExpectedPriceCents(
-                          health?.pricingRules,
-                          freq,
-                          dogsNum,
-                          yardTierNum
-                        );
-                        const priceMismatch =
-                          importedCents != null &&
-                          expectedCents != null &&
-                          Math.abs(importedCents - expectedCents) > 1;
-                        const addr = [c.streetAddress, c.city, c.state]
-                          .filter(Boolean)
-                          .join(", ");
-
-                        return (
-                          <TableRow
-                            key={row.id}
-                            className={`${isSelected ? "bg-primary/5" : ""} ${row.status === "ignored" ? "opacity-50" : ""}`}
-                            data-testid={`row-all-${row.id}`}
+                    </TableHeader>
+                    <TableBody>
+                      {sortedRows.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={isCommitted ? 13 : 14}
+                            className="text-center py-12 text-muted-foreground"
                           >
-                            {!isCommitted && (
-                              <TableCell className="pl-6">
-                                <Checkbox
-                                  checked={isSelected}
-                                  onCheckedChange={() => toggleSelect(row.id)}
-                                  disabled={row.status === "imported"}
-                                  data-testid={`checkbox-all-row-${row.id}`}
-                                />
+                            {allRowsSearch ? "No rows match your search." : "No staged rows."}
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        sortedRows.map((row) => {
+                          const isSelected = selectedIds.has(row.id);
+                          const c = (row.mappedContactJson || {}) as Record<string, unknown>;
+                          const s = (row.mappedServiceJson || {}) as Record<string, unknown>;
+                          const importedCents = s.priceCents ? Number(s.priceCents) : null;
+                          const yardTierNum = c.yardSizeTier ? Number(c.yardSizeTier) : null;
+                          const dogsNum = c.numberOfDogs ? Number(c.numberOfDogs) : null;
+                          const freq =
+                            String(s.serviceFrequency || c.serviceFrequency || "") || null;
+                          const expectedCents = computeExpectedPriceCents(
+                            health?.pricingRules,
+                            freq,
+                            dogsNum,
+                            yardTierNum
+                          );
+                          const priceMismatch =
+                            importedCents != null &&
+                            expectedCents != null &&
+                            Math.abs(importedCents - expectedCents) > 1;
+                          const addr = [c.streetAddress, c.city, c.state]
+                            .filter(Boolean)
+                            .join(", ");
+
+                          return (
+                            <TableRow
+                              key={row.id}
+                              className={`${isSelected ? "bg-primary/5" : ""} ${row.status === "ignored" ? "opacity-50" : ""}`}
+                              data-testid={`row-all-${row.id}`}
+                            >
+                              {!isCommitted && (
+                                <TableCell className="pl-6">
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onCheckedChange={() => toggleSelect(row.id)}
+                                    disabled={row.status === "imported"}
+                                    data-testid={`checkbox-all-row-${row.id}`}
+                                  />
+                                </TableCell>
+                              )}
+                              <TableCell className="text-muted-foreground text-xs">
+                                {row.rowIndex + 1}
                               </TableCell>
-                            )}
-                            <TableCell className="text-muted-foreground text-xs">
-                              {row.rowIndex + 1}
-                            </TableCell>
-                            <TableCell>
-                              <p className="font-medium text-sm whitespace-nowrap">
-                                {[c.firstName, c.lastName].filter(Boolean).join(" ") || `Row ${row.rowIndex + 1}`}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {String(c.email || "")}
-                              </p>
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground max-w-40 truncate" title={addr}>
-                              {addr || <span className="italic">—</span>}
-                            </TableCell>
-                            <TableCell className="text-center text-sm">
-                              {dogsNum ?? <span className="text-muted-foreground italic">—</span>}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {yardTierNum ? (
-                                <Badge variant="outline" className="text-xs font-mono px-1.5">
-                                  T{yardTierNum}
-                                </Badge>
-                              ) : (
-                                <span className="text-muted-foreground italic text-xs">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {freq || <span className="text-muted-foreground italic">—</span>}
-                            </TableCell>
-                            <TableCell className="text-sm capitalize">
-                              {String(s.serviceDay || c.serviceDay || "") || (
-                                <span className="text-muted-foreground italic">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {importedCents != null ? (
-                                <span
-                                  className={`text-sm font-medium ${priceMismatch ? "text-amber-600 dark:text-amber-400" : ""}`}
-                                  title={priceMismatch ? `Matrix expects $${(expectedCents! / 100).toFixed(2)}` : undefined}
-                                  data-testid={`price-imported-${row.id}`}
-                                >
-                                  ${(importedCents / 100).toFixed(2)}
-                                  {priceMismatch && (
-                                    <AlertTriangle className="inline w-3 h-3 ml-1 opacity-70" />
-                                  )}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground italic text-xs">—</span>
-                              )}
-                            </TableCell>
-                            {health?.pricingRules && (
                               <TableCell>
-                                {expectedCents != null ? (
+                                <p className="font-medium text-sm whitespace-nowrap">
+                                  {[c.firstName, c.lastName].filter(Boolean).join(" ") ||
+                                    `Row ${row.rowIndex + 1}`}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {String(c.email || "")}
+                                </p>
+                              </TableCell>
+                              <TableCell
+                                className="text-xs text-muted-foreground max-w-40 truncate"
+                                title={addr}
+                              >
+                                {addr || <span className="italic">—</span>}
+                              </TableCell>
+                              <TableCell className="text-center text-sm">
+                                {dogsNum ?? <span className="text-muted-foreground italic">—</span>}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {yardTierNum ? (
+                                  <Badge variant="outline" className="text-xs font-mono px-1.5">
+                                    T{yardTierNum}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground italic text-xs">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {freq || <span className="text-muted-foreground italic">—</span>}
+                              </TableCell>
+                              <TableCell className="text-sm capitalize">
+                                {String(s.serviceDay || c.serviceDay || "") || (
+                                  <span className="text-muted-foreground italic">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {importedCents != null ? (
                                   <span
-                                    className={`text-sm ${priceMismatch ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}
-                                    data-testid={`price-expected-${row.id}`}
+                                    className={`text-sm font-medium ${priceMismatch ? "text-amber-600 dark:text-amber-400" : ""}`}
+                                    title={
+                                      priceMismatch
+                                        ? `Imported: $${(importedCents / 100).toFixed(2)} | Expected: $${(expectedCents! / 100).toFixed(2)} (${importedCents > expectedCents! ? "above" : "below"} matrix)`
+                                        : undefined
+                                    }
+                                    data-testid={`price-imported-${row.id}`}
                                   >
-                                    ${(expectedCents / 100).toFixed(2)}
+                                    ${(importedCents / 100).toFixed(2)}
+                                    {priceMismatch && (
+                                      <AlertTriangle className="inline w-3 h-3 ml-1 opacity-70" />
+                                    )}
                                   </span>
                                 ) : (
                                   <span className="text-muted-foreground italic text-xs">—</span>
                                 )}
                               </TableCell>
-                            )}
-                            <TableCell className="text-xs">
-                              {String(s.billingRule || "") || (
-                                <span className="text-muted-foreground italic">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-xs">
-                              {String(s.billingTerms || "") || (
-                                <span className="text-muted-foreground italic">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {row.status === "ready" && (
-                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs" data-testid={`all-status-${row.id}`}>
-                                  <CheckCircle2 className="w-3 h-3 mr-1" /> Ready
-                                </Badge>
-                              )}
-                              {row.status === "needs_review" && (
-                                <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs" data-testid={`all-status-${row.id}`}>
-                                  <AlertTriangle className="w-3 h-3 mr-1" /> Review
-                                </Badge>
-                              )}
-                              {row.status === "ignored" && (
-                                <Badge variant="outline" className="text-xs text-muted-foreground" data-testid={`all-status-${row.id}`}>
-                                  <EyeOff className="w-3 h-3 mr-1" /> Ignored
-                                </Badge>
-                              )}
-                              {row.status === "imported" && (
-                                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs" data-testid={`all-status-${row.id}`}>
-                                  <CheckCircle2 className="w-3 h-3 mr-1" /> Imported
-                                </Badge>
-                              )}
-                            </TableCell>
-                            {!isCommitted && (
-                              <TableCell className="text-right pr-6">
-                                <div className="flex items-center justify-end gap-1">
-                                  {row.status !== "imported" && row.status !== "ignored" && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                                      onClick={() => applyRowIgnore(row.id)}
-                                      data-testid={`button-all-ignore-${row.id}`}
-                                    >
-                                      Ignore
-                                    </Button>
-                                  )}
-                                </div>
+                              <TableCell>
+                                {!health?.pricingRules ? (
+                                  <span
+                                    className="text-muted-foreground italic text-xs"
+                                    title="Configure pricing rules in Settings to see expected prices"
+                                    data-testid={`price-expected-${row.id}`}
+                                  >
+                                    —
+                                  </span>
+                                ) : expectedCents != null ? (
+                                  <span
+                                    className={`text-sm ${priceMismatch ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}
+                                    title={
+                                      priceMismatch
+                                        ? `Imported: $${(importedCents! / 100).toFixed(2)} | Expected: $${(expectedCents / 100).toFixed(2)} (${importedCents! > expectedCents ? "above" : "below"} matrix)`
+                                        : undefined
+                                    }
+                                    data-testid={`price-expected-${row.id}`}
+                                  >
+                                    ${(expectedCents / 100).toFixed(2)}
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="text-muted-foreground italic text-xs"
+                                    data-testid={`price-expected-${row.id}`}
+                                  >
+                                    —
+                                  </span>
+                                )}
                               </TableCell>
-                            )}
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-                ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {!isCommitted && (
-                        <TableHead className="w-10 pl-6">
-                          <Checkbox
-                            checked={allSelected}
-                            onCheckedChange={toggleSelectAll}
-                            data-testid="checkbox-select-all"
-                          />
-                        </TableHead>
+                              <TableCell className="text-xs">
+                                {String(s.billingRule || "") || (
+                                  <span className="text-muted-foreground italic">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {String(s.billingTerms || "") || (
+                                  <span className="text-muted-foreground italic">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell
+                                className="text-xs text-muted-foreground max-w-36 truncate"
+                                title={String(c.notes || "")}
+                              >
+                                {String(c.notes || "") || <span className="italic">—</span>}
+                              </TableCell>
+                              <TableCell>
+                                {row.status === "ready" && (
+                                  <Badge
+                                    className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs"
+                                    data-testid={`all-status-${row.id}`}
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Ready
+                                  </Badge>
+                                )}
+                                {row.status === "needs_review" && (
+                                  <Badge
+                                    className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs"
+                                    data-testid={`all-status-${row.id}`}
+                                  >
+                                    <AlertTriangle className="w-3 h-3 mr-1" /> Review
+                                  </Badge>
+                                )}
+                                {row.status === "ignored" && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-xs text-muted-foreground"
+                                    data-testid={`all-status-${row.id}`}
+                                  >
+                                    <EyeOff className="w-3 h-3 mr-1" /> Ignored
+                                  </Badge>
+                                )}
+                                {row.status === "imported" && (
+                                  <Badge
+                                    className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs"
+                                    data-testid={`all-status-${row.id}`}
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Imported
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              {!isCommitted && (
+                                <TableCell className="text-right pr-6">
+                                  <div className="flex items-center justify-end gap-1">
+                                    {row.status !== "imported" && row.status !== "ignored" && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                        onClick={() => applyRowIgnore(row.id)}
+                                        data-testid={`button-all-ignore-${row.id}`}
+                                      >
+                                        Ignore
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          );
+                        })
                       )}
-                      <TableHead>#</TableHead>
-                      <TableHead>Contact</TableHead>
-                      <TableHead>Frequency</TableHead>
-                      <TableHead>Service Day</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Billing Rule</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>AI</TableHead>
-                      {!isCommitted && <TableHead className="text-right pr-6">Actions</TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {displayedRows.length === 0 ? (
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell
-                          colSpan={isCommitted ? 8 : 9}
-                          className="text-center py-12 text-muted-foreground"
-                        >
-                          No rows in this category.
-                        </TableCell>
+                        {!isCommitted && (
+                          <TableHead className="w-10 pl-6">
+                            <Checkbox
+                              checked={allSelected}
+                              onCheckedChange={toggleSelectAll}
+                              data-testid="checkbox-select-all"
+                            />
+                          </TableHead>
+                        )}
+                        <TableHead>#</TableHead>
+                        <TableHead>Contact</TableHead>
+                        <TableHead>Frequency</TableHead>
+                        <TableHead>Service Day</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Billing Rule</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>AI</TableHead>
+                        {!isCommitted && <TableHead className="text-right pr-6">Actions</TableHead>}
                       </TableRow>
-                    ) : (
-                      displayedRows.map((row) => {
-                        const isSelected = selectedIds.has(row.id);
-                        const edit = rowEdits[row.id];
-                        const suggestion = row.suggestion;
-                        const isMissing = (field: string) =>
-                          (row.missingFields || []).includes(field);
-
-                        return (
-                          <TableRow
-                            key={row.id}
-                            className={`${isSelected ? "bg-primary/5" : ""} ${row.status === "ignored" ? "opacity-50" : ""}`}
-                            data-testid={`row-resolver-${row.id}`}
+                    </TableHeader>
+                    <TableBody>
+                      {displayedRows.length === 0 ? (
+                        <TableRow>
+                          <TableCell
+                            colSpan={isCommitted ? 8 : 9}
+                            className="text-center py-12 text-muted-foreground"
                           >
-                            {!isCommitted && (
-                              <TableCell className="pl-6">
-                                <Checkbox
-                                  checked={isSelected}
-                                  onCheckedChange={() => toggleSelect(row.id)}
-                                  disabled={row.status === "imported"}
-                                  data-testid={`checkbox-row-${row.id}`}
-                                />
+                            No rows in this category.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        displayedRows.map((row) => {
+                          const isSelected = selectedIds.has(row.id);
+                          const edit = rowEdits[row.id];
+                          const suggestion = row.suggestion;
+                          const isMissing = (field: string) =>
+                            (row.missingFields || []).includes(field);
+
+                          return (
+                            <TableRow
+                              key={row.id}
+                              className={`${isSelected ? "bg-primary/5" : ""} ${row.status === "ignored" ? "opacity-50" : ""}`}
+                              data-testid={`row-resolver-${row.id}`}
+                            >
+                              {!isCommitted && (
+                                <TableCell className="pl-6">
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onCheckedChange={() => toggleSelect(row.id)}
+                                    disabled={row.status === "imported"}
+                                    data-testid={`checkbox-row-${row.id}`}
+                                  />
+                                </TableCell>
+                              )}
+                              <TableCell className="text-muted-foreground text-xs">
+                                {row.rowIndex + 1}
                               </TableCell>
-                            )}
-                            <TableCell className="text-muted-foreground text-xs">
-                              {row.rowIndex + 1}
-                            </TableCell>
-                            <TableCell>
-                              <p className="font-medium text-sm">{getContactName(row)}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {((row.mappedContactJson as Record<string, string>) || {}).email ||
-                                  ""}
-                              </p>
-                            </TableCell>
-
-                            {/* Frequency */}
-                            <TableCell>
-                              {!isCommitted && isMissing("frequency") ? (
-                                <Select
-                                  value={edit?.serviceFrequency || ""}
-                                  onValueChange={(v) => setRowField(row.id, "serviceFrequency", v)}
-                                >
-                                  <SelectTrigger
-                                    className="w-28 h-7 text-xs"
-                                    data-testid={`select-freq-${row.id}`}
-                                  >
-                                    <SelectValue placeholder="Set…" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {FREQUENCY_OPTIONS.map((f) => (
-                                      <SelectItem key={f} value={f}>
-                                        {f}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              ) : (
-                                <span
-                                  className={`text-sm ${isMissing("frequency") ? "text-muted-foreground italic" : ""}`}
-                                >
-                                  {getServiceVal(row, "serviceFrequency") || (
-                                    <span className="text-muted-foreground italic">—</span>
-                                  )}
-                                </span>
-                              )}
-                            </TableCell>
-
-                            {/* Service Day */}
-                            <TableCell>
-                              {!isCommitted && isMissing("serviceDay") ? (
-                                <Select
-                                  value={edit?.serviceDay || ""}
-                                  onValueChange={(v) => setRowField(row.id, "serviceDay", v)}
-                                >
-                                  <SelectTrigger
-                                    className="w-28 h-7 text-xs"
-                                    data-testid={`select-day-${row.id}`}
-                                  >
-                                    <SelectValue placeholder="Set…" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {DAY_OPTIONS.map((d) => (
-                                      <SelectItem key={d} value={d}>
-                                        {d}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              ) : (
-                                <span className="text-sm">
-                                  {getServiceVal(row, "serviceDay") || (
-                                    <span className="text-muted-foreground italic">—</span>
-                                  )}
-                                </span>
-                              )}
-                            </TableCell>
-
-                            {/* Price */}
-                            <TableCell>
-                              {!isCommitted && isMissing("price") ? (
-                                <Input
-                                  type="number"
-                                  placeholder="$"
-                                  value={edit?.priceCents || ""}
-                                  onChange={(e) =>
-                                    setRowField(row.id, "priceCents", e.target.value)
-                                  }
-                                  className="w-20 h-7 text-xs"
-                                  step="0.01"
-                                  data-testid={`input-price-${row.id}`}
-                                />
-                              ) : (
-                                <span className="text-sm">
-                                  {getServiceVal(row, "priceCents") ? (
-                                    `$${getServiceVal(row, "priceCents")}`
-                                  ) : (
-                                    <span className="text-muted-foreground italic">—</span>
-                                  )}
-                                </span>
-                              )}
-                            </TableCell>
-
-                            {/* Billing Rule */}
-                            <TableCell>
-                              {!isCommitted && isMissing("billingRule") ? (
-                                <Select
-                                  value={edit?.billingRule || ""}
-                                  onValueChange={(v) => setRowField(row.id, "billingRule", v)}
-                                >
-                                  <SelectTrigger
-                                    className="w-32 h-7 text-xs"
-                                    data-testid={`select-billing-${row.id}`}
-                                  >
-                                    <SelectValue placeholder="Set…" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {BILLING_OPTIONS.map((b) => (
-                                      <SelectItem key={b} value={b}>
-                                        {b}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              ) : (
-                                <span className="text-sm">
-                                  {getServiceVal(row, "billingRule") || (
-                                    <span className="text-muted-foreground italic">—</span>
-                                  )}
-                                </span>
-                              )}
-                            </TableCell>
-
-                            {/* Status */}
-                            <TableCell>
-                              {row.status === "ready" && (
-                                <Badge
-                                  className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs"
-                                  data-testid={`status-${row.id}`}
-                                >
-                                  <CheckCircle2 className="w-3 h-3 mr-1" /> Ready
-                                </Badge>
-                              )}
-                              {row.status === "needs_review" && (
-                                <Badge
-                                  className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs"
-                                  data-testid={`status-${row.id}`}
-                                >
-                                  <AlertTriangle className="w-3 h-3 mr-1" /> Review
-                                </Badge>
-                              )}
-                              {row.status === "ignored" && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-xs text-muted-foreground"
-                                  data-testid={`status-${row.id}`}
-                                >
-                                  <EyeOff className="w-3 h-3 mr-1" /> Ignored
-                                </Badge>
-                              )}
-                              {row.status === "imported" && (
-                                <Badge
-                                  className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs"
-                                  data-testid={`status-${row.id}`}
-                                >
-                                  <CheckCircle2 className="w-3 h-3 mr-1" /> Imported
-                                </Badge>
-                              )}
-                            </TableCell>
-
-                            {/* AI Suggestion */}
-                            <TableCell>
-                              {suggestion && !suggestion.isAccepted && (
-                                <Badge
-                                  variant="outline"
-                                  className={`text-xs ${
-                                    suggestion.confidenceScore >= 75
-                                      ? "border-purple-400 text-purple-700 dark:text-purple-300"
-                                      : "text-muted-foreground"
-                                  }`}
-                                  title={suggestion.reason || ""}
-                                  data-testid={`ai-suggestion-${row.id}`}
-                                >
-                                  <Sparkles className="w-3 h-3 mr-1" />
-                                  {suggestion.confidenceScore}%
-                                </Badge>
-                              )}
-                              {suggestion?.isAccepted && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-xs border-green-400 text-green-700 dark:text-green-300"
-                                  data-testid={`ai-accepted-${row.id}`}
-                                >
-                                  <CheckCircle2 className="w-3 h-3 mr-1" /> Used
-                                </Badge>
-                              )}
-                            </TableCell>
-
-                            {/* Actions */}
-                            {!isCommitted && (
-                              <TableCell className="text-right pr-6">
-                                <div className="flex items-center justify-end gap-1">
-                                  {edit && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 text-xs"
-                                      onClick={() => saveRowEdit(row.id)}
-                                      disabled={rowUpdateMutation.isPending}
-                                      data-testid={`button-save-${row.id}`}
-                                    >
-                                      Save
-                                    </Button>
-                                  )}
-                                  {row.status !== "imported" && row.status !== "ignored" && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 text-xs text-muted-foreground hover:text-foreground"
-                                      onClick={() => applyRowIgnore(row.id)}
-                                      data-testid={`button-ignore-${row.id}`}
-                                    >
-                                      <EyeOff className="w-3 h-3" />
-                                    </Button>
-                                  )}
-                                  {row.status === "ignored" && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 text-xs"
-                                      onClick={() => applyRowReady(row.id)}
-                                      data-testid={`button-unignore-${row.id}`}
-                                    >
-                                      Restore
-                                    </Button>
-                                  )}
-                                </div>
+                              <TableCell>
+                                <p className="font-medium text-sm">{getContactName(row)}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {((row.mappedContactJson as Record<string, string>) || {})
+                                    .email || ""}
+                                </p>
                               </TableCell>
-                            )}
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
+
+                              {/* Frequency */}
+                              <TableCell>
+                                {!isCommitted && isMissing("frequency") ? (
+                                  <Select
+                                    value={edit?.serviceFrequency || ""}
+                                    onValueChange={(v) =>
+                                      setRowField(row.id, "serviceFrequency", v)
+                                    }
+                                  >
+                                    <SelectTrigger
+                                      className="w-28 h-7 text-xs"
+                                      data-testid={`select-freq-${row.id}`}
+                                    >
+                                      <SelectValue placeholder="Set…" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {FREQUENCY_OPTIONS.map((f) => (
+                                        <SelectItem key={f} value={f}>
+                                          {f}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span
+                                    className={`text-sm ${isMissing("frequency") ? "text-muted-foreground italic" : ""}`}
+                                  >
+                                    {getServiceVal(row, "serviceFrequency") || (
+                                      <span className="text-muted-foreground italic">—</span>
+                                    )}
+                                  </span>
+                                )}
+                              </TableCell>
+
+                              {/* Service Day */}
+                              <TableCell>
+                                {!isCommitted && isMissing("serviceDay") ? (
+                                  <Select
+                                    value={edit?.serviceDay || ""}
+                                    onValueChange={(v) => setRowField(row.id, "serviceDay", v)}
+                                  >
+                                    <SelectTrigger
+                                      className="w-28 h-7 text-xs"
+                                      data-testid={`select-day-${row.id}`}
+                                    >
+                                      <SelectValue placeholder="Set…" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {DAY_OPTIONS.map((d) => (
+                                        <SelectItem key={d} value={d}>
+                                          {d}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-sm">
+                                    {getServiceVal(row, "serviceDay") || (
+                                      <span className="text-muted-foreground italic">—</span>
+                                    )}
+                                  </span>
+                                )}
+                              </TableCell>
+
+                              {/* Price */}
+                              <TableCell>
+                                {!isCommitted && isMissing("price") ? (
+                                  <div className="space-y-1">
+                                    <Input
+                                      type="number"
+                                      placeholder="$"
+                                      value={edit?.priceCents || ""}
+                                      onChange={(e) =>
+                                        setRowField(row.id, "priceCents", e.target.value)
+                                      }
+                                      className="w-20 h-7 text-xs"
+                                      step="0.01"
+                                      data-testid={`input-price-${row.id}`}
+                                    />
+                                    {(() => {
+                                      const rc = (row.mappedContactJson || {}) as Record<
+                                        string,
+                                        unknown
+                                      >;
+                                      const rs = (row.mappedServiceJson || {}) as Record<
+                                        string,
+                                        unknown
+                                      >;
+                                      const rFreq =
+                                        String(rs.serviceFrequency || rc.serviceFrequency || "") ||
+                                        null;
+                                      const rTier = rc.yardSizeTier
+                                        ? Number(rc.yardSizeTier)
+                                        : null;
+                                      const rDogs = rc.numberOfDogs
+                                        ? Number(rc.numberOfDogs)
+                                        : null;
+                                      const exp = computeExpectedPriceCents(
+                                        health?.pricingRules,
+                                        rFreq,
+                                        rDogs,
+                                        rTier
+                                      );
+                                      if (exp == null) return null;
+                                      return (
+                                        <p className="text-xs text-muted-foreground">
+                                          Matrix: ${(exp / 100).toFixed(2)}
+                                        </p>
+                                      );
+                                    })()}
+                                  </div>
+                                ) : (
+                                  <span className="text-sm">
+                                    {getServiceVal(row, "priceCents") ? (
+                                      `$${getServiceVal(row, "priceCents")}`
+                                    ) : (
+                                      <span className="text-muted-foreground italic">—</span>
+                                    )}
+                                  </span>
+                                )}
+                              </TableCell>
+
+                              {/* Billing Rule */}
+                              <TableCell>
+                                {!isCommitted && isMissing("billingRule") ? (
+                                  <Select
+                                    value={edit?.billingRule || ""}
+                                    onValueChange={(v) => setRowField(row.id, "billingRule", v)}
+                                  >
+                                    <SelectTrigger
+                                      className="w-32 h-7 text-xs"
+                                      data-testid={`select-billing-${row.id}`}
+                                    >
+                                      <SelectValue placeholder="Set…" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {BILLING_OPTIONS.map((b) => (
+                                        <SelectItem key={b} value={b}>
+                                          {b}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-sm">
+                                    {getServiceVal(row, "billingRule") || (
+                                      <span className="text-muted-foreground italic">—</span>
+                                    )}
+                                  </span>
+                                )}
+                              </TableCell>
+
+                              {/* Status */}
+                              <TableCell>
+                                {row.status === "ready" && (
+                                  <Badge
+                                    className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs"
+                                    data-testid={`status-${row.id}`}
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Ready
+                                  </Badge>
+                                )}
+                                {row.status === "needs_review" && (
+                                  <Badge
+                                    className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs"
+                                    data-testid={`status-${row.id}`}
+                                  >
+                                    <AlertTriangle className="w-3 h-3 mr-1" /> Review
+                                  </Badge>
+                                )}
+                                {row.status === "ignored" && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-xs text-muted-foreground"
+                                    data-testid={`status-${row.id}`}
+                                  >
+                                    <EyeOff className="w-3 h-3 mr-1" /> Ignored
+                                  </Badge>
+                                )}
+                                {row.status === "imported" && (
+                                  <Badge
+                                    className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs"
+                                    data-testid={`status-${row.id}`}
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Imported
+                                  </Badge>
+                                )}
+                              </TableCell>
+
+                              {/* AI Suggestion */}
+                              <TableCell>
+                                {suggestion && !suggestion.isAccepted && (
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-xs ${
+                                      suggestion.confidenceScore >= 75
+                                        ? "border-purple-400 text-purple-700 dark:text-purple-300"
+                                        : "text-muted-foreground"
+                                    }`}
+                                    title={suggestion.reason || ""}
+                                    data-testid={`ai-suggestion-${row.id}`}
+                                  >
+                                    <Sparkles className="w-3 h-3 mr-1" />
+                                    {suggestion.confidenceScore}%
+                                  </Badge>
+                                )}
+                                {suggestion?.isAccepted && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-xs border-green-400 text-green-700 dark:text-green-300"
+                                    data-testid={`ai-accepted-${row.id}`}
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Used
+                                  </Badge>
+                                )}
+                              </TableCell>
+
+                              {/* Actions */}
+                              {!isCommitted && (
+                                <TableCell className="text-right pr-6">
+                                  <div className="flex items-center justify-end gap-1">
+                                    {edit && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-xs"
+                                        onClick={() => saveRowEdit(row.id)}
+                                        disabled={rowUpdateMutation.isPending}
+                                        data-testid={`button-save-${row.id}`}
+                                      >
+                                        Save
+                                      </Button>
+                                    )}
+                                    {row.status !== "imported" && row.status !== "ignored" && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                        onClick={() => applyRowIgnore(row.id)}
+                                        data-testid={`button-ignore-${row.id}`}
+                                      >
+                                        <EyeOff className="w-3 h-3" />
+                                      </Button>
+                                    )}
+                                    {row.status === "ignored" && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 text-xs"
+                                        onClick={() => applyRowReady(row.id)}
+                                        data-testid={`button-unignore-${row.id}`}
+                                      >
+                                        Restore
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
                 )}
               </div>
             </CardContent>
