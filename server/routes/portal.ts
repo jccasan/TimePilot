@@ -42,11 +42,15 @@ import {
   normalizeQuoteFrequency,
   provisionPortalAccess,
 } from "./shared";
+import {
+  checkPgRateLimit,
+  getPgRateLimitCount,
+  recordPgFailedAttempt,
+  clearPgRateLimit,
+} from "../utils/pg-rate-limit";
 
 export async function registerPortalRoutes(app: Express): Promise<void> {
   // ================ Client Portal Routes ================
-
-  const loginFailCounts = new Map<string, { count: number; resetAt: number }>();
 
   app.post("/api/portal/login", async (req: Request, res: Response) => {
     try {
@@ -57,10 +61,9 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const email = String(rawEmail).trim().toLowerCase();
 
       const clientIp = req.ip || req.socket.remoteAddress || "unknown";
-      const rateLimitKey = `${clientIp}:${email}`;
-      const now = Date.now();
-      const failEntry = loginFailCounts.get(rateLimitKey);
-      if (failEntry && failEntry.resetAt > now && failEntry.count >= 5) {
+      const rateLimitKey = `portal:login:${clientIp}:${email}`;
+      const failCount = await getPgRateLimitCount(rateLimitKey);
+      if (failCount >= 5) {
         return res.status(429).json({
           error: "Too many failed login attempts. Please try again later.",
         });
@@ -89,15 +92,10 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         }
       }
 
-      const recordFailedAttempt = () => {
-        const nowTs = Date.now();
-        const existing = loginFailCounts.get(rateLimitKey);
-        if (existing && existing.resetAt > nowTs) {
-          existing.count++;
-        } else {
-          loginFailCounts.set(rateLimitKey, { count: 1, resetAt: nowTs + 15 * 60 * 1000 });
-        }
-      };
+      const recordFailedAttempt = () =>
+        recordPgFailedAttempt(rateLimitKey, 15 * 60 * 1000).catch((err) =>
+          console.error("[portal/login] Failed to record failed attempt:", err)
+        );
 
       if (!foundContact) {
         recordFailedAttempt();
@@ -128,7 +126,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      loginFailCounts.delete(rateLimitKey);
+      await clearPgRateLimit(rateLimitKey);
 
       const token = crypto.randomBytes(32).toString("hex");
       const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
@@ -156,8 +154,6 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
     }
   });
 
-  const resetRequestCounts = new Map<string, { count: number; resetAt: number }>();
-
   app.post("/api/portal/forgot-password", async (req: Request, res: Response) => {
     try {
       const { email } = req.body;
@@ -165,16 +161,13 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
 
       const normalizedEmail = String(email).trim().toLowerCase();
 
-      const rateKey = normalizedEmail;
-      const now = Date.now();
-      const rateEntry = resetRequestCounts.get(rateKey);
-      if (rateEntry && rateEntry.resetAt > now) {
-        if (rateEntry.count >= 3) {
-          return res.json({ success: true });
-        }
-        rateEntry.count++;
-      } else {
-        resetRequestCounts.set(rateKey, { count: 1, resetAt: now + 60 * 60 * 1000 });
+      const portalResetAllowed = await checkPgRateLimit(
+        `portal:forgot:${normalizedEmail}`,
+        3,
+        60 * 60 * 1000
+      );
+      if (!portalResetAllowed) {
+        return res.json({ success: true });
       }
 
       const allCompanies = await storage.listCompanies();

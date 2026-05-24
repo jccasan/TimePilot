@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { PgRateLimitStore } from "./utils/pg-rate-limit";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -129,6 +130,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many authentication attempts, please try again later" },
+  store: new PgRateLimitStore(),
 });
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);

@@ -15,6 +15,7 @@ import {
 import { sendEmail } from "../services/email";
 
 import { isAuthenticated, handleError, ensureCompanySetup } from "./shared";
+import { checkPgRateLimit } from "../utils/pg-rate-limit";
 
 export async function registerAuthRoutes(app: Express): Promise<void> {
   // ================ Auth Routes ================
@@ -356,19 +357,6 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
     }
   });
 
-  const resetRateLimits = new Map<string, { count: number; resetAt: number }>();
-  function checkResetRateLimit(key: string, maxAttempts: number, windowMs: number): boolean {
-    const now = Date.now();
-    const entry = resetRateLimits.get(key);
-    if (!entry || now > entry.resetAt) {
-      resetRateLimits.set(key, { count: 1, resetAt: now + windowMs });
-      return true;
-    }
-    if (entry.count >= maxAttempts) return false;
-    entry.count++;
-    return true;
-  }
-
   app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
     try {
       const { email } = req.body;
@@ -376,10 +364,11 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
       const ip = req.ip || req.socket.remoteAddress || "unknown";
       const isProd = process.env.NODE_ENV === "production";
-      if (
-        !checkResetRateLimit(`forgot:${ip}`, isProd ? 5 : 500, 15 * 60 * 1000) ||
-        !checkResetRateLimit(`forgot:${email.toLowerCase()}`, isProd ? 3 : 500, 15 * 60 * 1000)
-      ) {
+      const [ipAllowed, emailAllowed] = await Promise.all([
+        checkPgRateLimit(`forgot:ip:${ip}`, isProd ? 5 : 500, 15 * 60 * 1000),
+        checkPgRateLimit(`forgot:email:${email.toLowerCase()}`, isProd ? 3 : 500, 15 * 60 * 1000),
+      ]);
+      if (!ipAllowed || !emailAllowed) {
         return res.json({
           message: "If an account exists with that email, a password reset link has been sent.",
         });
@@ -435,13 +424,12 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
     try {
       const { token, password } = req.body;
       const ip = req.ip || req.socket.remoteAddress || "unknown";
-      if (
-        !checkResetRateLimit(
-          `reset:${ip}`,
-          process.env.NODE_ENV === "production" ? 10 : 500,
-          15 * 60 * 1000
-        )
-      ) {
+      const resetAllowed = await checkPgRateLimit(
+        `reset:ip:${ip}`,
+        process.env.NODE_ENV === "production" ? 10 : 500,
+        15 * 60 * 1000
+      );
+      if (!resetAllowed) {
         return res.status(429).json({ error: "Too many attempts. Please try again later." });
       }
       const result = await resetPasswordWithToken(token, password);
