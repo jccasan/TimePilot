@@ -769,15 +769,68 @@ export default function SignupWidget() {
 
   const hasPricing = !!(parsed && parsed.availableFreqs.length > 0);
 
+  const pricingRulesFreqs = useMemo(() => {
+    const rules = company?.pricingRules;
+    if (!rules?.basePrices) return null;
+    const { basePrices } = rules;
+    const sym = (company?.currency || "usd").toLowerCase() === "cad" ? "CA$" : "$";
+    type FreqEntry = { key: keyof typeof basePrices; value: string };
+    const FREQ_ORDER: FreqEntry[] = [
+      { key: "weekly", value: "weekly" },
+      { key: "biWeekly", value: "biweekly" },
+      { key: "twiceWeekly", value: "twice_weekly" },
+      { key: "monthly", value: "monthly" },
+      { key: "oneTime", value: "onetime" },
+    ];
+    return FREQ_ORDER.filter(({ key }) => {
+      if (key === "monthly" || key === "oneTime") return ((basePrices[key] as number | undefined) ?? 0) > 0;
+      return true;
+    }).map(({ key, value }) => ({
+      value,
+      basePrice: (basePrices[key] as number) ?? 0,
+      sym,
+    }));
+  }, [company?.pricingRules, company?.currency]);
+
+  const pricingRulesDogTiers = useMemo((): DogTier[] | null => {
+    const rules = company?.pricingRules;
+    if (!rules?.perDogRule) return null;
+    const { incrementDogs, surchargeAmount, maxDogs } = rules.perDogRule;
+    const sym = (company?.currency || "usd").toLowerCase() === "cad" ? "CA$" : "$";
+    const tiers: DogTier[] = [];
+    for (let count = 1; count <= maxDogs; count++) {
+      const extraDogs = count - 1;
+      const increments = Math.floor(extraDogs / Math.max(incrementDogs, 1));
+      const surcharge = increments * surchargeAmount;
+      const surchargeLabel =
+        surcharge > 0 ? `+${sym}${surcharge.toFixed(0)}/visit` : "Base Price";
+      tiers.push({
+        label: `${count} dog${count !== 1 ? "s" : ""} (${surchargeLabel})`,
+        value: String(count),
+        dogCount: count,
+        surcharge: Math.round(surcharge * 100),
+        callForQuote: false,
+        pricingItemId: "",
+      });
+    }
+    return tiers;
+  }, [company?.pricingRules, company?.currency]);
+
   const dogTiers = useMemo(() => {
     if (!parsed || !selectedFreq || !parsed.freqGroups[selectedFreq]) return [];
     return parsed.buildDogTiers(parsed.freqGroups[selectedFreq]);
   }, [parsed, selectedFreq]);
 
   const currentTier = useMemo(() => {
-    if (!dogTiers.length || !selectedDogTier) return null;
-    return dogTiers.find((t) => t.value === selectedDogTier) || null;
-  }, [dogTiers, selectedDogTier]);
+    if (!selectedDogTier) return null;
+    if (dogTiers.length > 0) {
+      return dogTiers.find((t) => t.value === selectedDogTier) || null;
+    }
+    if (pricingRulesDogTiers && pricingRulesDogTiers.length > 0) {
+      return pricingRulesDogTiers.find((t) => t.value === selectedDogTier) || null;
+    }
+    return null;
+  }, [dogTiers, pricingRulesDogTiers, selectedDogTier]);
 
   const currentLot = useMemo(() => {
     if (!parsed || !selectedLot) return null;
@@ -812,8 +865,15 @@ export default function SignupWidget() {
     if (!basePrice) return null;
     let tierSurcharge = 0;
     if (selectedLot && rules.yardSizeTiers.length > 0) {
-      const tier = rules.yardSizeTiers.find((t) => (t.name || "") === selectedLot);
-      if (tier) tierSurcharge = tier.surcharge;
+      const idxMatch = selectedLot.match(/^tier_(\d+)$/);
+      if (idxMatch) {
+        const idx = parseInt(idxMatch[1]);
+        const tier = rules.yardSizeTiers[idx];
+        if (tier) tierSurcharge = tier.surcharge;
+      } else {
+        const tier = rules.yardSizeTiers.find((t) => (t.name || "") === selectedLot);
+        if (tier) tierSurcharge = tier.surcharge;
+      }
     }
     const dogCount = currentTier?.dogCount ?? 1;
     const { incrementDogs, surchargeAmount, maxDogs } = rules.perDogRule;
@@ -895,10 +955,14 @@ export default function SignupWidget() {
       const backendFreq = BACKEND_FREQ_MAP[selectedFreq] || selectedFreq || "weekly";
       let yardSize: string;
       if (hasYardSizeTiers && selectedLot) {
-        // Send the tier value directly — for pricingRules tiers this is the tier
-        // name (e.g. "Standard"), which getAcreageSurcharge matches by name.
-        // For legacy tier_N values the positional fallback still applies.
-        yardSize = selectedLot;
+        const idxMatch = selectedLot.match(/^tier_(\d+)$/);
+        if (idxMatch) {
+          const idx = parseInt(idxMatch[1]);
+          const tierData = company?.pricingRules?.yardSizeTiers[idx];
+          yardSize = tierData?.name || "";
+        } else {
+          yardSize = selectedLot;
+        }
       } else if (["small", "medium", "large", "extra-large"].includes(selectedLot)) {
         yardSize = selectedLot;
       } else {
@@ -1024,12 +1088,24 @@ export default function SignupWidget() {
 
   const yardSizeTiers = useMemo(() => {
     if (company?.pricingRules?.yardSizeTiers && company.pricingRules.yardSizeTiers.length > 0) {
-      return company.pricingRules.yardSizeTiers.map((t, i) => ({
-        value: t.name || `Tier ${i + 1}`,
-        label: t.name || `Tier ${i + 1}`,
-        price: t.surcharge,
-        isAddon: true,
-      }));
+      const tiers = company.pricingRules.yardSizeTiers;
+      return tiers.map((t, i) => {
+        let sizeLabel = "";
+        if (t.upToAcres !== null) {
+          sizeLabel = `up to ${t.upToAcres} acres`;
+        } else {
+          const prevTier = i > 0 ? tiers[i - 1] : null;
+          sizeLabel = prevTier?.upToAcres != null ? `over ${prevTier.upToAcres} acres` : "";
+        }
+        return {
+          value: `tier_${i}`,
+          label: t.name || `Tier ${i + 1}`,
+          sizeLabel,
+          price: t.surcharge,
+          isAddon: true,
+          tierName: t.name || "",
+        };
+      });
     }
     return [];
   }, [company?.pricingRules?.yardSizeTiers]);
@@ -1712,12 +1788,12 @@ export default function SignupWidget() {
                                 <span className="text-sm flex-1">{tier.label}</span>
                               </RadioOption>
                             ))
-                          : [
-                              { value: "1", label: "1-2 dogs" },
-                              { value: "3", label: "3-4 dogs" },
-                              { value: "5", label: "5-6 dogs" },
-                              { value: "7", label: "7+ dogs" },
-                            ].map((opt) => (
+                          : (pricingRulesDogTiers ?? [
+                              { value: "1", label: "1-2 dogs", dogCount: 1, surcharge: 0, callForQuote: false, pricingItemId: "" },
+                              { value: "3", label: "3-4 dogs", dogCount: 3, surcharge: 0, callForQuote: false, pricingItemId: "" },
+                              { value: "5", label: "5-6 dogs", dogCount: 5, surcharge: 0, callForQuote: false, pricingItemId: "" },
+                              { value: "7", label: "7+ dogs", dogCount: 7, surcharge: 0, callForQuote: false, pricingItemId: "" },
+                            ] as DogTier[]).map((opt) => (
                               <RadioOption
                                 key={opt.value}
                                 isSelected={selectedDogTier === opt.value}
@@ -1781,11 +1857,11 @@ export default function SignupWidget() {
                                 </RadioOption>
                               );
                             })
-                          : [
-                              { value: "weekly", label: "Once a Week" },
-                              { value: "biweekly", label: "Every Other Week" },
-                              { value: "onetime", label: "One-Time Cleaning" },
-                            ].map((opt) => (
+                          : (pricingRulesFreqs ?? [
+                              { value: "weekly", basePrice: 0, sym: "$" },
+                              { value: "biweekly", basePrice: 0, sym: "$" },
+                              { value: "onetime", basePrice: 0, sym: "$" },
+                            ]).map((opt) => (
                               <RadioOption
                                 key={opt.value}
                                 isSelected={selectedFreq === opt.value}
@@ -1793,7 +1869,12 @@ export default function SignupWidget() {
                                 testId={`radio-freq-${opt.value}`}
                                 onClick={() => setSelectedFreq(opt.value)}
                               >
-                                <span className="flex-1 text-sm">{opt.label}</span>
+                                <span className="flex-1 text-sm">{FREQ_DISPLAY[opt.value] || opt.value}</span>
+                                {opt.basePrice > 0 && (
+                                  <span className="text-xs text-muted-foreground font-medium">
+                                    from {opt.sym}{opt.basePrice.toFixed(2)}/visit
+                                  </span>
+                                )}
                               </RadioOption>
                             ))}
                       </div>
@@ -1813,7 +1894,12 @@ export default function SignupWidget() {
                                 setSelectedLot(selectedLot === tier.value ? "" : tier.value)
                               }
                             >
-                              <span className="text-sm flex-1">{tier.label}</span>
+                              <div className="flex flex-col flex-1">
+                                <span className="text-sm">{tier.label}</span>
+                                {tier.sizeLabel && (
+                                  <span className="text-xs text-muted-foreground">{tier.sizeLabel}</span>
+                                )}
+                              </div>
                               {tier.price > 0 && (
                                 <span className="text-sm text-muted-foreground ml-2">
                                   {tier.isAddon ? "+" : ""}
@@ -2358,12 +2444,12 @@ export default function SignupWidget() {
                               <span className="text-sm flex-1">{tier.label}</span>
                             </RadioOption>
                           ))
-                        : [
-                            { value: "1", label: "1-2 dogs" },
-                            { value: "3", label: "3-4 dogs" },
-                            { value: "5", label: "5-6 dogs" },
-                            { value: "7", label: "7+ dogs" },
-                          ].map((opt) => (
+                        : (pricingRulesDogTiers ?? [
+                            { value: "1", label: "1-2 dogs", dogCount: 1, surcharge: 0, callForQuote: false, pricingItemId: "" },
+                            { value: "3", label: "3-4 dogs", dogCount: 3, surcharge: 0, callForQuote: false, pricingItemId: "" },
+                            { value: "5", label: "5-6 dogs", dogCount: 5, surcharge: 0, callForQuote: false, pricingItemId: "" },
+                            { value: "7", label: "7+ dogs", dogCount: 7, surcharge: 0, callForQuote: false, pricingItemId: "" },
+                          ] as DogTier[]).map((opt) => (
                             <RadioOption
                               key={opt.value}
                               isSelected={selectedDogTier === opt.value}
@@ -2426,11 +2512,11 @@ export default function SignupWidget() {
                               </RadioOption>
                             );
                           })
-                        : [
-                            { value: "weekly", label: "Once a Week" },
-                            { value: "biweekly", label: "Every Other Week" },
-                            { value: "onetime", label: "One-Time Cleaning" },
-                          ].map((opt) => (
+                        : (pricingRulesFreqs ?? [
+                            { value: "weekly", basePrice: 0, sym: "$" },
+                            { value: "biweekly", basePrice: 0, sym: "$" },
+                            { value: "onetime", basePrice: 0, sym: "$" },
+                          ]).map((opt) => (
                             <RadioOption
                               key={opt.value}
                               isSelected={selectedFreq === opt.value}
@@ -2438,7 +2524,12 @@ export default function SignupWidget() {
                               testId={`radio-freq-${opt.value}`}
                               onClick={() => setSelectedFreq(opt.value)}
                             >
-                              <span className="flex-1 text-sm">{opt.label}</span>
+                              <span className="flex-1 text-sm">{FREQ_DISPLAY[opt.value] || opt.value}</span>
+                              {opt.basePrice > 0 && (
+                                <span className="text-xs text-muted-foreground font-medium">
+                                  from {opt.sym}{opt.basePrice.toFixed(2)}/visit
+                                </span>
+                              )}
                             </RadioOption>
                           ))}
                     </div>
@@ -2458,7 +2549,12 @@ export default function SignupWidget() {
                               setSelectedLot(selectedLot === tier.value ? "" : tier.value)
                             }
                           >
-                            <span className="text-sm flex-1">{tier.label}</span>
+                            <div className="flex flex-col flex-1">
+                              <span className="text-sm">{tier.label}</span>
+                              {tier.sizeLabel && (
+                                <span className="text-xs text-muted-foreground">{tier.sizeLabel}</span>
+                              )}
+                            </div>
                             {tier.price > 0 && (
                               <span className="text-sm text-muted-foreground ml-2">
                                 {tier.isAddon ? "+" : ""}
