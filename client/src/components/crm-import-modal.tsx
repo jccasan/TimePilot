@@ -4,7 +4,15 @@ import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Download, Upload, FileText, CheckCircle2, AlertCircle, ArrowLeft, RotateCcw } from "lucide-react";
+import {
+  Download,
+  Upload,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  ArrowLeft,
+  RotateCcw,
+} from "lucide-react";
 
 interface SkippedRow {
   row: number;
@@ -31,6 +39,7 @@ interface CrmImportModalProps {
   importUrl: string;
   invalidateKeys: string[];
   knownFields?: string[];
+  requiredFields?: string[];
 }
 
 const PREVIEW_LIMIT = 10;
@@ -114,6 +123,7 @@ export function CrmImportModal({
   importUrl,
   invalidateKeys,
   knownFields,
+  requiredFields,
 }: CrmImportModalProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -224,6 +234,13 @@ export function CrmImportModal({
   const unknownColumns =
     knownFields && preview ? preview.headers.filter((h) => !knownFields.includes(h)) : [];
 
+  function rowIsMissingRequired(row: Record<string, string>): boolean {
+    if (!requiredFields || requiredFields.length === 0) return false;
+    return requiredFields.some((f) => !row[f]);
+  }
+
+  const skippedPreviewCount = preview ? preview.rows.filter(rowIsMissingRequired).length : 0;
+
   const isWide = step === "preview";
 
   return (
@@ -325,18 +342,29 @@ export function CrmImportModal({
                     </th>
                     {preview.headers.map((h) => {
                       const isUnknown = knownFields ? !knownFields.includes(h) : false;
+                      const isRequired = requiredFields?.includes(h) ?? false;
                       return (
                         <th
                           key={h}
                           className={`px-2 py-1.5 text-left font-medium border-b border-border/60 whitespace-nowrap ${
                             isUnknown
                               ? "text-amber-600 dark:text-amber-400"
-                              : "text-muted-foreground"
+                              : isRequired
+                                ? "text-foreground"
+                                : "text-muted-foreground"
                           }`}
                           data-testid={`th-crm-preview-col-${h}`}
                         >
                           {h}
-                          {isUnknown && (
+                          {isRequired && (
+                            <span
+                              className="ml-0.5 text-red-500 dark:text-red-400"
+                              title="Required field"
+                            >
+                              *
+                            </span>
+                          )}
+                          {isUnknown && !isRequired && (
                             <span className="ml-1 text-amber-500 dark:text-amber-400">*</span>
                           )}
                         </th>
@@ -345,23 +373,80 @@ export function CrmImportModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {preview.rows.map((row, i) => (
-                    <tr
-                      key={i}
-                      className="border-b border-border/40 last:border-0 hover:bg-muted/30"
-                      data-testid={`row-crm-preview-${i}`}
-                    >
-                      <td className="px-2 py-1.5 text-muted-foreground font-mono">{i + 2}</td>
-                      {preview.headers.map((h) => (
-                        <td key={h} className="px-2 py-1.5 max-w-[180px] truncate" title={row[h]}>
-                          {row[h] || <span className="text-muted-foreground/50 italic">—</span>}
+                  {preview.rows.map((row, i) => {
+                    const missing = rowIsMissingRequired(row);
+                    return (
+                      <tr
+                        key={i}
+                        className={`border-b border-border/40 last:border-0 ${
+                          missing
+                            ? "bg-red-50 dark:bg-red-950/30 hover:bg-red-100/60 dark:hover:bg-red-950/50"
+                            : "hover:bg-muted/30"
+                        }`}
+                        data-testid={`row-crm-preview-${i}`}
+                      >
+                        <td
+                          className={`px-2 py-1.5 font-mono ${missing ? "text-red-500 dark:text-red-400" : "text-muted-foreground"}`}
+                        >
+                          {i + 2}
                         </td>
-                      ))}
-                    </tr>
-                  ))}
+                        {preview.headers.map((h) => {
+                          const isRequired = requiredFields?.includes(h) ?? false;
+                          const isEmpty = !row[h];
+                          const isBadCell = isRequired && isEmpty;
+                          return (
+                            <td
+                              key={h}
+                              className={`px-2 py-1.5 max-w-[180px] truncate ${
+                                isBadCell
+                                  ? "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400"
+                                  : ""
+                              }`}
+                              title={row[h]}
+                              data-testid={isBadCell ? `cell-crm-missing-${i}-${h}` : undefined}
+                            >
+                              {row[h] || (
+                                <span
+                                  className={
+                                    isBadCell
+                                      ? "italic font-medium"
+                                      : "text-muted-foreground/50 italic"
+                                  }
+                                >
+                                  {isBadCell ? "required" : "—"}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+
+            {skippedPreviewCount > 0 && (
+              <div
+                className="flex items-center gap-2 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 px-3 py-2 text-xs text-red-700 dark:text-red-400"
+                data-testid="text-crm-import-skip-warning"
+              >
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  <span className="font-medium">
+                    {skippedPreviewCount} row{skippedPreviewCount !== 1 ? "s" : ""}
+                  </span>{" "}
+                  {preview.totalRows > PREVIEW_LIMIT
+                    ? "in this preview are"
+                    : preview.totalRows === skippedPreviewCount
+                      ? "will be"
+                      : "will be"}{" "}
+                  skipped — missing required field
+                  {requiredFields && requiredFields.length > 1 ? "s" : ""} (
+                  {requiredFields?.join(", ")}). Fix your CSV before importing.
+                </span>
+              </div>
+            )}
 
             <div className="flex gap-2 pt-1">
               <Button

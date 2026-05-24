@@ -387,6 +387,7 @@ export default function CrmTasks() {
           "deal_title",
           "company_name",
         ]}
+        requiredFields={["title"]}
       />
     </div>
   );

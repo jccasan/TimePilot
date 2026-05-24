@@ -385,6 +385,7 @@ export default function CrmDeals() {
           "contact_email",
           "company_name",
         ]}
+        requiredFields={["title"]}
       />
     </div>
   );

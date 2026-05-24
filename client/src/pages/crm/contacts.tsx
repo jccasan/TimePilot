@@ -503,6 +503,7 @@ export default function CrmContacts() {
           "assigned_to",
           "tags",
         ]}
+        requiredFields={["first_name", "last_name", "email"]}
       />
     </div>
   );
