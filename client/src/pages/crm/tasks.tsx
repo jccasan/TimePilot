@@ -21,8 +21,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Search, CheckSquare, Trash2, Circle, CheckCircle2 } from "lucide-react";
+import { Plus, Search, CheckSquare, Trash2, Circle, CheckCircle2, Upload } from "lucide-react";
 import type { CrmTask } from "@shared/crm-schema";
+import { CrmImportModal } from "@/components/crm-import-modal";
 
 interface PaginatedResult<T> {
   data: T[];
@@ -88,6 +89,7 @@ function Pagination({
 export default function CrmTasks() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -164,68 +166,79 @@ export default function CrmTasks() {
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">Manage follow-ups and action items.</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-2" data-testid="button-crm-add-task">
-              <Plus className="w-4 h-4" /> Add Task
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>New Task</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>Title</Label>
-                <Input name="title" required data-testid="input-crm-task-title" />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Description</Label>
-                <Textarea name="description" rows={3} data-testid="input-crm-task-description" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Type</Label>
-                  <Select name="type" defaultValue="todo">
-                    <SelectTrigger data-testid="select-crm-task-type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {taskTypes.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t.replace("_", " ")}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Priority</Label>
-                  <Select name="priority" defaultValue="medium">
-                    <SelectTrigger data-testid="select-crm-task-priority">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {taskPriorities.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {p}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={createMutation.isPending}
-                data-testid="button-crm-submit-task"
-              >
-                {createMutation.isPending ? "Creating..." : "Create Task"}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setImportOpen(true)}
+            data-testid="button-crm-import-tasks"
+          >
+            <Upload className="w-4 h-4" /> Import CSV
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-2" data-testid="button-crm-add-task">
+                <Plus className="w-4 h-4" /> Add Task
               </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>New Task</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Title</Label>
+                  <Input name="title" required data-testid="input-crm-task-title" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Description</Label>
+                  <Textarea name="description" rows={3} data-testid="input-crm-task-description" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Type</Label>
+                    <Select name="type" defaultValue="todo">
+                      <SelectTrigger data-testid="select-crm-task-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {taskTypes.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t.replace("_", " ")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Priority</Label>
+                    <Select name="priority" defaultValue="medium">
+                      <SelectTrigger data-testid="select-crm-task-priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {taskPriorities.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={createMutation.isPending}
+                  data-testid="button-crm-submit-task"
+                >
+                  {createMutation.isPending ? "Creating..." : "Create Task"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-b border-border/50 pb-4">
@@ -355,6 +368,14 @@ export default function CrmTasks() {
           )}
         </>
       )}
+      <CrmImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entityLabel="Task"
+        templateUrl="/api/crm/tasks/import/template"
+        importUrl="/api/crm/tasks/import"
+        invalidateKeys={["/api/crm/tasks", "/api/crm/stats"]}
+      />
     </div>
   );
 }

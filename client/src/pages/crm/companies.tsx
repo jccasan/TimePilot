@@ -29,8 +29,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useLocation } from "wouter";
-import { Plus, Search, Building2, Trash2 } from "lucide-react";
+import { Plus, Search, Building2, Trash2, Upload } from "lucide-react";
 import type { CrmCompany } from "@shared/crm-schema";
+import { CrmImportModal } from "@/components/crm-import-modal";
 
 interface PaginatedResult<T> {
   data: T[];
@@ -97,6 +98,7 @@ export default function CrmCompanies() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [industryFilter, setIndustryFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -164,73 +166,84 @@ export default function CrmCompanies() {
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">Manage company accounts in your CRM.</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-2" data-testid="button-crm-add-company">
-              <Plus className="w-4 h-4" /> Add Company
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Company</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="name">Company Name</Label>
-                <Input id="name" name="name" required data-testid="input-crm-company-name" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="domain">Website Domain</Label>
-                <Input
-                  id="domain"
-                  name="domain"
-                  placeholder="example.com"
-                  data-testid="input-crm-company-domain"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Industry</Label>
-                  <Select name="industry" defaultValue="">
-                    <SelectTrigger data-testid="select-crm-industry">
-                      <SelectValue placeholder="Select..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {industries.map((i) => (
-                        <SelectItem key={i} value={i}>
-                          {i.replace("_", " ")}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Size</Label>
-                  <Select name="size" defaultValue="">
-                    <SelectTrigger data-testid="select-crm-company-size">
-                      <SelectValue placeholder="Select..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {companySizes.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={createMutation.isPending}
-                data-testid="button-crm-submit-company"
-              >
-                {createMutation.isPending ? "Creating..." : "Create Company"}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setImportOpen(true)}
+            data-testid="button-crm-import-companies"
+          >
+            <Upload className="w-4 h-4" /> Import CSV
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-2" data-testid="button-crm-add-company">
+                <Plus className="w-4 h-4" /> Add Company
               </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Company</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="name">Company Name</Label>
+                  <Input id="name" name="name" required data-testid="input-crm-company-name" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="domain">Website Domain</Label>
+                  <Input
+                    id="domain"
+                    name="domain"
+                    placeholder="example.com"
+                    data-testid="input-crm-company-domain"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Industry</Label>
+                    <Select name="industry" defaultValue="">
+                      <SelectTrigger data-testid="select-crm-industry">
+                        <SelectValue placeholder="Select..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {industries.map((i) => (
+                          <SelectItem key={i} value={i}>
+                            {i.replace("_", " ")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Size</Label>
+                    <Select name="size" defaultValue="">
+                      <SelectTrigger data-testid="select-crm-company-size">
+                        <SelectValue placeholder="Select..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {companySizes.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={createMutation.isPending}
+                  data-testid="button-crm-submit-company"
+                >
+                  {createMutation.isPending ? "Creating..." : "Create Company"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-b border-border/50 pb-4">
@@ -336,6 +349,14 @@ export default function CrmCompanies() {
           )}
         </>
       )}
+      <CrmImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entityLabel="Company"
+        templateUrl="/api/crm/companies/import/template"
+        importUrl="/api/crm/companies/import"
+        invalidateKeys={["/api/crm/companies", "/api/crm/stats"]}
+      />
     </div>
   );
 }

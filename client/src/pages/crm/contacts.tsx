@@ -30,8 +30,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Search, Users, Trash2, Download, Star } from "lucide-react";
+import { Plus, Search, Users, Trash2, Download, Star, Upload } from "lucide-react";
 import type { CrmContact } from "@shared/crm-schema";
+import { CrmImportModal } from "@/components/crm-import-modal";
 
 interface PaginatedResult<T> {
   data: T[];
@@ -88,6 +89,7 @@ function PaginationControls({
 export default function CrmContacts() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
@@ -181,6 +183,15 @@ export default function CrmContacts() {
             data-testid="button-crm-export-contacts"
           >
             <Download className="w-4 h-4" /> Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setImportOpen(true)}
+            data-testid="button-crm-import-contacts"
+          >
+            <Upload className="w-4 h-4" /> Import CSV
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -453,6 +464,14 @@ export default function CrmContacts() {
           )}
         </>
       )}
+      <CrmImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entityLabel="Contact"
+        templateUrl="/api/crm/contacts/import/template"
+        importUrl="/api/crm/contacts/import"
+        invalidateKeys={["/api/crm/contacts", "/api/crm/stats"]}
+      />
     </div>
   );
 }

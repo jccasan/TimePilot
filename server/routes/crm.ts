@@ -1,7 +1,55 @@
 import type { Express, Request } from "express";
+import multer from "multer";
 import { db } from "../db";
 import { sql, eq, and, ilike, desc, or } from "drizzle-orm";
 import { isAuthenticated, getCompanyContext } from "./shared";
+
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+function parseCSV(raw: string): Record<string, string>[] {
+  const lines = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (lines.length < 2) return [];
+  const headers = splitCSVLine(lines[0]);
+  const rows: Record<string, string>[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const vals = splitCSVLine(line);
+    const row: Record<string, string> = {};
+    headers.forEach((h, idx) => {
+      row[h.trim()] = (vals[idx] ?? "").trim();
+    });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function splitCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === "," && !inQuotes) {
+      result.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
 import {
   crmContacts,
   crmCompanies,
@@ -413,6 +461,82 @@ export function registerCrmRoutes(app: Express) {
     res.send(["firstName,lastName,email,phone,company,title,status,source", ...rows].join("\n"));
   });
 
+  app.get("/api/crm/contacts/import/template", async (_req, res) => {
+    const header =
+      "first_name,last_name,email,phone,company,title,status,source,lead_score,assigned_to,tags";
+    const example =
+      "Jane,Smith,jane@example.com,555-0100,Acme Corp,Manager,active,referral,75,john@myco.com,vip;priority";
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", 'attachment; filename="contacts_import_template.csv"');
+    res.send([header, example].join("\n"));
+  });
+
+  function safeImportError(e: unknown): string {
+    const msg = e instanceof Error ? e.message.toLowerCase() : "";
+    if (msg.includes("unique") || msg.includes("duplicate"))
+      return "Duplicate entry — row already exists";
+    if (msg.includes("foreign key") || msg.includes("violates foreign key"))
+      return "Invalid reference — related record not found";
+    if (msg.includes("not null") || msg.includes("null value")) return "Required field is missing";
+    if (msg.includes("invalid input syntax") || msg.includes("invalid input value"))
+      return "Invalid value format";
+    if (msg.includes("check constraint")) return "Value out of allowed range";
+    return "Could not import this row";
+  }
+
+  app.post("/api/crm/contacts/import", csvUpload.single("file"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const companyId = getCompanyId(req);
+    const rows = parseCSV(req.file.buffer.toString("utf-8"));
+    const imported: string[] = [];
+    const skipped: { row: number; reason: string }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNum = i + 2;
+      if (!r.first_name) {
+        skipped.push({ row: rowNum, reason: "Missing first_name" });
+        continue;
+      }
+      if (!r.last_name) {
+        skipped.push({ row: rowNum, reason: "Missing last_name" });
+        continue;
+      }
+      if (!r.email) {
+        skipped.push({ row: rowNum, reason: "Missing email" });
+        continue;
+      }
+      try {
+        const tags = r.tags
+          ? r.tags
+              .split(";")
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : [];
+        const [ct] = await db
+          .insert(crmContacts)
+          .values({
+            companyId,
+            firstName: r.first_name,
+            lastName: r.last_name,
+            email: r.email,
+            phone: r.phone || null,
+            company: r.company || null,
+            title: r.title || null,
+            status: r.status || "active",
+            source: r.source || "import",
+            leadScore: r.lead_score ? parseInt(r.lead_score) || 0 : 0,
+            assignedTo: r.assigned_to || null,
+            tags,
+          })
+          .returning({ id: crmContacts.id });
+        imported.push(ct.id);
+      } catch (e: unknown) {
+        skipped.push({ row: rowNum, reason: safeImportError(e) });
+      }
+    }
+    res.json({ imported: imported.length, skipped });
+  });
+
   // ─── CRM Companies ────────────────────────────────────
   app.get("/api/crm/companies", async (req, res) => {
     const c = getCompanyId(req);
@@ -486,6 +610,47 @@ export function registerCrmRoutes(app: Express) {
         and(eq(crmCompanies.id, req.params.id), eq(crmCompanies.companyId, getCompanyId(req)))
       );
     res.status(204).send();
+  });
+
+  app.get("/api/crm/companies/import/template", async (_req, res) => {
+    const header = "name,domain,industry,size,status";
+    const example = "Acme Corp,acme.com,technology,11-50,active";
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", 'attachment; filename="companies_import_template.csv"');
+    res.send([header, example].join("\n"));
+  });
+
+  app.post("/api/crm/companies/import", csvUpload.single("file"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const companyId = getCompanyId(req);
+    const rows = parseCSV(req.file.buffer.toString("utf-8"));
+    const imported: string[] = [];
+    const skipped: { row: number; reason: string }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNum = i + 2;
+      if (!r.name) {
+        skipped.push({ row: rowNum, reason: "Missing name" });
+        continue;
+      }
+      try {
+        const [co] = await db
+          .insert(crmCompanies)
+          .values({
+            companyId,
+            name: r.name,
+            domain: r.domain || null,
+            industry: r.industry || null,
+            size: r.size || null,
+            status: r.status || "active",
+          })
+          .returning({ id: crmCompanies.id });
+        imported.push(co.id);
+      } catch (e: unknown) {
+        skipped.push({ row: rowNum, reason: safeImportError(e) });
+      }
+    }
+    res.json({ imported: imported.length, skipped });
   });
 
   app.get("/api/crm/companies/:id/contacts", async (req, res) => {
@@ -689,6 +854,76 @@ export function registerCrmRoutes(app: Express) {
     res.status(204).send();
   });
 
+  app.get("/api/crm/deals/import/template", async (_req, res) => {
+    const header =
+      "title,value,currency,stage,probability,expected_close_date,description,assigned_to,contact_email,company_name";
+    const example =
+      "New Website Project,5000,USD,proposal,60,2026-09-30,Redesign project,sales@myco.com,jane@acme.com,Acme Corp";
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", 'attachment; filename="deals_import_template.csv"');
+    res.send([header, example].join("\n"));
+  });
+
+  app.post("/api/crm/deals/import", csvUpload.single("file"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const companyId = getCompanyId(req);
+    const rows = parseCSV(req.file.buffer.toString("utf-8"));
+    const imported: string[] = [];
+    const skipped: { row: number; reason: string }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNum = i + 2;
+      if (!r.title) {
+        skipped.push({ row: rowNum, reason: "Missing title" });
+        continue;
+      }
+      try {
+        let contactId: string | null = null;
+        if (r.contact_email) {
+          const [ct] = await db
+            .select({ id: crmContacts.id })
+            .from(crmContacts)
+            .where(
+              and(eq(crmContacts.companyId, companyId), eq(crmContacts.email, r.contact_email))
+            );
+          if (ct) contactId = ct.id;
+        }
+        let crmCompanyId: string | null = null;
+        if (r.company_name) {
+          const [co] = await db
+            .select({ id: crmCompanies.id })
+            .from(crmCompanies)
+            .where(
+              and(eq(crmCompanies.companyId, companyId), ilike(crmCompanies.name, r.company_name))
+            );
+          if (co) crmCompanyId = co.id;
+        }
+        const valueInCents = r.value ? Math.round(parseFloat(r.value) * 100) : 0;
+        const expectedCloseDate = r.expected_close_date ? new Date(r.expected_close_date) : null;
+        const [deal] = await db
+          .insert(crmDeals)
+          .values({
+            companyId,
+            title: r.title,
+            value: isNaN(valueInCents) ? 0 : valueInCents,
+            currency: r.currency || "USD",
+            stage: r.stage || "lead",
+            probability: r.probability ? parseInt(r.probability) || 0 : 0,
+            expectedCloseDate,
+            description: r.description || null,
+            assignedTo: r.assigned_to || null,
+            contactId,
+            crmCompanyId,
+          })
+          .returning({ id: crmDeals.id });
+        imported.push(deal.id);
+      } catch (e: unknown) {
+        skipped.push({ row: rowNum, reason: safeImportError(e) });
+      }
+    }
+    res.json({ imported: imported.length, skipped });
+  });
+
   // ─── CRM Tasks ────────────────────────────────────────
   app.get("/api/crm/tasks", async (req, res) => {
     const c = getCompanyId(req);
@@ -756,6 +991,83 @@ export function registerCrmRoutes(app: Express) {
       .delete(crmTasks)
       .where(and(eq(crmTasks.id, req.params.id), eq(crmTasks.companyId, getCompanyId(req))));
     res.status(204).send();
+  });
+
+  app.get("/api/crm/tasks/import/template", async (_req, res) => {
+    const header =
+      "title,description,type,priority,status,due_date,assigned_to,contact_email,deal_title,company_name";
+    const example =
+      "Follow up call,Discuss renewal options,call,high,pending,2026-08-15,sales@myco.com,jane@acme.com,Acme Renewal,Acme Corp";
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", 'attachment; filename="tasks_import_template.csv"');
+    res.send([header, example].join("\n"));
+  });
+
+  app.post("/api/crm/tasks/import", csvUpload.single("file"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const companyId = getCompanyId(req);
+    const rows = parseCSV(req.file.buffer.toString("utf-8"));
+    const imported: string[] = [];
+    const skipped: { row: number; reason: string }[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNum = i + 2;
+      if (!r.title) {
+        skipped.push({ row: rowNum, reason: "Missing title" });
+        continue;
+      }
+      try {
+        let contactId: string | null = null;
+        if (r.contact_email) {
+          const [ct] = await db
+            .select({ id: crmContacts.id })
+            .from(crmContacts)
+            .where(
+              and(eq(crmContacts.companyId, companyId), eq(crmContacts.email, r.contact_email))
+            );
+          if (ct) contactId = ct.id;
+        }
+        let dealId: string | null = null;
+        if (r.deal_title) {
+          const [dl] = await db
+            .select({ id: crmDeals.id })
+            .from(crmDeals)
+            .where(and(eq(crmDeals.companyId, companyId), ilike(crmDeals.title, r.deal_title)));
+          if (dl) dealId = dl.id;
+        }
+        let crmCompanyId: string | null = null;
+        if (r.company_name) {
+          const [co] = await db
+            .select({ id: crmCompanies.id })
+            .from(crmCompanies)
+            .where(
+              and(eq(crmCompanies.companyId, companyId), ilike(crmCompanies.name, r.company_name))
+            );
+          if (co) crmCompanyId = co.id;
+        }
+        const dueDate = r.due_date ? new Date(r.due_date) : null;
+        const [task] = await db
+          .insert(crmTasks)
+          .values({
+            companyId,
+            title: r.title,
+            description: r.description || null,
+            type: r.type || "todo",
+            priority: r.priority || "medium",
+            status: r.status || "pending",
+            dueDate,
+            assignedTo: r.assigned_to || null,
+            contactId,
+            dealId,
+            crmCompanyId,
+          })
+          .returning({ id: crmTasks.id });
+        imported.push(task.id);
+      } catch (e: unknown) {
+        skipped.push({ row: rowNum, reason: safeImportError(e) });
+      }
+    }
+    res.json({ imported: imported.length, skipped });
   });
 
   // ─── CRM Notes ────────────────────────────────────────

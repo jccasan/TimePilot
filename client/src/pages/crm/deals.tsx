@@ -29,8 +29,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Search, TrendingUp, Trash2 } from "lucide-react";
+import { Plus, Search, TrendingUp, Trash2, Upload } from "lucide-react";
 import type { CrmDeal, CrmContact } from "@shared/crm-schema";
+import { CrmImportModal } from "@/components/crm-import-modal";
 
 interface PaginatedResult<T> {
   data: T[];
@@ -88,6 +89,7 @@ function Pagination({
 export default function CrmDeals() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -176,6 +178,15 @@ export default function CrmDeals() {
               View Pipeline Board
             </Button>
           </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setImportOpen(true)}
+            data-testid="button-crm-import-deals"
+          >
+            <Upload className="w-4 h-4" /> Import CSV
+          </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="gap-2" data-testid="button-crm-add-deal">
@@ -355,6 +366,14 @@ export default function CrmDeals() {
           )}
         </>
       )}
+      <CrmImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        entityLabel="Deal"
+        templateUrl="/api/crm/deals/import/template"
+        importUrl="/api/crm/deals/import"
+        invalidateKeys={["/api/crm/deals", "/api/crm/stats"]}
+      />
     </div>
   );
 }
