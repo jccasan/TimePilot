@@ -98,7 +98,7 @@ import {
 } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
-import { TIER_CONFIG, type CustomFieldDefinition } from "@shared/schema";
+import { TIER_CONFIG, type CustomFieldDefinition, type PricingRulesConfig } from "@shared/schema";
 import { useUpload } from "@/hooks/use-upload";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { LearnHowButton } from "@/components/interactive-tutorial";
@@ -602,6 +602,10 @@ function LeadResponseSection(_props: { company: Company | null }) {
     queryKey: ["/api/service-pricing"],
   });
 
+  const { data: pricingConfig } = useQuery<{ pricingRules?: PricingRulesConfig }>({
+    queryKey: ["/api/pricing-config"],
+  });
+
   const toNum = (v: string | number | null | undefined): number | null => {
     if (v == null || v === "") return null;
     const n = parseFloat(String(v));
@@ -666,6 +670,53 @@ function LeadResponseSection(_props: { company: Company | null }) {
       setFirstTimeCleanupFee(toNum(lrConfig.firstTimeCleanupFee));
     }
   }, [lrConfig]);
+
+  const syncStatus = useMemo((): "in_sync" | "drifted" | null => {
+    const rules = pricingConfig?.pricingRules;
+    const tiers = lrConfig?.pricingTiers;
+    if (!rules || !Array.isArray(tiers) || tiers.length === 0) return null;
+
+    const firstTierPrice = tiers[0]?.pricePerVisit;
+    if (firstTierPrice == null) return null;
+
+    // Weekly base price must match
+    if (Math.abs(rules.basePrices.weekly - firstTierPrice) >= 0.01) return "drifted";
+
+    // Per-dog surcharge: compare LR perDogAdder to pricingRules surchargeAmount
+    // (use tier delta as fallback when perDogAdder is not set)
+    const lrAdder =
+      typeof lrConfig?.perDogAdder === "number"
+        ? lrConfig.perDogAdder
+        : tiers.length >= 2 &&
+            typeof tiers[1]?.pricePerVisit === "number" &&
+            tiers[1].pricePerVisit > firstTierPrice
+          ? tiers[1].pricePerVisit - firstTierPrice
+          : null;
+    if (lrAdder != null && Math.abs((rules.perDogRule?.surchargeAmount ?? 0) - lrAdder) >= 0.01) {
+      return "drifted";
+    }
+
+    return "in_sync";
+  }, [pricingConfig, lrConfig]);
+
+  const handleSyncFromPricingEngine = useCallback(() => {
+    const rules = pricingConfig?.pricingRules;
+    if (!rules) return;
+    const { weekly } = rules.basePrices;
+    const { surchargeAmount, maxDogs } = rules.perDogRule;
+    const tiers: PricingTier[] = [];
+    const dogLimit = Math.min(Math.max(maxDogs, 3), 4);
+    for (let dogs = 1; dogs <= dogLimit; dogs++) {
+      const price = Math.round((weekly + (dogs - 1) * surchargeAmount) * 100) / 100;
+      tiers.push({
+        label: `${dogs} Dog${dogs > 1 ? "s" : ""} - Weekly`,
+        pricePerVisit: price,
+      });
+    }
+    setPricingTiers(tiers);
+    setPerDogAdder(Math.round(surchargeAmount * 100) / 100);
+    toast({ title: "Tiers synced from Pricing Engine", description: "Review and save to apply." });
+  }, [pricingConfig, toast]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -871,13 +922,55 @@ function LeadResponseSection(_props: { company: Company | null }) {
       </div>
 
       <div className="border-t pt-4 space-y-3">
-        <div>
-          <p className="text-sm font-medium">Pricing Tiers</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {isScenarioA()
-              ? "Tiers 1–4 are pre-filled from your SP pricing. Review and adjust before saving."
-              : "Define your pricing tiers. Tiers 1–3 are required."}
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Pricing Tiers</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isScenarioA()
+                ? "Tiers 1–4 are pre-filled from your SP pricing. Review and adjust before saving."
+                : "Define your pricing tiers. Tiers 1–3 are required."}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            {syncStatus === "in_sync" && (
+              <Badge
+                variant="outline"
+                className="text-xs gap-1 text-green-700 border-green-300 bg-green-50 dark:text-green-400 dark:border-green-700 dark:bg-green-950/30"
+                data-testid="badge-pricing-sync-status"
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                In sync with Pricing Engine
+              </Badge>
+            )}
+            {syncStatus === "drifted" && (
+              <Badge
+                variant="outline"
+                className="text-xs gap-1 text-amber-700 border-amber-300 bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-950/30"
+                data-testid="badge-pricing-sync-status"
+              >
+                <AlertTriangle className="h-3 w-3" />
+                Differs from Pricing Engine
+              </Badge>
+            )}
+            {pricingConfig?.pricingRules ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-7"
+                onClick={handleSyncFromPricingEngine}
+                data-testid="button-sync-from-pricing-engine"
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Sync from Pricing Engine
+              </Button>
+            ) : (
+              <Link href="/pricing">
+                <span className="text-xs text-muted-foreground underline hover:text-foreground cursor-pointer">
+                  Configure Pricing Engine
+                </span>
+              </Link>
+            )}
+          </div>
         </div>
         <PricingTiersEditor
           value={pricingTiers}

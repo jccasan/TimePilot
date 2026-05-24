@@ -1190,6 +1190,93 @@ export async function runStartupMigrations(): Promise<void> {
       );
     }
 
+    // Backfill pricingRules from LR pricing tiers for companies that have LR
+    // tiers configured but no pricingRules in pricing_config. This ensures the
+    // signup widget shows live pricing for companies that previously configured
+    // pricing only through the Lead Response settings page.
+    {
+      const lrRows = await client.query<{
+        company_id: string;
+        pricing_tiers: { label: string; pricePerVisit: number | null }[] | null;
+        per_dog_adder: string | number | null;
+        pricing_config: {
+          pricingRules?: {
+            basePrices?: { weekly?: number };
+          } | null;
+        } | null;
+      }>(
+        `SELECT lr.company_id,
+                lr.pricing_tiers,
+                lr.per_dog_adder,
+                c.pricing_config
+         FROM lead_response_config lr
+         JOIN companies c ON c.id = lr.company_id
+         WHERE lr.pricing_tiers IS NOT NULL
+           AND jsonb_array_length(lr.pricing_tiers) > 0
+           AND (
+             c.pricing_config IS NULL
+             OR c.pricing_config->>'pricingRules' IS NULL
+             OR c.pricing_config->'pricingRules' = 'null'
+           )`
+      );
+
+      let backfilled = 0;
+      for (const row of lrRows.rows) {
+        const tiers = row.pricing_tiers ?? [];
+        const firstPrice =
+          typeof tiers[0]?.pricePerVisit === "number" ? tiers[0].pricePerVisit : null;
+        if (firstPrice == null || firstPrice <= 0) continue;
+
+        const weekly = Math.round(firstPrice * 100) / 100;
+        const biWeekly = Math.round(weekly * 1.35 * 100) / 100;
+        const twiceWeekly = Math.round(weekly * 0.9 * 100) / 100;
+
+        // Derive per-dog surcharge: prefer explicit perDogAdder; fall back to
+        // the price delta between the first two tiers; default to 0 if neither.
+        let surchargeAmount = 0;
+        const rawAdder = row.per_dog_adder;
+        if (rawAdder != null && rawAdder !== "" && parseFloat(String(rawAdder)) > 0) {
+          surchargeAmount = Math.round(parseFloat(String(rawAdder)) * 100) / 100;
+        } else if (
+          tiers.length >= 2 &&
+          typeof tiers[1]?.pricePerVisit === "number" &&
+          tiers[1].pricePerVisit > firstPrice
+        ) {
+          surchargeAmount = Math.round((tiers[1].pricePerVisit - firstPrice) * 100) / 100;
+        }
+
+        // maxDogs: use number of configured tiers if > 0, else 4.
+        const maxDogs = tiers.length > 0 ? tiers.length : 4;
+
+        const derivedRules = {
+          basePrices: { weekly, biWeekly, twiceWeekly },
+          perDogRule: { incrementDogs: 1, surchargeAmount, maxDogs },
+          yardSizeTiers: [
+            { name: "Standard", upToAcres: 0.25, surcharge: 0 },
+            { name: "Large", upToAcres: 0.5, surcharge: 10.0 },
+            { name: "Very Large", upToAcres: null, surcharge: 20.0 },
+          ],
+        };
+
+        const existingConfig = row.pricing_config ?? {};
+        const updatedConfig = { ...existingConfig, pricingRules: derivedRules };
+
+        await client.query(`UPDATE companies SET pricing_config = $1::jsonb WHERE id = $2`, [
+          JSON.stringify(updatedConfig),
+          row.company_id,
+        ]);
+        backfilled++;
+      }
+
+      if (backfilled > 0) {
+        console.log(
+          `[Migration] pricingRules backfilled from LR tiers for ${backfilled} company(s)`
+        );
+      } else {
+        console.log("[Migration] pricingRules backfill — no companies needed updating");
+      }
+    }
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);
