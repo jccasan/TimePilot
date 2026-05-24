@@ -540,6 +540,15 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
             const leadSource = contactData.leadSource ? String(contactData.leadSource) : null;
             const numberOfDogs = contactData.numberOfDogs ? Number(contactData.numberOfDogs) : null;
             const yardSize = contactData.yardSize ? String(contactData.yardSize) : null;
+            const billingTermsRaw = serviceData.billingTerms
+              ? String(serviceData.billingTerms).toLowerCase().trim()
+              : null;
+            const invoiceTiming: "before_service" | "after_service" | null =
+              billingTermsRaw === "prepay"
+                ? "before_service"
+                : billingTermsRaw === "postpay"
+                  ? "after_service"
+                  : null;
             const serviceFreqRaw =
               serviceData.serviceFrequency || contactData.serviceFrequency || null;
             const serviceDay = toDayOfWeek(serviceData.serviceDay || contactData.serviceDay);
@@ -564,6 +573,7 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
                 status: "active",
                 serviceFrequency: serviceFreqRaw ? String(serviceFreqRaw) : null,
                 serviceDay,
+                ...(invoiceTiming ? { invoiceTiming } : {}),
               })
               .returning();
 
@@ -615,6 +625,7 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
                 pricePerVisit: (priceCents / 100).toFixed(2),
                 isActive: true,
                 startDate: today,
+                ...(billingTermsRaw ? { billingTerms: billingTermsRaw } : {}),
               });
               createdServicePlans++;
             } else {
