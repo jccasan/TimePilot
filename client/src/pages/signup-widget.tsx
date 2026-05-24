@@ -769,6 +769,8 @@ export default function SignupWidget() {
 
   const hasPricing = !!(parsed && parsed.availableFreqs.length > 0);
 
+  const noPricingConfigured = !hasPricing && !company?.pricingRules;
+
   const pricingRulesFreqs = useMemo(() => {
     const rules = company?.pricingRules;
     if (!rules?.basePrices) return null;
@@ -1767,6 +1769,17 @@ export default function SignupWidget() {
                     </div>
                     <h2 className="text-lg font-bold">Service Details</h2>
                   </div>
+                  {noPricingConfigured && (
+                    <div
+                      className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3"
+                      data-testid="banner-no-pricing-single"
+                    >
+                      <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-amber-800">
+                        Pricing will be shown once configured. You can still submit your information and we'll follow up with a custom quote.
+                      </p>
+                    </div>
+                  )}
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">How Many Dogs? *</Label>
@@ -2422,6 +2435,18 @@ export default function SignupWidget() {
                   <h2 className="text-xl font-bold">Service Details</h2>
                   <p className="text-sm text-muted-foreground">Tell us about your yard and pets</p>
                 </div>
+
+                {noPricingConfigured && (
+                  <div
+                    className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3"
+                    data-testid="banner-no-pricing"
+                  >
+                    <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-amber-800">
+                      Pricing will be shown once configured. You can still submit your information and we'll follow up with a custom quote.
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div className="space-y-2">
