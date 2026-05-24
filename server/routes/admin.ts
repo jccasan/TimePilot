@@ -3025,6 +3025,78 @@ Respond with exactly one category from the list above and nothing else.`;
     }
   });
 
+  // ================ One-time Data Fixes ================
+
+  // Fix ScoopIt.Dog Stripe Connect country (Canadian business incorrectly set as US)
+  // SAFE TO REMOVE after confirmed applied in production.
+  app.post(
+    "/api/admin/fix/scoopit-dog-stripe-country",
+    isAdmin,
+    async (_req: Request, res: Response) => {
+      try {
+        const COMPANY_ID = "b499e085-7396-4ae5-b1da-7b6a0d9e578e";
+
+        const [before] = await db
+          .select({
+            id: companies.id,
+            name: companies.name,
+            country: companies.country,
+            currency: companies.currency,
+            stripeConnectAccountId: companies.stripeConnectAccountId,
+            stripeConnectOnboarded: companies.stripeConnectOnboarded,
+            stripeCustomerId: companies.stripeCustomerId,
+          })
+          .from(companies)
+          .where(eq(companies.id, COMPANY_ID));
+
+        if (!before) {
+          return res.status(404).json({ error: "Company not found", companyId: COMPANY_ID });
+        }
+
+        const alreadyFixed =
+          before.country === "CA" &&
+          before.currency === "cad" &&
+          before.stripeConnectAccountId === null &&
+          before.stripeConnectOnboarded === false;
+
+        if (alreadyFixed) {
+          return res.json({ status: "already_applied", company: before });
+        }
+
+        await db
+          .update(companies)
+          .set({
+            country: "CA",
+            currency: "cad",
+            stripeConnectAccountId: null,
+            stripeConnectOnboarded: false,
+          })
+          .where(eq(companies.id, COMPANY_ID));
+
+        const [after] = await db
+          .select({
+            id: companies.id,
+            name: companies.name,
+            country: companies.country,
+            currency: companies.currency,
+            stripeConnectAccountId: companies.stripeConnectAccountId,
+            stripeConnectOnboarded: companies.stripeConnectOnboarded,
+            stripeCustomerId: companies.stripeCustomerId,
+          })
+          .from(companies)
+          .where(eq(companies.id, COMPANY_ID));
+
+        return res.json({
+          status: "applied",
+          before,
+          after,
+        });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
   // ================ Demo Account Management ================
   app.post("/api/admin/demo/reset", isAdmin, async (_req: Request, res: Response) => {
     try {

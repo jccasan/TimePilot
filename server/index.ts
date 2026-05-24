@@ -3226,7 +3226,8 @@ async function migrateYardSizeTiers() {
         if (!entry?.label?.trim()) continue;
         newTiers.push({
           name: entry.label.trim(),
-          upToAcres: boundIdx < DEFAULT_BOUNDARIES.length - 1 ? DEFAULT_BOUNDARIES[boundIdx++] : null,
+          upToAcres:
+            boundIdx < DEFAULT_BOUNDARIES.length - 1 ? DEFAULT_BOUNDARIES[boundIdx++] : null,
           surcharge: typeof entry.price === "number" ? entry.price : 0,
         });
       }

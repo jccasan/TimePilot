@@ -87,9 +87,7 @@ export function YardSizeTierEditor({ tiers, onChange }: YardSizeTierEditorProps)
         if (newRows[idx].upToAcres <= prevBound) {
           const validOpt = ACRE_OPTIONS.find((o) => o.value > prevBound);
           if (validOpt) {
-            newRows = newRows.map((r, i) =>
-              i === idx ? { ...r, upToAcres: validOpt.value } : r
-            );
+            newRows = newRows.map((r, i) => (i === idx ? { ...r, upToAcres: validOpt.value } : r));
           }
         }
       }
@@ -151,10 +149,7 @@ export function YardSizeTierEditor({ tiers, onChange }: YardSizeTierEditorProps)
                 value={String(effectiveBoundary)}
                 onValueChange={(v) => updateRow(index, { upToAcres: parseFloat(v) })}
               >
-                <SelectTrigger
-                  className="h-8 text-sm"
-                  data-testid={`select-yard-acres-${index}`}
-                >
+                <SelectTrigger className="h-8 text-sm" data-testid={`select-yard-acres-${index}`}>
                   <SelectValue>{`${effectiveBoundary.toFixed(2)} ac`}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>

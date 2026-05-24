@@ -2295,11 +2295,12 @@ function CostsTab() {
 function toActiveTiers(
   yardSizeTiers: PricingRulesConfig["yardSizeTiers"]
 ): Array<{ label: string; midpointAcres: number; upToAcres: number | null }> {
-  if (!yardSizeTiers || yardSizeTiers.length === 0) return DEFAULT_PRICING_RULES.yardSizeTiers.map((t, i) => {
-    const prevBound = i > 0 ? (DEFAULT_PRICING_RULES.yardSizeTiers[i - 1].upToAcres ?? 0) : 0;
-    const midpointAcres = t.upToAcres !== null ? (prevBound + t.upToAcres) / 2 : prevBound + 0.5;
-    return { label: t.name || `Tier ${i + 1}`, midpointAcres, upToAcres: t.upToAcres };
-  });
+  if (!yardSizeTiers || yardSizeTiers.length === 0)
+    return DEFAULT_PRICING_RULES.yardSizeTiers.map((t, i) => {
+      const prevBound = i > 0 ? (DEFAULT_PRICING_RULES.yardSizeTiers[i - 1].upToAcres ?? 0) : 0;
+      const midpointAcres = t.upToAcres !== null ? (prevBound + t.upToAcres) / 2 : prevBound + 0.5;
+      return { label: t.name || `Tier ${i + 1}`, midpointAcres, upToAcres: t.upToAcres };
+    });
   return yardSizeTiers.map((t, i) => {
     const prevBound = i > 0 ? (yardSizeTiers[i - 1].upToAcres ?? 0) : 0;
     const midpointAcres = t.upToAcres !== null ? (prevBound + t.upToAcres) / 2 : prevBound + 0.5;
@@ -2316,8 +2317,6 @@ const FREQ_COLUMNS: Array<{ key: BaseKey; label: string; multKey: FreqMultKey }>
   { key: "monthly", label: "Monthly", multKey: "monthlyMultiplier" },
   { key: "onetime", label: "One-time", multKey: "oneTimeMultiplier" },
 ];
-
-
 
 function computeSuggestedPrice(
   midpointAcres: number,

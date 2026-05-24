@@ -1054,6 +1054,45 @@ export async function runStartupMigrations(): Promise<void> {
       "[Migration] quote_form_events.zip_code widened to VARCHAR(10) for Canadian postal codes"
     );
 
+    // One-time fix: ScoopIt.Dog (steve@scoopit.dog) was registered with country='us'
+    // and currency='usd' despite being a Canadian business. Their Stripe Connect
+    // account (US-based) must be cleared so they can re-onboard as a CA business.
+    // stripe_customer_id is intentionally left unchanged.
+    // This block is idempotent — safe to run on every startup.
+    await client.query(`
+      UPDATE companies
+      SET
+        country                   = 'CA',
+        currency                  = 'cad',
+        stripe_connect_account_id = NULL,
+        stripe_connect_onboarded  = FALSE
+      WHERE id       = 'b499e085-7396-4ae5-b1da-7b6a0d9e578e'
+        AND (
+          country                   != 'CA'
+          OR currency               != 'cad'
+          OR stripe_connect_account_id IS NOT NULL
+          OR stripe_connect_onboarded = TRUE
+        )
+    `);
+    const verifyResult = await client.query(
+      `SELECT id, name, country, currency, stripe_connect_account_id, stripe_connect_onboarded
+       FROM companies
+       WHERE id = 'b499e085-7396-4ae5-b1da-7b6a0d9e578e'`
+    );
+    if (verifyResult.rows.length > 0) {
+      const row = verifyResult.rows[0];
+      const correct =
+        row.country === "CA" &&
+        row.currency === "cad" &&
+        row.stripe_connect_account_id === null &&
+        row.stripe_connect_onboarded === false;
+      console.log(
+        correct
+          ? "[Migration] ScoopIt.Dog country/currency/Stripe Connect fix verified OK"
+          : `[Migration] ScoopIt.Dog fix MISMATCH — got: ${JSON.stringify(row)}`
+      );
+    }
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);
