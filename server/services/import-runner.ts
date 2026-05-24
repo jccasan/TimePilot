@@ -53,7 +53,25 @@ function toContactStatus(val: unknown): ContactStatus {
   return VALID_CONTACT_STATUSES.has(val as ContactStatus) ? (val as ContactStatus) : "lead";
 }
 function toDayOfWeek(val: unknown): DayOfWeek | null {
-  return VALID_DAY_OF_WEEK.has(val as DayOfWeek) ? (val as DayOfWeek) : null;
+  const s = String(val ?? "")
+    .toLowerCase()
+    .trim();
+  if (VALID_DAY_OF_WEEK.has(s as DayOfWeek)) return s as DayOfWeek;
+  const abbrev: Record<string, DayOfWeek> = {
+    mon: "monday",
+    tue: "tuesday",
+    tues: "tuesday",
+    wed: "wednesday",
+    thu: "thursday",
+    thur: "thursday",
+    thurs: "thursday",
+    fri: "friday",
+    sat: "saturday",
+    sun: "sunday",
+  };
+  if (abbrev[s]) return abbrev[s];
+  console.debug(`[import-runner] toDayOfWeek: unrecognised value "${val}" — treating as null`);
+  return null;
 }
 function toInvoiceStatus(val: unknown): InvoiceStatus {
   return VALID_INVOICE_STATUSES.has(val as InvoiceStatus) ? (val as InvoiceStatus) : "pending";
@@ -779,7 +797,8 @@ function matrixPriceCents(
   rules: PricingRulesConfig,
   serviceFrequency: string | null,
   numberOfDogs: number | null,
-  yardSizeAcres: number | null
+  yardSizeAcres: number | null,
+  yardSizeTierIdx?: number | null
 ): number | null {
   const freq = (serviceFrequency || "").toLowerCase().replace(/\s+/g, "");
   let baseDollars: number | null = null;
@@ -793,16 +812,22 @@ function matrixPriceCents(
 
   if (baseDollars == null) return null;
 
-  // Yard size surcharge
+  // Yard size surcharge — prefer tier index over raw acreage
   let yardSurchargeDollars = 0;
-  if (yardSizeAcres != null && rules.yardSizeTiers.length > 0) {
+  if (rules.yardSizeTiers.length > 0) {
     const sorted = [...rules.yardSizeTiers].sort((a, b) => {
       if (a.upToAcres == null) return 1;
       if (b.upToAcres == null) return -1;
       return a.upToAcres - b.upToAcres;
     });
-    const match = sorted.find((t) => t.upToAcres == null || yardSizeAcres <= t.upToAcres);
-    if (match) yardSurchargeDollars = match.surcharge;
+    if (yardSizeTierIdx != null && yardSizeTierIdx >= 1) {
+      // 1-indexed positional lookup
+      const tier = sorted[yardSizeTierIdx - 1];
+      if (tier) yardSurchargeDollars = tier.surcharge;
+    } else if (yardSizeAcres != null) {
+      const match = sorted.find((t) => t.upToAcres == null || yardSizeAcres <= t.upToAcres);
+      if (match) yardSurchargeDollars = match.surcharge;
+    }
   }
 
   // Per-dog surcharge (beyond incrementDogs threshold)
@@ -915,6 +940,20 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
     if (internalOverrides["state"] !== undefined) t.state = internalOverrides["state"];
     if (internalOverrides["zipCode"] !== undefined) t.zipCode = internalOverrides["zipCode"];
 
+    // Parse yardSizeTier (numeric 1-6) from CSV — takes precedence over legacy yardSize text.
+    const yardSizeTierRaw = t.yardSizeTier != null ? Number(t.yardSizeTier) : null;
+    const yardSizeTierNum =
+      yardSizeTierRaw != null && Number.isInteger(yardSizeTierRaw) &&
+      yardSizeTierRaw >= 1 && yardSizeTierRaw <= 6
+        ? yardSizeTierRaw
+        : null;
+    // Represent yardSize as "Tier N" so getAcreageSurcharge can do positional lookup.
+    const resolvedYardSize = yardSizeTierNum
+      ? `Tier ${yardSizeTierNum}`
+      : t.yardSize
+        ? String(t.yardSize)
+        : null;
+
     // Build contact json — address fields read from `t` which now includes any overrides.
     const mappedContactJson: Record<string, unknown> = {
       firstName: t.firstName || null,
@@ -927,7 +966,8 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
       state: t.state || null,
       zipCode: t.zipCode || null,
       numberOfDogs: t.numberOfDogs || null,
-      yardSize: t.yardSize || null,
+      yardSize: resolvedYardSize,
+      yardSizeTier: yardSizeTierNum,
       notes: t.notes || null,
       leadSource: t.leadSource || null,
       status: t.status || "lead",
@@ -944,22 +984,58 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
     const effectiveServiceDay =
       routePreference === "rebuild" && !internalOverrides["serviceDay"] ? null : csvServiceDay;
 
+    // Parse explicit price, billingRule, billingTerms from the CSV row (mapped fields).
+    const csvPriceDollars = (() => {
+      const raw = t.price ?? null;
+      if (raw == null) return null;
+      const parsed = parseFloat(String(raw).replace(/[$,\s]/g, ""));
+      return isNaN(parsed) || parsed <= 0 ? null : parsed;
+    })();
+
+    const normalizeBillingRule = (v: string): string | null => {
+      const s = v.toLowerCase().replace(/[\s-]/g, "_");
+      if (s === "per_visit" || s === "per_visit") return "per_visit";
+      if (s === "monthly_flat" || s === "monthly" || s === "flat") return "monthly_flat";
+      if (s === "per_dog") return "per_dog";
+      if (s === "custom") return "custom";
+      return null;
+    };
+    const csvBillingRule = t.billingRule ? normalizeBillingRule(String(t.billingRule)) : null;
+    const csvBillingTerms = t.billingTerms ? String(t.billingTerms).toLowerCase().trim() : null;
+    const normalizedBillingTerms = csvBillingTerms
+      ? csvBillingTerms.includes("pre")
+        ? "prepay"
+        : csvBillingTerms.includes("post")
+          ? "postpay"
+          : csvBillingTerms
+      : null;
+
     const mappedServiceJson: Record<string, unknown> = {
       serviceFrequency: csvServiceFreq || null,
       serviceDay: effectiveServiceDay,
     };
 
+    if (csvBillingRule) mappedServiceJson.billingRule = csvBillingRule;
+    if (normalizedBillingTerms) mappedServiceJson.billingTerms = normalizedBillingTerms;
+
     // Auto-fill price from tenant's pricing matrix when the row has enough data.
     // Requires at minimum a service frequency; yard size and dog count are optional.
+    // Explicit CSV price overrides the matrix result.
     let matrixFilledPriceCents: number | null = null;
-    if (pricingRules && csvServiceFreq) {
+    if (csvPriceDollars != null) {
+      // Explicit price from CSV column — use directly
+      mappedServiceJson.priceCents = Math.round(csvPriceDollars * 100);
+      mappedServiceJson.priceSource = "csv";
+      matrixFilledPriceCents = Math.round(csvPriceDollars * 100);
+    } else if (pricingRules && csvServiceFreq) {
       const dogs = t.numberOfDogs != null ? Number(t.numberOfDogs) : null;
       const acres = t.yardSize != null ? Number(t.yardSize) : null;
       matrixFilledPriceCents = matrixPriceCents(
         pricingRules,
         String(csvServiceFreq),
         Number.isFinite(dogs) ? dogs : null,
-        Number.isFinite(acres) && acres! > 0 ? acres : null
+        Number.isFinite(acres) && acres! > 0 ? acres : null,
+        yardSizeTierNum
       );
       if (matrixFilledPriceCents != null) {
         mappedServiceJson.priceCents = matrixFilledPriceCents;
@@ -975,9 +1051,10 @@ async function runStagedCsvContactsImport(payload: StagedCsvContactsPayload): Pr
     if (!mappedServiceJson.serviceDay || routePreference === "rebuild") {
       missingFields.push("serviceDay");
     }
-    // Price: only add as missing if we couldn't auto-fill from matrix
+    // Price: only add as missing if we couldn't auto-fill from matrix or CSV
     if (matrixFilledPriceCents == null) missingFields.push("price");
-    missingFields.push("billingRule");
+    // BillingRule: only add as missing if not provided in CSV
+    if (!mappedServiceJson.billingRule) missingFields.push("billingRule");
 
     // Validation errors from transform
     const validationErrors = r.errors.map((e) => ({ field: e.field, message: e.message }));

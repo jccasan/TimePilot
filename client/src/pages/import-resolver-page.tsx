@@ -31,11 +31,68 @@ import {
   EyeOff,
   Loader2,
   RefreshCw,
+  Search,
   Sparkles,
   Users,
   Zap,
 } from "lucide-react";
 import type { ImportBatch, ImportRow, ImportRuleSuggestion } from "@shared/schema";
+
+interface PricingRulesConfig {
+  basePrices: {
+    weekly: number;
+    biWeekly: number;
+    twiceWeekly: number;
+    monthly?: number | null;
+  };
+  perDogRule: {
+    incrementDogs: number;
+    surchargeAmount: number;
+    maxDogs: number;
+  };
+  yardSizeTiers: Array<{
+    name?: string;
+    upToAcres: number | null;
+    surcharge: number;
+  }>;
+}
+
+function computeExpectedPriceCents(
+  rules: PricingRulesConfig | null | undefined,
+  serviceFrequency: string | null,
+  numberOfDogs: number | null,
+  yardSizeTierIdx: number | null
+): number | null {
+  if (!rules || !serviceFrequency) return null;
+  const freq = serviceFrequency.toLowerCase().replace(/\s+/g, "");
+  let baseDollars: number | null = null;
+  if (freq === "weekly" || freq === "week") baseDollars = rules.basePrices.weekly;
+  else if (freq === "biweekly" || freq === "bi-weekly") baseDollars = rules.basePrices.biWeekly;
+  else if (freq === "twiceweekly" || freq === "2x/week") baseDollars = rules.basePrices.twiceWeekly;
+  else if (freq === "monthly" && rules.basePrices.monthly != null)
+    baseDollars = rules.basePrices.monthly;
+  if (baseDollars == null) return null;
+
+  let yardSurcharge = 0;
+  if (rules.yardSizeTiers.length > 0) {
+    const sorted = [...rules.yardSizeTiers].sort(
+      (a, b) => (a.upToAcres ?? Infinity) - (b.upToAcres ?? Infinity)
+    );
+    if (yardSizeTierIdx != null && yardSizeTierIdx >= 1) {
+      const tier = sorted[yardSizeTierIdx - 1];
+      if (tier) yardSurcharge = tier.surcharge;
+    }
+  }
+
+  let dogSurcharge = 0;
+  const dogs = numberOfDogs ?? 1;
+  const { incrementDogs, surchargeAmount, maxDogs } = rules.perDogRule;
+  const effectiveDogs = Math.min(dogs, maxDogs);
+  const steps = Math.floor((effectiveDogs - 1) / incrementDogs);
+  if (steps > 0) dogSurcharge = steps * surchargeAmount;
+
+  return Math.round((baseDollars + yardSurcharge + dogSurcharge) * 100);
+}
 
 interface ResolverRow extends ImportRow {
   suggestion: ImportRuleSuggestion | null;
@@ -89,6 +146,7 @@ interface HealthData {
       missingBillingRule: number;
     };
   };
+  pricingRules?: PricingRulesConfig | null;
 }
 
 const FREQUENCY_OPTIONS = ["weekly", "biweekly", "monthly", "as-needed"];
@@ -182,6 +240,7 @@ export default function ImportResolverPage() {
   const [bulkPrice, setBulkPrice] = useState("");
   const [bulkBillingRule, setBulkBillingRule] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [allRowsSearch, setAllRowsSearch] = useState("");
   const [rowEdits, setRowEdits] = useState<Record<string, Record<string, string>>>({});
 
   const healthQuery = useQuery<HealthData>({
@@ -286,13 +345,29 @@ export default function ImportResolverPage() {
 
   const displayedRows = useMemo(() => {
     if (!resolverData) return [];
-    if (activeTab === "all") return resolverData.rows;
-    if (activeTab === "frequency") return resolverData.grouped.frequency;
-    if (activeTab === "serviceDay") return resolverData.grouped.serviceDay;
-    if (activeTab === "price") return resolverData.grouped.price;
-    if (activeTab === "billingRule") return resolverData.grouped.billingRule;
-    return resolverData.rows;
-  }, [resolverData, activeTab]);
+    let base: ResolverRow[];
+    if (activeTab === "all") base = resolverData.rows;
+    else if (activeTab === "frequency") base = resolverData.grouped.frequency;
+    else if (activeTab === "serviceDay") base = resolverData.grouped.serviceDay;
+    else if (activeTab === "price") base = resolverData.grouped.price;
+    else if (activeTab === "billingRule") base = resolverData.grouped.billingRule;
+    else base = resolverData.rows;
+
+    if (activeTab === "all" && allRowsSearch.trim()) {
+      const q = allRowsSearch.trim().toLowerCase();
+      base = base.filter((row) => {
+        const c = (row.mappedContactJson || {}) as Record<string, string>;
+        const s = (row.mappedServiceJson || {}) as Record<string, string>;
+        const name = `${c.firstName || ""} ${c.lastName || ""}`.toLowerCase();
+        const addr = `${c.streetAddress || ""} ${c.city || ""}`.toLowerCase();
+        const email = (c.email || "").toLowerCase();
+        const freq = (s.serviceFrequency || "").toLowerCase();
+        const day = (s.serviceDay || "").toLowerCase();
+        return name.includes(q) || addr.includes(q) || email.includes(q) || freq.includes(q) || day.includes(q);
+      });
+    }
+    return base;
+  }, [resolverData, activeTab, allRowsSearch]);
 
   const allSelected = displayedRows.length > 0 && selectedIds.size === displayedRows.length;
   const someSelected = selectedIds.size > 0;
@@ -676,26 +751,40 @@ export default function ImportResolverPage() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
           <div className="px-6 space-y-2">
-            <TabsList className="h-8">
-              <TabsTrigger value="all" className="text-xs" data-testid="tab-all">
-                All ({resolverData.rows.length})
-              </TabsTrigger>
-              <TabsTrigger value="frequency" className="text-xs" data-testid="tab-frequency">
-                Frequency ({resolverData.missingFieldCounts.frequency})
-              </TabsTrigger>
-              <TabsTrigger value="serviceDay" className="text-xs" data-testid="tab-service-day">
-                Service Day ({resolverData.missingFieldCounts.serviceDay})
-              </TabsTrigger>
-              <TabsTrigger value="price" className="text-xs" data-testid="tab-price">
-                Price ({resolverData.missingFieldCounts.price})
-              </TabsTrigger>
-              <TabsTrigger value="billingRule" className="text-xs" data-testid="tab-billing">
-                Billing ({resolverData.missingFieldCounts.billingRule})
-              </TabsTrigger>
-            </TabsList>
+            <div className="flex items-center gap-3 flex-wrap">
+              <TabsList className="h-8">
+                <TabsTrigger value="all" className="text-xs" data-testid="tab-all">
+                  All ({resolverData.rows.length})
+                </TabsTrigger>
+                <TabsTrigger value="frequency" className="text-xs" data-testid="tab-frequency">
+                  Frequency ({resolverData.missingFieldCounts.frequency})
+                </TabsTrigger>
+                <TabsTrigger value="serviceDay" className="text-xs" data-testid="tab-service-day">
+                  Service Day ({resolverData.missingFieldCounts.serviceDay})
+                </TabsTrigger>
+                <TabsTrigger value="price" className="text-xs" data-testid="tab-price">
+                  Price ({resolverData.missingFieldCounts.price})
+                </TabsTrigger>
+                <TabsTrigger value="billingRule" className="text-xs" data-testid="tab-billing">
+                  Billing ({resolverData.missingFieldCounts.billingRule})
+                </TabsTrigger>
+              </TabsList>
+              {activeTab === "all" && (
+                <div className="relative flex-1 min-w-48 max-w-72">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search contacts..."
+                    value={allRowsSearch}
+                    onChange={(e) => setAllRowsSearch(e.target.value)}
+                    className="pl-8 h-8 text-xs"
+                    data-testid="input-all-rows-search"
+                  />
+                </div>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground pb-1" data-testid="text-tab-description">
               {activeTab === "all" &&
-                "All staged contacts — review or filter by a specific missing field using the tabs above."}
+                "Full overview of every staged row — name, address, yard tier, service details, imported price vs. your pricing matrix, and billing rule."}
               {activeTab === "frequency" &&
                 "Contacts missing a service frequency (weekly, biweekly, etc.). Set one per row or use bulk-edit to apply the same value to many rows at once."}
               {activeTab === "serviceDay" &&
@@ -710,6 +799,203 @@ export default function ImportResolverPage() {
           <TabsContent value={activeTab} className="mt-0">
             <CardContent className="pt-3 px-0">
               <div className="overflow-x-auto">
+                {activeTab === "all" ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {!isCommitted && (
+                        <TableHead className="w-10 pl-6">
+                          <Checkbox
+                            checked={allSelected}
+                            onCheckedChange={toggleSelectAll}
+                            data-testid="checkbox-select-all"
+                          />
+                        </TableHead>
+                      )}
+                      <TableHead className="w-8">#</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Address</TableHead>
+                      <TableHead className="text-center">Dogs</TableHead>
+                      <TableHead className="text-center">Tier</TableHead>
+                      <TableHead>Frequency</TableHead>
+                      <TableHead>Day</TableHead>
+                      <TableHead>Imported $</TableHead>
+                      {health?.pricingRules && <TableHead>Expected $</TableHead>}
+                      <TableHead>Billing</TableHead>
+                      <TableHead>Terms</TableHead>
+                      <TableHead>Status</TableHead>
+                      {!isCommitted && <TableHead className="text-right pr-6">Actions</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {displayedRows.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={isCommitted ? 12 : 13}
+                          className="text-center py-12 text-muted-foreground"
+                        >
+                          {allRowsSearch ? "No rows match your search." : "No staged rows."}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      displayedRows.map((row) => {
+                        const isSelected = selectedIds.has(row.id);
+                        const c = (row.mappedContactJson || {}) as Record<string, unknown>;
+                        const s = (row.mappedServiceJson || {}) as Record<string, unknown>;
+                        const importedCents = s.priceCents ? Number(s.priceCents) : null;
+                        const yardTierNum = c.yardSizeTier ? Number(c.yardSizeTier) : null;
+                        const dogsNum = c.numberOfDogs ? Number(c.numberOfDogs) : null;
+                        const freq = String(s.serviceFrequency || c.serviceFrequency || "") || null;
+                        const expectedCents = computeExpectedPriceCents(
+                          health?.pricingRules,
+                          freq,
+                          dogsNum,
+                          yardTierNum
+                        );
+                        const priceMismatch =
+                          importedCents != null &&
+                          expectedCents != null &&
+                          Math.abs(importedCents - expectedCents) > 1;
+                        const addr = [c.streetAddress, c.city, c.state]
+                          .filter(Boolean)
+                          .join(", ");
+
+                        return (
+                          <TableRow
+                            key={row.id}
+                            className={`${isSelected ? "bg-primary/5" : ""} ${row.status === "ignored" ? "opacity-50" : ""}`}
+                            data-testid={`row-all-${row.id}`}
+                          >
+                            {!isCommitted && (
+                              <TableCell className="pl-6">
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={() => toggleSelect(row.id)}
+                                  disabled={row.status === "imported"}
+                                  data-testid={`checkbox-all-row-${row.id}`}
+                                />
+                              </TableCell>
+                            )}
+                            <TableCell className="text-muted-foreground text-xs">
+                              {row.rowIndex + 1}
+                            </TableCell>
+                            <TableCell>
+                              <p className="font-medium text-sm whitespace-nowrap">
+                                {[c.firstName, c.lastName].filter(Boolean).join(" ") || `Row ${row.rowIndex + 1}`}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {String(c.email || "")}
+                              </p>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground max-w-40 truncate" title={addr}>
+                              {addr || <span className="italic">—</span>}
+                            </TableCell>
+                            <TableCell className="text-center text-sm">
+                              {dogsNum ?? <span className="text-muted-foreground italic">—</span>}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {yardTierNum ? (
+                                <Badge variant="outline" className="text-xs font-mono px-1.5">
+                                  T{yardTierNum}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground italic text-xs">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {freq || <span className="text-muted-foreground italic">—</span>}
+                            </TableCell>
+                            <TableCell className="text-sm capitalize">
+                              {String(s.serviceDay || c.serviceDay || "") || (
+                                <span className="text-muted-foreground italic">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {importedCents != null ? (
+                                <span
+                                  className={`text-sm font-medium ${priceMismatch ? "text-amber-600 dark:text-amber-400" : ""}`}
+                                  title={priceMismatch ? `Matrix expects $${(expectedCents! / 100).toFixed(2)}` : undefined}
+                                  data-testid={`price-imported-${row.id}`}
+                                >
+                                  ${(importedCents / 100).toFixed(2)}
+                                  {priceMismatch && (
+                                    <AlertTriangle className="inline w-3 h-3 ml-1 opacity-70" />
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground italic text-xs">—</span>
+                              )}
+                            </TableCell>
+                            {health?.pricingRules && (
+                              <TableCell>
+                                {expectedCents != null ? (
+                                  <span
+                                    className={`text-sm ${priceMismatch ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}
+                                    data-testid={`price-expected-${row.id}`}
+                                  >
+                                    ${(expectedCents / 100).toFixed(2)}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground italic text-xs">—</span>
+                                )}
+                              </TableCell>
+                            )}
+                            <TableCell className="text-xs">
+                              {String(s.billingRule || "") || (
+                                <span className="text-muted-foreground italic">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {String(s.billingTerms || "") || (
+                                <span className="text-muted-foreground italic">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {row.status === "ready" && (
+                                <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs" data-testid={`all-status-${row.id}`}>
+                                  <CheckCircle2 className="w-3 h-3 mr-1" /> Ready
+                                </Badge>
+                              )}
+                              {row.status === "needs_review" && (
+                                <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs" data-testid={`all-status-${row.id}`}>
+                                  <AlertTriangle className="w-3 h-3 mr-1" /> Review
+                                </Badge>
+                              )}
+                              {row.status === "ignored" && (
+                                <Badge variant="outline" className="text-xs text-muted-foreground" data-testid={`all-status-${row.id}`}>
+                                  <EyeOff className="w-3 h-3 mr-1" /> Ignored
+                                </Badge>
+                              )}
+                              {row.status === "imported" && (
+                                <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 text-xs" data-testid={`all-status-${row.id}`}>
+                                  <CheckCircle2 className="w-3 h-3 mr-1" /> Imported
+                                </Badge>
+                              )}
+                            </TableCell>
+                            {!isCommitted && (
+                              <TableCell className="text-right pr-6">
+                                <div className="flex items-center justify-end gap-1">
+                                  {row.status !== "imported" && row.status !== "ignored" && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                      onClick={() => applyRowIgnore(row.id)}
+                                      data-testid={`button-all-ignore-${row.id}`}
+                                    >
+                                      Ignore
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+                ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1007,6 +1293,7 @@ export default function ImportResolverPage() {
                     )}
                   </TableBody>
                 </Table>
+                )}
               </div>
             </CardContent>
           </TabsContent>

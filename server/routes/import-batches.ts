@@ -189,6 +189,13 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
         const ignoredCount = rows.filter((r) => r.status === "ignored").length;
         const importedCount = rows.filter((r) => r.status === "imported").length;
 
+        const company = await storage.getCompany(companyId).catch(() => null);
+        const pricingConfig = company?.pricingConfig as
+          | { pricingRules?: unknown }
+          | null
+          | undefined;
+        const pricingRules = pricingConfig?.pricingRules ?? null;
+
         res.json({
           batchId: batch.id,
           status: batch.status,
@@ -198,6 +205,7 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
           ignoredRows: ignoredCount,
           importedRows: importedCount,
           health,
+          pricingRules,
         });
       } catch (err) {
         handleError(res, err);

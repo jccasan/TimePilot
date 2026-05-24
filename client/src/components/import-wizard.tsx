@@ -149,12 +149,16 @@ const SCHEMA_FIELDS: Record<
     { field: "zipCode", label: "Zip Code", required: false, sensitive: false },
     { field: "numberOfDogs", label: "Number of Dogs", required: false, sensitive: false },
     { field: "yardSize", label: "Yard Size", required: false, sensitive: false },
+    { field: "yardSizeTier", label: "Yard Size Tier", required: false, sensitive: false },
     { field: "serviceFrequency", label: "Service Frequency", required: false, sensitive: false },
+    { field: "serviceDay", label: "Service Day", required: false, sensitive: false },
+    { field: "price", label: "Price", required: false, sensitive: false },
+    { field: "billingRule", label: "Billing Rule", required: false, sensitive: false },
+    { field: "billingTerms", label: "Pre/Postpay", required: false, sensitive: false },
     { field: "leadSource", label: "Lead Source", required: false, sensitive: false },
     { field: "status", label: "Status", required: false, sensitive: true },
     { field: "notes", label: "Notes", required: false, sensitive: false },
     { field: "gateCode", label: "Gate Code", required: false, sensitive: false },
-    { field: "serviceDay", label: "Service Day", required: false, sensitive: false },
   ],
   invoices: [
     { field: "invoiceNumber", label: "Invoice Number", required: true, sensitive: false },
@@ -266,7 +270,9 @@ const PLATFORM_CONFIG: Record<
 // Helpers
 
 function parseCSVClient(text: string): { headers: string[]; rows: string[][] } {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
+  const lines = text
+    .split(/\r?\n/)
+    .filter((l) => l.trim() !== "" && !l.trim().startsWith("#"));
   if (lines.length === 0) return { headers: [], rows: [] };
 
   const parseLine = (line: string): string[] => {
