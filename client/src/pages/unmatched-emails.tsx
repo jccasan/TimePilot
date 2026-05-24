@@ -45,6 +45,7 @@ interface ContactResult {
   firstName: string | null;
   lastName: string | null;
   email: string | null;
+  phone: string | null;
 }
 
 const PERSONAL_DOMAINS = new Set([
@@ -181,6 +182,7 @@ function ContactPicker({
                 {c.firstName || ""} {c.lastName || ""}
               </span>
               {c.email && <span className="text-muted-foreground ml-2 text-xs">{c.email}</span>}
+              {c.phone && <span className="text-muted-foreground ml-2 text-xs">{c.phone}</span>}
             </button>
           ))}
         </div>
