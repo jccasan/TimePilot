@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Download,
   Upload,
   FileText,
@@ -52,6 +59,7 @@ interface CrmImportModalProps {
 }
 
 const PREVIEW_LIMIT = 10;
+const IGNORE_SENTINEL = "__ignore__";
 
 // ── Validators ────────────────────────────────────────────────────────────────
 
@@ -224,6 +232,21 @@ function downloadCsv(content: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function rebuildCsvWithRemap(rawText: string, columnRemap: Record<string, string>): string {
+  const lines = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (lines.length === 0) return rawText;
+  const originalHeaders = splitCSVLine(lines[0]).map((h) => h.trim());
+  const remappedHeaders = originalHeaders.map((h) => {
+    const mapped = columnRemap[h];
+    if (mapped && mapped !== IGNORE_SENTINEL) return mapped;
+    return h;
+  });
+  const newFirstLine = remappedHeaders
+    .map((h) => (h.includes(",") || h.includes('"') ? `"${h.replace(/"/g, '""')}"` : h))
+    .join(",");
+  return [newFirstLine, ...lines.slice(1)].join("\n");
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CrmImportModal({
@@ -241,7 +264,8 @@ export function CrmImportModal({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [step, setStep] = useState<"select" | "preview" | "result">("select");
   const [preview, setPreview] = useState<PreviewData | null>(null);
-  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [rawCsvText, setRawCsvText] = useState<string>("");
+  const [columnRemap, setColumnRemap] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
@@ -250,7 +274,8 @@ export function CrmImportModal({
     setSelectedFile(file);
     setResult(null);
     setPreview(null);
-    setValidationErrors({});
+    setColumnRemap({});
+    setRawCsvText("");
   }
 
   function handleClose(val: boolean) {
@@ -258,7 +283,8 @@ export function CrmImportModal({
       setSelectedFile(null);
       setResult(null);
       setPreview(null);
-      setValidationErrors({});
+      setColumnRemap({});
+      setRawCsvText("");
       setStep("select");
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -277,16 +303,17 @@ export function CrmImportModal({
       });
       return;
     }
-    const errors = validatePreview(data, requiredFields);
+    setRawCsvText(text);
+    setColumnRemap({});
     setPreview(data);
-    setValidationErrors(errors);
     setStep("preview");
   }
 
   function handleRetry() {
     setResult(null);
     setSelectedFile(null);
-    setValidationErrors({});
+    setColumnRemap({});
+    setRawCsvText("");
     setStep("select");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -306,13 +333,47 @@ export function CrmImportModal({
     downloadCsv(csv, `${entityLabel.toLowerCase()}_import_errors.csv`);
   }
 
+  function handleRemap(originalCol: string, targetField: string) {
+    setColumnRemap((prev) => ({ ...prev, [originalCol]: targetField }));
+  }
+
+  function getEffectiveHeaders(headers: string[]): string[] {
+    return headers.map((h) => {
+      const mapped = columnRemap[h];
+      if (mapped && mapped !== IGNORE_SENTINEL) return mapped;
+      return h;
+    });
+  }
+
+  function getEffectiveRows(
+    rows: Record<string, string>[],
+    headers: string[],
+  ): Record<string, string>[] {
+    const effectiveHeaders = getEffectiveHeaders(headers);
+    return rows.map((row) => {
+      const newRow: Record<string, string> = {};
+      headers.forEach((orig, idx) => {
+        const key = effectiveHeaders[idx];
+        newRow[key] = row[orig];
+      });
+      return newRow;
+    });
+  }
+
   async function handleUpload() {
     if (!selectedFile) return;
     setUploading(true);
     setResult(null);
     try {
+      const hasRemap = Object.values(columnRemap).some((v) => v && v !== IGNORE_SENTINEL);
+      let fileToUpload: File = selectedFile;
+      if (hasRemap && rawCsvText) {
+        const rebuilt = rebuildCsvWithRemap(rawCsvText, columnRemap);
+        const blob = new Blob([rebuilt], { type: "text/csv" });
+        fileToUpload = new File([blob], selectedFile.name, { type: "text/csv" });
+      }
       const fd = new FormData();
-      fd.append("file", selectedFile);
+      fd.append("file", fileToUpload);
       const res = await fetch(importUrl, {
         method: "POST",
         body: fd,
@@ -352,8 +413,35 @@ export function CrmImportModal({
     }
   }
 
-  const unknownColumns =
+  // ── Derived preview state ─────────────────────────────────────────────────
+
+  // All columns that were originally unrecognized (drives the remap panel)
+  const originallyUnknownCols =
     knownFields && preview ? preview.headers.filter((h) => !knownFields.includes(h)) : [];
+
+  // Badge count: only columns not yet resolved (not remapped and not ignored)
+  const unresolvedCount = originallyUnknownCols.filter((h) => !columnRemap[h]).length;
+
+  // Fields already chosen as remap targets by other columns (prevent duplicate targets)
+  const alreadyRemappedTo = new Set(
+    Object.values(columnRemap).filter((v) => v && v !== IGNORE_SENTINEL),
+  );
+
+  // Recognized fields already present as original headers — remapping another column
+  // to one of these would create a duplicate header.
+  const recognizedOriginalHeaders = new Set(
+    preview?.headers.filter((h) => knownFields?.includes(h)) ?? [],
+  );
+
+  // Effective headers/rows after applying column remappings
+  const effectiveHeaders = preview ? getEffectiveHeaders(preview.headers) : [];
+  const effectiveRows = preview ? getEffectiveRows(preview.rows, preview.headers) : [];
+
+  // Validation runs against the effective (post-remap) data so errors reflect
+  // the field names the server will actually see.
+  const validationErrors: ValidationErrors = preview
+    ? validatePreview({ headers: effectiveHeaders, rows: effectiveRows, totalRows: preview.totalRows }, requiredFields)
+    : {};
 
   // Summarise validation errors across all preview rows
   const totalErrorCells = Object.values(validationErrors).reduce(
@@ -449,13 +537,15 @@ export function CrmImportModal({
                     {totalErrorCells} issue{totalErrorCells !== 1 ? "s" : ""}
                   </Badge>
                 )}
-                {unknownColumns.length > 0 && (
+                {originallyUnknownCols.length > 0 && (
                   <Badge
                     variant="outline"
                     className="text-amber-600 border-amber-300 dark:border-amber-700 dark:text-amber-400 text-xs gap-1"
                   >
                     <AlertCircle className="w-3 h-3" />
-                    {unknownColumns.length} unknown column{unknownColumns.length !== 1 ? "s" : ""}
+                    {unresolvedCount > 0
+                      ? `${unresolvedCount} unresolved column${unresolvedCount !== 1 ? "s" : ""}`
+                      : "All columns mapped"}
                   </Badge>
                 )}
               </div>
@@ -489,14 +579,64 @@ export function CrmImportModal({
               </div>
             )}
 
-            {/* Unknown column warning */}
-            {unknownColumns.length > 0 && (
-              <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-700 dark:text-amber-400 space-y-1">
-                <p className="font-medium">Column mapping notes:</p>
-                <p>
-                  The following columns are not recognized and will be ignored during import:{" "}
-                  <span className="font-mono">{unknownColumns.join(", ")}</span>
+            {/* Column remap panel */}
+            {originallyUnknownCols.length > 0 && (
+              <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 space-y-2">
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                  Unrecognized columns — remap to a known field or mark as ignored
                 </p>
+                <div className="space-y-1.5">
+                  {originallyUnknownCols.map((col) => {
+                    const currentValue = columnRemap[col] ?? "";
+                    const availableFields =
+                      knownFields?.filter(
+                        (f) =>
+                          !recognizedOriginalHeaders.has(f) &&
+                          (!alreadyRemappedTo.has(f) || currentValue === f),
+                      ) ?? [];
+                    return (
+                      <div key={col} className="flex items-center gap-2">
+                        <span
+                          className="font-mono text-xs text-amber-700 dark:text-amber-400 shrink-0 min-w-0 max-w-[140px] truncate"
+                          title={col}
+                        >
+                          {col}
+                        </span>
+                        <span className="text-xs text-amber-600/70 dark:text-amber-500/70 shrink-0">
+                          →
+                        </span>
+                        <Select
+                          value={currentValue}
+                          onValueChange={(val) => handleRemap(col, val)}
+                        >
+                          <SelectTrigger
+                            className="h-7 text-xs flex-1 min-w-0 border-amber-300 dark:border-amber-700 bg-white dark:bg-background"
+                            data-testid={`select-remap-col-${col}`}
+                          >
+                            <SelectValue placeholder="Select a field or ignore" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem
+                              value={IGNORE_SENTINEL}
+                              data-testid={`option-ignore-${col}`}
+                            >
+                              Ignore this column
+                            </SelectItem>
+                            {availableFields.map((f) => (
+                              <SelectItem
+                                key={f}
+                                value={f}
+                                data-testid={`option-remap-${col}-to-${f}`}
+                              >
+                                {f}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -508,27 +648,45 @@ export function CrmImportModal({
                     <th className="px-2 py-1.5 text-left font-medium text-muted-foreground border-b border-border/60 w-10">
                       #
                     </th>
-                    {preview.headers.map((h) => {
-                      const isUnknown = knownFields ? !knownFields.includes(h) : false;
-                      const isRequired = requiredFields.includes(h);
+                    {preview.headers.map((origCol, idx) => {
+                      const effectiveCol = effectiveHeaders[idx];
+                      const wasRemapped = effectiveCol !== origCol;
+                      const isMappedToIgnore = columnRemap[origCol] === IGNORE_SENTINEL;
+                      const isUnknown =
+                        knownFields && !wasRemapped && !isMappedToIgnore
+                          ? !knownFields.includes(origCol)
+                          : false;
+                      const isRequired = requiredFields.includes(effectiveCol);
                       return (
                         <th
-                          key={h}
+                          key={origCol}
                           className={`px-2 py-1.5 text-left font-medium border-b border-border/60 whitespace-nowrap ${
-                            isUnknown
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-muted-foreground"
+                            isMappedToIgnore
+                              ? "text-muted-foreground/40 line-through"
+                              : wasRemapped
+                                ? "text-green-600 dark:text-green-400"
+                                : isUnknown
+                                  ? "text-amber-600 dark:text-amber-400"
+                                  : "text-muted-foreground"
                           }`}
-                          data-testid={`th-crm-preview-col-${h}`}
+                          data-testid={`th-crm-preview-col-${origCol}`}
                         >
-                          {h}
+                          {isMappedToIgnore ? origCol : effectiveCol}
                           {isRequired && (
                             <span className="ml-1 text-destructive" title="Required field">
                               *
                             </span>
                           )}
-                          {isUnknown && !isRequired && (
+                          {isUnknown && !wasRemapped && !isRequired && (
                             <span className="ml-1 text-amber-500 dark:text-amber-400">*</span>
+                          )}
+                          {wasRemapped && (
+                            <span
+                              className="ml-1 text-green-500 dark:text-green-400 font-normal text-[10px] normal-case"
+                              title={`Remapped from "${origCol}"`}
+                            >
+                              (was {origCol})
+                            </span>
                           )}
                         </th>
                       );
@@ -536,7 +694,7 @@ export function CrmImportModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {preview.rows.map((row, rowIdx) => {
+                  {effectiveRows.map((row, rowIdx) => {
                     const rowErrors = validationErrors[rowIdx] ?? {};
                     const hasRowError = Object.keys(rowErrors).length > 0;
                     return (
@@ -552,22 +710,26 @@ export function CrmImportModal({
                         <td className="px-2 py-1.5 text-muted-foreground font-mono">
                           {rowIdx + 2}
                         </td>
-                        {preview.headers.map((h) => {
-                          const cellErr = rowErrors[h];
+                        {effectiveHeaders.map((col, idx) => {
+                          const origCol = preview.headers[idx];
+                          const isMappedToIgnore = columnRemap[origCol] === IGNORE_SENTINEL;
+                          const cellErr = rowErrors[col];
                           return (
                             <td
-                              key={h}
+                              key={col}
                               className={`px-2 py-1.5 max-w-[180px] truncate ${
-                                cellErr
-                                  ? "text-destructive font-medium bg-destructive/10 rounded"
-                                  : ""
+                                isMappedToIgnore
+                                  ? "opacity-30"
+                                  : cellErr
+                                    ? "text-destructive font-medium bg-destructive/10 rounded"
+                                    : ""
                               }`}
-                              title={cellErr ? cellErr.message : row[h] || undefined}
+                              title={cellErr ? cellErr.message : row[col] || undefined}
                               data-testid={
-                                cellErr ? `cell-crm-preview-error-${rowIdx}-${h}` : undefined
+                                cellErr ? `cell-crm-preview-error-${rowIdx}-${col}` : undefined
                               }
                             >
-                              {row[h] || (
+                              {row[col] || (
                                 <span
                                   className={
                                     cellErr
