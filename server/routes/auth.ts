@@ -55,10 +55,21 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
 
       // Fetch role so the frontend can gate import mode UI immediately after login
       const memberships = await storage.getCompaniesForUser(result.user.id);
-      const role = memberships.length > 0 ? memberships[0].role : "tech";
-      const companyId = memberships.length > 0 ? memberships[0].companyId : null;
-      // Pin session to this company so multi-membership users always land in
-      // their original (oldest) tenant rather than a newly-forced one.
+
+      // For the platform admin account, prefer the ScooPilot HQ company so
+      // CRM access is immediately available without needing the company switcher.
+      let preferredMembership = memberships.length > 0 ? memberships[0] : null;
+      const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+      if (adminEmail && result.user.email.toLowerCase() === adminEmail) {
+        const hqCompany = await storage.getCompanyBySlug("scoopilot-hq");
+        if (hqCompany) {
+          const hqMembership = memberships.find((m) => m.companyId === hqCompany.id);
+          if (hqMembership) preferredMembership = hqMembership;
+        }
+      }
+
+      const role = preferredMembership ? preferredMembership.role : "tech";
+      const companyId = preferredMembership ? preferredMembership.companyId : null;
       if (companyId) {
         req.session.activeCompanyId = companyId;
       }

@@ -1105,7 +1105,8 @@ export async function runStartupMigrations(): Promise<void> {
     const hqAdminPassword = process.env.ADMIN_INITIAL_PASSWORD;
     if (hqAdminEmail && hqAdminPassword) {
       // 1. Ensure ScooPilot HQ company exists
-      await client.query(`
+      await client.query(
+        `
         INSERT INTO companies
           (id, name, email, slug, subscription_status, subscription_tier, created_at, updated_at)
         VALUES
@@ -1113,7 +1114,9 @@ export async function runStartupMigrations(): Promise<void> {
            'active'::subscription_status, 'tier_10_plus'::subscription_tier,
            NOW(), NOW())
         ON CONFLICT (slug) DO NOTHING
-      `, [hqAdminEmail.toLowerCase()]);
+      `,
+        [hqAdminEmail.toLowerCase()]
+      );
 
       const hqRow = await client.query(
         `SELECT id FROM companies WHERE slug = 'scoopilot-hq' LIMIT 1`
@@ -1130,10 +1133,13 @@ export async function runStartupMigrations(): Promise<void> {
         });
         const passwordHash = `${salt}:${derivedKey.toString("hex")}`;
 
-        // 3. Upsert the admin's regular user account.
+        // 3. Seed the admin's regular user account on first creation only.
         //    last_login_at is set to NOW() so the first login does not trigger
         //    the "import mode" auto-enable that fires for brand-new accounts.
-        await client.query(`
+        //    ON CONFLICT intentionally does NOT update password_hash — the admin
+        //    may change their password via the UI and that change must persist.
+        await client.query(
+          `
           INSERT INTO users
             (id, email, password_hash, first_name, last_name,
              must_change_password, import_mode, last_login_at,
@@ -1143,20 +1149,21 @@ export async function runStartupMigrations(): Promise<void> {
              false, false, NOW(),
              NOW(), NOW())
           ON CONFLICT (email) DO UPDATE
-            SET password_hash     = EXCLUDED.password_hash,
-                must_change_password = false,
-                updated_at        = NOW()
-        `, [hqAdminEmail.toLowerCase(), passwordHash]);
-
-        const userRow = await client.query(
-          `SELECT id FROM users WHERE email = $1 LIMIT 1`,
-          [hqAdminEmail.toLowerCase()]
+            SET must_change_password = false,
+                updated_at           = NOW()
+        `,
+          [hqAdminEmail.toLowerCase(), passwordHash]
         );
+
+        const userRow = await client.query(`SELECT id FROM users WHERE email = $1 LIMIT 1`, [
+          hqAdminEmail.toLowerCase(),
+        ]);
         const hqUserId: string | null = userRow.rows[0]?.id ?? null;
 
         if (hqUserId) {
           // 4. Link user → ScooPilot HQ company as owner
-          await client.query(`
+          await client.query(
+            `
             INSERT INTO company_users
               (id, company_id, user_id, role, is_active, invite_pending, created_at, updated_at)
             VALUES
@@ -1165,7 +1172,9 @@ export async function runStartupMigrations(): Promise<void> {
               SET role         = 'owner',
                   is_active    = true,
                   updated_at   = NOW()
-          `, [hqCompanyId, hqUserId]);
+          `,
+            [hqCompanyId, hqUserId]
+          );
 
           console.log(
             `[Migration] ScooPilot HQ CRM account ready — company=${hqCompanyId} user=${hqUserId}`
