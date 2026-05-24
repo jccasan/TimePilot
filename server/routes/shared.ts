@@ -497,14 +497,31 @@ export function getStopOnlyOnlyContactIds(
 }
 
 // isAdmin middleware (platform-level admin auth)
+// Accepts either an x-admin-token session OR the regular user session when the
+// logged-in user's email matches ADMIN_EMAIL (isPlatformAdmin).
 export async function isAdmin(req: Request, res: Response, next: NextFunction) {
   const token = req.headers["x-admin-token"] as string;
-  if (!token) return res.status(401).json({ error: "Admin authentication required" });
-  const { validateAdminSession } = await import("../services/admin-auth");
-  const session = await validateAdminSession(token);
-  if (!session) return res.status(401).json({ error: "Invalid or expired session" });
-  req.adminUser = session;
-  next();
+  if (token) {
+    const { validateAdminSession } = await import("../services/admin-auth");
+    const session = await validateAdminSession(token);
+    if (session) {
+      req.adminUser = session;
+      return next();
+    }
+  }
+  // Fallback: accept the platform-admin regular user session
+  const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+  if (adminEmail) {
+    const userId = req.session?.userId as string | undefined;
+    if (userId) {
+      const user = await getUserById(userId);
+      if (user?.email && user.email.toLowerCase() === adminEmail) {
+        req.adminUser = { userId: user.id, email: user.email };
+        return next();
+      }
+    }
+  }
+  return res.status(401).json({ error: "Admin authentication required" });
 }
 
 // ─── Cross-domain helper functions ───────────────────────────────────────────

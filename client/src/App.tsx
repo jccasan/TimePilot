@@ -243,6 +243,15 @@ function Router() {
         <Route path="/crm" component={CrmRouter} />
         <Route path="/lead-response" component={LeadResponseDashboard} />
         <Route path="/unmatched-emails" component={UnmatchedEmails} />
+        {/* Platform admin pages — accessible to isPlatformAdmin regular users */}
+        <Route path="/admin" component={AdminDashboard} />
+        <Route path="/admin/tenants" component={AdminTenants} />
+        <Route path="/admin/analytics" component={AdminAnalytics} />
+        <Route path="/admin/security" component={AdminSecurity} />
+        <Route path="/admin/pricing" component={AdminSubscriptionPricing} />
+        <Route path="/admin/messaging" component={AdminMessaging} />
+        <Route path="/admin/errors" component={AdminErrors} />
+        <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>
@@ -1007,11 +1016,24 @@ function AppContent() {
   }
 
   if (isAdminPath) {
-    return (
-      <AdminAuthProvider>
-        <AdminLayout />
-      </AdminAuthProvider>
-    );
+    // Platform admin using regular session: skip the standalone AdminLayout and
+    // let them fall through to AuthenticatedLayout so AppSidebar (with CRM) is
+    // always visible. Admin routes are registered in the main Router above.
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-screen">
+          <Skeleton className="h-12 w-48" />
+        </div>
+      );
+    }
+    if (!(isAuthenticated && user?.isPlatformAdmin)) {
+      return (
+        <AdminAuthProvider>
+          <AdminLayout />
+        </AdminAuthProvider>
+      );
+    }
+    // isPlatformAdmin — fall through to the regular authenticated layout below
   }
 
   if (isLoading) {

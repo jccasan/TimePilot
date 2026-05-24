@@ -46,6 +46,8 @@ import {
   PhoneIncoming,
   CreditCard,
   Sprout,
+  Shield,
+  Bug,
 } from "lucide-react";
 import {
   Sidebar,
@@ -555,6 +557,56 @@ export function AppSidebar({
                 </SidebarGroup>
               );
             })}
+            {isPlatformAdmin && (
+              <SidebarGroup>
+                <button
+                  onClick={() => toggle("platform")}
+                  className="flex items-center justify-between w-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="button-collapse-platform"
+                >
+                  <span>Platform Admin</span>
+                  {collapsed["platform"] ? (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                </button>
+                {!collapsed["platform"] && (
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {[
+                        { title: "Overview", url: "/admin", icon: LayoutDashboard },
+                        { title: "Tenants", url: "/admin/tenants", icon: Building2 },
+                        { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
+                        { title: "Pricing", url: "/admin/pricing", icon: DollarSign },
+                        { title: "Messaging", url: "/admin/messaging", icon: MessageSquare },
+                        { title: "Errors", url: "/admin/errors", icon: Bug },
+                        { title: "Security", url: "/admin/security", icon: Shield },
+                      ].map((item) => {
+                        const isActive =
+                          item.url === "/admin"
+                            ? location === "/admin"
+                            : location === item.url || location.startsWith(item.url + "/");
+                        return (
+                          <SidebarMenuItem key={item.title}>
+                            <SidebarMenuButton asChild data-active={isActive} tooltip={item.title}>
+                              <Link
+                                href={item.url}
+                                data-testid={`link-admin-${item.title.toLowerCase()}`}
+                                onClick={handleNavClick}
+                              >
+                                <item.icon className="h-4 w-4" />
+                                <span>{item.title}</span>
+                              </Link>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                )}
+              </SidebarGroup>
+            )}
           </>
         )}
       </SidebarContent>
