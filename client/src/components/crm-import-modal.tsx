@@ -4,11 +4,12 @@ import { queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Download, Upload, FileText, CheckCircle2, AlertCircle, ArrowLeft } from "lucide-react";
+import { Download, Upload, FileText, CheckCircle2, AlertCircle, ArrowLeft, RotateCcw } from "lucide-react";
 
 interface SkippedRow {
   row: number;
   reason: string;
+  data?: Record<string, string>;
 }
 
 interface ImportResult {
@@ -76,6 +77,35 @@ function parseCSVPreview(raw: string): PreviewData {
   return { headers, rows, totalRows };
 }
 
+function buildErrorCsv(skipped: SkippedRow[]): string {
+  const dataKeys = skipped.length > 0 && skipped[0].data ? Object.keys(skipped[0].data) : [];
+  const headers = ["row", ...dataKeys, "error_reason"];
+  const escapeCell = (val: string) => {
+    if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+      return `"${val.replace(/"/g, '""')}"`;
+    }
+    return val;
+  };
+  const lines = [
+    headers.join(","),
+    ...skipped.map((s) => {
+      const dataCells = dataKeys.map((k) => escapeCell(s.data?.[k] ?? ""));
+      return [String(s.row), ...dataCells, escapeCell(s.reason)].join(",");
+    }),
+  ];
+  return lines.join("\n");
+}
+
+function downloadCsv(content: string, filename: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export function CrmImportModal({
   open,
   onOpenChange,
@@ -125,6 +155,22 @@ export function CrmImportModal({
     }
     setPreview(data);
     setStep("preview");
+  }
+
+  function handleRetry() {
+    setResult(null);
+    setSelectedFile(null);
+    setStep("select");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  }
+
+  function handleDownloadErrors() {
+    if (!result?.skipped.length) return;
+    const csv = buildErrorCsv(result.skipped);
+    downloadCsv(csv, `${entityLabel.toLowerCase()}_import_errors.csv`);
   }
 
   async function handleUpload() {
@@ -366,18 +412,42 @@ export function CrmImportModal({
                 </div>
               </div>
               {result.skipped.length > 0 && (
-                <div className="space-y-1 max-h-40 overflow-y-auto">
-                  <p className="text-xs font-medium text-muted-foreground">Skipped rows:</p>
-                  {result.skipped.map((s, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-start gap-2 text-xs text-destructive bg-destructive/5 rounded px-2 py-1"
-                      data-testid={`text-crm-import-skip-${idx}`}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground">Skipped rows:</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-xs gap-1"
+                      onClick={handleDownloadErrors}
+                      data-testid="button-crm-import-download-errors"
                     >
-                      <span className="font-mono shrink-0">Row {s.row}:</span>
-                      <span>{s.reason}</span>
-                    </div>
-                  ))}
+                      <Download className="w-3 h-3" />
+                      Error report
+                    </Button>
+                  </div>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {result.skipped.map((s, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-start gap-2 text-xs text-destructive bg-destructive/5 rounded px-2 py-1"
+                        data-testid={`text-crm-import-skip-${idx}`}
+                      >
+                        <span className="font-mono shrink-0">Row {s.row}:</span>
+                        <span>{s.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={handleRetry}
+                    data-testid="button-crm-import-fix-retry"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Fix & Retry — upload a corrected file
+                  </Button>
                 </div>
               )}
               <Button

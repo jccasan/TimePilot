@@ -9,6 +9,23 @@ const csvUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function normalizePhone(phone: string): string | null {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return digits;
+  if (digits.length === 11 && digits[0] === "1") return digits.slice(1);
+  if (digits.length === 0) return null;
+  return null;
+}
+
+function isValidNumericValue(val: string): boolean {
+  if (!val || val.trim() === "") return true;
+  return !isNaN(parseFloat(val.trim())) && isFinite(Number(val.trim()));
+}
+
 function parseCSV(raw: string): Record<string, string>[] {
   const lines = raw.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length < 2) return [];
@@ -465,7 +482,7 @@ export function registerCrmRoutes(app: Express) {
     const header =
       "first_name,last_name,email,phone,company,title,status,source,lead_score,assigned_to,tags";
     const example =
-      "Jane,Smith,jane@example.com,555-0100,Acme Corp,Manager,active,referral,75,john@myco.com,vip;priority";
+      "Jane,Smith,jane@example.com,5551234567,Acme Corp,Manager,active,referral,75,john@myco.com,vip;priority";
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", 'attachment; filename="contacts_import_template.csv"');
     res.send([header, example].join("\n"));
@@ -489,20 +506,50 @@ export function registerCrmRoutes(app: Express) {
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
     const imported: string[] = [];
-    const skipped: { row: number; reason: string }[] = [];
+    const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rowNum = i + 2;
+      const rowData = {
+        first_name: r.first_name || "",
+        last_name: r.last_name || "",
+        email: r.email || "",
+        phone: r.phone || "",
+      };
       if (!r.first_name) {
-        skipped.push({ row: rowNum, reason: "Missing first_name" });
+        skipped.push({ row: rowNum, reason: "Missing first_name", data: rowData });
         continue;
       }
       if (!r.last_name) {
-        skipped.push({ row: rowNum, reason: "Missing last_name" });
+        skipped.push({ row: rowNum, reason: "Missing last_name", data: rowData });
         continue;
       }
       if (!r.email) {
-        skipped.push({ row: rowNum, reason: "Missing email" });
+        skipped.push({ row: rowNum, reason: "Missing email", data: rowData });
+        continue;
+      }
+      if (!isValidEmail(r.email)) {
+        skipped.push({ row: rowNum, reason: `Invalid email format: "${r.email}"`, data: rowData });
+        continue;
+      }
+      let normalizedPhone: string | null = null;
+      if (r.phone) {
+        normalizedPhone = normalizePhone(r.phone);
+        if (normalizedPhone === null) {
+          skipped.push({
+            row: rowNum,
+            reason: `Invalid phone number: "${r.phone}" — expected 10 digits (US) or leave blank`,
+            data: rowData,
+          });
+          continue;
+        }
+      }
+      if (r.lead_score && !isValidNumericValue(r.lead_score)) {
+        skipped.push({
+          row: rowNum,
+          reason: `lead_score must be a number, got: "${r.lead_score}"`,
+          data: rowData,
+        });
         continue;
       }
       try {
@@ -518,8 +565,8 @@ export function registerCrmRoutes(app: Express) {
             companyId,
             firstName: r.first_name,
             lastName: r.last_name,
-            email: r.email,
-            phone: r.phone || null,
+            email: r.email.trim().toLowerCase(),
+            phone: normalizedPhone,
             company: r.company || null,
             title: r.title || null,
             status: r.status || "active",
@@ -531,7 +578,7 @@ export function registerCrmRoutes(app: Express) {
           .returning({ id: crmContacts.id });
         imported.push(ct.id);
       } catch (e: unknown) {
-        skipped.push({ row: rowNum, reason: safeImportError(e) });
+        skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
     res.json({ imported: imported.length, skipped });
@@ -625,12 +672,24 @@ export function registerCrmRoutes(app: Express) {
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
     const imported: string[] = [];
-    const skipped: { row: number; reason: string }[] = [];
+    const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rowNum = i + 2;
+      const rowData = { name: r.name || "", domain: r.domain || "" };
       if (!r.name) {
-        skipped.push({ row: rowNum, reason: "Missing name" });
+        skipped.push({ row: rowNum, reason: "Missing name", data: rowData });
+        continue;
+      }
+      if (
+        r.domain &&
+        !/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$/.test(r.domain.trim())
+      ) {
+        skipped.push({
+          row: rowNum,
+          reason: `Invalid domain format: "${r.domain}"`,
+          data: rowData,
+        });
         continue;
       }
       try {
@@ -647,7 +706,7 @@ export function registerCrmRoutes(app: Express) {
           .returning({ id: crmCompanies.id });
         imported.push(co.id);
       } catch (e: unknown) {
-        skipped.push({ row: rowNum, reason: safeImportError(e) });
+        skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
     res.json({ imported: imported.length, skipped });
@@ -869,12 +928,60 @@ export function registerCrmRoutes(app: Express) {
     const companyId = getCompanyId(req);
     const rows = parseCSV(req.file.buffer.toString("utf-8"));
     const imported: string[] = [];
-    const skipped: { row: number; reason: string }[] = [];
+    const skipped: { row: number; reason: string; data?: Record<string, string> }[] = [];
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rowNum = i + 2;
+      const rowData = {
+        title: r.title || "",
+        value: r.value || "",
+        contact_email: r.contact_email || "",
+      };
       if (!r.title) {
-        skipped.push({ row: rowNum, reason: "Missing title" });
+        skipped.push({ row: rowNum, reason: "Missing title", data: rowData });
+        continue;
+      }
+      if (r.value && !isValidNumericValue(r.value)) {
+        skipped.push({
+          row: rowNum,
+          reason: `value must be a number, got: "${r.value}"`,
+          data: rowData,
+        });
+        continue;
+      }
+      if (r.probability) {
+        if (!isValidNumericValue(r.probability)) {
+          skipped.push({
+            row: rowNum,
+            reason: `probability must be a number (0–100), got: "${r.probability}"`,
+            data: rowData,
+          });
+          continue;
+        }
+        const probNum = parseFloat(r.probability);
+        if (probNum < 0 || probNum > 100) {
+          skipped.push({
+            row: rowNum,
+            reason: `probability must be between 0 and 100, got: "${r.probability}"`,
+            data: rowData,
+          });
+          continue;
+        }
+      }
+      if (r.contact_email && !isValidEmail(r.contact_email)) {
+        skipped.push({
+          row: rowNum,
+          reason: `Invalid contact_email format: "${r.contact_email}"`,
+          data: rowData,
+        });
+        continue;
+      }
+      if (r.expected_close_date && isNaN(Date.parse(r.expected_close_date))) {
+        skipped.push({
+          row: rowNum,
+          reason: `Invalid expected_close_date: "${r.expected_close_date}" — use YYYY-MM-DD`,
+          data: rowData,
+        });
         continue;
       }
       try {
@@ -905,7 +1012,7 @@ export function registerCrmRoutes(app: Express) {
           .values({
             companyId,
             title: r.title,
-            value: isNaN(valueInCents) ? 0 : valueInCents,
+            value: valueInCents,
             currency: r.currency || "USD",
             stage: r.stage || "lead",
             probability: r.probability ? parseInt(r.probability) || 0 : 0,
@@ -918,7 +1025,7 @@ export function registerCrmRoutes(app: Express) {
           .returning({ id: crmDeals.id });
         imported.push(deal.id);
       } catch (e: unknown) {
-        skipped.push({ row: rowNum, reason: safeImportError(e) });
+        skipped.push({ row: rowNum, reason: safeImportError(e), data: rowData });
       }
     }
     res.json({ imported: imported.length, skipped });
