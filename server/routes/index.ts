@@ -84,16 +84,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
-      // Enforce ACL with the resolved identity.
-      // Public objects (visibility="public") are always accessible.
-      // Private objects require the caller to be the ACL owner.
-      // Objects with no ACL metadata fail closed (denied).
-      const canAccess = await _objStorage.canAccessObjectEntity({
-        userId: callerUserId,
-        objectFile,
-      });
-      if (!canAccess) {
-        return res.status(403).json({ error: "Access denied" });
+      // Company logos are always public assets (invoices, portals, signup widget).
+      // If this object is currently set as any company's logoUrl, serve it without
+      // requiring ACL metadata — ACL writes can silently fail in serverless Postgres
+      // environments and we never want a broken logo from a stale ACL state.
+      const isCompanyLogo = await db
+        .execute(sql`SELECT 1 FROM companies WHERE logo_url = ${req.path} LIMIT 1`)
+        .then((r) => r.rows.length > 0);
+
+      if (!isCompanyLogo) {
+        // Enforce ACL with the resolved identity.
+        // Public objects (visibility="public") are always accessible.
+        // Private objects require the caller to be the ACL owner.
+        // Objects with no ACL metadata fail closed (denied).
+        const canAccess = await _objStorage.canAccessObjectEntity({
+          userId: callerUserId,
+          objectFile,
+        });
+        if (!canAccess) {
+          return res.status(403).json({ error: "Access denied" });
+        }
       }
 
       await _objStorage.downloadObject(objectFile, res);
