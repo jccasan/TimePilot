@@ -709,6 +709,27 @@ export async function registerContactsRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get("/api/contacts/search", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      if (req._apiKeyAuth) requireApiKeyScope(req, "crm:read");
+      const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+      const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || "10"), 10) || 10));
+      if (!q) return res.json([]);
+      const results = await storage.getContacts(companyId, { search: q });
+      const trimmed = results.slice(0, limit).map((c) => ({
+        id: c.id,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        email: c.email,
+        phone: c.phone,
+      }));
+      res.json(trimmed);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/contacts/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
