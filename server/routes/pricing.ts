@@ -170,7 +170,16 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
             weekly: z.number().min(0),
             biWeekly: z.number().min(0),
             twiceWeekly: z.number().min(0),
+            monthly: z.number().min(0).optional(),
+            oneTime: z.number().min(0).optional(),
           }),
+          enabledFrequencies: z
+            .object({
+              twiceWeekly: z.boolean().optional(),
+              monthly: z.boolean().optional(),
+            })
+            .optional(),
+          monthlyLinkedToCleanup: z.boolean().optional(),
           perDogRule: z.object({
             incrementDogs: z.number().int().min(1),
             surchargeAmount: z.number().min(0),
@@ -183,6 +192,32 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
               surcharge: z.number().min(0),
             })
           ),
+          firstTimeCleanupConfig: z
+            .object({
+              baseAmount: z.number().min(0),
+              modifiers: z.array(
+                z.object({
+                  id: z.string(),
+                  type: z.enum(["per_unit", "hourly", "flat_fee"]),
+                  label: z.string(),
+                  pricePerUnit: z.number().optional(),
+                  rate: z.number().optional(),
+                  estimatedHours: z.number().optional(),
+                  amount: z.number().optional(),
+                })
+              ),
+              conversionDiscount: z.object({
+                type: z.enum([
+                  "waive",
+                  "discount_amount",
+                  "discount_percent",
+                  "none",
+                ]),
+                discountAmount: z.number().optional(),
+                discountPercent: z.number().optional(),
+              }),
+            })
+            .optional(),
         });
 
         const rules: PricingRulesConfig = rulesSchema.parse(req.body);
@@ -203,6 +238,9 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           existingByName.set(item.name, item);
         }
 
+        const twiceWeeklyEnabled = rules.enabledFrequencies?.twiceWeekly !== false;
+        const monthlyEnabled = rules.enabledFrequencies?.monthly === true;
+
         const frequencies = [
           {
             key: "weekly",
@@ -210,18 +248,32 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
             base: rules.basePrices.weekly,
             unit: "per_week",
           },
-          {
-            key: "twiceWeekly",
-            label: "Twice Weekly Scooping",
-            base: rules.basePrices.twiceWeekly,
-            unit: "per_visit",
-          },
+          ...(twiceWeeklyEnabled
+            ? [
+                {
+                  key: "twiceWeekly",
+                  label: "Twice Weekly Scooping",
+                  base: rules.basePrices.twiceWeekly,
+                  unit: "per_visit",
+                },
+              ]
+            : []),
           {
             key: "biWeekly",
             label: "Bi-Weekly Scooping",
             base: rules.basePrices.biWeekly,
             unit: "per_visit",
           },
+          ...(monthlyEnabled
+            ? [
+                {
+                  key: "monthly",
+                  label: "Monthly Scooping",
+                  base: rules.basePrices.monthly ?? 0,
+                  unit: "per_visit",
+                },
+              ]
+            : []),
         ];
 
         let sortOrder = 1;

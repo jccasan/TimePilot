@@ -13,6 +13,7 @@ import type {
   PricingRulesConfig,
   PricingConfig,
   ServiceBillingRule,
+  CleanupFeeModifier,
 } from "@shared/schema";
 import { DEFAULT_PRICING_RULES } from "@shared/schema";
 import {
@@ -63,6 +64,7 @@ import {
 } from "lucide-react";
 import { YardSizeTierEditor } from "@/components/yard-size-tier-editor";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const CATEGORY_LABELS: Record<string, string> = {
   recurring_service: "Recurring Services",
@@ -191,10 +193,29 @@ function PricingRulesPanel({
   isSaving: boolean;
 }) {
   const [localRules, setLocalRules] = useState<PricingRulesConfig>(rules);
+  const { formatMoney } = useCurrency();
 
   useEffect(() => {
     setLocalRules(rules);
   }, [rules]);
+
+  const twiceWeeklyEnabled = localRules.enabledFrequencies?.twiceWeekly !== false;
+  const monthlyEnabled = localRules.enabledFrequencies?.monthly === true;
+  const monthlyLinked = localRules.monthlyLinkedToCleanup === true;
+  const cleanupConfig = localRules.firstTimeCleanupConfig ?? {
+    baseAmount: 0,
+    modifiers: [] as CleanupFeeModifier[],
+    conversionDiscount: { type: "none" as const },
+  };
+
+  useEffect(() => {
+    if (monthlyLinked && monthlyEnabled) {
+      setLocalRules((prev) => ({
+        ...prev,
+        basePrices: { ...prev.basePrices, monthly: cleanupConfig.baseAmount },
+      }));
+    }
+  }, [monthlyLinked, monthlyEnabled, cleanupConfig.baseAmount]);
 
   const updateBasePrice = (key: keyof PricingRulesConfig["basePrices"], value: string) => {
     const num = value === "" ? 0 : parseFloat(value);
@@ -223,6 +244,82 @@ function PricingRulesPanel({
     setLocalRules((prev) => ({ ...prev, yardSizeTiers: tiers }));
   };
 
+  const toggleFrequency = (key: "twiceWeekly" | "monthly", enabled: boolean) => {
+    setLocalRules((prev) => ({
+      ...prev,
+      enabledFrequencies: { ...prev.enabledFrequencies, [key]: enabled },
+    }));
+  };
+
+  const setMonthlyLinked = (linked: boolean) => {
+    setLocalRules((prev) => {
+      const cfg = prev.firstTimeCleanupConfig;
+      return {
+        ...prev,
+        monthlyLinkedToCleanup: linked,
+        basePrices: {
+          ...prev.basePrices,
+          monthly: linked && cfg ? cfg.baseAmount : prev.basePrices.monthly,
+        },
+      };
+    });
+  };
+
+  const updateCleanupConfig = (updates: Partial<typeof cleanupConfig>) => {
+    const merged = { ...cleanupConfig, ...updates };
+    setLocalRules((prev) => {
+      const updated: PricingRulesConfig = { ...prev, firstTimeCleanupConfig: merged };
+      if (prev.monthlyLinkedToCleanup && updates.baseAmount !== undefined) {
+        updated.basePrices = { ...prev.basePrices, monthly: updates.baseAmount };
+      }
+      return updated;
+    });
+  };
+
+  const addModifier = () => {
+    updateCleanupConfig({
+      modifiers: [
+        ...cleanupConfig.modifiers,
+        { id: String(Date.now()), type: "flat_fee" as const, label: "", amount: 0 },
+      ],
+    });
+  };
+
+  const updateModifier = (id: string, updates: Partial<CleanupFeeModifier>) => {
+    updateCleanupConfig({
+      modifiers: cleanupConfig.modifiers.map((m) => (m.id === id ? { ...m, ...updates } : m)),
+    });
+  };
+
+  const removeModifier = (id: string) => {
+    updateCleanupConfig({
+      modifiers: cleanupConfig.modifiers.filter((m) => m.id !== id),
+    });
+  };
+
+  const computeCleanupTotal = () => {
+    let total = cleanupConfig.baseAmount;
+    for (const mod of cleanupConfig.modifiers) {
+      if (mod.type === "per_unit") total += mod.pricePerUnit ?? 0;
+      else if (mod.type === "hourly") total += (mod.rate ?? 0) * (mod.estimatedHours ?? 1);
+      else if (mod.type === "flat_fee") total += mod.amount ?? 0;
+    }
+    return total;
+  };
+
+  const MODIFIER_TYPE_LABELS: Record<string, string> = {
+    per_unit: "Per unit",
+    hourly: "Hourly",
+    flat_fee: "Flat fee",
+  };
+
+  const CONVERSION_LABELS: Record<string, string> = {
+    waive: "Waive entirely",
+    discount_amount: "Apply fixed discount ($)",
+    discount_percent: "Apply % discount",
+    none: "No change",
+  };
+
   return (
     <Card data-testid="pricing-rules-panel">
       <CardHeader className="pb-2">
@@ -235,6 +332,7 @@ function PricingRulesPanel({
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Base Prices */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -242,51 +340,125 @@ function PricingRulesPanel({
               Base Prices (1 Dog)
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Weekly</label>
-                <div className="flex items-center gap-1">
-                  <span className="text-muted-foreground">$</span>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={localRules.basePrices.weekly}
-                    onChange={(e) => updateBasePrice("weekly", e.target.value)}
-                    data-testid="input-base-weekly"
-                  />
-                </div>
+          <CardContent className="space-y-3">
+            {/* Weekly — always enabled */}
+            <div className="flex items-center gap-3">
+              <div className="w-4 shrink-0" />
+              <span className="text-sm font-medium w-28 shrink-0">Weekly</span>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground text-sm">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={localRules.basePrices.weekly}
+                  onChange={(e) => updateBasePrice("weekly", e.target.value)}
+                  className="w-28"
+                  data-testid="input-base-weekly"
+                />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Bi-Weekly</label>
-                <div className="flex items-center gap-1">
-                  <span className="text-muted-foreground">$</span>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={localRules.basePrices.biWeekly}
-                    onChange={(e) => updateBasePrice("biWeekly", e.target.value)}
-                    data-testid="input-base-biweekly"
-                  />
-                </div>
+            </div>
+
+            {/* Bi-Weekly — always enabled */}
+            <div className="flex items-center gap-3">
+              <div className="w-4 shrink-0" />
+              <span className="text-sm font-medium w-28 shrink-0">Bi-Weekly</span>
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground text-sm">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={localRules.basePrices.biWeekly}
+                  onChange={(e) => updateBasePrice("biWeekly", e.target.value)}
+                  className="w-28"
+                  data-testid="input-base-biweekly"
+                />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Twice Weekly</label>
-                <div className="flex items-center gap-1">
-                  <span className="text-muted-foreground">$</span>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={localRules.basePrices.twiceWeekly}
-                    onChange={(e) => updateBasePrice("twiceWeekly", e.target.value)}
-                    data-testid="input-base-twiceweekly"
-                  />
-                </div>
+            </div>
+
+            {/* Twice Weekly — optional */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  checked={twiceWeeklyEnabled}
+                  onCheckedChange={(c) => toggleFrequency("twiceWeekly", !!c)}
+                  data-testid="checkbox-twice-weekly"
+                />
+                <span
+                  className={`text-sm font-medium w-28 shrink-0 ${!twiceWeeklyEnabled ? "text-muted-foreground" : ""}`}
+                >
+                  Twice Weekly
+                </span>
+                {twiceWeeklyEnabled && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground text-sm">$</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={localRules.basePrices.twiceWeekly}
+                      onChange={(e) => updateBasePrice("twiceWeekly", e.target.value)}
+                      className="w-28"
+                      data-testid="input-base-twiceweekly"
+                    />
+                  </div>
+                )}
               </div>
+              {!twiceWeeklyEnabled && (
+                <p className="text-xs text-muted-foreground pl-7">
+                  Twice weekly will not be included in generated pricing
+                </p>
+              )}
+            </div>
+
+            {/* Monthly — optional with link toggle */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  checked={monthlyEnabled}
+                  onCheckedChange={(c) => toggleFrequency("monthly", !!c)}
+                  data-testid="checkbox-monthly"
+                />
+                <span
+                  className={`text-sm font-medium w-28 shrink-0 ${!monthlyEnabled ? "text-muted-foreground" : ""}`}
+                >
+                  Monthly
+                </span>
+                {monthlyEnabled && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground text-sm">$</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={localRules.basePrices.monthly ?? 0}
+                      onChange={(e) => updateBasePrice("monthly", e.target.value)}
+                      className="w-28"
+                      disabled={monthlyLinked}
+                      data-testid="input-base-monthly"
+                    />
+                  </div>
+                )}
+              </div>
+              {monthlyEnabled && (
+                <div className="flex items-center gap-2 pl-7">
+                  <Switch
+                    checked={monthlyLinked}
+                    onCheckedChange={setMonthlyLinked}
+                    data-testid="switch-monthly-linked"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Charge monthly visits at first-time cleanup fee price
+                  </span>
+                </div>
+              )}
+              {!monthlyEnabled && (
+                <p className="text-xs text-muted-foreground pl-7">
+                  Monthly will not be included in generated pricing
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
 
+        {/* Per-Dog Pricing Rule */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -344,6 +516,7 @@ function PricingRulesPanel({
           </CardContent>
         </Card>
 
+        {/* Yard Size Tiers */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -353,6 +526,254 @@ function PricingRulesPanel({
           </CardHeader>
           <CardContent>
             <YardSizeTierEditor tiers={localRules.yardSizeTiers} onChange={handleYardTiersChange} />
+          </CardContent>
+        </Card>
+
+        {/* First-Time Cleanup Fee */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              First-Time Cleanup Fee
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Applied to the first visit for new clients. Subsequent visits use the recurring price only.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-muted-foreground">Base flat amount</label>
+              <div className="flex items-center gap-1 w-36">
+                <span className="text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={cleanupConfig.baseAmount}
+                  onChange={(e) => {
+                    const num = e.target.value === "" ? 0 : parseFloat(e.target.value);
+                    if (!isNaN(num)) updateCleanupConfig({ baseAmount: num });
+                  }}
+                  data-testid="input-cleanup-base"
+                />
+              </div>
+            </div>
+
+            {cleanupConfig.modifiers.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Modifiers</p>
+                {cleanupConfig.modifiers.map((mod) => (
+                  <div
+                    key={mod.id}
+                    className="border rounded-md p-3 space-y-2"
+                    data-testid={`modifier-row-${mod.id}`}
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Select
+                        value={mod.type}
+                        onValueChange={(v) =>
+                          updateModifier(mod.id, { type: v as "per_unit" | "hourly" | "flat_fee" })
+                        }
+                      >
+                        <SelectTrigger
+                          className="w-32 h-8 text-sm"
+                          data-testid={`select-modifier-type-${mod.id}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(MODIFIER_TYPE_LABELS).map(([v, l]) => (
+                            <SelectItem key={v} value={v}>
+                              {l}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        placeholder="Label (shown on quote)"
+                        value={mod.label}
+                        onChange={(e) => updateModifier(mod.id, { label: e.target.value })}
+                        className="flex-1 min-w-[140px] h-8 text-sm"
+                        data-testid={`input-modifier-label-${mod.id}`}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeModifier(mod.id)}
+                        data-testid={`button-remove-modifier-${mod.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap pl-1">
+                      {mod.type === "per_unit" && (
+                        <>
+                          <span className="text-xs text-muted-foreground">Price per unit</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm text-muted-foreground">$</span>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min={0}
+                              value={mod.pricePerUnit ?? 0}
+                              onChange={(e) =>
+                                updateModifier(mod.id, {
+                                  pricePerUnit: parseFloat(e.target.value) || 0,
+                                })
+                              }
+                              className="w-24 h-8 text-sm"
+                              data-testid={`input-modifier-unit-price-${mod.id}`}
+                            />
+                          </div>
+                        </>
+                      )}
+                      {mod.type === "hourly" && (
+                        <>
+                          <span className="text-xs text-muted-foreground">Rate ($/hr)</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm text-muted-foreground">$</span>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min={0}
+                              value={mod.rate ?? 0}
+                              onChange={(e) =>
+                                updateModifier(mod.id, { rate: parseFloat(e.target.value) || 0 })
+                              }
+                              className="w-24 h-8 text-sm"
+                              data-testid={`input-modifier-rate-${mod.id}`}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground">Est. hours</span>
+                          <Input
+                            type="number"
+                            step="0.5"
+                            min={0}
+                            value={mod.estimatedHours ?? 1}
+                            onChange={(e) =>
+                              updateModifier(mod.id, {
+                                estimatedHours: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            className="w-20 h-8 text-sm"
+                            data-testid={`input-modifier-hours-${mod.id}`}
+                          />
+                        </>
+                      )}
+                      {mod.type === "flat_fee" && (
+                        <>
+                          <span className="text-xs text-muted-foreground">Amount</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm text-muted-foreground">$</span>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min={0}
+                              value={mod.amount ?? 0}
+                              onChange={(e) =>
+                                updateModifier(mod.id, { amount: parseFloat(e.target.value) || 0 })
+                              }
+                              className="w-24 h-8 text-sm"
+                              data-testid={`input-modifier-amount-${mod.id}`}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addModifier}
+              data-testid="button-add-modifier"
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add modifier
+            </Button>
+
+            <div className="flex items-center gap-2 border-t pt-3">
+              <span className="text-sm font-medium">Total first-visit fee:</span>
+              <span className="text-sm font-semibold" data-testid="text-cleanup-total">
+                {formatMoney(computeCleanupTotal())}
+              </span>
+            </div>
+
+            <div className="space-y-2 border-t pt-3">
+              <p className="text-sm font-medium">When client converts to recurring service</p>
+              <Select
+                value={cleanupConfig.conversionDiscount.type}
+                onValueChange={(v) =>
+                  updateCleanupConfig({
+                    conversionDiscount: {
+                      ...cleanupConfig.conversionDiscount,
+                      type: v as "waive" | "discount_amount" | "discount_percent" | "none",
+                    },
+                  })
+                }
+              >
+                <SelectTrigger className="w-56" data-testid="select-conversion-discount">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CONVERSION_LABELS).map(([v, l]) => (
+                    <SelectItem key={v} value={v}>
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {cleanupConfig.conversionDiscount.type === "discount_amount" && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Reduce by</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-muted-foreground">$</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={cleanupConfig.conversionDiscount.discountAmount ?? 0}
+                      onChange={(e) =>
+                        updateCleanupConfig({
+                          conversionDiscount: {
+                            ...cleanupConfig.conversionDiscount,
+                            discountAmount: parseFloat(e.target.value) || 0,
+                          },
+                        })
+                      }
+                      className="w-24"
+                      data-testid="input-discount-amount"
+                    />
+                  </div>
+                </div>
+              )}
+              {cleanupConfig.conversionDiscount.type === "discount_percent" && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Reduce by</span>
+                  <Input
+                    type="number"
+                    step="1"
+                    min={0}
+                    max={100}
+                    value={cleanupConfig.conversionDiscount.discountPercent ?? 0}
+                    onChange={(e) =>
+                      updateCleanupConfig({
+                        conversionDiscount: {
+                          ...cleanupConfig.conversionDiscount,
+                          discountPercent: parseFloat(e.target.value) || 0,
+                        },
+                      })
+                    }
+                    className="w-20"
+                    data-testid="input-discount-percent"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 

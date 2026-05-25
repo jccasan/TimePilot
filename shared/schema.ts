@@ -126,6 +126,26 @@ export const priceRecommendationSourceEnum = pgEnum("price_recommendation_source
 ]);
 export const contactTypeEnum = pgEnum("contact_type", ["residential", "commercial"]);
 
+export interface CleanupFeeModifier {
+  id: string;
+  type: "per_unit" | "hourly" | "flat_fee";
+  label: string;
+  pricePerUnit?: number;
+  rate?: number;
+  estimatedHours?: number;
+  amount?: number;
+}
+
+export interface FirstTimeCleanupConfig {
+  baseAmount: number;
+  modifiers: CleanupFeeModifier[];
+  conversionDiscount: {
+    type: "waive" | "discount_amount" | "discount_percent" | "none";
+    discountAmount?: number;
+    discountPercent?: number;
+  };
+}
+
 export interface PricingRulesConfig {
   basePrices: {
     weekly: number;
@@ -134,6 +154,11 @@ export interface PricingRulesConfig {
     monthly?: number;
     oneTime?: number;
   };
+  enabledFrequencies?: {
+    twiceWeekly?: boolean;
+    monthly?: boolean;
+  };
+  monthlyLinkedToCleanup?: boolean;
   perDogRule: {
     incrementDogs: number;
     surchargeAmount: number;
@@ -144,6 +169,7 @@ export interface PricingRulesConfig {
     upToAcres: number | null;
     surcharge: number;
   }>;
+  firstTimeCleanupConfig?: FirstTimeCleanupConfig;
 }
 
 export const DEFAULT_PRICING_RULES: PricingRulesConfig = {
@@ -151,7 +177,13 @@ export const DEFAULT_PRICING_RULES: PricingRulesConfig = {
     weekly: 19.99,
     biWeekly: 26.99,
     twiceWeekly: 17.99,
+    monthly: 0,
   },
+  enabledFrequencies: {
+    twiceWeekly: true,
+    monthly: false,
+  },
+  monthlyLinkedToCleanup: false,
   perDogRule: {
     incrementDogs: 1,
     surchargeAmount: 5.0,
@@ -162,6 +194,11 @@ export const DEFAULT_PRICING_RULES: PricingRulesConfig = {
     { name: "Large", upToAcres: 0.5, surcharge: 10.0 },
     { name: "Very Large", upToAcres: null, surcharge: 20.0 },
   ],
+  firstTimeCleanupConfig: {
+    baseAmount: 0,
+    modifiers: [],
+    conversionDiscount: { type: "none" },
+  },
 };
 
 export interface PricingConfig {
