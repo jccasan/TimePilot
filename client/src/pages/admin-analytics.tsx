@@ -1398,7 +1398,9 @@ function CustomerCostsTab() {
                       const voiceTip = `${r.voiceMinutes} min × $0.50 = ${cFmt(r.voiceCostCents)}`;
                       const stripeTip = r.stripeFeesPassedThrough
                         ? "Passed to customers"
-                        : `${r.paidInvoiceCount} inv × $0.30 + $${Number(r.paidInvoiceTotal ?? 0).toFixed(2)} × 2.9% = ${cFmt(r.stripeFeesCents)}`;
+                        : r.stripeFeesOnConnect
+                          ? `On connected account (direct charges) — platform pays $0`
+                          : `${r.paidInvoiceCount} inv × $0.30 + $${Number(r.paidInvoiceTotal ?? 0).toFixed(2)} × 2.9% = ${cFmt(r.stripeFeesCents)}`;
                       const infraTip = `Plan weight allocation = ${cFmt(r.allocatedInfraCents)}`;
                       const totalTip = `SMS ${cFmt(r.smsCostCents)} + Email ${cFmt(r.emailCostCents)} + Voice ${cFmt(r.voiceCostCents)} + Stripe ${cFmt(r.stripeFeesCents)} + Infra ${cFmt(r.allocatedInfraCents)} = ${cFmt(r.totalCostCents)}`;
                       const marginTip = `MRR ${cFmt(r.mrrCents)} − SMS ${cFmt(r.smsCostCents)} − Email ${cFmt(r.emailCostCents)} − Voice ${cFmt(r.voiceCostCents)} − Stripe ${cFmt(r.stripeFeesCents)} − Infra ${cFmt(r.allocatedInfraCents)} = ${cFmt(r.netMarginCents)}`;
@@ -1436,6 +1438,14 @@ function CustomerCostsTab() {
                                       className="text-[10px] px-1 py-0 border-blue-400 text-blue-600 dark:text-blue-400"
                                     >
                                       fees→customer
+                                    </Badge>
+                                  )}
+                                  {r.stripeFeesOnConnect && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] px-1 py-0 border-green-500 text-green-600 dark:text-green-400"
+                                    >
+                                      direct charges
                                     </Badge>
                                   )}
                                 </div>

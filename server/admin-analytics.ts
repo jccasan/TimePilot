@@ -140,10 +140,14 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: RequestHandl
         const emailCost = (totalEmailCount * EMAIL_COST_PER_UNIT_CENTS) / 10000;
         const voiceCost = (totalVoiceMin * VOICE_COST_PER_MINUTE_CENTS) / 100;
 
-        const paidInvs30d = await db
+        const allPaidInvs30d = await db
           .select()
           .from(invoices)
           .where(and(eq(invoices.status, "paid"), gte(invoices.paidAt, thirtyDaysAgo)));
+        const nonConnectIds30d = new Set(
+          allCompanies.filter((c) => !c.stripeConnectOnboarded).map((c) => c.id)
+        );
+        const paidInvs30d = allPaidInvs30d.filter((inv) => nonConnectIds30d.has(inv.companyId));
         const paidTotal30d = paidInvs30d.reduce((s, inv) => s + parseFloat(inv.total), 0);
         const stripeFees =
           (paidTotal30d * STRIPE_PCT) / 100 + (paidInvs30d.length * STRIPE_FIXED_CENTS) / 100;
@@ -389,9 +393,18 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: RequestHandl
       const refundCount = refundedInvoices.length;
       const refundAmount = refundedInvoices.reduce((sum, i) => sum + parseFloat(i.total), 0);
 
-      const paidTotal = paidInvoices.reduce((sum, i) => sum + parseFloat(i.total), 0);
+      const billingCompanies = await db
+        .select({ id: companies.id, stripeConnectOnboarded: companies.stripeConnectOnboarded })
+        .from(companies);
+      const nonConnectBillingIds = new Set(
+        billingCompanies.filter((c) => !c.stripeConnectOnboarded).map((c) => c.id)
+      );
+      const platformPaidInvoices = paidInvoices.filter((inv) =>
+        nonConnectBillingIds.has(inv.companyId)
+      );
+      const paidTotal = platformPaidInvoices.reduce((sum, i) => sum + parseFloat(i.total), 0);
       const totalStripeFees =
-        (paidTotal * STRIPE_PCT) / 100 + (paidInvoices.length * STRIPE_FIXED_CENTS) / 100;
+        (paidTotal * STRIPE_PCT) / 100 + (platformPaidInvoices.length * STRIPE_FIXED_CENTS) / 100;
 
       const invoicesByStatus: Record<string, number> = {};
       for (const inv of allInvoices) {
@@ -851,11 +864,11 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: RequestHandl
             const emailCostCents = Math.round((emailCount * EMAIL_COST_PER_UNIT_CENTS) / 100);
             const voiceCostCents = voiceMinutes * VOICE_COST_PER_MINUTE_CENTS;
             const stripeFeesPassedThrough = !!c.passStripeFees;
-            const stripeFeesCents = stripeFeesPassedThrough
-              ? 0
-              : Math.round(paidTotal * STRIPE_PCT) + paidInvs.length * STRIPE_FIXED_CENTS;
+            const stripeFeesOnConnect = !!c.stripeConnectOnboarded;
             const rawStripeFeesCents =
               Math.round(paidTotal * STRIPE_PCT) + paidInvs.length * STRIPE_FIXED_CENTS;
+            const stripeFeesCents =
+              stripeFeesPassedThrough || stripeFeesOnConnect ? 0 : rawStripeFeesCents;
 
             const accountWeight = getPlanWeight(c.subscriptionTier);
             const allocatedInfraCents = Math.round(accountWeight * fixedCostPerWeight * 100);
@@ -893,6 +906,7 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: RequestHandl
               stripeFeesCents,
               rawStripeFeesCents,
               stripeFeesPassedThrough,
+              stripeFeesOnConnect,
               paidInvoiceCount: paidInvs.length,
               paidInvoiceTotal: Math.round(paidTotal * 100) / 100,
               allocatedInfraCents,
@@ -957,6 +971,9 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: RequestHandl
         const avgRevenuePerAccount =
           currentActiveAccounts > 0 ? currentMrr / currentActiveAccounts : 0;
 
+        const nonConnectCompanyIds = new Set(
+          allCompanies.filter((c) => !c.stripeConnectOnboarded).map((c) => c.id)
+        );
         const months: any[] = [];
         for (let i = 5; i >= 0; i--) {
           const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -978,12 +995,15 @@ export function registerAdminAnalyticsRoutes(app: Express, isAdmin: RequestHandl
             0
           );
 
-          const monthPaidInvoices = await db
+          const allMonthPaidInvoices = await db
             .select()
             .from(invoices)
             .where(
               and(eq(invoices.status, "paid"), gte(invoices.paidAt, d), lte(invoices.paidAt, mEnd))
             );
+          const monthPaidInvoices = allMonthPaidInvoices.filter((inv) =>
+            nonConnectCompanyIds.has(inv.companyId)
+          );
           const paidTotal = monthPaidInvoices.reduce((s, inv) => s + parseFloat(inv.total), 0);
           const stripeFees =
             (paidTotal * STRIPE_PCT) / 100 + (monthPaidInvoices.length * STRIPE_FIXED_CENTS) / 100;

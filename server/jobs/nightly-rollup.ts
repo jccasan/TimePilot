@@ -80,7 +80,9 @@ export async function runNightlyRollup() {
       const paymentsGrossCents = Math.round(parseFloat(grossResult?.total ?? "0") * 100);
 
       const stripeFees =
-        paymentsCount > 0 ? Math.round(paymentsGrossCents * 0.029 + paymentsCount * 30) : 0;
+        paymentsCount > 0 && !company.stripeConnectOnboarded
+          ? Math.round(paymentsGrossCents * 0.029 + paymentsCount * 30)
+          : 0;
       const paymentsNetCents = paymentsGrossCents - stripeFees;
 
       const [smsOutResult] = await db
