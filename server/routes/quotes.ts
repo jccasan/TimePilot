@@ -546,6 +546,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         propertyId,
         expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
         images: parsed.data.images?.map((img) => ({ ...img, sqft: img.sqft ?? undefined })),
+        discountValue: parsed.data.discountValue != null ? String(parsed.data.discountValue) : null,
       };
 
       const quote = await storage.createQuote(quoteData);

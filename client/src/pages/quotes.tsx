@@ -1363,9 +1363,7 @@ function CreateEditQuoteDialog({
       setFrequency(quote.frequency || "weekly");
       setIsFirstTime(quote.isFirstTime !== false);
       setDiscountType((quote.discountType as "percent" | "amount") || "");
-      setDiscountValue(
-        quote.discountValue ? String(parseFloat(String(quote.discountValue))) : ""
-      );
+      setDiscountValue(quote.discountValue ? String(parseFloat(String(quote.discountValue))) : "");
       setDiscountLabel(quote.discountLabel || "");
       setNotes(quote.notes || "");
       setInternalNotes(quote.internalNotes || "");
@@ -2837,7 +2835,9 @@ function CreateEditQuoteDialog({
                 <Label className="text-xs text-muted-foreground mb-1 block">Type</Label>
                 <Select
                   value={discountType || "none"}
-                  onValueChange={(v) => setDiscountType(v === "none" ? "" : (v as "percent" | "amount"))}
+                  onValueChange={(v) =>
+                    setDiscountType(v === "none" ? "" : (v as "percent" | "amount"))
+                  }
                 >
                   <SelectTrigger className="w-36" data-testid="select-discount-type">
                     <SelectValue />
@@ -2868,7 +2868,9 @@ function CreateEditQuoteDialog({
               )}
               {discountType && (
                 <div className="flex-1 min-w-[180px]">
-                  <Label className="text-xs text-muted-foreground mb-1 block">Description (shown to customer)</Label>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    Description (shown to customer)
+                  </Label>
                   <Input
                     value={discountLabel}
                     onChange={(e) => setDiscountLabel(e.target.value)}
