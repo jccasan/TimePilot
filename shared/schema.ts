@@ -292,7 +292,7 @@ export const TIER_CONFIG = {
     maxUsers: 1,
     maxContacts: null as number | null,
     price: 10,
-    additionalUserPrice: 7,
+    additionalUserPrice: 15,
     visible: true,
   },
   tier_1: {
@@ -321,7 +321,7 @@ export const TIER_CONFIG = {
   },
   tier_6_10: {
     name: "Agency",
-    maxUsers: 12,
+    maxUsers: 999,
     maxContacts: null as number | null,
     price: 219,
     additionalUserPrice: 7,
