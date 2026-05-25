@@ -2,6 +2,8 @@
   "name": "ScooPilot - Pet Waste Removal",
   "short_name": "ScooPilot",
   "description": "Professional pet waste removal management platform",
+  "id": "scoopilot",
+  "scope": "/",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
