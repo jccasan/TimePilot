@@ -3024,6 +3024,9 @@ export const quotes = pgTable(
       jsonb("line_items").$type<
         { pricingItemId: string; name: string; unitPrice: number; quantity: number }[]
       >(),
+    discountType: discountTypeEnum("discount_type"),
+    discountValue: decimal("discount_value", { precision: 10, scale: 2 }).default("0"),
+    discountLabel: varchar("discount_label", { length: 255 }),
     notes: text("notes"),
     internalNotes: text("internal_notes"),
     expiresAt: timestamp("expires_at"),

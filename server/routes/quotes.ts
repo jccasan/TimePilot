@@ -480,6 +480,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       )
       .nullable()
       .optional(),
+    discountType: z.enum(["percent", "amount"]).nullable().optional(),
+    discountValue: z.coerce.number().min(0).nullable().optional(),
+    discountLabel: z.string().max(255).nullable().optional(),
     notes: z.string().max(5000).nullable().optional(),
     internalNotes: z.string().max(5000).nullable().optional(),
     expiresAt: z.string().nullable().optional(),

@@ -1303,6 +1303,13 @@ function CreateEditQuoteDialog({
     quote?.frequency || (quoteType === "residential" ? "weekly" : "1x_weekly")
   );
   const [isFirstTime, setIsFirstTime] = useState(quote?.isFirstTime !== false);
+  const [discountType, setDiscountType] = useState<"percent" | "amount" | "">(
+    (quote?.discountType as "percent" | "amount") || ""
+  );
+  const [discountValue, setDiscountValue] = useState(
+    quote?.discountValue ? String(parseFloat(String(quote.discountValue))) : ""
+  );
+  const [discountLabel, setDiscountLabel] = useState(quote?.discountLabel || "");
   const [notes, setNotes] = useState(quote?.notes || "");
   const [internalNotes, setInternalNotes] = useState(quote?.internalNotes || "");
   const [livePricing, setLivePricing] = useState<TierPricing | null>(null);
@@ -1355,6 +1362,11 @@ function CreateEditQuoteDialog({
       setSiteSqft(quote.siteSqft || 0);
       setFrequency(quote.frequency || "weekly");
       setIsFirstTime(quote.isFirstTime !== false);
+      setDiscountType((quote.discountType as "percent" | "amount") || "");
+      setDiscountValue(
+        quote.discountValue ? String(parseFloat(String(quote.discountValue))) : ""
+      );
+      setDiscountLabel(quote.discountLabel || "");
       setNotes(quote.notes || "");
       setInternalNotes(quote.internalNotes || "");
       setQuoteImages(
@@ -1796,6 +1808,9 @@ function CreateEditQuoteDialog({
         .filter(Boolean)
         .join(", "),
       frequency,
+      discountType: discountType || null,
+      discountValue: discountValue ? parseFloat(discountValue) : null,
+      discountLabel: discountLabel || null,
       notes: notes || null,
       internalNotes: internalNotes || null,
       isFirstTime,
@@ -2813,6 +2828,56 @@ function CreateEditQuoteDialog({
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="space-y-3">
+            <Label>Discount (optional)</Label>
+            <div className="flex flex-wrap gap-3 items-end">
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">Type</Label>
+                <Select
+                  value={discountType || "none"}
+                  onValueChange={(v) => setDiscountType(v === "none" ? "" : (v as "percent" | "amount"))}
+                >
+                  <SelectTrigger className="w-36" data-testid="select-discount-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No discount</SelectItem>
+                    <SelectItem value="amount">$ Fixed amount</SelectItem>
+                    <SelectItem value="percent">% Percentage</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {discountType && (
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">
+                    {discountType === "percent" ? "Percent off" : "Amount off ($)"}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={discountType === "percent" ? 1 : 0.01}
+                    className="w-28"
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
+                    placeholder={discountType === "percent" ? "e.g. 10" : "e.g. 5.00"}
+                    data-testid="input-discount-value"
+                  />
+                </div>
+              )}
+              {discountType && (
+                <div className="flex-1 min-w-[180px]">
+                  <Label className="text-xs text-muted-foreground mb-1 block">Description (shown to customer)</Label>
+                  <Input
+                    value={discountLabel}
+                    onChange={(e) => setDiscountLabel(e.target.value)}
+                    placeholder="e.g. Referral discount, Loyalty reward..."
+                    data-testid="input-discount-label"
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

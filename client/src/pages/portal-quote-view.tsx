@@ -55,6 +55,9 @@ interface PortalQuote {
   acceptedAt?: string;
   lineItems?: LineItem[] | null;
   approvalEnabled?: boolean;
+  discountType?: string | null;
+  discountValue?: string | null;
+  discountLabel?: string | null;
 }
 
 const SERVICE_DAYS = [
@@ -233,9 +236,18 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     );
   }
 
-  const essentialPrice = parseFloat(quote.essentialPrice || "0");
-  const premiumPrice = parseFloat(quote.premiumPrice || "0");
-  const deluxePrice = parseFloat(quote.deluxePrice || "0");
+  const essentialPriceRaw = parseFloat(quote.essentialPrice || "0");
+  const premiumPriceRaw = parseFloat(quote.premiumPrice || "0");
+  const deluxePriceRaw = parseFloat(quote.deluxePrice || "0");
+  const discountAmt = (base: number) => {
+    if (!quote.discountType || !quote.discountValue) return 0;
+    const v = parseFloat(quote.discountValue);
+    if (!v) return 0;
+    return quote.discountType === "percent" ? base * (v / 100) : v;
+  };
+  const essentialPrice = Math.max(0, essentialPriceRaw - discountAmt(essentialPriceRaw));
+  const premiumPrice = Math.max(0, premiumPriceRaw - discountAmt(premiumPriceRaw));
+  const deluxePrice = Math.max(0, deluxePriceRaw - discountAmt(deluxePriceRaw));
   const hasLineItems = Array.isArray(quote.lineItems) && quote.lineItems.length > 0;
   const allPricesIdentical =
     quote.type === "residential" && essentialPrice === premiumPrice && premiumPrice === deluxePrice;
@@ -419,10 +431,24 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
           <Card className="mb-6" data-testid="card-single-price">
             <CardContent className="p-8 text-center">
               <p className="text-sm text-muted-foreground mb-2">Service Price</p>
+              {quote.discountType && quote.discountValue && parseFloat(quote.discountValue) > 0 && (
+                <p className="text-sm line-through text-muted-foreground mb-0.5">
+                  {formatMoney(essentialPriceRaw)}
+                </p>
+              )}
               <p className="text-4xl font-bold text-green-700 mb-1">
                 {formatMoney(essentialPrice)}
                 <span className="text-base font-normal text-muted-foreground">/visit</span>
               </p>
+              {quote.discountType && quote.discountValue && parseFloat(quote.discountValue) > 0 && (
+                <p className="text-sm text-green-600 font-medium mt-1">
+                  {quote.discountLabel || "Discount applied"}
+                  {" — "}
+                  {quote.discountType === "percent"
+                    ? `${quote.discountValue}% off`
+                    : `${formatMoney(parseFloat(quote.discountValue))} off`}
+                </p>
+              )}
               <p className="text-sm text-muted-foreground mt-2">{frequencyLabel} service</p>
             </CardContent>
           </Card>
