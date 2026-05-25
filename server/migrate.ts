@@ -1338,6 +1338,13 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] depots table and depot_id/default_depot_id columns verified");
 
+    // ── Stripe fee breakdown columns on invoices (Connect audit) ─────────────
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_charge_id VARCHAR(255)`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_application_fee_cents INTEGER`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_processing_fee_cents INTEGER`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_net_cents INTEGER`);
+    console.log("[Migration] invoices: stripe fee breakdown columns verified");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

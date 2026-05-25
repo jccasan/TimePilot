@@ -593,7 +593,13 @@ export async function createCustomerSession(customerId: string): Promise<string 
 export async function retrievePaymentIntentFees(
   paymentIntentId: string,
   stripeAccount?: string | null
-): Promise<{ feeCents: number; netCents: number; grossCents: number } | null> {
+): Promise<{
+  chargeId: string | null;
+  feeCents: number;
+  netCents: number;
+  grossCents: number;
+  applicationFeeCents: number | null;
+} | null> {
   const stripe = getStripe();
   const pi = await stripe.paymentIntents.retrieve(
     paymentIntentId,
@@ -601,14 +607,19 @@ export async function retrievePaymentIntentFees(
     reqOpts(stripeAccount)
   );
   const piData = pi as unknown as Record<string, unknown>;
+  const applicationFeeCents =
+    typeof pi.application_fee_amount === "number" ? pi.application_fee_amount : null;
   const charge = piData.latest_charge as Record<string, unknown> | string | null;
   if (!charge || typeof charge === "string") return null;
+  const chargeId = typeof charge.id === "string" ? charge.id : null;
   const bt = charge.balance_transaction as Record<string, unknown> | string | null;
   if (!bt || typeof bt === "string") return null;
   return {
+    chargeId,
     feeCents: bt.fee as number,
     netCents: bt.net as number,
     grossCents: bt.amount as number,
+    applicationFeeCents,
   };
 }
 

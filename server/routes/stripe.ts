@@ -27,6 +27,7 @@ import {
   getConnectAccountStatus,
   createConnectLoginLink,
   ensureConnectedCustomer,
+  retrievePaymentIntentFees,
 } from "../services/stripe";
 import {
   seedRetellKnowledgeBase,
@@ -49,6 +50,36 @@ import {
   qboAutoSync,
   seedDefaultLeadSources,
 } from "./shared";
+
+async function logInvoicePaymentFees(params: {
+  invoiceId: string;
+  companyId: string;
+  paymentIntentId: string | null | undefined;
+  connectAccountId: string | null | undefined;
+}): Promise<void> {
+  const { invoiceId, companyId, paymentIntentId, connectAccountId } = params;
+  if (!paymentIntentId) return;
+  try {
+    const fees = await retrievePaymentIntentFees(paymentIntentId, connectAccountId);
+    if (!fees) return;
+    await storage.updateInvoice(invoiceId, companyId, {
+      stripeChargeId: fees.chargeId ?? undefined,
+      stripeApplicationFeeCents: fees.applicationFeeCents ?? undefined,
+      stripeProcessingFeeCents: fees.feeCents,
+      stripeNetCents: fees.netCents,
+    });
+    console.log(
+      `[Stripe Fees] invoice=${invoiceId} pi=${paymentIntentId} charge=${fees.chargeId ?? "n/a"} ` +
+        `gross=${fees.grossCents}c stripe_fee=${fees.feeCents}c app_fee=${fees.applicationFeeCents ?? 0}c ` +
+        `net_to_connected=${fees.netCents}c connect_account=${connectAccountId ?? "platform"}`
+    );
+  } catch (feeErr: unknown) {
+    console.warn(
+      `[Stripe Fees] Could not retrieve fee details for invoice ${invoiceId} / PI ${paymentIntentId}: ` +
+        `${feeErr instanceof Error ? feeErr.message : String(feeErr)}`
+    );
+  }
+}
 
 export async function registerStripeRoutes(app: Express): Promise<void> {
   // ================ Stripe Payment Routes ================
@@ -883,6 +914,12 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 `/invoices`
               );
               qboAutoSync(tenantId, invoiceId, "payment");
+              void logInvoicePaymentFees({
+                invoiceId,
+                companyId: tenantId,
+                paymentIntentId: session.payment_intent as string | null,
+                connectAccountId,
+              });
               try {
                 const { advanceBillingOnboarding } = await import("../services/billing-onboarding");
                 await advanceBillingOnboarding(invoiceId, tenantId);
@@ -927,6 +964,12 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   `/invoices`
                 );
                 qboAutoSync(resolvedTenantId, invoiceId, "payment");
+                void logInvoicePaymentFees({
+                  invoiceId,
+                  companyId: resolvedTenantId,
+                  paymentIntentId: session.payment_intent as string | null,
+                  connectAccountId,
+                });
                 try {
                   const { advanceBillingOnboarding } =
                     await import("../services/billing-onboarding");
@@ -1047,6 +1090,12 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 `/invoices`
               );
               qboAutoSync(piTenantId, invoiceId, "payment");
+              void logInvoicePaymentFees({
+                invoiceId,
+                companyId: piTenantId,
+                paymentIntentId: pi.id,
+                connectAccountId,
+              });
               try {
                 const { advanceBillingOnboarding } = await import("../services/billing-onboarding");
                 await advanceBillingOnboarding(invoiceId, piTenantId);
@@ -1085,6 +1134,12 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                   `/invoices`
                 );
                 qboAutoSync(connCompany.id, invoiceId, "payment");
+                void logInvoicePaymentFees({
+                  invoiceId,
+                  companyId: connCompany.id,
+                  paymentIntentId: pi.id,
+                  connectAccountId,
+                });
                 try {
                   const { advanceBillingOnboarding } =
                     await import("../services/billing-onboarding");
