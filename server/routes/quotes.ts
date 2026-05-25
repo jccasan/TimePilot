@@ -581,6 +581,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       if (updateData.quoteNumber === null || updateData.quoteNumber === undefined) {
         delete updateData.quoteNumber;
       }
+      if (typeof updateData.expiresAt === "string") {
+        updateData.expiresAt = new Date(updateData.expiresAt);
+      }
 
       const quote = await storage.updateQuote(
         p(req.params.id),
