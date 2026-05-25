@@ -207,12 +207,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
                 })
               ),
               conversionDiscount: z.object({
-                type: z.enum([
-                  "waive",
-                  "discount_amount",
-                  "discount_percent",
-                  "none",
-                ]),
+                type: z.enum(["waive", "discount_amount", "discount_percent", "none"]),
                 discountAmount: z.number().optional(),
                 discountPercent: z.number().optional(),
               }),

@@ -537,7 +537,8 @@ function PricingRulesPanel({
               First-Time Cleanup Fee
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Applied to the first visit for new clients. Subsequent visits use the recurring price only.
+              Applied to the first visit for new clients. Subsequent visits use the recurring price
+              only.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
