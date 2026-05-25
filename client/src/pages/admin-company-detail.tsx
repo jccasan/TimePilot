@@ -919,9 +919,7 @@ export default function AdminCompanyDetail() {
                         <Button
                           variant={company.crmGrandfathered ? "default" : "outline"}
                           size="sm"
-                          onClick={() =>
-                            crmGrandfatheredMutation.mutate(!company.crmGrandfathered)
-                          }
+                          onClick={() => crmGrandfatheredMutation.mutate(!company.crmGrandfathered)}
                           disabled={crmGrandfatheredMutation.isPending}
                           data-testid="button-toggle-crm-grandfathered"
                         >
