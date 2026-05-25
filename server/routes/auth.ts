@@ -75,11 +75,15 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         req.session.activeCompanyId = companyId;
       }
       let subscriptionStatus: string | null = null;
+      let subscriptionTier: string | null = null;
       let voicePlanStatus: string | null = null;
+      let crmGrandfathered = false;
       if (companyId) {
         const company = await storage.getCompany(companyId);
         subscriptionStatus = company?.subscriptionStatus ?? null;
+        subscriptionTier = company?.subscriptionTier ?? null;
         voicePlanStatus = company?.voicePlanStatus ?? null;
+        crmGrandfathered = company?.crmGrandfathered ?? false;
       }
 
       let setupDone = false;
@@ -106,7 +110,9 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         setupDone,
         sessionToken: req.sessionID,
         subscriptionStatus,
+        subscriptionTier,
         voicePlanStatus,
+        crmGrandfathered,
         isPlatformAdmin,
       });
     } catch (err) {
@@ -164,11 +170,15 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
       const role = activeMembership ? activeMembership.role : "tech";
       const companyId = activeMembership ? activeMembership.companyId : null;
       let subscriptionStatus: string | null = null;
+      let subscriptionTier: string | null = null;
       let voicePlanStatus: string | null = null;
+      let crmGrandfathered = false;
       if (companyId) {
         const company = await storage.getCompany(companyId);
         subscriptionStatus = company?.subscriptionStatus ?? null;
+        subscriptionTier = company?.subscriptionTier ?? null;
         voicePlanStatus = company?.voicePlanStatus ?? null;
+        crmGrandfathered = company?.crmGrandfathered ?? false;
       }
       const hqAdminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
       const isPlatformAdmin = !!(
@@ -181,7 +191,9 @@ export async function registerAuthRoutes(app: Express): Promise<void> {
         role,
         companyId,
         subscriptionStatus,
+        subscriptionTier,
         voicePlanStatus,
+        crmGrandfathered,
         isPlatformAdmin,
       });
     } catch (err) {

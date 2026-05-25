@@ -239,8 +239,16 @@ function Router() {
           </SubscriptionGate>
         </Route>
         <Route path="/command-center" component={CommandCenter} />
-        <Route path="/crm/:rest*" component={CrmRouter} />
-        <Route path="/crm" component={CrmRouter} />
+        <Route path="/crm/:rest*">
+          <SubscriptionGate featureName="CRM" excludedTiers={["tier_starter"]}>
+            <CrmRouter />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/crm">
+          <SubscriptionGate featureName="CRM" excludedTiers={["tier_starter"]}>
+            <CrmRouter />
+          </SubscriptionGate>
+        </Route>
         <Route path="/lead-response" component={LeadResponseDashboard} />
         <Route path="/unmatched-emails" component={UnmatchedEmails} />
         {/* Platform admin pages — accessible to isPlatformAdmin regular users */}

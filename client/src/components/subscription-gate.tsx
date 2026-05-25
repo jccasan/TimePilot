@@ -5,12 +5,14 @@ interface SubscriptionGateProps {
   children: React.ReactNode;
   featureName?: string;
   type?: "subscription" | "voice";
+  excludedTiers?: string[];
 }
 
 export function SubscriptionGate({
   children,
   featureName,
   type = "subscription",
+  excludedTiers,
 }: SubscriptionGateProps) {
   const { user } = useAuth();
 
@@ -30,6 +32,15 @@ export function SubscriptionGate({
     user.subscriptionStatus === "active" || user.subscriptionStatus === "trialing";
   if (!hasSubscription) {
     return <UpgradeWall type="subscription" featureName={featureName} />;
+  }
+
+  if (
+    excludedTiers &&
+    user.subscriptionTier &&
+    excludedTiers.includes(user.subscriptionTier) &&
+    !user.crmGrandfathered
+  ) {
+    return <UpgradeWall type="tier" featureName={featureName} />;
   }
 
   return <>{children}</>;

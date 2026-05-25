@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Lock, Mic } from "lucide-react";
 
 interface UpgradeWallProps {
-  type: "subscription" | "voice";
+  type: "subscription" | "voice" | "tier";
   featureName?: string;
 }
 
 export function UpgradeWall({ type, featureName }: UpgradeWallProps) {
   const isVoice = type === "voice";
+  const isTier = type === "tier";
 
   return (
     <div
@@ -30,12 +31,18 @@ export function UpgradeWall({ type, featureName }: UpgradeWallProps) {
 
           <div className="space-y-2">
             <h2 className="text-xl font-semibold" data-testid="text-upgrade-wall-title">
-              {isVoice ? "Voice Plan Required" : "Upgrade to Access This Feature"}
+              {isVoice
+                ? "Voice Plan Required"
+                : isTier
+                  ? "Upgrade Your Plan"
+                  : "Upgrade to Access This Feature"}
             </h2>
             <p className="text-sm text-muted-foreground" data-testid="text-upgrade-wall-desc">
               {isVoice
                 ? `${featureName ? featureName + " is" : "This feature is"} part of the Voice Agent add-on. Add it to your account to unlock AI-powered call handling.`
-                : `${featureName ? featureName + " is" : "This section is"} available on a full ScooPilot subscription. Upgrade to unlock CRM, scheduling, invoicing, routes, and more.`}
+                : isTier
+                  ? `${featureName ? featureName + " is" : "This feature is"} available on the Solo plan and above. Upgrade to unlock pipeline management, deals, sequences, and campaigns.`
+                  : `${featureName ? featureName + " is" : "This section is"} available on a full ScooPilot subscription. Upgrade to unlock CRM, scheduling, invoicing, routes, and more.`}
             </p>
           </div>
 

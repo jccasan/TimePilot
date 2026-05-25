@@ -1301,7 +1301,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
       const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
 
-      const { name, email, phone, address, voiceNumberPortingStatus } = req.body;
+      const { name, email, phone, address, voiceNumberPortingStatus, crmGrandfathered } = req.body;
       const updates: Record<string, unknown> = {};
       if (name !== undefined) {
         if (typeof name !== "string" || name.trim().length < 2)
@@ -1328,6 +1328,9 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
             .json({ error: "Invalid porting status. Must be pending, in_progress, or complete." });
         }
         updates.voiceNumberPortingStatus = voiceNumberPortingStatus || null;
+      }
+      if (crmGrandfathered !== undefined) {
+        updates.crmGrandfathered = crmGrandfathered === true;
       }
 
       if (Object.keys(updates).length === 0)

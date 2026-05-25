@@ -144,6 +144,18 @@ export function registerCrmRoutes(app: Express) {
     try {
       const ctx = await getCompanyContext(req);
       req.crmCompanyId = ctx.companyId;
+
+      const { storage } = await import("../storage");
+      const company = await storage.getCompany(ctx.companyId);
+      if (
+        company?.subscriptionTier === "tier_starter" &&
+        !company?.crmGrandfathered
+      ) {
+        return res.status(403).json({
+          error: "CRM is not available on the Bootstrap plan. Upgrade to Solo or above to access pipeline management.",
+        });
+      }
+
       next();
     } catch (err: unknown) {
       const e = err as { status?: number; message?: string };

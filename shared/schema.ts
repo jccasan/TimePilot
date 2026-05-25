@@ -253,7 +253,7 @@ export const TIER_CONFIG = {
   tier_starter: {
     name: "Bootstrap",
     maxUsers: 1,
-    maxContacts: 10 as number | null,
+    maxContacts: null as number | null,
     price: 10,
     additionalUserPrice: 7,
     visible: true,
@@ -448,6 +448,7 @@ export const companies = pgTable("companies", {
   newClientDepositEnabled: boolean("new_client_deposit_enabled").notNull().default(false),
   newClientDepositType: varchar("new_client_deposit_type", { length: 10 }),
   newClientDepositValue: decimal("new_client_deposit_value", { precision: 10, scale: 2 }),
+  crmGrandfathered: boolean("crm_grandfathered").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

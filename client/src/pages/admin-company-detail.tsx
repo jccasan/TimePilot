@@ -299,6 +299,30 @@ export default function AdminCompanyDetail() {
       toast({ title: "Update failed", description: err.message, variant: "destructive" }),
   });
 
+  const crmGrandfatheredMutation = useMutation({
+    mutationFn: async (value: boolean) => {
+      const res = await adminRequest("PATCH", `/api/admin/companies/${id}`, {
+        crmGrandfathered: value,
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update CRM grandfathered status");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, value) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies", id] });
+      toast({
+        title: value ? "CRM access grandfathered" : "CRM grandfathering removed",
+        description: value
+          ? "This Bootstrap company retains CRM access."
+          : "This Bootstrap company will now see the CRM upgrade wall.",
+      });
+    },
+    onError: (err: any) =>
+      toast({ title: "Update failed", description: err.message, variant: "destructive" }),
+  });
+
   const resetPasswordMutation = useMutation({
     mutationFn: async ({ userId, newPassword }: { userId: string; newPassword?: string }) => {
       const res = await adminRequest(
@@ -884,6 +908,27 @@ export default function AdminCompanyDetail() {
                         {company.subscriptionStatus}
                       </Badge>
                     </div>
+                    {company.subscriptionTier === "tier_starter" && (
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <span className="text-sm text-muted-foreground">CRM Grandfathered</span>
+                          <p className="text-xs text-muted-foreground">
+                            Grants CRM access to this Bootstrap company
+                          </p>
+                        </div>
+                        <Button
+                          variant={company.crmGrandfathered ? "default" : "outline"}
+                          size="sm"
+                          onClick={() =>
+                            crmGrandfatheredMutation.mutate(!company.crmGrandfathered)
+                          }
+                          disabled={crmGrandfatheredMutation.isPending}
+                          data-testid="button-toggle-crm-grandfathered"
+                        >
+                          {company.crmGrandfathered ? "Grandfathered" : "Gated"}
+                        </Button>
+                      </div>
+                    )}
                     {(company as any).cancelAtPeriodEnd && (company as any).cancelAt && (
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-sm text-muted-foreground">Cancels On</span>

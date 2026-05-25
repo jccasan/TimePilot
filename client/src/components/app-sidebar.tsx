@@ -83,6 +83,7 @@ type MenuItem = {
   adminOnly?: boolean;
   requiresSubscription?: boolean;
   requiresVoice?: boolean;
+  excludedTiers?: string[];
 };
 
 // Nav items accessible to lead_response_operator role
@@ -183,26 +184,28 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
     label: "CRM",
     key: "crm",
     items: [
-      { title: "CRM Dashboard", url: "/crm", icon: Kanban, requiresSubscription: true },
+      { title: "CRM Dashboard", url: "/crm", icon: Kanban, requiresSubscription: true, excludedTiers: ["tier_starter"] },
       {
         title: "Contacts and Leads",
         url: "/crm/contacts",
         icon: Users2,
         requiresSubscription: true,
+        excludedTiers: ["tier_starter"],
       },
-      { title: "Companies", url: "/crm/companies", icon: Building2, requiresSubscription: true },
-      { title: "Deals", url: "/crm/deals", icon: DollarSign, requiresSubscription: true },
-      { title: "Pipeline", url: "/crm/pipeline", icon: BarChart3, requiresSubscription: true },
-      { title: "Tasks", url: "/crm/tasks", icon: ClipboardCheck, requiresSubscription: true },
-      { title: "Emails", url: "/crm/emails", icon: Mail, requiresSubscription: true },
-      { title: "Sequences", url: "/crm/sequences", icon: GitBranch, requiresSubscription: true },
+      { title: "Companies", url: "/crm/companies", icon: Building2, requiresSubscription: true, excludedTiers: ["tier_starter"] },
+      { title: "Deals", url: "/crm/deals", icon: DollarSign, requiresSubscription: true, excludedTiers: ["tier_starter"] },
+      { title: "Pipeline", url: "/crm/pipeline", icon: BarChart3, requiresSubscription: true, excludedTiers: ["tier_starter"] },
+      { title: "Tasks", url: "/crm/tasks", icon: ClipboardCheck, requiresSubscription: true, excludedTiers: ["tier_starter"] },
+      { title: "Emails", url: "/crm/emails", icon: Mail, requiresSubscription: true, excludedTiers: ["tier_starter"] },
+      { title: "Sequences", url: "/crm/sequences", icon: GitBranch, requiresSubscription: true, excludedTiers: ["tier_starter"] },
       {
         title: "Campaigns",
         url: "/crm/campaigns",
         icon: MessageSquare,
         requiresSubscription: true,
+        excludedTiers: ["tier_starter"],
       },
-      { title: "Reports", url: "/crm/reports", icon: TrendingUp, requiresSubscription: true },
+      { title: "Reports", url: "/crm/reports", icon: TrendingUp, requiresSubscription: true, excludedTiers: ["tier_starter"] },
     ],
   },
   {
@@ -264,7 +267,9 @@ export function AppSidebar({
   // Determine plan access
   const isPlatformAdmin = user?.isPlatformAdmin ?? false;
   const subscriptionStatus = user?.subscriptionStatus;
+  const subscriptionTier = user?.subscriptionTier;
   const voicePlanStatus = user?.voicePlanStatus;
+  const crmGrandfathered = user?.crmGrandfathered ?? false;
   const hasMainSubscription =
     isPlatformAdmin || subscriptionStatus === "active" || subscriptionStatus === "trialing";
   const hasVoicePlan = voicePlanStatus === "active";
@@ -298,12 +303,27 @@ export function AppSidebar({
   function isItemLocked(item: MenuItem): boolean {
     if (item.requiresSubscription && !hasMainSubscription) return true;
     if (item.requiresVoice && !hasVoicePlan) return true;
+    if (
+      item.excludedTiers &&
+      subscriptionTier &&
+      item.excludedTiers.includes(subscriptionTier) &&
+      !crmGrandfathered &&
+      !isPlatformAdmin
+    )
+      return true;
     return false;
   }
 
   function getLockTooltip(item: MenuItem): string {
     if (item.requiresVoice && !hasVoicePlan)
       return "Add the Voice Agent plan to access this feature";
+    if (
+      item.excludedTiers &&
+      subscriptionTier &&
+      item.excludedTiers.includes(subscriptionTier) &&
+      !crmGrandfathered
+    )
+      return "Upgrade to the Solo plan to access CRM features";
     return "Upgrade to full plan to access this feature";
   }
 
