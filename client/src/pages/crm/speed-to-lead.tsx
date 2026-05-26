@@ -32,6 +32,8 @@ import {
   AlertTriangle,
   Settings2,
   LayoutList,
+  Radio,
+  Loader2,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { PricingTiersEditor, validatePricingTiers } from "@/components/PricingTiersEditor";
@@ -51,7 +53,6 @@ type LrConfig = {
   pricingTiers?: PricingTier[] | null;
   perDogAdder?: string | number | null;
   firstTimeCleanupFee?: string | number | null;
-  followUpDelayHours?: number | null;
 };
 
 interface DashboardSummary {
@@ -539,10 +540,35 @@ function SetupTab() {
   const [firstTimeCleanupFee, setFirstTimeCleanupFee] = useState<number | null>(
     toNum(lrConfig?.firstTimeCleanupFee)
   );
-  const [followUpDelayHours, setFollowUpDelayHours] = useState<string>(
-    String(lrConfig?.followUpDelayHours ?? 1)
-  );
+  const [provisionAreaCode, setProvisionAreaCode] = useState("");
+  const [portNumber, setPortNumber] = useState("");
   const [tierErrors, setTierErrors] = useState<Record<string, string>>({});
+
+  const provisionNumberMutation = useMutation({
+    mutationFn: async () => {
+      const code = provisionAreaCode.replace(/\D/g, "").slice(0, 3);
+      if (code.length !== 3) throw new Error("Enter a valid 3-digit area code");
+      const res = await apiRequest("POST", "/api/lead-response/provision-number", {
+        areaCode: code,
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Provisioning failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/lead-response/config"] });
+      toast({
+        title: "Number provisioned",
+        description: `Your Lead Response number is ${data.phoneNumber}.`,
+      });
+      setProvisionAreaCode("");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
   useEffect(() => {
     if (lrConfig) {
@@ -555,7 +581,6 @@ function SetupTab() {
       setPricingTiers(lrConfig.pricingTiers ?? []);
       setPerDogAdder(toNum(lrConfig.perDogAdder));
       setFirstTimeCleanupFee(toNum(lrConfig.firstTimeCleanupFee));
-      setFollowUpDelayHours(String(lrConfig.followUpDelayHours ?? 1));
     }
   }, [lrConfig]);
 
@@ -616,7 +641,6 @@ function SetupTab() {
         pricingTiers: effectiveTiers,
         perDogAdder,
         firstTimeCleanupFee,
-        followUpDelayHours: parseInt(followUpDelayHours) || 1,
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -675,25 +699,126 @@ function SetupTab() {
 
   return (
     <div className="space-y-5 max-w-2xl" data-testid="section-lead-response">
-      <div className="space-y-1.5">
-        <Label className="text-sm font-medium">Telnyx Number</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            value={lrConfig.lrPhoneNumber ?? "Not yet assigned"}
-            readOnly
-            className="bg-muted text-muted-foreground flex-1"
-            data-testid="input-lr-phone-number"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => requestNumberChangeMutation.mutate()}
-            disabled={requestNumberChangeMutation.isPending || !!lrConfig.portingRequested}
-            data-testid="button-request-number-change"
-          >
-            {lrConfig.portingRequested ? "Request submitted" : "Request number change"}
-          </Button>
-        </div>
+      {/* Phone Number Section */}
+      <div className="space-y-3">
+        <Label className="text-sm font-medium">Lead Response Phone Number</Label>
+        {lrConfig.lrPhoneNumber ? (
+          <>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground mb-0.5">Your dedicated number</p>
+              <p
+                className="text-lg font-bold font-mono tracking-wide"
+                data-testid="input-lr-phone-number"
+              >
+                {lrConfig.lrPhoneNumber}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => requestNumberChangeMutation.mutate()}
+                disabled={requestNumberChangeMutation.isPending || !!lrConfig.portingRequested}
+                data-testid="button-request-number-change"
+              >
+                {requestNumberChangeMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                ) : null}
+                {lrConfig.portingRequested ? "Change request submitted" : "Request number change"}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-lg border border-dashed p-4 space-y-4">
+            <div className="flex items-start gap-2">
+              <Radio className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">No number assigned yet</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Provision a new number or request porting of your existing business number.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Option A — Get a new number
+              </p>
+              <div className="flex gap-2 items-end">
+                <div className="space-y-1">
+                  <Label htmlFor="provision-area-code" className="text-xs">
+                    Area Code
+                  </Label>
+                  <Input
+                    id="provision-area-code"
+                    value={provisionAreaCode}
+                    onChange={(e) =>
+                      setProvisionAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))
+                    }
+                    placeholder="e.g. 404"
+                    maxLength={3}
+                    className="w-28 h-8 text-sm"
+                    data-testid="input-lr-provision-area-code"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => provisionNumberMutation.mutate()}
+                  disabled={
+                    provisionNumberMutation.isPending || provisionAreaCode.replace(/\D/g, "").length !== 3
+                  }
+                  data-testid="button-provision-number"
+                >
+                  {provisionNumberMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : null}
+                  Provision Number
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                We'll assign a new Telnyx number in your preferred area code.
+              </p>
+            </div>
+
+            <div className="border-t pt-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Option B — Port your existing number
+              </p>
+              <div className="flex gap-2 items-end">
+                <div className="space-y-1">
+                  <Label htmlFor="port-number" className="text-xs">
+                    Your current number
+                  </Label>
+                  <Input
+                    id="port-number"
+                    value={portNumber}
+                    onChange={(e) => setPortNumber(e.target.value)}
+                    placeholder="+1 (555) 000-0000"
+                    className="w-44 h-8 text-sm"
+                    data-testid="input-lr-port-number"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => requestNumberChangeMutation.mutate()}
+                  disabled={
+                    requestNumberChangeMutation.isPending || !!lrConfig.portingRequested || !portNumber.trim()
+                  }
+                  data-testid="button-request-port"
+                >
+                  {requestNumberChangeMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  ) : null}
+                  {lrConfig.portingRequested ? "Port request submitted" : "Request Port"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Porting typically takes 2–4 weeks. Our team will be in touch.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-1.5">
@@ -795,27 +920,6 @@ function SetupTab() {
           maxLength={160}
           data-testid="input-lr-out-of-area-message"
         />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label className="text-sm font-medium">Follow-up Reminder Timing</Label>
-        <p className="text-xs text-muted-foreground">
-          How long after receiving a new lead to send an automated follow-up reminder if no
-          appointment has been scheduled.
-        </p>
-        <Select value={followUpDelayHours} onValueChange={setFollowUpDelayHours}>
-          <SelectTrigger className="w-48" data-testid="select-lr-followup-delay">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="1">1 hour</SelectItem>
-            <SelectItem value="2">2 hours</SelectItem>
-            <SelectItem value="4">4 hours</SelectItem>
-            <SelectItem value="8">8 hours</SelectItem>
-            <SelectItem value="24">24 hours</SelectItem>
-            <SelectItem value="48">48 hours</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="border-t pt-4 space-y-3">

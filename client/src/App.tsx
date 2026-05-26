@@ -96,6 +96,8 @@ const PendingApproval = lazy(() => import("@/pages/pending-approval"));
 const ReviewRouter = lazy(() => import("@/pages/review-router"));
 const ImportResolverPage = lazy(() => import("@/pages/import-resolver-page"));
 const CrmRouter = lazy(() => import("@/pages/crm/index"));
+const VoiceChatAgentPage = lazy(() => import("@/pages/crm/voice-agent"));
+const SpeedToLeadPage = lazy(() => import("@/pages/crm/speed-to-lead"));
 const SignDocumentsPage = lazy(() => import("@/pages/sign-documents-page"));
 const LeadResponseRegisterPage = lazy(() => import("@/pages/lead-response-register"));
 const UnmatchedEmails = lazy(() => import("@/pages/unmatched-emails"));
@@ -238,6 +240,8 @@ function Router() {
           </SubscriptionGate>
         </Route>
         <Route path="/command-center" component={CommandCenter} />
+        <Route path="/crm/voice-agent" component={VoiceChatAgentPage} />
+        <Route path="/crm/speed-to-lead" component={SpeedToLeadPage} />
         <Route path="/crm/:rest*">
           <SubscriptionGate featureName="CRM" excludedTiers={["tier_starter"]}>
             <CrmRouter />

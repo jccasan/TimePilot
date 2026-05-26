@@ -424,7 +424,7 @@ export default function VoiceChatAgentPage() {
                           {cfg.dedicatedPhoneNumber}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          This number is routed to your AI voice agent.
+                          This number is routed to your AI voice/chat agent.
                         </p>
                       </div>
                     ) : cfg?.portingPhoneNumber ? (
@@ -954,7 +954,7 @@ export default function VoiceChatAgentPage() {
                       <PhoneCall className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                       <p className="text-sm text-muted-foreground">No call records yet.</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Calls handled by your voice agent will appear here.
+                        Calls handled by your voice/chat agent will appear here.
                       </p>
                     </div>
                   ) : (

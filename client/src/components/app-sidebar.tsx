@@ -378,7 +378,7 @@ export function AppSidebar({
 
   function getLockTooltip(item: MenuItem): string {
     if (item.requiresVoice && !hasVoicePlan)
-      return "Add the Voice Agent plan to access this feature";
+      return "Add the Voice/Chat Agent plan to access this feature";
     if (
       item.excludedTiers &&
       subscriptionTier &&
