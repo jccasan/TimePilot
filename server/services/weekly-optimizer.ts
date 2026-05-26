@@ -2,6 +2,7 @@ import {
   haversineDistance,
   optimizeRoute,
   optimizeRouteAsync,
+  optimizeRouteAsyncMultiStart,
   buildChunkedDistMap,
   ROUTE_MATRIX_LIMIT,
 } from "./route-optimizer";
@@ -230,7 +231,8 @@ async function splitIntoSubRoutes(
   startPoint?: StartPoint,
   maxStops: number = MAX_STOPS_PER_ROUTE,
   minRoutes: number = 1,
-  maxDurationHours?: number
+  maxDurationHours?: number,
+  candidateStarts?: StartPoint[]
 ): Promise<{ routes: ProposedRoute[]; degraded: boolean }> {
   if (stops.length === 0) return { routes: [], degraded: false };
 
@@ -238,12 +240,13 @@ async function splitIntoSubRoutes(
   const numRoutes = Math.max(minRoutes, numByMax);
 
   if (numRoutes <= 1) {
-    const { stops: optimizedStops, degraded: orderDegraded } = await optimizeStopOrder(
-      stops,
-      startPoint,
-      maxDurationHours
-    );
-    const metrics = await computeDayMetrics(optimizedStops, startPoint);
+    const {
+      stops: optimizedStops,
+      degraded: orderDegraded,
+      bestStart,
+    } = await optimizeStopOrder(stops, startPoint, maxDurationHours, candidateStarts);
+    const effectiveStart = bestStart ?? startPoint;
+    const metrics = await computeDayMetrics(optimizedStops, effectiveStart);
     return {
       routes: [
         {
@@ -268,12 +271,13 @@ async function splitIntoSubRoutes(
         clusters.length > 1
           ? `${capitalize(day)} Route ${String.fromCharCode(65 + idx)}`
           : `${capitalize(day)} Route`;
-      const { stops: optimizedStops, degraded: orderDegraded } = await optimizeStopOrder(
-        cluster,
-        startPoint,
-        maxDurationHours
-      );
-      const metrics = await computeDayMetrics(optimizedStops, startPoint);
+      const {
+        stops: optimizedStops,
+        degraded: orderDegraded,
+        bestStart,
+      } = await optimizeStopOrder(cluster, startPoint, maxDurationHours, candidateStarts);
+      const effectiveStart = bestStart ?? startPoint;
+      const metrics = await computeDayMetrics(optimizedStops, effectiveStart);
       if (orderDegraded || metrics.degraded) anyDegraded = true;
       return {
         routeLabel: label,
@@ -291,8 +295,9 @@ async function splitIntoSubRoutes(
 async function optimizeStopOrder(
   stops: WeeklyStop[],
   startPoint?: StartPoint,
-  maxDurationHours?: number
-): Promise<{ stops: WeeklyStop[]; degraded: boolean }> {
+  maxDurationHours?: number,
+  candidateStarts?: StartPoint[]
+): Promise<{ stops: WeeklyStop[]; degraded: boolean; bestStart?: StartPoint }> {
   if (stops.length <= 1) return { stops, degraded: false };
 
   const routeStops = stops.map((s) => ({
@@ -301,16 +306,25 @@ async function optimizeStopOrder(
     longitude: s.longitude,
   }));
 
-  const internalResult = await optimizeRouteAsync(routeStops, startPoint);
+  // When multiple candidate start points are provided, use the multi-start
+  // optimizer so all depots are evaluated and the best anchor is selected.
+  const hasMultipleCandidates = candidateStarts && candidateStarts.length > 1;
+  const internalResult = hasMultipleCandidates
+    ? await optimizeRouteAsyncMultiStart(routeStops, candidateStarts)
+    : await optimizeRouteAsync(routeStops, startPoint);
+
   let orderedIds: string[];
   let degraded = false;
+  const bestStart = hasMultipleCandidates
+    ? ((internalResult as { bestStart?: StartPoint }).bestStart ?? startPoint)
+    : startPoint;
 
   if (!internalResult.degraded) {
     orderedIds = internalResult.orderedIds;
   } else {
     const routificOptions =
       maxDurationHours != null && maxDurationHours > 0 ? { maxDurationHours } : undefined;
-    const routificResult = await routificOptimize(routeStops, startPoint, routificOptions);
+    const routificResult = await routificOptimize(routeStops, bestStart, routificOptions);
     if (routificResult) {
       orderedIds = routificResult.orderedIds;
     } else {
@@ -325,6 +339,7 @@ async function optimizeStopOrder(
       (a, b) => (orderMap.get(a.servicePlanId) ?? 0) - (orderMap.get(b.servicePlanId) ?? 0)
     ),
     degraded,
+    bestStart,
   };
 }
 
@@ -346,6 +361,9 @@ export async function analyzeWeeklySchedule(
     routePlanningMode?: "stops" | "time";
     avgMinutesPerStop?: number;
     minRouteDurationHours?: number;
+    /** All valid candidate start points. When provided, the optimizer evaluates
+     *  every candidate and picks the one that yields the shortest route. */
+    candidateStarts?: StartPoint[];
   } = {}
 ): Promise<WeeklyOptimizationResult> {
   const {
@@ -359,6 +377,7 @@ export async function analyzeWeeklySchedule(
     routePlanningMode = "stops",
     avgMinutesPerStop = 12,
     minRouteDurationHours,
+    candidateStarts,
   } = options;
 
   // In time-based mode, derive effective max stops from the time budget.
@@ -395,7 +414,8 @@ export async function analyzeWeeklySchedule(
       startPoint,
       effectiveMaxStopsPerDay,
       minRoutesPerDay,
-      maxRouteDurationHours
+      maxRouteDurationHours,
+      candidateStarts
     );
     if (splitDegraded) anyDegraded = true;
     const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
@@ -427,7 +447,8 @@ export async function analyzeWeeklySchedule(
         startPoint,
         effectiveMaxStopsPerDay,
         minRoutesPerDay,
-        maxRouteDurationHours
+        maxRouteDurationHours,
+        candidateStarts
       );
       if (splitDegraded) anyDegraded = true;
       const totalMiles = routes.reduce((s, r) => s + r.estimatedMiles, 0);
@@ -482,7 +503,8 @@ export async function analyzeWeeklySchedule(
           startPoint,
           effectiveMaxStopsPerDay,
           clusterMin[ci],
-          maxRouteDurationHours
+          maxRouteDurationHours,
+          candidateStarts
         );
         if (splitDegraded) anyDegraded = true;
         routes.push(...subRoutes);

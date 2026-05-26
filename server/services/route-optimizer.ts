@@ -406,6 +406,226 @@ export async function optimizeRouteAsync(
   return { ...optimizeRoute(stops, startPoint, distMap), degraded };
 }
 
+// ---------------------------------------------------------------------------
+// Multi-start candidate optimization
+// ---------------------------------------------------------------------------
+
+/** Maximum number of candidate start locations evaluated per route optimization run. */
+export const MAX_CANDIDATE_STARTS = 5;
+
+/** Minimum haversine distance (miles) below which two candidates are considered duplicates. */
+const CANDIDATE_DEDUP_MILES = 0.1;
+
+/**
+ * Removes near-duplicate candidate start points that are within
+ * CANDIDATE_DEDUP_MILES of each other. Preserves order; keeps the first
+ * occurrence of each unique location.
+ */
+export function deduplicateCandidates(candidates: StartPoint[]): StartPoint[] {
+  const result: StartPoint[] = [];
+  for (const c of candidates) {
+    const isDup = result.some(
+      (r) =>
+        haversineDistance(c.latitude, c.longitude, r.latitude, r.longitude) < CANDIDATE_DEDUP_MILES
+    );
+    if (!isDup) result.push(c);
+  }
+  return result;
+}
+
+/**
+ * If candidates exceed `max`, returns the `max` candidates closest to the
+ * geographic centroid of the stops. Otherwise returns the input unchanged.
+ */
+export function selectCandidateStarts(
+  candidates: StartPoint[],
+  stops: Stop[],
+  max: number = MAX_CANDIDATE_STARTS
+): StartPoint[] {
+  if (candidates.length <= max) return candidates;
+  if (stops.length === 0) return candidates.slice(0, max);
+  const cLat = stops.reduce((s, st) => s + st.latitude, 0) / stops.length;
+  const cLon = stops.reduce((s, st) => s + st.longitude, 0) / stops.length;
+  return [...candidates]
+    .sort(
+      (a, b) =>
+        haversineDistance(a.latitude, a.longitude, cLat, cLon) -
+        haversineDistance(b.latitude, b.longitude, cLat, cLon)
+    )
+    .slice(0, max);
+}
+
+/**
+ * Creates a copy of `distMap` where all references to `candidateId` are
+ * aliased to `__start__`. This lets the existing `optimizeRoute` (which
+ * expects `__start__`) work transparently with a shared multi-candidate matrix.
+ */
+function aliasStartInDistMap(distMap: TimeDistMap, candidateId: string): TimeDistMap {
+  if (candidateId === START_ID) return distMap;
+  const aliased: TimeDistMap = new Map();
+  for (const [from, toMap] of distMap) {
+    const newToMap = new Map<string, number>();
+    for (const [to, dist] of toMap) {
+      newToMap.set(to === candidateId ? START_ID : to, dist);
+    }
+    aliased.set(from === candidateId ? START_ID : from, newToMap);
+  }
+  return aliased;
+}
+
+/**
+ * Build a shared distance/time map that includes all stops PLUS all candidate
+ * start points in the fewest possible Mapbox Matrix API calls.
+ *
+ * Candidate IDs in the returned map: `__start_0__`, `__start_1__`, …
+ *
+ * Candidates appear in every chunk so that candidate→stop and stop→candidate
+ * drive-time edges are always populated from real data. Cross-chunk stop→stop
+ * edges not covered by a chunk fall back to haversine inside `getDist`.
+ */
+export async function buildSharedDistMapMultiStart(
+  stops: Stop[],
+  candidateStarts: StartPoint[],
+  companyId?: string | null
+): Promise<{ map: TimeDistMap | undefined; degraded: boolean }> {
+  if (candidateStarts.length === 0) {
+    return buildChunkedDistMap(stops, undefined, companyId);
+  }
+  if (candidateStarts.length === 1) {
+    return buildChunkedDistMap(stops, candidateStarts[0], companyId);
+  }
+
+  const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
+  if (!token) return { map: undefined, degraded: false };
+  if (stops.length < 1 || stops.length > ROUTE_MATRIX_LIMIT) {
+    return { map: undefined, degraded: false };
+  }
+
+  const candidateIds = candidateStarts.map((_, i) => `__start_${i}__`);
+  const slotsForStops = MAPBOX_MATRIX_CAP - candidateStarts.length;
+
+  if (slotsForStops < 2) {
+    // Candidate list is too large to share a chunk — fall back to single-start.
+    return buildChunkedDistMap(stops, candidateStarts[0], companyId);
+  }
+
+  const distMap: TimeDistMap = new Map();
+
+  for (let i = 0; i < stops.length; i += slotsForStops) {
+    const chunk = stops.slice(i, i + slotsForStops);
+    const coords: { latitude: number; longitude: number }[] = [];
+    const chunkIds: string[] = [];
+
+    for (let ci = 0; ci < candidateStarts.length; ci++) {
+      coords.push(candidateStarts[ci]);
+      chunkIds.push(candidateIds[ci]);
+    }
+    for (const s of chunk) {
+      coords.push({ latitude: s.latitude, longitude: s.longitude });
+      chunkIds.push(s.id);
+    }
+    if (coords.length < 2) break;
+
+    const matrix = await fetchDriveTimeMatrix(coords, companyId);
+    if (!matrix) return { map: undefined, degraded: true };
+
+    for (let ri = 0; ri < chunkIds.length; ri++) {
+      if (!distMap.has(chunkIds[ri])) distMap.set(chunkIds[ri], new Map());
+      for (let ci = 0; ci < chunkIds.length; ci++) {
+        if (ri !== ci) distMap.get(chunkIds[ri])!.set(chunkIds[ci], matrix[ri][ci]);
+      }
+    }
+  }
+
+  return distMap.size > 0 ? { map: distMap, degraded: false } : { map: undefined, degraded: false };
+}
+
+/**
+ * Evaluate each candidate start location using the shared distance map,
+ * running the full nearest-neighbour + 2-opt sequence for each. Returns the
+ * best (lowest total drive time) result including the winning start point.
+ *
+ * When `candidateStarts` is empty this falls back to the no-start-point
+ * optimiser (multiple stop-index seeds).
+ */
+export function optimizeRouteMultiStart(
+  stops: Stop[],
+  candidateStarts: StartPoint[],
+  distMap?: TimeDistMap
+): { orderedIds: string[]; totalDistance: number; bestStart?: StartPoint } {
+  if (candidateStarts.length === 0) {
+    return optimizeRoute(stops, undefined, distMap);
+  }
+  if (candidateStarts.length === 1) {
+    return { ...optimizeRoute(stops, candidateStarts[0], distMap), bestStart: candidateStarts[0] };
+  }
+
+  const candidateIds = candidateStarts.map((_, i) => `__start_${i}__`);
+  let bestOrder: string[] = [];
+  let bestDist = Infinity;
+  let bestStartIdx = 0;
+
+  for (let ci = 0; ci < candidateStarts.length; ci++) {
+    const aliasedMap = distMap ? aliasStartInDistMap(distMap, candidateIds[ci]) : undefined;
+    const result = optimizeRoute(stops, candidateStarts[ci], aliasedMap);
+    if (result.totalDistance < bestDist) {
+      bestDist = result.totalDistance;
+      bestOrder = result.orderedIds;
+      bestStartIdx = ci;
+    }
+  }
+
+  return {
+    orderedIds: bestOrder,
+    totalDistance: Math.round(bestDist * 100) / 100,
+    bestStart: candidateStarts[bestStartIdx],
+  };
+}
+
+/**
+ * Async multi-start optimizer: deduplicates and caps candidates, builds a
+ * shared Mapbox matrix covering all stops + all candidates in the minimum
+ * number of API calls, evaluates every candidate with nearest-neighbour +
+ * 2-opt, and returns the best-scoring result.
+ *
+ * Falls back to the single-start async optimizer when only one candidate
+ * remains after deduplication, and to the no-start-point optimizer when there
+ * are none.
+ */
+export async function optimizeRouteAsyncMultiStart(
+  stops: Stop[],
+  candidateStarts: StartPoint[],
+  companyId?: string | null
+): Promise<{
+  orderedIds: string[];
+  totalDistance: number;
+  degraded: boolean;
+  bestStart?: StartPoint;
+}> {
+  const deduped = deduplicateCandidates(candidateStarts);
+  const candidates = selectCandidateStarts(deduped, stops);
+
+  if (candidates.length === 0) {
+    return optimizeRouteAsync(stops, undefined, companyId);
+  }
+  if (candidates.length === 1) {
+    const result = await optimizeRouteAsync(stops, candidates[0], companyId);
+    return { ...result, bestStart: candidates[0] };
+  }
+
+  let distMap: TimeDistMap | undefined;
+  let degraded = false;
+
+  if (stops.length <= ROUTE_MATRIX_LIMIT) {
+    const sharedResult = await buildSharedDistMapMultiStart(stops, candidates, companyId);
+    distMap = sharedResult.map;
+    degraded = sharedResult.degraded;
+  }
+
+  const result = optimizeRouteMultiStart(stops, candidates, distMap);
+  return { ...result, degraded };
+}
+
 export async function fetchMapboxDirections(
   coordinates: { longitude: number; latitude: number }[],
   companyId?: string | null

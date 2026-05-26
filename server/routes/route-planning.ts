@@ -73,6 +73,65 @@ async function resolveStartPoint(
   return undefined;
 }
 
+/**
+ * Collect ALL valid candidate start locations for multi-start optimization.
+ * Returns each distinct depot / company start in priority order; callers
+ * pass the full list to the optimizer, which deduplicates and picks the best.
+ *  1. Route's explicitly assigned depot
+ *  2. Assigned technician's default depot
+ *  3. Company's primary depot
+ *  4. Legacy company start coordinates
+ */
+async function resolveAllCandidateStarts(
+  companyId: string,
+  routeDepotId: string | null | undefined,
+  technicianId: string | null | undefined,
+  company: { startLatitude?: string | null; startLongitude?: string | null }
+): Promise<{ latitude: number; longitude: number }[]> {
+  const candidates: { latitude: number; longitude: number }[] = [];
+
+  if (routeDepotId) {
+    const depot = await storage.getDepotById(routeDepotId, companyId);
+    if (depot) {
+      candidates.push({
+        latitude: parseFloat(String(depot.latitude)),
+        longitude: parseFloat(String(depot.longitude)),
+      });
+    }
+  }
+  if (technicianId) {
+    const [techUser] = await db
+      .select({ defaultDepotId: users.defaultDepotId })
+      .from(users)
+      .where(eq(users.id, technicianId))
+      .limit(1);
+    if (techUser?.defaultDepotId) {
+      const depot = await storage.getDepotById(techUser.defaultDepotId, companyId);
+      if (depot) {
+        candidates.push({
+          latitude: parseFloat(String(depot.latitude)),
+          longitude: parseFloat(String(depot.longitude)),
+        });
+      }
+    }
+  }
+  const primaryDepot = await storage.getPrimaryDepot(companyId);
+  if (primaryDepot) {
+    candidates.push({
+      latitude: parseFloat(String(primaryDepot.latitude)),
+      longitude: parseFloat(String(primaryDepot.longitude)),
+    });
+  }
+  if (company.startLatitude && company.startLongitude) {
+    candidates.push({
+      latitude: parseFloat(String(company.startLatitude)),
+      longitude: parseFloat(String(company.startLongitude)),
+    });
+  }
+
+  return candidates;
+}
+
 export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
   // ================ Route Routes ================
 
@@ -440,7 +499,8 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
 
       const { kMeansClustering } = await import("../services/weekly-optimizer");
-      const { optimizeRouteAsync: optimizeCluster } = await import("../services/route-optimizer");
+      const { optimizeRouteAsyncMultiStart: optimizeClusterMulti } =
+        await import("../services/route-optimizer");
       const { routificOptimize } = await import("../services/routific");
 
       const weeklyStops = routePlans
@@ -493,12 +553,20 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         "#f97316",
       ];
 
-      const startPoint = await resolveStartPoint(
-        companyId,
-        (route as Record<string, unknown>).depotId as string | null | undefined,
-        route.technicianId ?? null,
-        company
-      );
+      const [startPoint, candidateStartsForSplit] = await Promise.all([
+        resolveStartPoint(
+          companyId,
+          (route as Record<string, unknown>).depotId as string | null | undefined,
+          route.technicianId ?? null,
+          company
+        ),
+        resolveAllCandidateStarts(
+          companyId,
+          (route as Record<string, unknown>).depotId as string | null | undefined,
+          route.technicianId ?? null,
+          company
+        ),
+      ]);
 
       const newRoutes: { id: string; name: string; stopCount: number }[] = [];
       const allAffectedPlanIds: string[] = [];
@@ -546,14 +614,18 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           latitude: s.latitude,
           longitude: s.longitude,
         }));
-        const internalClusterResult = await optimizeCluster(clusterStops, startPoint);
+        const internalClusterResult = await optimizeClusterMulti(
+          clusterStops,
+          candidateStartsForSplit
+        );
+        const clusterBestStart = internalClusterResult.bestStart ?? startPoint;
         let orderedIds: string[];
         if (!internalClusterResult.degraded) {
           orderedIds = internalClusterResult.orderedIds;
         } else {
           const routificResult = await routificOptimize(
             clusterStops,
-            startPoint,
+            clusterBestStart,
             company.maxRouteDurationHours && company.maxRouteDurationHours > 0
               ? { maxDurationHours: company.maxRouteDurationHours }
               : undefined
@@ -685,7 +757,8 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       }
 
       const { kMeansClustering } = await import("../services/weekly-optimizer");
-      const { optimizeRouteAsync: optimizeCluster } = await import("../services/route-optimizer");
+      const { optimizeRouteAsyncMultiStart: optimizeBulkClusterMulti } =
+        await import("../services/route-optimizer");
       const { routificOptimize: routificOptimizeBulk } = await import("../services/routific");
       const allProperties = await storage.getProperties(companyId);
       const propertyMap = new Map(allProperties.map((p) => [p.id, p]));
@@ -711,12 +784,20 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
 
       for (const route of oversized) {
         try {
-          const startPoint = await resolveStartPoint(
-            companyId,
-            (route as Record<string, unknown>).depotId as string | null | undefined,
-            route.technicianId ?? null,
-            company
-          );
+          const [startPoint, candidateStartsBulk] = await Promise.all([
+            resolveStartPoint(
+              companyId,
+              (route as Record<string, unknown>).depotId as string | null | undefined,
+              route.technicianId ?? null,
+              company
+            ),
+            resolveAllCandidateStarts(
+              companyId,
+              (route as Record<string, unknown>).depotId as string | null | undefined,
+              route.technicianId ?? null,
+              company
+            ),
+          ]);
           const routePlans = plansByRoute.get(route.id) || [];
 
           const weeklyStops = routePlans
@@ -778,14 +859,18 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
               latitude: s.latitude,
               longitude: s.longitude,
             }));
-            const internalBulkResult = await optimizeCluster(clusterStops, startPoint);
+            const internalBulkResult = await optimizeBulkClusterMulti(
+              clusterStops,
+              candidateStartsBulk
+            );
+            const bulkBestStart = internalBulkResult.bestStart ?? startPoint;
             let orderedIds: string[];
             if (!internalBulkResult.degraded) {
               orderedIds = internalBulkResult.orderedIds;
             } else {
               const routificRes = await routificOptimizeBulk(
                 clusterStops,
-                startPoint,
+                bulkBestStart,
                 company.maxRouteDurationHours && company.maxRouteDurationHours > 0
                   ? { maxDurationHours: company.maxRouteDurationHours }
                   : undefined
@@ -999,7 +1084,10 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         });
       }
 
-      const startPoint = await resolveStartPoint(companyId, null, null, company);
+      const [startPoint, candidateStarts] = await Promise.all([
+        resolveStartPoint(companyId, null, null, company),
+        resolveAllCandidateStarts(companyId, null, null, company),
+      ]);
 
       let zones: { zipCode: string; dayOfWeek: string }[] = [];
       if (respectZones) {
@@ -1043,6 +1131,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         routePlanningMode,
         avgMinutesPerStop,
         minRouteDurationHours,
+        candidateStarts,
       });
 
       const { calculateAllCustomerProfitability } =
@@ -1206,7 +1295,10 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         const allContacts = await storage.getContacts(companyId);
         const contactMap = new Map(allContacts.map((c) => [c.id, c]));
 
-        const startPoint = await resolveStartPoint(companyId, null, null, company);
+        const [startPoint, candidateStarts] = await Promise.all([
+          resolveStartPoint(companyId, null, null, company),
+          resolveAllCandidateStarts(companyId, null, null, company),
+        ]);
 
         let zones: { zipCode: string; dayOfWeek: string }[] = [];
         if (respectZones) {
@@ -1385,6 +1477,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
             routePlanningMode,
             avgMinutesPerStop,
             minRouteDurationHours,
+            candidateStarts,
           });
 
           weekResults.push({

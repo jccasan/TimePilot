@@ -5,7 +5,8 @@ import { db } from "../../db";
 import { storage } from "../../storage";
 import { routes } from "@shared/schema";
 import {
-  optimizeRouteAsync,
+  optimizeRouteAsyncMultiStart,
+  deduplicateCandidates,
   calculateTotalDistance,
   getMapboxRouteMetrics,
 } from "../route-optimizer";
@@ -117,47 +118,62 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
     };
   }
 
-  // Depot resolution chain:
+  // Collect ALL valid candidate start locations (multi-start optimization):
   // 1. Route's assigned depot
   // 2. Assigned technician's default depot
   // 3. Company's primary depot
   // 4. Legacy company start coordinates
-  let startPoint: { latitude: number; longitude: number } | undefined;
-
-  let resolvedDepot:
-    | Awaited<ReturnType<typeof storage.getDepotById>>
-    | Awaited<ReturnType<typeof storage.getPrimaryDepot>> = undefined;
+  // Near-duplicate candidates are deduplicated inside optimizeRouteAsyncMultiStart.
+  const candidateStarts: { latitude: number; longitude: number }[] = [];
 
   if (route.depotId) {
-    resolvedDepot = await storage.getDepotById(route.depotId, companyId);
-  }
-  if (!resolvedDepot && route.technicianId) {
-    const techUser = await getUserById(route.technicianId);
-    if (techUser?.defaultDepotId) {
-      resolvedDepot = await storage.getDepotById(techUser.defaultDepotId, companyId);
+    const depot = await storage.getDepotById(route.depotId, companyId);
+    if (depot) {
+      candidateStarts.push({
+        latitude: parseFloat(String(depot.latitude)),
+        longitude: parseFloat(String(depot.longitude)),
+      });
     }
   }
-  if (!resolvedDepot) {
-    resolvedDepot = await storage.getPrimaryDepot(companyId);
+  if (route.technicianId) {
+    const techUser = await getUserById(route.technicianId);
+    if (techUser?.defaultDepotId) {
+      const techDepot = await storage.getDepotById(techUser.defaultDepotId, companyId);
+      if (techDepot) {
+        candidateStarts.push({
+          latitude: parseFloat(String(techDepot.latitude)),
+          longitude: parseFloat(String(techDepot.longitude)),
+        });
+      }
+    }
   }
-
-  if (resolvedDepot) {
-    startPoint = {
-      latitude: parseFloat(String(resolvedDepot.latitude)),
-      longitude: parseFloat(String(resolvedDepot.longitude)),
-    };
-  } else if (company?.startLatitude && company?.startLongitude) {
-    startPoint = {
+  const primaryDepot = await storage.getPrimaryDepot(companyId);
+  if (primaryDepot) {
+    candidateStarts.push({
+      latitude: parseFloat(String(primaryDepot.latitude)),
+      longitude: parseFloat(String(primaryDepot.longitude)),
+    });
+  }
+  if (company?.startLatitude && company?.startLongitude) {
+    candidateStarts.push({
       latitude: parseFloat(String(company.startLatitude)),
       longitude: parseFloat(String(company.startLongitude)),
-    };
+    });
   }
+
+  // The winning start point is determined by the multi-start optimizer.
+  // Fall back to the first candidate (or undefined) for metrics and Routific.
+  const dedupedCandidates = deduplicateCandidates(candidateStarts);
+  const startPoint = dedupedCandidates[0];
 
   const originalMapbox = await getMapboxRouteMetrics(stops, startPoint);
   const originalDistance = originalMapbox?.distance ?? calculateTotalDistance(stops, startPoint);
   const originalMinutes = originalMapbox?.duration ?? (originalDistance / 25) * 60;
 
-  const internalResult = await optimizeRouteAsync(stops, startPoint, companyId);
+  const internalResult = await optimizeRouteAsyncMultiStart(stops, dedupedCandidates, companyId);
+  // Use the winning start point for subsequent Routific call and metrics.
+  const bestStart = internalResult.bestStart ?? startPoint;
+
   let orderedIds: string[];
   let isDegraded = false;
   let routingEngine: string;
@@ -171,7 +187,7 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
       company?.maxRouteDurationHours != null && company.maxRouteDurationHours > 0
         ? { maxDurationHours: company.maxRouteDurationHours }
         : undefined;
-    routificResult = await routificOptimize(stops, startPoint, routificOptions);
+    routificResult = await routificOptimize(stops, bestStart, routificOptions);
     if (routificResult) {
       orderedIds = routificResult.orderedIds;
       routingEngine = "routific";
