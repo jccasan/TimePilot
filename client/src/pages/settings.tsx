@@ -1258,6 +1258,7 @@ type TeamMember = {
   email: string;
   profileImageUrl: string | null;
   defaultDepotId?: string | null;
+  homeAddress?: string | null;
 };
 
 const roleIcons: Record<string, typeof Crown> = {
@@ -7875,6 +7876,8 @@ export default function Settings() {
   const [resetPasswordMember, setResetPasswordMember] = useState<TeamMember | null>(null);
   const [resetNewPassword, setResetNewPassword] = useState("");
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [editHomeAddressMember, setEditHomeAddressMember] = useState<TeamMember | null>(null);
+  const [editHomeAddressValue, setEditHomeAddressValue] = useState("");
   const [, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -8148,6 +8151,26 @@ export default function Settings() {
       toast({
         title: "Failed to reset password",
         description: err.message || "Something went wrong",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateHomeAddressMutation = useMutation({
+    mutationFn: async ({ userId, homeAddress }: { userId: string; homeAddress: string | null }) => {
+      const res = await apiRequest("PATCH", `/api/team/${userId}/home-address`, { homeAddress });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/team"] });
+      setEditHomeAddressMember(null);
+      setEditHomeAddressValue("");
+      toast({ title: "Home address updated" });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Failed to update home address",
+        description: err.message || "Address could not be saved",
         variant: "destructive",
       });
     },
@@ -8842,6 +8865,24 @@ export default function Settings() {
                               {member.firstName} {member.lastName}
                             </p>
                             <p className="text-sm text-muted-foreground truncate">{member.email}</p>
+                            {member.role === "tech" &&
+                              (currentUser?.role === "owner" || currentUser?.role === "admin") && (
+                                <p
+                                  className="text-xs text-muted-foreground truncate"
+                                  data-testid={`text-home-address-${member.id}`}
+                                >
+                                  {member.homeAddress ? (
+                                    <span className="flex items-center gap-1">
+                                      <MapPin className="h-3 w-3 shrink-0" />
+                                      {member.homeAddress}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground/60">
+                                      No home address set
+                                    </span>
+                                  )}
+                                </p>
+                              )}
                           </div>
                           <Badge
                             variant="secondary"
@@ -8863,6 +8904,22 @@ export default function Settings() {
                               <KeyRound className="h-4 w-4" />
                             </Button>
                           )}
+                          {member.role === "tech" &&
+                            (currentUser?.role === "owner" || currentUser?.role === "admin") && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                onClick={() => {
+                                  setEditHomeAddressMember(member);
+                                  setEditHomeAddressValue(member.homeAddress || "");
+                                }}
+                                title="Edit home address"
+                                data-testid={`button-edit-home-address-${member.id}`}
+                              >
+                                <MapPin className="h-4 w-4" />
+                              </Button>
+                            )}
                           {currentUser?.role !== "tech" && (
                             <>
                               <Select
@@ -10408,6 +10465,83 @@ export default function Settings() {
               data-testid="button-confirm-remove-member"
             >
               {removeMemberMutation.isPending ? "Removing..." : "Remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!editHomeAddressMember}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditHomeAddressMember(null);
+            setEditHomeAddressValue("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Home Address</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This address is used as the starting point for route navigation for{" "}
+            {editHomeAddressMember?.firstName} {editHomeAddressMember?.lastName}.
+          </p>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="home-address-input">Home Address</Label>
+            <AddressAutocomplete
+              value={editHomeAddressValue}
+              onChange={setEditHomeAddressValue}
+              onSelect={(parsed) =>
+                setEditHomeAddressValue(
+                  [parsed.streetAddress, parsed.city, parsed.state, parsed.zipCode]
+                    .filter(Boolean)
+                    .join(", ")
+                )
+              }
+              placeholder="Enter full street address"
+              data-testid="input-home-address"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditHomeAddressMember(null);
+                setEditHomeAddressValue("");
+              }}
+            >
+              Cancel
+            </Button>
+            {editHomeAddressValue && (
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                disabled={updateHomeAddressMutation.isPending}
+                onClick={() =>
+                  editHomeAddressMember &&
+                  updateHomeAddressMutation.mutate({
+                    userId: editHomeAddressMember.id,
+                    homeAddress: null,
+                  })
+                }
+                data-testid="button-clear-home-address"
+              >
+                Clear
+              </Button>
+            )}
+            <Button
+              disabled={updateHomeAddressMutation.isPending}
+              onClick={() =>
+                editHomeAddressMember &&
+                updateHomeAddressMutation.mutate({
+                  userId: editHomeAddressMember.id,
+                  homeAddress: editHomeAddressValue || null,
+                })
+              }
+              data-testid="button-save-home-address"
+            >
+              {updateHomeAddressMutation.isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>

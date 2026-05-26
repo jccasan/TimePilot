@@ -729,7 +729,8 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
 
   app.get("/api/company/team", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { companyId } = await getCompanyContext(req);
+      const { companyId, role: callerRole, userId: callerUserId } = await getCompanyContext(req);
+      const canViewHomeAddress = callerRole === "owner" || callerRole === "admin";
       const companyUsersList = await storage.getCompanyUsers(companyId);
       const teamMembers = await Promise.all(
         companyUsersList
@@ -745,6 +746,10 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
               email: user?.email || "",
               profileImageUrl: user?.profileImageUrl || null,
               defaultDepotId: user?.defaultDepotId ?? null,
+              homeAddress:
+                canViewHomeAddress || cu.userId === callerUserId
+                  ? (user?.homeAddress ?? null)
+                  : undefined,
             };
           })
       );
