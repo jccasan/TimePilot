@@ -1029,8 +1029,11 @@ export default function SignupWidget() {
     (quoteData: QuoteResult) => {
       const option = LAST_CLEANUP_OPTIONS.find((o) => o.value === lastCleanup);
       const pc = quoteData.quote.recommendedPriceCents;
-      const icLow = option && pc ? Math.round(pc * option.multiplier) : null;
-      const icHigh = option && pc ? Math.round(pc * (option.multiplier + 0.5)) : null;
+      const feeCents = company?.firstTimeCleanupFee
+        ? Math.round(company.firstTimeCleanupFee * 100)
+        : 0;
+      const icLow = option && pc ? Math.round(pc * option.multiplier) + feeCents : null;
+      const icHigh = option && pc ? Math.round(pc * (option.multiplier + 0.5)) + feeCents : null;
       sessionStorage.setItem(
         `sq_result_${slug}`,
         JSON.stringify({
@@ -1051,7 +1054,16 @@ export default function SignupWidget() {
       const thankYouQuery = thankYouParams.toString();
       window.location.href = `/signup/${slug}/thank-you${thankYouQuery ? `?${thankYouQuery}` : ""}`;
     },
-    [slug, lastCleanup, formData.firstName, selectedFreq, isEmbed, track, utmParams]
+    [
+      slug,
+      lastCleanup,
+      formData.firstName,
+      selectedFreq,
+      isEmbed,
+      track,
+      utmParams,
+      company?.firstTimeCleanupFee,
+    ]
   );
 
   const updateField = useCallback((field: string, value: string) => {
@@ -1772,52 +1784,52 @@ export default function SignupWidget() {
                       <Label className="text-sm font-semibold">How Many Dogs? *</Label>
                       <div className="space-y-1.5">
                         {(
-                              pricingRulesDogTiers ??
-                              ([
-                                {
-                                  value: "1",
-                                  label: "1-2 dogs",
-                                  dogCount: 1,
-                                  surcharge: 0,
-                                  callForQuote: false,
-                                  pricingItemId: "",
-                                },
-                                {
-                                  value: "3",
-                                  label: "3-4 dogs",
-                                  dogCount: 3,
-                                  surcharge: 0,
-                                  callForQuote: false,
-                                  pricingItemId: "",
-                                },
-                                {
-                                  value: "5",
-                                  label: "5-6 dogs",
-                                  dogCount: 5,
-                                  surcharge: 0,
-                                  callForQuote: false,
-                                  pricingItemId: "",
-                                },
-                                {
-                                  value: "7",
-                                  label: "7+ dogs",
-                                  dogCount: 7,
-                                  surcharge: 0,
-                                  callForQuote: false,
-                                  pricingItemId: "",
-                                },
-                              ] as DogTier[])
-                            ).map((opt) => (
-                              <RadioOption
-                                key={opt.value}
-                                isSelected={selectedDogTier === opt.value}
-                                brandStyles={brandStyles}
-                                testId={`radio-dogs-${opt.value}`}
-                                onClick={() => setSelectedDogTier(opt.value)}
-                              >
-                                <span className="text-sm flex-1">{opt.label}</span>
-                              </RadioOption>
-                            ))}
+                          pricingRulesDogTiers ??
+                          ([
+                            {
+                              value: "1",
+                              label: "1-2 dogs",
+                              dogCount: 1,
+                              surcharge: 0,
+                              callForQuote: false,
+                              pricingItemId: "",
+                            },
+                            {
+                              value: "3",
+                              label: "3-4 dogs",
+                              dogCount: 3,
+                              surcharge: 0,
+                              callForQuote: false,
+                              pricingItemId: "",
+                            },
+                            {
+                              value: "5",
+                              label: "5-6 dogs",
+                              dogCount: 5,
+                              surcharge: 0,
+                              callForQuote: false,
+                              pricingItemId: "",
+                            },
+                            {
+                              value: "7",
+                              label: "7+ dogs",
+                              dogCount: 7,
+                              surcharge: 0,
+                              callForQuote: false,
+                              pricingItemId: "",
+                            },
+                          ] as DogTier[])
+                        ).map((opt) => (
+                          <RadioOption
+                            key={opt.value}
+                            isSelected={selectedDogTier === opt.value}
+                            brandStyles={brandStyles}
+                            testId={`radio-dogs-${opt.value}`}
+                            onClick={() => setSelectedDogTier(opt.value)}
+                          >
+                            <span className="text-sm flex-1">{opt.label}</span>
+                          </RadioOption>
+                        ))}
                       </div>
                     </div>
 
@@ -1825,30 +1837,30 @@ export default function SignupWidget() {
                       <Label className="text-sm font-semibold">Cleanup Frequency *</Label>
                       <div className="space-y-1.5">
                         {(
-                              pricingRulesFreqs ?? [
-                                { value: "weekly", basePrice: 0, sym: "$" },
-                                { value: "biweekly", basePrice: 0, sym: "$" },
-                                { value: "onetime", basePrice: 0, sym: "$" },
-                              ]
-                            ).map((opt) => (
-                              <RadioOption
-                                key={opt.value}
-                                isSelected={selectedFreq === opt.value}
-                                brandStyles={brandStyles}
-                                testId={`radio-freq-${opt.value}`}
-                                onClick={() => setSelectedFreq(opt.value)}
-                              >
-                                <span className="flex-1 text-sm">
-                                  {FREQ_DISPLAY[opt.value] || opt.value}
-                                </span>
-                                {opt.basePrice > 0 && (
-                                  <span className="text-xs text-muted-foreground font-medium">
-                                    from {opt.sym}
-                                    {opt.basePrice.toFixed(2)}/visit
-                                  </span>
-                                )}
-                              </RadioOption>
-                            ))}
+                          pricingRulesFreqs ?? [
+                            { value: "weekly", basePrice: 0, sym: "$" },
+                            { value: "biweekly", basePrice: 0, sym: "$" },
+                            { value: "onetime", basePrice: 0, sym: "$" },
+                          ]
+                        ).map((opt) => (
+                          <RadioOption
+                            key={opt.value}
+                            isSelected={selectedFreq === opt.value}
+                            brandStyles={brandStyles}
+                            testId={`radio-freq-${opt.value}`}
+                            onClick={() => setSelectedFreq(opt.value)}
+                          >
+                            <span className="flex-1 text-sm">
+                              {FREQ_DISPLAY[opt.value] || opt.value}
+                            </span>
+                            {opt.basePrice > 0 && (
+                              <span className="text-xs text-muted-foreground font-medium">
+                                from {opt.sym}
+                                {opt.basePrice.toFixed(2)}/visit
+                              </span>
+                            )}
+                          </RadioOption>
+                        ))}
                       </div>
                     </div>
 
@@ -2415,52 +2427,52 @@ export default function SignupWidget() {
                     <Label className="text-sm font-semibold">How Many Dogs? *</Label>
                     <div className="space-y-1.5">
                       {(
-                            pricingRulesDogTiers ??
-                            ([
-                              {
-                                value: "1",
-                                label: "1-2 dogs",
-                                dogCount: 1,
-                                surcharge: 0,
-                                callForQuote: false,
-                                pricingItemId: "",
-                              },
-                              {
-                                value: "3",
-                                label: "3-4 dogs",
-                                dogCount: 3,
-                                surcharge: 0,
-                                callForQuote: false,
-                                pricingItemId: "",
-                              },
-                              {
-                                value: "5",
-                                label: "5-6 dogs",
-                                dogCount: 5,
-                                surcharge: 0,
-                                callForQuote: false,
-                                pricingItemId: "",
-                              },
-                              {
-                                value: "7",
-                                label: "7+ dogs",
-                                dogCount: 7,
-                                surcharge: 0,
-                                callForQuote: false,
-                                pricingItemId: "",
-                              },
-                            ] as DogTier[])
-                          ).map((opt) => (
-                            <RadioOption
-                              key={opt.value}
-                              isSelected={selectedDogTier === opt.value}
-                              brandStyles={brandStyles}
-                              testId={`radio-dogs-${opt.value}`}
-                              onClick={() => setSelectedDogTier(opt.value)}
-                            >
-                              <span className="text-sm flex-1">{opt.label}</span>
-                            </RadioOption>
-                          ))}
+                        pricingRulesDogTiers ??
+                        ([
+                          {
+                            value: "1",
+                            label: "1-2 dogs",
+                            dogCount: 1,
+                            surcharge: 0,
+                            callForQuote: false,
+                            pricingItemId: "",
+                          },
+                          {
+                            value: "3",
+                            label: "3-4 dogs",
+                            dogCount: 3,
+                            surcharge: 0,
+                            callForQuote: false,
+                            pricingItemId: "",
+                          },
+                          {
+                            value: "5",
+                            label: "5-6 dogs",
+                            dogCount: 5,
+                            surcharge: 0,
+                            callForQuote: false,
+                            pricingItemId: "",
+                          },
+                          {
+                            value: "7",
+                            label: "7+ dogs",
+                            dogCount: 7,
+                            surcharge: 0,
+                            callForQuote: false,
+                            pricingItemId: "",
+                          },
+                        ] as DogTier[])
+                      ).map((opt) => (
+                        <RadioOption
+                          key={opt.value}
+                          isSelected={selectedDogTier === opt.value}
+                          brandStyles={brandStyles}
+                          testId={`radio-dogs-${opt.value}`}
+                          onClick={() => setSelectedDogTier(opt.value)}
+                        >
+                          <span className="text-sm flex-1">{opt.label}</span>
+                        </RadioOption>
+                      ))}
                     </div>
                   </div>
 
@@ -2468,30 +2480,30 @@ export default function SignupWidget() {
                     <Label className="text-sm font-semibold">Cleanup Frequency *</Label>
                     <div className="space-y-1.5">
                       {(
-                            pricingRulesFreqs ?? [
-                              { value: "weekly", basePrice: 0, sym: "$" },
-                              { value: "biweekly", basePrice: 0, sym: "$" },
-                              { value: "onetime", basePrice: 0, sym: "$" },
-                            ]
-                          ).map((opt) => (
-                            <RadioOption
-                              key={opt.value}
-                              isSelected={selectedFreq === opt.value}
-                              brandStyles={brandStyles}
-                              testId={`radio-freq-${opt.value}`}
-                              onClick={() => setSelectedFreq(opt.value)}
-                            >
-                              <span className="flex-1 text-sm">
-                                {FREQ_DISPLAY[opt.value] || opt.value}
-                              </span>
-                              {opt.basePrice > 0 && (
-                                <span className="text-xs text-muted-foreground font-medium">
-                                  from {opt.sym}
-                                  {opt.basePrice.toFixed(2)}/visit
-                                </span>
-                              )}
-                            </RadioOption>
-                          ))}
+                        pricingRulesFreqs ?? [
+                          { value: "weekly", basePrice: 0, sym: "$" },
+                          { value: "biweekly", basePrice: 0, sym: "$" },
+                          { value: "onetime", basePrice: 0, sym: "$" },
+                        ]
+                      ).map((opt) => (
+                        <RadioOption
+                          key={opt.value}
+                          isSelected={selectedFreq === opt.value}
+                          brandStyles={brandStyles}
+                          testId={`radio-freq-${opt.value}`}
+                          onClick={() => setSelectedFreq(opt.value)}
+                        >
+                          <span className="flex-1 text-sm">
+                            {FREQ_DISPLAY[opt.value] || opt.value}
+                          </span>
+                          {opt.basePrice > 0 && (
+                            <span className="text-xs text-muted-foreground font-medium">
+                              from {opt.sym}
+                              {opt.basePrice.toFixed(2)}/visit
+                            </span>
+                          )}
+                        </RadioOption>
+                      ))}
                     </div>
                   </div>
 

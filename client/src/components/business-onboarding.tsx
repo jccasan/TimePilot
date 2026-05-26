@@ -1382,7 +1382,6 @@ function PaymentProcessingStep({
   );
 }
 
-
 type LRSubStep = 1 | 2 | 3 | 4;
 
 function LeadResponseSetupStep({
