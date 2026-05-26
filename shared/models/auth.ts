@@ -1,5 +1,13 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  doublePrecision,
+  index,
+  jsonb,
+  pgTable,
+  timestamp,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 export const sessions = pgTable(
   "sessions",
@@ -26,6 +34,9 @@ export const users = pgTable("users", {
   onboardingEmailSentAt: timestamp("onboarding_email_sent_at"),
   importMode: boolean("import_mode").notNull().default(false),
   defaultDepotId: varchar("default_depot_id"),
+  homeAddress: varchar("home_address"),
+  homeLatitude: doublePrecision("home_latitude"),
+  homeLongitude: doublePrecision("home_longitude"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

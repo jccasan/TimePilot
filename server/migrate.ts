@@ -1351,6 +1351,15 @@ export async function runStartupMigrations(): Promise<void> {
     await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS stripe_net_cents INTEGER`);
     console.log("[Migration] invoices: stripe fee breakdown columns verified");
 
+    // ── Technician home address columns for route optimization ───────────────
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS home_address VARCHAR,
+        ADD COLUMN IF NOT EXISTS home_latitude DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS home_longitude DOUBLE PRECISION
+    `);
+    console.log("[Migration] users home_address/home_latitude/home_longitude columns verified");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

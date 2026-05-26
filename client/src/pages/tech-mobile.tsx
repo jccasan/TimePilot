@@ -251,6 +251,8 @@ export default function TechMobile() {
   const [onMyWaySending, setOnMyWaySending] = useState<string | null>(null);
   const [onMyWayCooldowns, setOnMyWayCooldowns] = useState<Record<string, number>>({});
   const [showDepotPicker, setShowDepotPicker] = useState(false);
+  const [showHomeAddressDialog, setShowHomeAddressDialog] = useState(false);
+  const [homeAddressInput, setHomeAddressInput] = useState("");
 
   const handleOnMyWay = (visitId: string) => {
     if (onMyWayCooldowns[visitId] && Date.now() < onMyWayCooldowns[visitId]) {
@@ -300,6 +302,9 @@ export default function TechMobile() {
   const { data: currentUser, isSuccess: userLoaded } = useQuery<{
     id: string;
     defaultDepotId?: string | null;
+    homeAddress?: string | null;
+    homeLatitude?: number | null;
+    homeLongitude?: number | null;
   }>({
     queryKey: ["/api/auth/user"],
   });
@@ -341,6 +346,28 @@ export default function TechMobile() {
     onError: (err: Error) => {
       toast({
         title: "Failed to update starting point",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateHomeAddressMutation = useMutation({
+    mutationFn: (homeAddress: string | null) =>
+      apiRequest("PATCH", `/api/team/${currentUser?.id}/home-address`, { homeAddress }).then((r) =>
+        r.json()
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setShowHomeAddressDialog(false);
+      toast({
+        title: "Home address saved",
+        description: "Your home will be used as a route optimization candidate.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Could not save home address",
         description: err.message,
         variant: "destructive",
       });
@@ -1049,6 +1076,36 @@ export default function TechMobile() {
               ) : (
                 <p className="text-sm text-muted-foreground" data-testid="text-no-depot-nudge">
                   Set your starting point for accurate directions
+                </p>
+              )}
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          </button>
+
+          {/* Home address row */}
+          <button
+            className="w-full flex items-center gap-3 p-3 rounded-lg border bg-card text-left hover:bg-accent transition-colors"
+            onClick={() => {
+              setHomeAddressInput(currentUser?.homeAddress || "");
+              setShowHomeAddressDialog(true);
+            }}
+            data-testid="button-home-address-picker"
+          >
+            <MapPin className="h-4 w-4 text-primary shrink-0" />
+            <div className="flex-1 min-w-0">
+              {currentUser?.homeAddress ? (
+                <>
+                  <p className="text-xs text-muted-foreground">Home address</p>
+                  <p className="text-sm font-medium truncate" data-testid="text-home-address">
+                    {currentUser.homeAddress}
+                  </p>
+                </>
+              ) : (
+                <p
+                  className="text-sm text-muted-foreground"
+                  data-testid="text-no-home-address-nudge"
+                >
+                  Save your home address for route optimization
                 </p>
               )}
             </div>
@@ -2174,6 +2231,68 @@ export default function TechMobile() {
               </Button>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Home Address Dialog */}
+      <Dialog open={showHomeAddressDialog} onOpenChange={setShowHomeAddressDialog}>
+        <DialogContent className="max-w-sm" data-testid="dialog-home-address">
+          <DialogHeader>
+            <DialogTitle>Home Address</DialogTitle>
+            <DialogDescription>
+              Your home address is included as a candidate start when the route optimizer runs,
+              helping routes begin closer to where you live.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Street address</label>
+              <input
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                placeholder="123 Main St, City, State 12345"
+                value={homeAddressInput}
+                onChange={(e) => setHomeAddressInput(e.target.value)}
+                data-testid="input-home-address"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter your full address including city and state.
+              </p>
+            </div>
+            {currentUser?.homeAddress && (
+              <p className="text-xs text-muted-foreground">Current: {currentUser.homeAddress}</p>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            {currentUser?.homeAddress && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => updateHomeAddressMutation.mutate(null)}
+                disabled={updateHomeAddressMutation.isPending}
+                data-testid="button-clear-home-address"
+              >
+                Clear
+              </Button>
+            )}
+            <Button
+              onClick={() => {
+                const trimmed = homeAddressInput.trim();
+                if (!trimmed) return;
+                updateHomeAddressMutation.mutate(trimmed);
+              }}
+              disabled={updateHomeAddressMutation.isPending || !homeAddressInput.trim()}
+              data-testid="button-save-home-address"
+            >
+              {updateHomeAddressMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

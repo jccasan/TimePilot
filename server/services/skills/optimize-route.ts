@@ -146,6 +146,13 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
         });
       }
     }
+    // 5. Technician's saved home address
+    if (techUser?.homeLatitude != null && techUser?.homeLongitude != null) {
+      candidateStarts.push({
+        latitude: techUser.homeLatitude,
+        longitude: techUser.homeLongitude,
+      });
+    }
   }
   const primaryDepot = await storage.getPrimaryDepot(companyId);
   if (primaryDepot) {

@@ -101,7 +101,11 @@ async function resolveAllCandidateStarts(
   }
   if (technicianId) {
     const [techUser] = await db
-      .select({ defaultDepotId: users.defaultDepotId })
+      .select({
+        defaultDepotId: users.defaultDepotId,
+        homeLatitude: users.homeLatitude,
+        homeLongitude: users.homeLongitude,
+      })
       .from(users)
       .where(eq(users.id, technicianId))
       .limit(1);
@@ -113,6 +117,13 @@ async function resolveAllCandidateStarts(
           longitude: parseFloat(String(depot.longitude)),
         });
       }
+    }
+    // 5. Technician's saved home address
+    if (techUser?.homeLatitude != null && techUser?.homeLongitude != null) {
+      candidates.push({
+        latitude: techUser.homeLatitude,
+        longitude: techUser.homeLongitude,
+      });
     }
   }
   const primaryDepot = await storage.getPrimaryDepot(companyId);
@@ -2151,6 +2162,84 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
+
+  // Update technician home address (used as a candidate start in route optimization)
+  app.patch(
+    "/api/team/:userId/home-address",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role, userId: currentUserId } = await getCompanyContext(req);
+        const targetUserId = p(req.params.userId);
+
+        // Techs can only update their own home address; owner/admin can update anyone on the team
+        if (targetUserId !== currentUserId) {
+          requireRole(role, ["owner", "admin"]);
+        }
+
+        // Verify target user belongs to caller's company
+        const [membership] = await db
+          .select({ userId: companyUsers.userId })
+          .from(companyUsers)
+          .where(
+            and(
+              eq(companyUsers.userId, targetUserId),
+              eq(companyUsers.companyId, companyId),
+              eq(companyUsers.isActive, true)
+            )
+          );
+        if (!membership) return res.status(404).json({ error: "Team member not found" });
+
+        const schema = z.object({ homeAddress: z.string().nullable() });
+        const { homeAddress } = schema.parse(req.body);
+
+        if (!homeAddress) {
+          await db
+            .update(users)
+            .set({
+              homeAddress: null,
+              homeLatitude: null,
+              homeLongitude: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(users.id, targetUserId));
+          return res.json({
+            success: true,
+            homeAddress: null,
+            homeLatitude: null,
+            homeLongitude: null,
+          });
+        }
+
+        // Geocode the address
+        const coords = await geocodeAddress(homeAddress);
+        if (!coords) {
+          return res.status(422).json({
+            error: "Address could not be geocoded. Please enter a more specific address.",
+          });
+        }
+
+        await db
+          .update(users)
+          .set({
+            homeAddress,
+            homeLatitude: parseFloat(coords.latitude),
+            homeLongitude: parseFloat(coords.longitude),
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, targetUserId));
+
+        return res.json({
+          success: true,
+          homeAddress,
+          homeLatitude: parseFloat(coords.latitude),
+          homeLongitude: parseFloat(coords.longitude),
+        });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // Update technician default depot
   app.patch(
