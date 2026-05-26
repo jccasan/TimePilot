@@ -636,12 +636,9 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       }
 
       const lrConfig = await storage.getLeadResponseConfig(company.id);
-      const lrPricingTiers =
-        lrConfig?.leadResponseActive && Array.isArray(lrConfig.pricingTiers)
-          ? (lrConfig.pricingTiers as { label: string; pricePerVisit: number | null }[]).filter(
-              (t) => t.label?.trim() && t.pricePerVisit != null
-            )
-          : null;
+      const firstTimeCleanupFee = lrConfig?.firstTimeCleanupFee
+        ? Number(lrConfig.firstTimeCleanupFee)
+        : null;
 
       res.json({
         name: company.name,
@@ -654,7 +651,7 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         requireCardOnSignup: company.requireCardOnSignup ?? true,
         widgetFieldConfig: company.widgetFieldConfig ?? null,
         yardSizeTierConfig: company.yardSizeTierConfig ?? null,
-        lrPricingTiers: lrPricingTiers ?? null,
+        firstTimeCleanupFee,
         pricingRules: company.pricingConfig?.pricingRules ?? null,
         stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
         stripeConnectOnboarded: company.stripeConnectOnboarded || false,

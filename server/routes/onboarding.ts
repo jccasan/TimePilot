@@ -284,25 +284,6 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
           await db.execute(
             sql`UPDATE companies SET pricing_config = ${JSON.stringify(data.pricingConfig)}::jsonb, business_onboarding_step = ${step + 1} WHERE id = ${companyId}`
           );
-        } else if (stepType === "pricingTiers" && data) {
-          // Step 4a: Save pricing tiers to lead_response_config only
-          const tiersData = data.tiers as
-            | Array<{ label: string; pricePerVisit: number | null }>
-            | undefined;
-          const perDogAdder = data.perDogAdder != null ? String(data.perDogAdder) : undefined;
-          const firstTimeCleanupFee =
-            data.firstTimeCleanupFee != null ? String(data.firstTimeCleanupFee) : undefined;
-          const depositPercent =
-            data.depositPercent != null ? String(data.depositPercent) : undefined;
-          await storage.upsertLeadResponseConfig(companyId, {
-            ...(tiersData ? { pricingTiers: tiersData } : {}),
-            ...(perDogAdder !== undefined ? { perDogAdder } : {}),
-            ...(firstTimeCleanupFee !== undefined ? { firstTimeCleanupFee } : {}),
-            ...(depositPercent !== undefined ? { depositPercent } : {}),
-          });
-          await db.execute(
-            sql`UPDATE companies SET business_onboarding_step = ${step + 1} WHERE id = ${companyId}`
-          );
         } else if (stepType === "leadResponseSetup" && data) {
           // Step 4b: Save full LR config, fire webhook, mark setupComplete
           const lrUpdates: Record<string, unknown> = {

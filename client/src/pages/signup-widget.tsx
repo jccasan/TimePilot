@@ -96,11 +96,6 @@ type YardSizeTierConfig = {
   tier6?: YardSizeTierEntry;
 };
 
-type LrPricingTier = {
-  label: string;
-  pricePerVisit: number | null;
-};
-
 type PricingRulesYardTier = {
   name?: string;
   upToAcres: number | null;
@@ -119,7 +114,6 @@ type CompanyInfo = {
   stripeConnectAccountId: string | null;
   widgetFieldConfig: WidgetFieldConfig | null;
   yardSizeTierConfig: YardSizeTierConfig | null;
-  lrPricingTiers: LrPricingTier[] | null;
   pricingRules: {
     basePrices: {
       weekly: number;
@@ -137,6 +131,7 @@ type CompanyInfo = {
   } | null;
   country?: string;
   currency?: string;
+  firstTimeCleanupFee?: number | null;
 };
 
 type QuoteResult = {
@@ -769,7 +764,7 @@ export default function SignupWidget() {
 
   const hasPricing = !!(parsed && parsed.availableFreqs.length > 0);
 
-  const noPricingConfigured = !hasPricing && !company?.pricingRules;
+  const noPricingConfigured = !company?.pricingRules;
 
   const pricingRulesFreqs = useMemo(() => {
     const rules = company?.pricingRules;
@@ -818,27 +813,10 @@ export default function SignupWidget() {
     return tiers;
   }, [company?.pricingRules, company?.currency]);
 
-  const dogTiers = useMemo(() => {
-    if (!parsed || !selectedFreq || !parsed.freqGroups[selectedFreq]) return [];
-    return parsed.buildDogTiers(parsed.freqGroups[selectedFreq]);
-  }, [parsed, selectedFreq]);
-
   const currentTier = useMemo(() => {
-    if (!selectedDogTier) return null;
-    if (company?.pricingRules) {
-      if (pricingRulesDogTiers && pricingRulesDogTiers.length > 0) {
-        return pricingRulesDogTiers.find((t) => t.value === selectedDogTier) || null;
-      }
-      return null;
-    }
-    if (dogTiers.length > 0) {
-      return dogTiers.find((t) => t.value === selectedDogTier) || null;
-    }
-    if (pricingRulesDogTiers && pricingRulesDogTiers.length > 0) {
-      return pricingRulesDogTiers.find((t) => t.value === selectedDogTier) || null;
-    }
-    return null;
-  }, [company?.pricingRules, dogTiers, pricingRulesDogTiers, selectedDogTier]);
+    if (!selectedDogTier || !pricingRulesDogTiers) return null;
+    return pricingRulesDogTiers.find((t) => t.value === selectedDogTier) || null;
+  }, [pricingRulesDogTiers, selectedDogTier]);
 
   const currentLot = useMemo(() => {
     if (!parsed || !selectedLot) return null;
@@ -848,7 +826,6 @@ export default function SignupWidget() {
   const livePrice = useMemo(() => {
     const rules = company?.pricingRules;
     if (!rules?.basePrices || !selectedFreq) return null;
-    if (hasPricing && !company?.pricingRules && !currentTier) return null;
     const backendFreq = BACKEND_FREQ_MAP[selectedFreq] || selectedFreq;
     let basePrice: number;
     switch (backendFreq) {
@@ -902,10 +879,13 @@ export default function SignupWidget() {
       quoteResult?.quote?.recommendedPriceCents ??
       (livePrice && !livePrice.callForQuote ? livePrice.cents : null);
     if (!baseCents) return null;
-    const low = Math.round(baseCents * option.multiplier);
-    const high = Math.round(baseCents * (option.multiplier + 0.5));
+    const feeCents = company?.firstTimeCleanupFee
+      ? Math.round(company.firstTimeCleanupFee * 100)
+      : 0;
+    const low = Math.round(baseCents * option.multiplier) + feeCents;
+    const high = Math.round(baseCents * (option.multiplier + 0.5)) + feeCents;
     return { low, high };
-  }, [livePrice, lastCleanup, quoteResult]);
+  }, [livePrice, lastCleanup, quoteResult, company?.firstTimeCleanupFee]);
 
   const isCanadian = (company?.country || "us").toLowerCase() === "ca";
   const currency = (company?.currency || "usd").toLowerCase();
@@ -1791,24 +1771,7 @@ export default function SignupWidget() {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">How Many Dogs? *</Label>
                       <div className="space-y-1.5">
-                        {hasPricing && parsed && !company?.pricingRules
-                          ? (dogTiers.length > 0
-                              ? dogTiers
-                              : parsed.buildDogTiers(
-                                  parsed.freqGroups[parsed.availableFreqs[0]] || []
-                                )
-                            ).map((tier) => (
-                              <RadioOption
-                                key={tier.value}
-                                isSelected={selectedDogTier === tier.value}
-                                brandStyles={brandStyles}
-                                testId={`radio-dogs-${tier.value}`}
-                                onClick={() => setSelectedDogTier(tier.value)}
-                              >
-                                <span className="text-sm flex-1">{tier.label}</span>
-                              </RadioOption>
-                            ))
-                          : (
+                        {(
                               pricingRulesDogTiers ??
                               ([
                                 {
@@ -1861,54 +1824,7 @@ export default function SignupWidget() {
                     <div className="space-y-2">
                       <Label className="text-sm font-semibold">Cleanup Frequency *</Label>
                       <div className="space-y-1.5">
-                        {hasPricing && parsed && !company?.pricingRules
-                          ? parsed.availableFreqs.map((freq) => {
-                              const items = parsed.freqGroups[freq];
-                              let priceLabel = "";
-                              if (selectedDogTier) {
-                                const dogCount = parseInt(selectedDogTier);
-                                const matchedItem = items.find((i) => i.dogCount === dogCount);
-                                if (matchedItem) {
-                                  priceLabel = matchedItem.callForQuote
-                                    ? "Call for Quote"
-                                    : `${currencySymbol}${(matchedItem.price / 100).toFixed(2)}/visit`;
-                                }
-                              }
-                              if (!priceLabel) {
-                                const baseItem = items.find((i) => !i.callForQuote);
-                                priceLabel = baseItem
-                                  ? `from ${currencySymbol}${(baseItem.price / 100).toFixed(2)}/visit`
-                                  : "";
-                              }
-                              return (
-                                <RadioOption
-                                  key={freq}
-                                  isSelected={selectedFreq === freq}
-                                  brandStyles={brandStyles}
-                                  testId={`radio-freq-${freq}`}
-                                  onClick={() => {
-                                    setSelectedFreq(freq);
-                                    if (selectedDogTier) {
-                                      const newTiers = parsed.buildDogTiers(
-                                        parsed.freqGroups[freq] || []
-                                      );
-                                      if (!newTiers.find((t) => t.value === selectedDogTier))
-                                        setSelectedDogTier("");
-                                    }
-                                  }}
-                                >
-                                  <span className="flex-1 text-sm">
-                                    {FREQ_DISPLAY[freq] || freq}
-                                  </span>
-                                  {priceLabel && (
-                                    <span className="text-xs text-muted-foreground font-medium">
-                                      {priceLabel}
-                                    </span>
-                                  )}
-                                </RadioOption>
-                              );
-                            })
-                          : (
+                        {(
                               pricingRulesFreqs ?? [
                                 { value: "weekly", basePrice: 0, sym: "$" },
                                 { value: "biweekly", basePrice: 0, sym: "$" },
@@ -2498,24 +2414,7 @@ export default function SignupWidget() {
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">How Many Dogs? *</Label>
                     <div className="space-y-1.5">
-                      {hasPricing && parsed && !company?.pricingRules
-                        ? (dogTiers.length > 0
-                            ? dogTiers
-                            : parsed.buildDogTiers(
-                                parsed.freqGroups[parsed.availableFreqs[0]] || []
-                              )
-                          ).map((tier) => (
-                            <RadioOption
-                              key={tier.value}
-                              isSelected={selectedDogTier === tier.value}
-                              brandStyles={brandStyles}
-                              testId={`radio-dogs-${tier.value}`}
-                              onClick={() => setSelectedDogTier(tier.value)}
-                            >
-                              <span className="text-sm flex-1">{tier.label}</span>
-                            </RadioOption>
-                          ))
-                        : (
+                      {(
                             pricingRulesDogTiers ??
                             ([
                               {
@@ -2568,53 +2467,7 @@ export default function SignupWidget() {
                   <div className="space-y-2">
                     <Label className="text-sm font-semibold">Cleanup Frequency *</Label>
                     <div className="space-y-1.5">
-                      {hasPricing && parsed && !company?.pricingRules
-                        ? parsed.availableFreqs.map((freq) => {
-                            const items = parsed.freqGroups[freq];
-                            let priceLabel = "";
-                            if (selectedDogTier) {
-                              const dogCount = parseInt(selectedDogTier);
-                              const matchedItem = items.find((i) => i.dogCount === dogCount);
-                              if (matchedItem) {
-                                priceLabel = matchedItem.callForQuote
-                                  ? "Call for Quote"
-                                  : `${currencySymbol}${(matchedItem.price / 100).toFixed(2)}/visit`;
-                              }
-                            }
-                            if (!priceLabel) {
-                              const baseItem = items.find((i) => !i.callForQuote);
-                              priceLabel = baseItem
-                                ? `from ${currencySymbol}${(baseItem.price / 100).toFixed(2)}/visit`
-                                : "";
-                            }
-                            return (
-                              <RadioOption
-                                key={freq}
-                                isSelected={selectedFreq === freq}
-                                brandStyles={brandStyles}
-                                testId={`radio-freq-${freq}`}
-                                onClick={() => {
-                                  setSelectedFreq(freq);
-                                  if (selectedDogTier) {
-                                    const newTiers = parsed.buildDogTiers(
-                                      parsed.freqGroups[freq] || []
-                                    );
-                                    if (!newTiers.find((t) => t.value === selectedDogTier)) {
-                                      setSelectedDogTier("");
-                                    }
-                                  }
-                                }}
-                              >
-                                <span className="flex-1 text-sm">{FREQ_DISPLAY[freq] || freq}</span>
-                                {priceLabel && (
-                                  <span className="text-xs text-muted-foreground font-medium">
-                                    {priceLabel}
-                                  </span>
-                                )}
-                              </RadioOption>
-                            );
-                          })
-                        : (
+                      {(
                             pricingRulesFreqs ?? [
                               { value: "weekly", basePrice: 0, sym: "$" },
                               { value: "biweekly", basePrice: 0, sym: "$" },

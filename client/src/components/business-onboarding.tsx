@@ -67,11 +67,6 @@ import {
   Phone,
   Info,
 } from "lucide-react";
-import {
-  PricingTiersEditor,
-  validatePricingTiers,
-  type PricingTier,
-} from "@/components/PricingTiersEditor";
 import logoSquare from "@assets/ScooPilot_Square_text_1771089502024.png";
 
 type BusinessOnboardingStatus = {
@@ -118,7 +113,6 @@ function buildSteps(hasVoicePlan: boolean, hasLeadResponse: boolean) {
     { key: "intelligence", label: "Business Intelligence", icon: Globe },
     { key: "pricing", label: "Pricing Setup", icon: DollarSign },
     { key: "payments", label: "Payment Processing", icon: CreditCard },
-    { key: "pricingTiers", label: "LR Pricing Tiers", icon: DollarSign },
   ];
   if (hasLeadResponse) {
     steps.push({ key: "leadResponse", label: "Lead Response Setup", icon: PhoneCall });
@@ -131,16 +125,15 @@ function buildSteps(hasVoicePlan: boolean, hasLeadResponse: boolean) {
 }
 
 function getLaunchStepIdx(hasVoicePlan: boolean, hasLeadResponse: boolean) {
-  // 4 (base) + 1 (pricingTiers always) + optional LR + optional voice
-  return 4 + (hasLeadResponse ? 1 : 0) + (hasVoicePlan ? 1 : 0) + 1;
+  // 4 base steps + optional LR + optional voice
+  return 4 + (hasLeadResponse ? 1 : 0) + (hasVoicePlan ? 1 : 0);
 }
 
 function getVoiceStepIdx(hasLeadResponse: boolean) {
-  return hasLeadResponse ? 6 : 5;
+  return hasLeadResponse ? 5 : 4;
 }
 
-const LR_STEP_IDX = 5;
-const PRICING_TIERS_STEP_IDX = 4;
+const LR_STEP_IDX = 4;
 
 const profileSchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -1389,109 +1382,6 @@ function PaymentProcessingStep({
   );
 }
 
-function PricingTiersStep({
-  companyData,
-  onNext,
-  onBack,
-  isPending,
-}: {
-  companyData: BusinessOnboardingStatus["companyData"];
-  onNext: (data: {
-    tiers: PricingTier[];
-    perDogAdder: number | null;
-    firstTimeCleanupFee: number | null;
-    depositPercent: number | null;
-  }) => void;
-  onBack: () => void;
-  isPending: boolean;
-}) {
-  const isSPSubscriber = !!companyData.pricingConfig;
-  const { toast } = useToast();
-
-  function buildInitialTiers(): PricingTier[] {
-    if (isSPSubscriber && companyData.pricingConfig?.pricingRules?.basePrices) {
-      const bp = companyData.pricingConfig.pricingRules.basePrices;
-      return [
-        { label: "Weekly Service", pricePerVisit: bp.weekly ?? null },
-        { label: "Bi-Weekly Service", pricePerVisit: bp.biWeekly ?? null },
-        { label: "Monthly Service", pricePerVisit: bp.monthly ?? null },
-        { label: "", pricePerVisit: null },
-        { label: "", pricePerVisit: null },
-        { label: "", pricePerVisit: null },
-      ];
-    }
-    return Array.from({ length: 6 }, () => ({ label: "", pricePerVisit: null }));
-  }
-
-  const [tiers, setTiers] = useState<PricingTier[]>(buildInitialTiers);
-  const [perDogAdder, setPerDogAdder] = useState<number | null>(null);
-  const [firstTimeCleanupFee, setFirstTimeCleanupFee] = useState<number | null>(null);
-  const [depositPercent, setDepositPercent] = useState<number | null>(null);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const handleNext = () => {
-    const errs = validatePricingTiers(tiers);
-    setErrors(errs);
-    if (Object.keys(errs).length > 0) {
-      toast({
-        title: "Pricing tiers incomplete",
-        description: "Please fill in labels and prices for tiers 1–3.",
-        variant: "destructive",
-      });
-      return;
-    }
-    onNext({ tiers, perDogAdder, firstTimeCleanupFee, depositPercent });
-  };
-
-  return (
-    <div className="max-w-xl mx-auto">
-      <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold" data-testid="text-step-title">
-          Lead Response Pricing Tiers
-        </h2>
-        <p className="text-muted-foreground mt-1">
-          Set your pricing tiers for the Lead Response product. Tiers 1–3 are required.
-        </p>
-      </div>
-
-      {isSPSubscriber && (
-        <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/20 text-sm flex items-start gap-2">
-          <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-          <span>Pre-filled from your existing ScooPilot pricing. Review and adjust as needed.</span>
-        </div>
-      )}
-
-      <Card>
-        <CardContent className="pt-6">
-          <PricingTiersEditor
-            value={tiers}
-            onChange={setTiers}
-            perDogAdder={perDogAdder}
-            onPerDogAdderChange={setPerDogAdder}
-            firstTimeCleanupFee={firstTimeCleanupFee}
-            onFirstTimeCleanupFeeChange={setFirstTimeCleanupFee}
-            depositPercent={depositPercent}
-            onDepositPercentChange={setDepositPercent}
-            showDepositPercent
-            errors={errors}
-          />
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center justify-between pt-6">
-        <Button variant="ghost" onClick={onBack} data-testid="button-back-step">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        <Button onClick={handleNext} disabled={isPending} data-testid="button-next-step">
-          {isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-          Continue
-          <ArrowRight className="h-4 w-4 ml-2" />
-        </Button>
-      </div>
-    </div>
-  );
-}
 
 type LRSubStep = 1 | 2 | 3 | 4;
 
@@ -2724,21 +2614,6 @@ export default function BusinessOnboarding({
               onNext={() => stepMutation.mutate({ step: 3 })}
               onBack={handleBack}
               onSkip={handleSkip}
-              isPending={stepMutation.isPending}
-            />
-          )}
-
-          {currentStep === PRICING_TIERS_STEP_IDX && (
-            <PricingTiersStep
-              companyData={status.companyData}
-              onNext={(data) =>
-                stepMutation.mutate({
-                  step: PRICING_TIERS_STEP_IDX,
-                  stepType: "pricingTiers",
-                  data: data as Record<string, unknown>,
-                })
-              }
-              onBack={handleBack}
               isPending={stepMutation.isPending}
             />
           )}
