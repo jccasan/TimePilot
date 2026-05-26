@@ -1360,6 +1360,31 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] users home_address/home_latitude/home_longitude columns verified");
 
+    // ── Geocode cache: remove known-bad entries cached with wrong coordinates ──
+    // These 6 Northern Virginia addresses were cached on 2026-05-19 with coordinates
+    // in OH, WV, and NC due to a Mapbox API mis-match. Deleting them forces a fresh
+    // geocode on next import-wizard step 5 load.
+    {
+      const badKeys = [
+        "us:12 w pennsylvania ave, lovettsville, va, 20180",
+        "us:24120 chamberlayne ave, aldie, va, 20105",
+        "us:450 library st se, purcellville, va, 20132",
+        "us:700 technology dr, sterling, va, 20164",
+        "us:36326 green ln, purcellville, va, 20132",
+        "us:5 high st, lovettsville, va, 20180",
+      ];
+      const placeholders = badKeys.map((_, i) => `$${i + 1}`).join(", ");
+      const result = await client.query(
+        `DELETE FROM geocode_cache WHERE address_key IN (${placeholders})`,
+        badKeys
+      );
+      if (result.rowCount && result.rowCount > 0) {
+        console.log(
+          `[Migration] Removed ${result.rowCount} bad geocode cache entries (stale out-of-state coordinates)`
+        );
+      }
+    }
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

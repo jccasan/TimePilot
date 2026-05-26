@@ -92,6 +92,17 @@ runPrune();
 const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 setInterval(runPrune, PRUNE_INTERVAL_MS).unref();
 
+// Continental US bounding box (includes Alaska + Hawaii with generous padding).
+// Results outside this box are almost certainly wrong Mapbox matches.
+const US_LAT_MIN = 17.0; // southernmost Hawaii/territory
+const US_LAT_MAX = 72.0; // northernmost Alaska
+const US_LNG_MIN = -180.0; // westernmost Alaska
+const US_LNG_MAX = -66.0; // easternmost Maine
+
+function isWithinUSBounds(lat: number, lng: number): boolean {
+  return lat >= US_LAT_MIN && lat <= US_LAT_MAX && lng >= US_LNG_MIN && lng <= US_LNG_MAX;
+}
+
 export async function geocodeAddress(
   streetAddress: string,
   city?: string | null,
@@ -173,9 +184,19 @@ export async function geocodeAddress(
         });
         return null;
       }
+      const lat = coords[1] as number;
+      const lng = coords[0] as number;
+      if (countryFilter === "us" && !isWithinUSBounds(lat, lng)) {
+        console.warn(
+          `[Geocode] Discarding out-of-bounds result for "${parts}": (${lat}, ${lng})`
+        );
+        geocodeCache.set(cacheKey, { value: null, storedAt: Date.now() });
+        storage.setGeocodeCache(cacheKey, null, null).catch(() => {});
+        return null;
+      }
       const result = {
-        latitude: String(coords[1]),
-        longitude: String(coords[0]),
+        latitude: String(lat),
+        longitude: String(lng),
       };
       geocodeCache.set(cacheKey, { value: result, storedAt: Date.now() });
       storage.setGeocodeCache(cacheKey, result.latitude, result.longitude).catch((err) => {
@@ -212,9 +233,15 @@ async function trySearchBoxFallback(
     if (!feature) return null;
     const coords = feature.geometry?.coordinates;
     if (!coords || coords.length < 2) return null;
+    const lat = coords[1] as number;
+    const lng = coords[0] as number;
+    if (country === "us" && !isWithinUSBounds(lat, lng)) {
+      console.warn(`[Geocode] SearchBox: discarding out-of-bounds result for "${query}": (${lat}, ${lng})`);
+      return null;
+    }
     return {
-      latitude: String(coords[1]),
-      longitude: String(coords[0]),
+      latitude: String(lat),
+      longitude: String(lng),
     };
   } catch {
     return null;
