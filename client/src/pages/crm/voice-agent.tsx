@@ -468,9 +468,7 @@ export default function VoiceChatAgentPage() {
                       <Input
                         id="voice-area-code"
                         value={areaCode}
-                        onChange={(e) =>
-                          setAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))
-                        }
+                        onChange={(e) => setAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))}
                         placeholder="e.g. 206"
                         maxLength={3}
                         className="w-32"
@@ -924,9 +922,7 @@ export default function VoiceChatAgentPage() {
                       )}
                     </>
                   ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Unable to load webhook status.
-                    </p>
+                    <p className="text-sm text-muted-foreground">Unable to load webhook status.</p>
                   )}
                 </div>
               )}
@@ -1157,11 +1153,7 @@ export default function VoiceChatAgentPage() {
                         </div>
                       )}
                       <DialogFooter>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedCallId(null)}
-                        >
+                        <Button variant="outline" size="sm" onClick={() => setSelectedCallId(null)}>
                           Close
                         </Button>
                       </DialogFooter>

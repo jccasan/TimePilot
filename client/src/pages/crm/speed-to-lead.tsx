@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -329,9 +328,7 @@ function LeadBoardTab({ isActive }: { isActive: boolean }) {
                         <th className="px-4 py-2.5 font-medium text-muted-foreground">Address</th>
                         <th className="px-4 py-2.5 font-medium text-muted-foreground">Yard</th>
                         <th className="px-4 py-2.5 font-medium text-muted-foreground">Dogs</th>
-                        <th className="px-4 py-2.5 font-medium text-muted-foreground">
-                          Estimate
-                        </th>
+                        <th className="px-4 py-2.5 font-medium text-muted-foreground">Estimate</th>
                         <th className="px-4 py-2.5 font-medium text-muted-foreground">Deposit</th>
                         <th className="px-4 py-2.5 font-medium text-muted-foreground">
                           <button
@@ -383,9 +380,7 @@ function LeadBoardTab({ isActive }: { isActive: boolean }) {
                           <td className="px-4 py-3 font-medium">
                             {lead.firstName} {lead.lastName}
                           </td>
-                          <td className="px-4 py-3 text-muted-foreground">
-                            {lead.phone || "—"}
-                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">{lead.phone || "—"}</td>
                           <td className="px-4 py-3 text-muted-foreground max-w-[180px] truncate">
                             {[lead.streetAddress, lead.city, lead.state]
                               .filter(Boolean)
@@ -413,8 +408,7 @@ function LeadBoardTab({ isActive }: { isActive: boolean }) {
                                 className={`text-xs ${STATUS_BADGE_COLORS[lead.leadResponseStatus] ?? ""}`}
                                 data-testid={`badge-status-${i}`}
                               >
-                                {STATUS_LABELS[lead.leadResponseStatus] ??
-                                  lead.leadResponseStatus}
+                                {STATUS_LABELS[lead.leadResponseStatus] ?? lead.leadResponseStatus}
                               </Badge>
                             ) : (
                               <span className="text-muted-foreground">—</span>
@@ -940,9 +934,7 @@ export default function SpeedToLeadPage() {
             ))}
           </div>
 
-          {activeTab === "board" && (
-            <LeadBoardTab isActive={config?.leadResponseActive === true} />
-          )}
+          {activeTab === "board" && <LeadBoardTab isActive={config?.leadResponseActive === true} />}
           {activeTab === "setup" && <SetupTab />}
         </>
       )}

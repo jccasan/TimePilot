@@ -130,7 +130,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-
 function EmailForwardingCard(_props: { company: Company | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
