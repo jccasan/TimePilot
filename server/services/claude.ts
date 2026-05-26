@@ -27,6 +27,16 @@ function warnIfModelUnknown(modelConst: string, modelId: string): void {
 warnIfModelUnknown("CLAUDE_FAST_MODEL", CLAUDE_FAST_MODEL);
 warnIfModelUnknown("CLAUDE_SMART_MODEL", CLAUDE_SMART_MODEL);
 
+if (!process.env.CLAUDE_API_KEY) {
+  console.warn(
+    "[Claude] CLAUDE_API_KEY is not set — AI features (Rover chatbot, SMS agent, import mapper) are disabled."
+  );
+}
+
+export function isClaudeConfigured(): boolean {
+  return !!process.env.CLAUDE_API_KEY;
+}
+
 export const anthropic = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY,
 });

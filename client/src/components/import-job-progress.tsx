@@ -48,9 +48,9 @@ export function ImportJobProgress({
   const calledComplete = useRef(false);
 
   const { data: job } = useQuery<ImportJobStatus>({
-    queryKey: ["/api/imports", jobId],
+    queryKey: ["/api/import-batches", jobId],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/imports/${jobId}`);
+      const res = await apiRequest("GET", `/api/import-batches/${jobId}`);
       return res.json();
     },
     refetchInterval: (query) => {

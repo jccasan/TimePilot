@@ -11,7 +11,7 @@ import {
   isSmsConfiguredForCompany,
   getFromPhoneForCompany,
 } from "../services/sms";
-import { getAppBaseUrl } from "../services/retell";
+import { getAppBaseUrl } from "../services/invoice-email";
 import { haversineDistance, fetchMapboxDirections } from "../services/route-optimizer";
 import { insertVisitSchema, reviewTokens, reviewResponses } from "@shared/schema";
 
@@ -398,14 +398,96 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       if (!consumed)
         return res.status(410).json({ error: "This review link has already been used" });
       const branch = rating >= 4 ? "positive" : "negative";
-      await db.insert(reviewResponses).values({
-        tokenId: consumed.id,
-        rating,
-        feedbackText: null,
-        branch,
-        alertSent: false,
-      });
+      const [newResponse] = await db
+        .insert(reviewResponses)
+        .values({
+          tokenId: consumed.id,
+          rating,
+          feedbackText: null,
+          branch,
+          alertSent: false,
+        })
+        .returning({ id: reviewResponses.id });
       const company = await storage.getCompany(row.companyId);
+
+      // Fire an immediate owner alert for low ratings so negative feedback is
+      // never silently lost if the customer closes the browser before typing text.
+      if (branch === "negative" && newResponse) {
+        try {
+          const contact = await storage.getContact(row.contactId, row.companyId);
+          if (company && contact) {
+            const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+            const appBaseUrl = getAppBaseUrl();
+            const contactLink = `${appBaseUrl}/contacts/${contact.id}`;
+            const ownerEmails = await db.execute(sql`
+              SELECT u.email FROM users u
+              JOIN company_users cu ON cu.user_id = u.id
+              WHERE cu.company_id = ${row.companyId} AND cu.role = 'owner' AND cu.is_active = true AND u.email IS NOT NULL
+              LIMIT 3
+            `);
+            const safeContactName = escapeHtml(contactName);
+            const emailSubject = `Customer left a low rating — ${contactName}`;
+            const emailText = `A customer left a low rating. They may still submit written feedback, but you should follow up.\n\nCustomer: ${contactName}\nRating: ${rating}/5 stars\n\nView contact: ${contactLink}`;
+            const emailHtml = `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background-color: #dc2626; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+                  <h1 style="color: white; margin: 0; font-size: 20px;">Customer Left a Low Rating</h1>
+                </div>
+                <div style="padding: 24px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+                  <p style="margin: 0 0 16px; color: #111827; font-size: 15px;">A customer left a low rating. They may still leave written feedback, but you should reach out proactively.</p>
+                  <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                    <p style="margin: 4px 0; font-size: 14px;"><strong>Customer:</strong> ${safeContactName}</p>
+                    <p style="margin: 4px 0; font-size: 14px;"><strong>Rating:</strong> ${rating}/5 stars</p>
+                    <p style="margin: 4px 0; font-size: 14px; color: #6b7280;">No written feedback submitted yet.</p>
+                  </div>
+                  <div style="text-align: center;">
+                    <a href="${contactLink}" style="display: inline-block; background-color: #dc2626; color: white; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px;">View Customer in CRM</a>
+                  </div>
+                </div>
+              </div>
+            `;
+            for (const emailRow of ownerEmails.rows) {
+              const ownerEmail = String((emailRow as Record<string, unknown>).email ?? "");
+              if (ownerEmail) {
+                await sendEmail({
+                  to: ownerEmail,
+                  subject: emailSubject,
+                  text: emailText,
+                  html: emailHtml,
+                  companyId: row.companyId,
+                });
+              }
+            }
+            const smsConfigured = await isSmsConfiguredForCompany(row.companyId);
+            if (smsConfigured) {
+              const ownerPhones = await db.execute(sql`
+                SELECT u.phone FROM users u
+                JOIN company_users cu ON cu.user_id = u.id
+                WHERE cu.company_id = ${row.companyId} AND cu.role = 'owner' AND cu.is_active = true AND u.phone IS NOT NULL
+                LIMIT 3
+              `);
+              const smsBody = `Alert: ${contactName} gave a ${rating}-star rating. No written feedback yet — log in to ScooPilot to follow up.`;
+              for (const phoneRow of ownerPhones.rows) {
+                const ownerPhone = String((phoneRow as Record<string, unknown>).phone ?? "");
+                if (ownerPhone) {
+                  await sendSmsForCompany({
+                    to: ownerPhone,
+                    body: smsBody,
+                    companyId: row.companyId,
+                  }).catch((e) => console.error("[ReviewRateAlert] SMS failed:", e));
+                }
+              }
+            }
+            await db
+              .update(reviewResponses)
+              .set({ alertSent: true })
+              .where(eq(reviewResponses.id, newResponse.id));
+          }
+        } catch (alertErr) {
+          console.error("[ReviewRateAlert] Failed to send rating alert:", alertErr);
+        }
+      }
+
       res.json({
         tokenId: consumed.id,
         branch,
@@ -442,10 +524,7 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       if (!existingResponse) return res.status(404).json({ error: "Rating not yet recorded" });
       if (existingResponse.branch !== "negative")
         return res.status(400).json({ error: "Only negative responses require text feedback" });
-      if (
-        existingResponse.alertSent ||
-        (existingResponse.feedbackText && existingResponse.feedbackText.trim().length > 0)
-      ) {
+      if (existingResponse.feedbackText && existingResponse.feedbackText.trim().length > 0) {
         return res.status(409).json({ error: "Feedback already submitted" });
       }
       const updated = await db

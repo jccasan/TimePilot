@@ -7,7 +7,7 @@ import { checkRateLimit } from "../lib/rate-limit";
 import { loadSession, createSession, updateSession } from "../lib/sms-session";
 import { sendAlert } from "../lib/alert";
 import { isFallbackResponse, logFallback } from "../lib/fallback-log";
-import { anthropic } from "../services/claude";
+import { anthropic, isClaudeConfigured } from "../services/claude";
 import { sendTelnyxSms } from "../services/telnyx-sms";
 
 export async function registerSmsAgentRoutes(app: Express): Promise<void> {
@@ -57,6 +57,21 @@ export async function registerSmsAgentRoutes(app: Express): Promise<void> {
           toNumber,
           fromNumber,
         });
+        return res.sendStatus(200);
+      }
+
+      if (!isClaudeConfigured()) {
+        console.warn("[SMS Agent] CLAUDE_API_KEY not configured — sending fallback reply");
+        if (company.telnyxApiKey && company.telnyxPhoneNumber && company.telnyxMessagingProfileId) {
+          await sendTelnyxSms({
+            to: fromNumber,
+            body: `Thanks for reaching out to ${company.name || "us"}! We'll be in touch soon.`,
+            from: toNumber,
+            apiKey: company.telnyxApiKey,
+            messagingProfileId: company.telnyxMessagingProfileId,
+            companyId: company.id,
+          });
+        }
         return res.sendStatus(200);
       }
 
