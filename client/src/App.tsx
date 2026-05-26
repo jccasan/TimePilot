@@ -98,7 +98,6 @@ const ImportResolverPage = lazy(() => import("@/pages/import-resolver-page"));
 const CrmRouter = lazy(() => import("@/pages/crm/index"));
 const SignDocumentsPage = lazy(() => import("@/pages/sign-documents-page"));
 const LeadResponseRegisterPage = lazy(() => import("@/pages/lead-response-register"));
-const LeadResponseDashboard = lazy(() => import("@/pages/lead-response-dashboard"));
 const UnmatchedEmails = lazy(() => import("@/pages/unmatched-emails"));
 
 function PageLoader() {
@@ -249,7 +248,9 @@ function Router() {
             <CrmRouter />
           </SubscriptionGate>
         </Route>
-        <Route path="/lead-response" component={LeadResponseDashboard} />
+        <Route path="/lead-response">
+          <Redirect to="/crm/speed-to-lead" />
+        </Route>
         <Route path="/unmatched-emails" component={UnmatchedEmails} />
         {/* Platform admin pages — accessible to isPlatformAdmin regular users */}
         <Route path="/admin" component={AdminDashboard} />

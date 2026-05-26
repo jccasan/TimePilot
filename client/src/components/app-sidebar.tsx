@@ -44,6 +44,7 @@ import {
   MailOpen,
   GitBranch,
   PhoneIncoming,
+  PhoneCall,
   CreditCard,
   Sprout,
   Shield,
@@ -92,7 +93,7 @@ const LR_OPERATOR_NAV: {
   url: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { title: "Lead Response", url: "/lead-response", icon: PhoneIncoming },
+  { title: "Speed to Lead", url: "/crm/speed-to-lead", icon: PhoneIncoming },
   { title: "Contacts and Leads", url: "/contacts?leadSource=lead_response", icon: ContactRound },
   { title: "Messages", url: "/communications", icon: MessageSquare },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -253,6 +254,19 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
         icon: TrendingUp,
         requiresSubscription: true,
         excludedTiers: ["tier_starter"],
+      },
+      {
+        title: "Voice/Chat Agent",
+        url: "/crm/voice-agent",
+        icon: PhoneCall,
+        requiresSubscription: true,
+        requiresVoice: true,
+      },
+      {
+        title: "Speed to Lead",
+        url: "/crm/speed-to-lead",
+        icon: PhoneIncoming,
+        requiresSubscription: true,
       },
     ],
   },
