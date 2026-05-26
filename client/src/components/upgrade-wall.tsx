@@ -39,7 +39,7 @@ export function UpgradeWall({ type, featureName }: UpgradeWallProps) {
             </h2>
             <p className="text-sm text-muted-foreground" data-testid="text-upgrade-wall-desc">
               {isVoice
-                ? `${featureName ? featureName + " is" : "This feature is"} part of the Voice Agent add-on. Add it to your account to unlock AI-powered call handling.`
+                ? `${featureName ? featureName + " is" : "This feature is"} part of the Voice/Chat Agent add-on. Add it to your account to unlock AI-powered call handling.`
                 : isTier
                   ? `${featureName ? featureName + " is" : "This feature is"} available on the Solo plan and above. Upgrade to unlock pipeline management, deals, sequences, and campaigns.`
                   : `${featureName ? featureName + " is" : "This section is"} available on a full ScooPilot subscription. Upgrade to unlock CRM, scheduling, invoicing, routes, and more.`}

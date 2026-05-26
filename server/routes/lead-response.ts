@@ -487,6 +487,8 @@ export async function registerLeadResponseRoutes(app: Express): Promise<void> {
             .json({ error: "Only owners and admins can request a number change" });
         }
 
+        const { portingPhoneNumber } = req.body;
+
         const saved = await storage.upsertLeadResponseConfig(companyId, {
           portingRequested: true,
         });
@@ -494,10 +496,13 @@ export async function registerLeadResponseRoutes(app: Express): Promise<void> {
         const adminEmail = process.env.ADMIN_EMAIL;
         if (adminEmail) {
           const company = await storage.getCompany(companyId);
+          const portingLine = portingPhoneNumber
+            ? `\nNumber to port: ${portingPhoneNumber}`
+            : "";
           sendEmail({
             to: adminEmail,
             subject: `[Lead Response] Number change requested — ${company?.name ?? companyId}`,
-            text: `Company ${company?.name ?? companyId} (ID: ${companyId}) has requested a Lead Response phone number change.\n\nCurrent number: ${saved.lrPhoneNumber ?? "none"}\n\nPlease review and process the request.`,
+            text: `Company ${company?.name ?? companyId} (ID: ${companyId}) has requested a Lead Response phone number change.\n\nCurrent number: ${saved.lrPhoneNumber ?? "none"}${portingLine}\n\nPlease review and process the request.`,
           }).catch((err) => console.error("[LR] Failed to send number-change admin email:", err));
         }
 

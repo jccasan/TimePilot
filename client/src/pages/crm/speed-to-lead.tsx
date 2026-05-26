@@ -666,8 +666,10 @@ function SetupTab() {
   });
 
   const requestNumberChangeMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/lead-response/request-number-change", {});
+    mutationFn: async (numberToPort?: string) => {
+      const res = await apiRequest("POST", "/api/lead-response/request-number-change", {
+        portingPhoneNumber: numberToPort ?? undefined,
+      });
       if (!res.ok) throw new Error("Failed to submit request");
       return res.json();
     },
@@ -723,7 +725,7 @@ function SetupTab() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => requestNumberChangeMutation.mutate()}
+                onClick={() => requestNumberChangeMutation.mutate(undefined)}
                 disabled={requestNumberChangeMutation.isPending || !!lrConfig.portingRequested}
                 data-testid="button-request-number-change"
               >
@@ -808,7 +810,9 @@ function SetupTab() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => requestNumberChangeMutation.mutate()}
+                  onClick={() =>
+                    requestNumberChangeMutation.mutate(portNumber.trim() || undefined)
+                  }
                   disabled={
                     requestNumberChangeMutation.isPending ||
                     !!lrConfig.portingRequested ||
@@ -876,8 +880,8 @@ function SetupTab() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="scoopilot">ScooPilot</SelectItem>
-            <SelectItem value="housecall_pro">HouseCall Pro</SelectItem>
-            <SelectItem value="other">Other</SelectItem>
+            <SelectItem value="housecall_pro">HouseCallPro</SelectItem>
+            <SelectItem value="manual">Manual</SelectItem>
           </SelectContent>
         </Select>
       </div>

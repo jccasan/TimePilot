@@ -1406,7 +1406,7 @@ function ReviewLaunchStep({
           : "secondary") as "active" | "warn" | "secondary",
     },
     {
-      label: "Voice Agent",
+      label: "Voice/Chat Agent",
       icon: Phone,
       done: voiceStatus === "active",
       badge: voiceStatus === "active" ? "Active" : "Not subscribed",
