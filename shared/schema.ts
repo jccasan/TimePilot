@@ -3673,6 +3673,7 @@ export const leadResponseConfig = pgTable("lead_response_config", {
   pricingTiers: jsonb("pricing_tiers").$type<LrPricingTier[]>(),
   perDogAdder: decimal("per_dog_adder", { precision: 8, scale: 2 }),
   firstTimeCleanupFee: decimal("first_time_cleanup_fee", { precision: 8, scale: 2 }),
+  followUpDelayHours: integer("follow_up_delay_hours").default(1),
   airtableOperatorId: varchar("airtable_operator_id", { length: 255 }),
   setupComplete: boolean("setup_complete").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -240,8 +240,16 @@ function Router() {
           </SubscriptionGate>
         </Route>
         <Route path="/command-center" component={CommandCenter} />
-        <Route path="/crm/voice-agent" component={VoiceChatAgentPage} />
-        <Route path="/crm/speed-to-lead" component={SpeedToLeadPage} />
+        <Route path="/crm/voice-agent">
+          <SubscriptionGate type="voice" featureName="Voice/Chat Agent">
+            <VoiceChatAgentPage />
+          </SubscriptionGate>
+        </Route>
+        <Route path="/crm/speed-to-lead">
+          <SubscriptionGate featureName="Speed to Lead">
+            <SpeedToLeadPage />
+          </SubscriptionGate>
+        </Route>
         <Route path="/crm/:rest*">
           <SubscriptionGate featureName="CRM" excludedTiers={["tier_starter"]}>
             <CrmRouter />

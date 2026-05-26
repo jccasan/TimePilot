@@ -53,6 +53,7 @@ type LrConfig = {
   pricingTiers?: PricingTier[] | null;
   perDogAdder?: string | number | null;
   firstTimeCleanupFee?: string | number | null;
+  followUpDelayHours?: number | null;
 };
 
 interface DashboardSummary {
@@ -540,6 +541,9 @@ function SetupTab() {
   const [firstTimeCleanupFee, setFirstTimeCleanupFee] = useState<number | null>(
     toNum(lrConfig?.firstTimeCleanupFee)
   );
+  const [followUpDelayHours, setFollowUpDelayHours] = useState<string>(
+    String(lrConfig?.followUpDelayHours ?? 1)
+  );
   const [provisionAreaCode, setProvisionAreaCode] = useState("");
   const [portNumber, setPortNumber] = useState("");
   const [tierErrors, setTierErrors] = useState<Record<string, string>>({});
@@ -581,6 +585,7 @@ function SetupTab() {
       setPricingTiers(lrConfig.pricingTiers ?? []);
       setPerDogAdder(toNum(lrConfig.perDogAdder));
       setFirstTimeCleanupFee(toNum(lrConfig.firstTimeCleanupFee));
+      setFollowUpDelayHours(String(lrConfig.followUpDelayHours ?? 1));
     }
   }, [lrConfig]);
 
@@ -641,6 +646,7 @@ function SetupTab() {
         pricingTiers: effectiveTiers,
         perDogAdder,
         firstTimeCleanupFee,
+        followUpDelayHours: parseInt(followUpDelayHours) || 1,
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -765,7 +771,8 @@ function SetupTab() {
                   size="sm"
                   onClick={() => provisionNumberMutation.mutate()}
                   disabled={
-                    provisionNumberMutation.isPending || provisionAreaCode.replace(/\D/g, "").length !== 3
+                    provisionNumberMutation.isPending ||
+                    provisionAreaCode.replace(/\D/g, "").length !== 3
                   }
                   data-testid="button-provision-number"
                 >
@@ -803,7 +810,9 @@ function SetupTab() {
                   size="sm"
                   onClick={() => requestNumberChangeMutation.mutate()}
                   disabled={
-                    requestNumberChangeMutation.isPending || !!lrConfig.portingRequested || !portNumber.trim()
+                    requestNumberChangeMutation.isPending ||
+                    !!lrConfig.portingRequested ||
+                    !portNumber.trim()
                   }
                   data-testid="button-request-port"
                 >
@@ -920,6 +929,27 @@ function SetupTab() {
           maxLength={160}
           data-testid="input-lr-out-of-area-message"
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium">Follow-up Reminder Timing</Label>
+        <p className="text-xs text-muted-foreground">
+          How long after receiving a new lead to send an automated follow-up reminder if no
+          appointment has been scheduled.
+        </p>
+        <Select value={followUpDelayHours} onValueChange={setFollowUpDelayHours}>
+          <SelectTrigger className="w-48" data-testid="select-lr-followup-delay">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="1">1 hour</SelectItem>
+            <SelectItem value="2">2 hours</SelectItem>
+            <SelectItem value="4">4 hours</SelectItem>
+            <SelectItem value="8">8 hours</SelectItem>
+            <SelectItem value="24">24 hours</SelectItem>
+            <SelectItem value="48">48 hours</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="border-t pt-4 space-y-3">

@@ -384,6 +384,7 @@ export async function registerLeadResponseRoutes(app: Express): Promise<void> {
         pricingTiers,
         perDogAdder,
         firstTimeCleanupFee,
+        followUpDelayHours,
       } = req.body;
 
       const updates: Record<string, unknown> = {};
@@ -396,6 +397,7 @@ export async function registerLeadResponseRoutes(app: Express): Promise<void> {
       if (pricingTiers !== undefined) updates.pricingTiers = pricingTiers;
       if (perDogAdder !== undefined) updates.perDogAdder = perDogAdder;
       if (firstTimeCleanupFee !== undefined) updates.firstTimeCleanupFee = firstTimeCleanupFee;
+      if (followUpDelayHours !== undefined) updates.followUpDelayHours = followUpDelayHours;
 
       const saved = await storage.upsertLeadResponseConfig(
         companyId,
