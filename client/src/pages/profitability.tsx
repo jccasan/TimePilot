@@ -45,6 +45,7 @@ import {
   Loader2,
   Zap,
   ExternalLink,
+  Warehouse,
 } from "lucide-react";
 import { CustomerInfoPopover } from "@/components/customer-info-popover";
 import type { Route as RouteRecord } from "@shared/schema";
@@ -135,10 +136,21 @@ interface RouteProfitability {
   customers: RouteCustomer[];
 }
 
-type ViewMode = "customers" | "routes" | "breakeven";
-type SortField = "name" | "revenue" | "cost" | "profit" | "margin";
+type ViewMode = "customers" | "routes" | "depots" | "breakeven";
+type SortField = "name" | "revenue" | "cost" | "profit" | "margin" | "travel";
 type SortDir = "asc" | "desc";
 type StatusFilter = "all" | "profitable" | "marginal" | "unprofitable";
+
+interface DepotProfitability {
+  depotId: string | null;
+  depotName: string;
+  totalStops: number;
+  totalRevenueCents: number;
+  totalCostCents: number;
+  totalProfitCents: number;
+  avgMarginPct: number;
+  avgTravelTimePerStopMinutes: number;
+}
 
 function formatDollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -205,9 +217,18 @@ export default function Profitability() {
   const [, navigate] = useLocation();
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const urlTab = new URLSearchParams(window.location.search).get("tab");
-    if (urlTab === "customers" || urlTab === "routes" || urlTab === "breakeven") return urlTab;
+    if (
+      urlTab === "customers" ||
+      urlTab === "routes" ||
+      urlTab === "depots" ||
+      urlTab === "breakeven"
+    )
+      return urlTab;
     const saved = localStorage.getItem("scoopilot_profit_view_mode");
-    return saved === "customers" || saved === "routes" || saved === "breakeven"
+    return saved === "customers" ||
+      saved === "routes" ||
+      saved === "depots" ||
+      saved === "breakeven"
       ? saved
       : "customers";
   });
@@ -264,6 +285,11 @@ export default function Profitability() {
   const { data: routeData, isLoading: isRouteLoading } = useQuery<RouteProfitability[]>({
     queryKey: ["/api/profitability/route-summary"],
     enabled: viewMode === "routes",
+  });
+
+  const { data: depotData, isLoading: isDepotLoading } = useQuery<DepotProfitability[]>({
+    queryKey: ["/api/profitability/depot-summary"],
+    enabled: viewMode === "depots",
   });
 
   const { data: routeRecords } = useQuery<RouteWithOptStatus[]>({
@@ -460,14 +486,18 @@ export default function Profitability() {
               ? "Customer Profitability"
               : viewMode === "routes"
                 ? "Route Profitability"
-                : "Breakeven Analysis"}
+                : viewMode === "depots"
+                  ? "Depot Profitability"
+                  : "Breakeven Analysis"}
           </h1>
           <p className="text-muted-foreground">
             {viewMode === "customers"
               ? "Analyze profit and loss across your customer base"
               : viewMode === "routes"
                 ? "Analyze profit and loss across your routes"
-                : "See how many customers you need to cover your costs"}
+                : viewMode === "depots"
+                  ? "Compare performance and profitability by starting depot"
+                  : "See how many customers you need to cover your costs"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -480,6 +510,10 @@ export default function Profitability() {
               <TabsTrigger value="routes" data-testid="tab-by-route">
                 <Route className="mr-1 h-4 w-4" />
                 By Route
+              </TabsTrigger>
+              <TabsTrigger value="depots" data-testid="tab-by-depot">
+                <Warehouse className="mr-1 h-4 w-4" />
+                By Depot
               </TabsTrigger>
               <TabsTrigger value="breakeven" data-testid="tab-breakeven">
                 <TrendingDown className="mr-1 h-4 w-4" />
@@ -1165,6 +1199,198 @@ export default function Profitability() {
                 </TableBody>
               </Table>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {viewMode === "depots" && (
+        <Card data-testid="card-depot-profitability-table">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-4">
+            <CardTitle className="text-base">Depot Profitability</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isDepotLoading ? (
+              <div className="p-6">
+                <Skeleton className="h-64" />
+              </div>
+            ) : !depotData ||
+              depotData.length === 0 ||
+              depotData.every((d) => d.depotId === null) ? (
+              <div className="p-8 text-center text-muted-foreground" data-testid="text-depot-empty">
+                <Warehouse className="h-8 w-8 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">No depot analytics available</p>
+                <p className="text-sm mt-1">
+                  Configure depots in Settings and assign them to routes to see per-depot
+                  breakdowns. All stops currently group under Company Default.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          Depot
+                          <SortButton
+                            field="name"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
+                        </div>
+                      </TableHead>
+                      <TableHead className="text-center">Stops</TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          Revenue
+                          <SortButton
+                            field="revenue"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
+                        </div>
+                      </TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          Cost
+                          <SortButton
+                            field="cost"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
+                        </div>
+                      </TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          Profit
+                          <SortButton
+                            field="profit"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
+                        </div>
+                      </TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          Avg Margin
+                          <SortButton
+                            field="margin"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
+                        </div>
+                      </TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          Avg Travel
+                          <SortButton
+                            field="travel"
+                            currentField={sortField}
+                            currentDir={sortDir}
+                            onSort={handleSort}
+                          />
+                        </div>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(depotData ?? [])
+                      .slice()
+                      .sort((a, b) => {
+                        let cmp = 0;
+                        switch (sortField) {
+                          case "name":
+                            cmp = a.depotName.localeCompare(b.depotName);
+                            break;
+                          case "revenue":
+                            cmp = a.totalRevenueCents - b.totalRevenueCents;
+                            break;
+                          case "cost":
+                            cmp = a.totalCostCents - b.totalCostCents;
+                            break;
+                          case "profit":
+                            cmp = a.totalProfitCents - b.totalProfitCents;
+                            break;
+                          case "margin":
+                            cmp = a.avgMarginPct - b.avgMarginPct;
+                            break;
+                          case "travel":
+                            cmp = a.avgTravelTimePerStopMinutes - b.avgTravelTimePerStopMinutes;
+                            break;
+                        }
+                        return sortDir === "asc" ? cmp : -cmp;
+                      })
+                      .map((depot) => {
+                        const marginColor =
+                          depot.avgMarginPct >= 15
+                            ? "text-green-600 dark:text-green-400"
+                            : depot.avgMarginPct >= 0
+                              ? "text-yellow-600 dark:text-yellow-400"
+                              : "text-red-600 dark:text-red-400";
+                        const profitColor =
+                          depot.totalProfitCents >= 0
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-red-600 dark:text-red-400";
+                        const rowKey = depot.depotId ?? "company-default";
+                        const travelMins = depot.avgTravelTimePerStopMinutes;
+                        const travelLabel =
+                          travelMins >= 60
+                            ? `${Math.floor(travelMins / 60)}h ${Math.round(travelMins % 60)}m`
+                            : `${travelMins.toFixed(1)} min`;
+                        return (
+                          <TableRow key={rowKey} data-testid={`row-depot-${rowKey}`}>
+                            <TableCell
+                              className="font-medium"
+                              data-testid={`text-depot-name-${rowKey}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <Warehouse className="h-4 w-4 text-muted-foreground shrink-0" />
+                                {depot.depotName}
+                                {depot.depotId === null && (
+                                  <span className="text-xs text-muted-foreground italic">
+                                    (default)
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell
+                              className="text-center"
+                              data-testid={`text-depot-stops-${rowKey}`}
+                            >
+                              {depot.totalStops}
+                            </TableCell>
+                            <TableCell data-testid={`text-depot-revenue-${rowKey}`}>
+                              {formatDollars(depot.totalRevenueCents)}
+                            </TableCell>
+                            <TableCell data-testid={`text-depot-cost-${rowKey}`}>
+                              {formatDollars(depot.totalCostCents)}
+                            </TableCell>
+                            <TableCell data-testid={`text-depot-profit-${rowKey}`}>
+                              <span className={profitColor}>
+                                {formatDollars(depot.totalProfitCents)}
+                              </span>
+                            </TableCell>
+                            <TableCell data-testid={`text-depot-margin-${rowKey}`}>
+                              <span className={marginColor}>{depot.avgMarginPct.toFixed(1)}%</span>
+                            </TableCell>
+                            <TableCell
+                              className="text-muted-foreground"
+                              data-testid={`text-depot-travel-${rowKey}`}
+                            >
+                              {travelLabel}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

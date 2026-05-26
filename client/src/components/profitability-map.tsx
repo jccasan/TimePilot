@@ -34,11 +34,13 @@ export type MapRoute = {
   avgMarginPct: number;
   status: "profitable" | "marginal" | "unprofitable";
   stops: MapStop[];
+  depotId?: string | null;
 };
 
 type ProfitabilityMapProps = {
   routes: MapRoute[];
   visibleRouteIds: Set<string>;
+  dimmedRouteIds?: Set<string>;
   viewMode: "stops" | "zones";
   focusRouteId?: string | null;
   onStopClick?: (stop: MapStop) => void;
@@ -60,6 +62,7 @@ function formatDollars(cents: number): string {
 export default function ProfitabilityMap({
   routes,
   visibleRouteIds,
+  dimmedRouteIds,
   viewMode,
   focusRouteId,
   onStopClick,
@@ -177,7 +180,11 @@ export default function ProfitabilityMap({
       if (map.getSource(lineId)) map.removeSource(lineId);
     });
 
-    const visibleRoutes = routes.filter((r) => visibleRouteIds.has(r.routeId));
+    const dimmedSet = dimmedRouteIds ?? new Set<string>();
+    const visibleRoutes = routes.filter(
+      (r) => visibleRouteIds.has(r.routeId) && !dimmedSet.has(r.routeId)
+    );
+    const dimmedRoutes = dimmedRouteIds ? routes.filter((r) => dimmedRouteIds.has(r.routeId)) : [];
     const allVisibleStops = visibleRoutes.flatMap((r) => r.stops);
 
     if (viewMode === "zones") {
@@ -276,14 +283,35 @@ export default function ProfitabilityMap({
           .addTo(map);
         markersRef.current.push(marker);
       });
+
+      dimmedRoutes
+        .flatMap((r) => r.stops)
+        .forEach((stop) => {
+          const el = document.createElement("div");
+          el.style.width = "8px";
+          el.style.height = "8px";
+          el.style.borderRadius = "50%";
+          el.style.backgroundColor = "#9ca3af";
+          el.style.border = "1px solid white";
+          el.style.opacity = "0.25";
+          const marker = new mapboxgl.Marker({ element: el })
+            .setLngLat([stop.longitude, stop.latitude])
+            .addTo(map);
+          markersRef.current.push(marker);
+        });
     } else {
-      for (const route of visibleRoutes) {
+      for (const route of [...dimmedRoutes, ...visibleRoutes]) {
+        const isDimmed = dimmedSet.has(route.routeId);
         const validStops = route.stops.filter((s) => s.latitude && s.longitude);
 
         if (validStops.length >= 2) {
           const coordinates = validStops.map((s) => [s.longitude, s.latitude]);
           const lineId = `route-line-${route.routeId}`;
-          const lineColor = useRouteColors ? route.color || "#3b82f6" : STATUS_COLORS[route.status];
+          const lineColor = isDimmed
+            ? "#d1d5db"
+            : useRouteColors
+              ? route.color || "#3b82f6"
+              : STATUS_COLORS[route.status];
 
           map.addSource(lineId, {
             type: "geojson",
@@ -301,19 +329,23 @@ export default function ProfitabilityMap({
             layout: { "line-join": "round", "line-cap": "round" },
             paint: {
               "line-color": lineColor,
-              "line-width": 3,
-              "line-opacity": 0.6,
+              "line-width": isDimmed ? 1.5 : 3,
+              "line-opacity": isDimmed ? 0.2 : 0.6,
               "line-dasharray": [2, 2],
             },
           });
         }
 
         validStops.forEach((stop, stopIdx) => {
-          const color = useRouteColors ? route.color || "#3b82f6" : STATUS_COLORS[stop.status];
+          const color = isDimmed
+            ? "#9ca3af"
+            : useRouteColors
+              ? route.color || "#3b82f6"
+              : STATUS_COLORS[stop.status];
           const el = document.createElement("div");
           el.setAttribute("data-testid", `marker-stop-${stop.propertyId}`);
-          el.style.width = "24px";
-          el.style.height = "24px";
+          el.style.width = isDimmed ? "16px" : "24px";
+          el.style.height = isDimmed ? "16px" : "24px";
           el.style.borderRadius = "50%";
           el.style.backgroundColor = color;
           el.style.color = "white";
@@ -324,8 +356,9 @@ export default function ProfitabilityMap({
           el.style.fontWeight = "bold";
           el.style.border = "2px solid white";
           el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
-          el.style.cursor = "pointer";
-          el.textContent = String(stopIdx + 1);
+          el.style.cursor = isDimmed ? "default" : "pointer";
+          el.style.opacity = isDimmed ? "0.25" : "1";
+          el.textContent = isDimmed ? "" : String(stopIdx + 1);
 
           const popupEl = document.createElement("div");
           popupEl.dataset.testid = `popup-stop-${stop.propertyId}`;
@@ -406,7 +439,7 @@ export default function ProfitabilityMap({
       allVisibleStops.forEach((s) => bounds.extend([s.longitude, s.latitude]));
       map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
     }
-  }, [routes, visibleRouteIds, viewMode, mapLoaded, useRouteColors]);
+  }, [routes, visibleRouteIds, dimmedRouteIds, viewMode, mapLoaded, useRouteColors]);
 
   useEffect(() => {
     if (!focusRouteId || !mapRef.current || !mapboxglRef.current || !mapLoaded) return;

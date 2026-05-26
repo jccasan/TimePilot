@@ -46,6 +46,7 @@ import {
   MessageSquare,
   Mail,
   XCircle,
+  Warehouse,
 } from "lucide-react";
 import ProfitabilityMap, { type MapRoute, type MapStop } from "@/components/profitability-map";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -244,6 +245,7 @@ export default function RouteProfitMaps() {
 
   const [optResult, setOptResult] = useState<OptResult | null>(null);
   const [compareView, setCompareView] = useState<CompareView>("current");
+  const [depotFilter, setDepotFilter] = useState<string>("all");
 
   const isComparing = optResult !== null;
 
@@ -253,6 +255,11 @@ export default function RouteProfitMaps() {
 
   const { data: routeRecords } = useQuery<RouteWithOptStatus[]>({
     queryKey: ["/api/routes"],
+  });
+
+  type DepotRecord = { id: string; name: string; isPrimary: boolean };
+  const { data: depotRecords } = useQuery<DepotRecord[]>({
+    queryKey: ["/api/depots"],
   });
 
   const routes = routeMapData ?? [];
@@ -351,6 +358,20 @@ export default function RouteProfitMaps() {
     const filtered = new Set(filteredRoutes.map((r) => r.routeId));
     return new Set([...visibleRouteIds].filter((id) => filtered.has(id)));
   }, [filteredRoutes, visibleRouteIds]);
+
+  const depotDimmedIds = useMemo(() => {
+    if (depotFilter === "all") return undefined;
+    const dimmed = new Set<string>();
+    for (const r of filteredRoutes) {
+      const resolvedDepotId = r.depotId ?? null;
+      const matches =
+        depotFilter === "company_default"
+          ? resolvedDepotId === null
+          : resolvedDepotId === depotFilter;
+      if (!matches && effectiveVisibleIds.has(r.routeId)) dimmed.add(r.routeId);
+    }
+    return dimmed;
+  }, [depotFilter, filteredRoutes, effectiveVisibleIds]);
 
   const toggleRoute = (routeId: string) => {
     setVisibleRouteIds((prev) => {
@@ -471,6 +492,24 @@ export default function RouteProfitMaps() {
                   <SelectItem value="unprofitable">Unprofitable</SelectItem>
                 </SelectContent>
               </Select>
+
+              {depotRecords && depotRecords.length > 0 && (
+                <Select value={depotFilter} onValueChange={setDepotFilter}>
+                  <SelectTrigger className="h-8 w-40 text-xs" data-testid="select-depot-filter">
+                    <Warehouse className="h-3.5 w-3.5 mr-1 shrink-0 text-muted-foreground" />
+                    <SelectValue placeholder="All Depots" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Depots</SelectItem>
+                    <SelectItem value="company_default">Company Default</SelectItem>
+                    {depotRecords.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
 
               <div className="flex items-center border rounded-md overflow-hidden">
                 <Button
@@ -680,6 +719,7 @@ export default function RouteProfitMaps() {
             <ProfitabilityMap
               routes={displayRoutes}
               visibleRouteIds={displayVisibleIds}
+              dimmedRouteIds={isComparing ? undefined : depotDimmedIds}
               viewMode={isComparing ? "stops" : viewMode}
               focusRouteId={focusRouteId}
               useRouteColors={isComparing}

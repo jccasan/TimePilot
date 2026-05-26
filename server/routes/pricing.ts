@@ -17,6 +17,9 @@ import {
 import { z } from "zod";
 import { calculateTotalDistance, getRouteMetricsWithLegs } from "../services/route-optimizer";
 import { insertServicePricingSchema, insertServicePackageSchema } from "@shared/schema";
+import { db } from "../db";
+import { users } from "@shared/models/auth";
+import { eq } from "drizzle-orm";
 
 import {
   isAuthenticated,
@@ -2022,6 +2025,47 @@ Rules:
         avgMarginPct: number;
         status: "profitable" | "marginal" | "unprofitable";
         stops: MapStop[];
+        depotId: string | null;
+      };
+
+      const technicianIdsForMap = [
+        ...new Set(routes.map((r) => r.technicianId).filter(Boolean)),
+      ] as string[];
+      const techDepotMapForMap = new Map<string, string>();
+      if (technicianIdsForMap.length > 0) {
+        const techRows = await db
+          .select({ id: users.id, defaultDepotId: users.defaultDepotId })
+          .from(users)
+          .where(eq(users.id, technicianIdsForMap[0]));
+        for (const tech of techRows) {
+          if (tech.defaultDepotId) techDepotMapForMap.set(tech.id, tech.defaultDepotId);
+        }
+        for (const techId of technicianIdsForMap.slice(1)) {
+          const [tech] = await db
+            .select({ id: users.id, defaultDepotId: users.defaultDepotId })
+            .from(users)
+            .where(eq(users.id, techId));
+          if (tech?.defaultDepotId) techDepotMapForMap.set(tech.id, tech.defaultDepotId);
+        }
+      }
+
+      const allDepotsForMap = await storage.getDepots(companyId);
+      const depotMapForMap = new Map(allDepotsForMap.map((d) => [d.id, d]));
+
+      // Analytics depot resolution: only explicit assignments (route or technician) count as a
+      // named depot. Routes that would otherwise fall back to the primary depot are grouped under
+      // "Company Default" (null) so the analytics table clearly separates intentionally-assigned
+      // routes from those that have no explicit depot affiliation.
+      const resolveRouteDepotForMap = (route: {
+        depotId?: string | null;
+        technicianId?: string | null;
+      }): string | null => {
+        if (route.depotId && depotMapForMap.has(route.depotId)) return route.depotId;
+        if (route.technicianId) {
+          const techDepotId = techDepotMapForMap.get(route.technicianId);
+          if (techDepotId && depotMapForMap.has(techDepotId)) return techDepotId;
+        }
+        return null;
       };
 
       const result: MapRoute[] = [];
@@ -2092,6 +2136,7 @@ Rules:
           avgMarginPct: avgMargin,
           status: routeStatus,
           stops,
+          depotId: resolveRouteDepotForMap(route),
         });
       }
 
@@ -2100,6 +2145,153 @@ Rules:
       handleError(res, err);
     }
   });
+
+  app.get(
+    "/api/profitability/depot-summary",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const { calculateAllCustomerProfitability } =
+          await import("../services/profitability-calculator");
+
+        const [allProfitability, routes, allDepots, plans] = await Promise.all([
+          calculateAllCustomerProfitability(companyId),
+          storage.getRoutes(companyId),
+          storage.getDepots(companyId),
+          storage.getServicePlans(companyId, { isActive: true }),
+        ]);
+
+        const depotMap = new Map(allDepots.map((d) => [d.id, d]));
+
+        const technicianIds = [
+          ...new Set(routes.map((r) => r.technicianId).filter(Boolean)),
+        ] as string[];
+        const techDepotMap = new Map<string, string>();
+        if (technicianIds.length > 0) {
+          const techRows = await db
+            .select({ id: users.id, defaultDepotId: users.defaultDepotId })
+            .from(users)
+            .where(eq(users.id, technicianIds[0]));
+          for (const tech of techRows) {
+            if (tech.defaultDepotId) techDepotMap.set(tech.id, tech.defaultDepotId);
+          }
+          if (technicianIds.length > 1) {
+            for (const techId of technicianIds.slice(1)) {
+              const [tech] = await db
+                .select({ id: users.id, defaultDepotId: users.defaultDepotId })
+                .from(users)
+                .where(eq(users.id, techId));
+              if (tech?.defaultDepotId) techDepotMap.set(tech.id, tech.defaultDepotId);
+            }
+          }
+        }
+
+        // Analytics depot resolution: explicit assignments only. Routes falling back to
+        // primary depot are grouped under "Company Default" (null) so the By Depot table
+        // clearly separates intentionally-assigned routes from unaffiliated ones.
+        const resolveRouteDepotId = (route: {
+          depotId?: string | null;
+          technicianId?: string | null;
+        }): string | null => {
+          if (route.depotId && depotMap.has(route.depotId)) return route.depotId;
+          if (route.technicianId) {
+            const techDepotId = techDepotMap.get(route.technicianId);
+            if (techDepotId && depotMap.has(techDepotId)) return techDepotId;
+          }
+          return null;
+        };
+
+        const routeDepotMap = new Map<string, string | null>();
+        for (const route of routes) {
+          routeDepotMap.set(route.id, resolveRouteDepotId(route));
+        }
+
+        const planRouteMap = new Map<string, string>();
+        for (const plan of plans) {
+          if (plan.routeId) planRouteMap.set(plan.id, plan.routeId);
+        }
+
+        const COMPANY_DEFAULT_KEY = "__company_default__";
+
+        const depotAgg = new Map<
+          string,
+          {
+            depotId: string | null;
+            depotName: string;
+            totalStops: number;
+            totalRevenueCents: number;
+            totalCostCents: number;
+            totalProfitCents: number;
+            totalTravelMinutes: number;
+          }
+        >();
+
+        const ensureDepot = (key: string, name: string, depotId: string | null) => {
+          if (!depotAgg.has(key)) {
+            depotAgg.set(key, {
+              depotId,
+              depotName: name,
+              totalStops: 0,
+              totalRevenueCents: 0,
+              totalCostCents: 0,
+              totalProfitCents: 0,
+              totalTravelMinutes: 0,
+            });
+          }
+          return depotAgg.get(key)!;
+        };
+
+        for (const customer of allProfitability) {
+          for (const prop of customer.properties) {
+            const routeId = planRouteMap.get(prop.servicePlanId);
+            if (!routeId) continue;
+            const depotId = routeDepotMap.get(routeId);
+            let key: string;
+            let name: string;
+            if (depotId && depotMap.has(depotId)) {
+              key = depotId;
+              name = depotMap.get(depotId)!.name;
+            } else {
+              key = COMPANY_DEFAULT_KEY;
+              name = "Company Default";
+            }
+            const entry = ensureDepot(key, name, depotId && depotMap.has(depotId) ? depotId : null);
+            entry.totalStops++;
+            entry.totalRevenueCents += prop.revenuePerVisitCents;
+            entry.totalCostCents += prop.costPerVisitCents;
+            entry.totalProfitCents += prop.profitPerVisitCents;
+            entry.totalTravelMinutes += prop.standardTravelMinutesUsed ?? 0;
+          }
+        }
+
+        const result = Array.from(depotAgg.values()).map((d) => ({
+          depotId: d.depotId,
+          depotName: d.depotName,
+          totalStops: d.totalStops,
+          totalRevenueCents: d.totalRevenueCents,
+          totalCostCents: d.totalCostCents,
+          totalProfitCents: d.totalProfitCents,
+          avgMarginPct:
+            d.totalRevenueCents > 0
+              ? Math.round((d.totalProfitCents / d.totalRevenueCents) * 10000) / 100
+              : 0,
+          avgTravelTimePerStopMinutes:
+            d.totalStops > 0 ? Math.round((d.totalTravelMinutes / d.totalStops) * 10) / 10 : 0,
+        }));
+
+        result.sort((a, b) => {
+          if (a.depotId === null && b.depotId !== null) return 1;
+          if (a.depotId !== null && b.depotId === null) return -1;
+          return a.depotName.localeCompare(b.depotName);
+        });
+
+        res.json(result);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.post(
     "/api/profitability/recalculate",
