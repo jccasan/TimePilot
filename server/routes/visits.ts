@@ -537,24 +537,24 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       }
       // Only alert if no alert was already sent at rating time; prevents double-alerting.
       if (!existingResponse.alertSent) {
-      try {
-        const company = await storage.getCompany(row.companyId);
-        const contact = await storage.getContact(row.contactId, row.companyId);
-        if (company && contact) {
-          const contactName = `${contact.firstName} ${contact.lastName}`.trim();
-          const appBaseUrl = getAppBaseUrl();
-          const contactLink = `${appBaseUrl}/contacts/${contact.id}`;
-          const ownerEmails = await db.execute(sql`
+        try {
+          const company = await storage.getCompany(row.companyId);
+          const contact = await storage.getContact(row.contactId, row.companyId);
+          if (company && contact) {
+            const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+            const appBaseUrl = getAppBaseUrl();
+            const contactLink = `${appBaseUrl}/contacts/${contact.id}`;
+            const ownerEmails = await db.execute(sql`
             SELECT u.email FROM users u
             JOIN company_users cu ON cu.user_id = u.id
             WHERE cu.company_id = ${row.companyId} AND cu.role = 'owner' AND cu.is_active = true AND u.email IS NOT NULL
             LIMIT 3
           `);
-          const safeContactName = escapeHtml(contactName);
-          const safeFeedback = escapeHtml(feedbackText.trim());
-          const emailSubject = `⚠️ Urgent: Customer Needs Attention — ${contactName}`;
-          const emailText = `A customer left a low rating and needs your attention.\n\nCustomer: ${contactName}\nRating: ${existingResponse.rating}/5 stars\nFeedback: ${feedbackText.trim()}\n\nView contact: ${contactLink}`;
-          const emailHtml = `
+            const safeContactName = escapeHtml(contactName);
+            const safeFeedback = escapeHtml(feedbackText.trim());
+            const emailSubject = `⚠️ Urgent: Customer Needs Attention — ${contactName}`;
+            const emailText = `A customer left a low rating and needs your attention.\n\nCustomer: ${contactName}\nRating: ${existingResponse.rating}/5 stars\nFeedback: ${feedbackText.trim()}\n\nView contact: ${contactLink}`;
+            const emailHtml = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <div style="background-color: #dc2626; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
                 <h1 style="color: white; margin: 0; font-size: 20px;">⚠️ Customer Needs Attention</h1>
@@ -572,46 +572,46 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
               </div>
             </div>
           `;
-          for (const emailRow of ownerEmails.rows) {
-            const ownerEmail = String((emailRow as Record<string, unknown>).email ?? "");
-            if (ownerEmail) {
-              await sendEmail({
-                to: ownerEmail,
-                subject: emailSubject,
-                text: emailText,
-                html: emailHtml,
-                companyId: row.companyId,
-              });
+            for (const emailRow of ownerEmails.rows) {
+              const ownerEmail = String((emailRow as Record<string, unknown>).email ?? "");
+              if (ownerEmail) {
+                await sendEmail({
+                  to: ownerEmail,
+                  subject: emailSubject,
+                  text: emailText,
+                  html: emailHtml,
+                  companyId: row.companyId,
+                });
+              }
             }
-          }
-          const smsConfigured = await isSmsConfiguredForCompany(row.companyId);
-          if (smsConfigured) {
-            const ownerPhones = await db.execute(sql`
+            const smsConfigured = await isSmsConfiguredForCompany(row.companyId);
+            if (smsConfigured) {
+              const ownerPhones = await db.execute(sql`
               SELECT u.phone FROM users u
               JOIN company_users cu ON cu.user_id = u.id
               WHERE cu.company_id = ${row.companyId} AND cu.role = 'owner' AND cu.is_active = true AND u.phone IS NOT NULL
               LIMIT 3
             `);
-            const smsBody = `Action needed: ${contactName} left a ${existingResponse.rating}-star rating that needs your attention. Check your email or log in to ScooPilot.`;
-            for (const phoneRow of ownerPhones.rows) {
-              const ownerPhone = String((phoneRow as Record<string, unknown>).phone ?? "");
-              if (ownerPhone) {
-                await sendSmsForCompany({
-                  to: ownerPhone,
-                  body: smsBody,
-                  companyId: row.companyId,
-                }).catch((e) => console.error("[ReviewAlert] SMS failed:", e));
+              const smsBody = `Action needed: ${contactName} left a ${existingResponse.rating}-star rating that needs your attention. Check your email or log in to ScooPilot.`;
+              for (const phoneRow of ownerPhones.rows) {
+                const ownerPhone = String((phoneRow as Record<string, unknown>).phone ?? "");
+                if (ownerPhone) {
+                  await sendSmsForCompany({
+                    to: ownerPhone,
+                    body: smsBody,
+                    companyId: row.companyId,
+                  }).catch((e) => console.error("[ReviewAlert] SMS failed:", e));
+                }
               }
             }
+            await db
+              .update(reviewResponses)
+              .set({ alertSent: true })
+              .where(eq(reviewResponses.id, existingResponse.id));
           }
-          await db
-            .update(reviewResponses)
-            .set({ alertSent: true })
-            .where(eq(reviewResponses.id, existingResponse.id));
+        } catch (alertErr) {
+          console.error("[ReviewAlert] Failed to send owner alert:", alertErr);
         }
-      } catch (alertErr) {
-        console.error("[ReviewAlert] Failed to send owner alert:", alertErr);
-      }
       } // end if (!existingResponse.alertSent)
       res.json({ success: true, branch: existingResponse.branch });
     } catch (err) {
