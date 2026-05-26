@@ -1718,14 +1718,46 @@ export default function TechMobile() {
               ))}
             </div>
           ) : (
-            <Card>
-              <CardContent
-                className="p-6 text-center text-muted-foreground"
-                data-testid="text-no-visits"
+            <>
+              <Card>
+                <CardContent
+                  className="p-6 text-center text-muted-foreground"
+                  data-testid="text-no-visits"
+                >
+                  No visits scheduled for today.
+                </CardContent>
+              </Card>
+
+              {/* Depot / starting point row — always visible so techs can manage it on quiet days */}
+              <button
+                className="w-full flex items-center gap-3 p-3 rounded-lg border bg-card text-left hover:bg-accent transition-colors"
+                onClick={() => setShowDepotPicker(true)}
+                data-testid="button-depot-picker-empty"
               >
-                No visits scheduled for today.
-              </CardContent>
-            </Card>
+                <Home className="h-4 w-4 text-primary shrink-0" />
+                <div className="flex-1 min-w-0">
+                  {activeDepot ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">Starting from</p>
+                      <p
+                        className="text-sm font-medium truncate"
+                        data-testid="text-active-depot-name-empty"
+                      >
+                        {activeDepot.name}
+                      </p>
+                    </>
+                  ) : (
+                    <p
+                      className="text-sm text-muted-foreground"
+                      data-testid="text-no-depot-nudge-empty"
+                    >
+                      Set your starting point for accurate directions
+                    </p>
+                  )}
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              </button>
+            </>
           )}
 
           <Dialog
