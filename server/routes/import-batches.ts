@@ -288,9 +288,7 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
         const batch = await storage.getImportBatch(p(req.params.batchId), companyId);
         if (!batch) return res.status(404).json({ error: "Import batch not found" });
         if (batch.status === "committed") {
-          return res
-            .status(400)
-            .json({ error: "Committed imports cannot be deleted" });
+          return res.status(400).json({ error: "Committed imports cannot be deleted" });
         }
         await storage.deleteImportBatch(batch.id, companyId);
         res.json({ ok: true });

@@ -942,14 +942,16 @@ function InProgressBatchesList() {
 
       <AlertDialog
         open={!!confirmDeleteId}
-        onOpenChange={(open) => { if (!open) setConfirmDeleteId(null); }}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDeleteId(null);
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Discard this import?</AlertDialogTitle>
             <AlertDialogDescription>
-              All staged rows for this import will be permanently deleted. This cannot be undone.
-              No contacts have been created yet.
+              All staged rows for this import will be permanently deleted. This cannot be undone. No
+              contacts have been created yet.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

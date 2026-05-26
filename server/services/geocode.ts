@@ -187,9 +187,7 @@ export async function geocodeAddress(
       const lat = coords[1] as number;
       const lng = coords[0] as number;
       if (countryFilter === "us" && !isWithinUSBounds(lat, lng)) {
-        console.warn(
-          `[Geocode] Discarding out-of-bounds result for "${parts}": (${lat}, ${lng})`
-        );
+        console.warn(`[Geocode] Discarding out-of-bounds result for "${parts}": (${lat}, ${lng})`);
         geocodeCache.set(cacheKey, { value: null, storedAt: Date.now() });
         storage.setGeocodeCache(cacheKey, null, null).catch(() => {});
         return null;
@@ -236,7 +234,9 @@ async function trySearchBoxFallback(
     const lat = coords[1] as number;
     const lng = coords[0] as number;
     if (country === "us" && !isWithinUSBounds(lat, lng)) {
-      console.warn(`[Geocode] SearchBox: discarding out-of-bounds result for "${query}": (${lat}, ${lng})`);
+      console.warn(
+        `[Geocode] SearchBox: discarding out-of-bounds result for "${query}": (${lat}, ${lng})`
+      );
       return null;
     }
     return {
