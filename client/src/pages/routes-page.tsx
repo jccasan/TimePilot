@@ -100,6 +100,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { WeeklyOptimizerPanel } from "@/components/WeeklyOptimizerPanel";
+import { AddDepotDialog, type DepotLike } from "@/components/AddDepotDialog";
 import { Link } from "wouter";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
@@ -624,6 +625,8 @@ function RouteCard({
   contacts,
   properties,
   team,
+  depots,
+  primaryDepot,
   isOverThis,
   onEdit,
   onDelete,
@@ -656,6 +659,8 @@ function RouteCard({
   contacts: Contact[];
   properties: Property[];
   team: TeamMember[];
+  depots: DepotLike[];
+  primaryDepot?: DepotLike;
   isOverThis: boolean;
   onEdit: (route: Route) => void;
   onDelete: (route: Route) => void;
@@ -689,6 +694,27 @@ function RouteCard({
   const [overDurationDismissed, setOverDurationDismissed] = useState(false);
   const tech = team.find((t) => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
+
+  // Resolve the effective depot for this route using the same 4-tier fallback
+  // chain: route depot → tech default depot → primary depot
+  const routeDepotId = (route as any).depotId as string | null | undefined;
+  const techDefaultDepotId = (tech as any)?.defaultDepotId as string | null | undefined;
+  let resolvedDepot: DepotLike | undefined;
+  let isUsingCompanyDefault = false;
+  if (routeDepotId) {
+    resolvedDepot = depots.find((d) => d.id === routeDepotId);
+  }
+  if (!resolvedDepot && techDefaultDepotId) {
+    resolvedDepot = depots.find((d) => d.id === techDefaultDepotId);
+  }
+  if (!resolvedDepot && primaryDepot) {
+    resolvedDepot = primaryDepot;
+    // Only flag as "using company default" when neither the route nor the
+    // tech has a specific depot set — the dispatcher should consider adding one.
+    if (!routeDepotId && !techDefaultDepotId) {
+      isUsingCompanyDefault = true;
+    }
+  }
   const totalRevenue = stops.reduce((sum, s) => sum + Number(s.pricePerVisit), 0);
   const stopCount = stops.length;
   const routeVisitCount = visitsByPlan ? sortedStops.filter((s) => visitsByPlan[s.id]).length : 0;
@@ -814,6 +840,16 @@ function RouteCard({
               {tech.firstName} {tech.lastName}
             </span>
           )}
+          {resolvedDepot && (
+            <span
+              className="flex items-center gap-1"
+              data-testid={`text-route-depot-${route.id}`}
+              title={resolvedDepot.address}
+            >
+              <MapPin className="h-3 w-3 shrink-0" />
+              {resolvedDepot.name}
+            </span>
+          )}
           <span>{formatMoney(totalRevenue)}</span>
           {metricsLoading && <Loader2 className="h-3 w-3 animate-spin" />}
           {metrics && metrics.totalDistance > 0 && (
@@ -843,6 +879,16 @@ function RouteCard({
           >
             {stopCount} stops
           </Badge>
+          {isUsingCompanyDefault && resolvedDepot && (
+            <Badge
+              variant="outline"
+              className="text-[10px] text-amber-700 border-amber-300 bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-950/30"
+              data-testid={`badge-depot-default-${route.id}`}
+              title="This route has no custom starting point assigned. Edit the route to set a specific depot."
+            >
+              Using company default
+            </Badge>
+          )}
           {isOverMax && <span className="text-xs text-destructive">Max 60 stops</span>}
           {hasVisits && routeVisitCount > 0 && (
             <Badge
@@ -1367,10 +1413,9 @@ function RouteFormDialog({
   const [technicianId, setTechnicianId] = useState<string>("");
   const [color, setColor] = useState(ROUTE_COLORS[0]);
   const [depotId, setDepotId] = useState<string>("");
+  const [showAddDepot, setShowAddDepot] = useState(false);
 
-  const { data: depots = [] } = useQuery<
-    { id: string; name: string; address: string; isPrimary: boolean }[]
-  >({ queryKey: ["/api/depots"] });
+  const { data: depots = [] } = useQuery<DepotLike[]>({ queryKey: ["/api/depots"] });
 
   useEffect(() => {
     if (open) {
@@ -1450,28 +1495,40 @@ function RouteFormDialog({
               </SelectContent>
             </Select>
           </div>
-          {depots.length > 0 && (
-            <div className="space-y-2">
-              <Label>Starting Point (Depot)</Label>
-              <Select
-                value={depotId || "none"}
-                onValueChange={(v) => setDepotId(v === "none" ? "" : v)}
-              >
-                <SelectTrigger data-testid="select-route-depot">
-                  <SelectValue placeholder="Company default" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Company default</SelectItem>
-                  {depots.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.name}
-                      {d.isPrimary ? " (primary)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label>Starting Point (Depot)</Label>
+            <Select
+              value={depotId || "none"}
+              onValueChange={(v) => {
+                if (v === "__add_new__") {
+                  setShowAddDepot(true);
+                } else {
+                  setDepotId(v === "none" ? "" : v);
+                }
+              }}
+            >
+              <SelectTrigger data-testid="select-route-depot">
+                <SelectValue placeholder="Company default" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Company default</SelectItem>
+                {depots.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                    {d.isPrimary ? " (primary)" : ""}
+                  </SelectItem>
+                ))}
+                <SelectItem value="__add_new__" className="text-primary font-medium">
+                  + Add new location...
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <AddDepotDialog
+            open={showAddDepot}
+            onOpenChange={setShowAddDepot}
+            onCreated={(depot) => setDepotId(depot.id)}
+          />
           <div className="space-y-2">
             <Label>Color</Label>
             <div className="flex items-center gap-2 flex-wrap">
@@ -3238,6 +3295,8 @@ export default function RoutesPage() {
                           contacts={contacts}
                           properties={properties}
                           team={team}
+                          depots={allDepots}
+                          primaryDepot={primaryDepot}
                           isOverThis={overContainerId === `route-${route.id}`}
                           onEdit={(r) => {
                             setEditingRoute(r);

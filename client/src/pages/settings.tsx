@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { AddDepotDialog, type DepotLike } from "@/components/AddDepotDialog";
 import { useAuth } from "@/hooks/use-auth";
 import { getDismissedKey } from "@/components/rover-chatbot";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7861,6 +7862,7 @@ export default function Settings() {
   const [importStep, setImportStep] = useState<"idle" | "mapping" | "review">("idle");
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [seatLimitDialogOpen, setSeatLimitDialogOpen] = useState(false);
+  const [addDepotForMemberId, setAddDepotForMemberId] = useState<string | null>(null);
   const [seatLimitData, setSeatLimitData] = useState<{
     currentCount: number;
     maxUsers: number;
@@ -8738,183 +8740,214 @@ export default function Settings() {
         const maxSeats = tierInfo?.maxUsers || 1;
         const atCapacity = activeCount >= maxSeats;
         return (
-          <Card className="h-full overflow-auto">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Team Members
-                  </CardTitle>
-                  <CardDescription
-                    className={atCapacity ? "text-amber-600 dark:text-amber-400 font-medium" : ""}
-                    data-testid="text-seat-usage"
-                  >
-                    {activeCount} / {maxSeats} seats used{atCapacity ? " — at limit" : ""}
-                  </CardDescription>
+          <>
+            <Card className="h-full overflow-auto">
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="h-5 w-5" />
+                      Team Members
+                    </CardTitle>
+                    <CardDescription
+                      className={atCapacity ? "text-amber-600 dark:text-amber-400 font-medium" : ""}
+                      data-testid="text-seat-usage"
+                    >
+                      {activeCount} / {maxSeats} seats used{atCapacity ? " — at limit" : ""}
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {atCapacity && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSeatLimitDialogOpen(true)}
+                        data-testid="button-buy-seat"
+                        className="border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+                      >
+                        <ShoppingCart className="h-4 w-4 mr-1" />
+                        Buy a Seat
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => setInviteDialogOpen(true)}
+                      data-testid="button-invite-team-member"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Invite Team Member
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {atCapacity && (
+              </CardHeader>
+              <CardContent>
+                {atCapacity && (
+                  <div className="mb-4 flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                        Seat limit reached
+                      </p>
+                      <p className="text-sm text-amber-700 dark:text-amber-400">
+                        You&apos;re using all {maxSeats} seat{maxSeats !== 1 ? "s" : ""} on your
+                        plan. Purchase an additional seat to invite more team members.
+                      </p>
+                    </div>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => setSeatLimitDialogOpen(true)}
-                      data-testid="button-buy-seat"
-                      className="border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+                      className="flex-shrink-0 border-amber-500 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900"
+                      data-testid="button-buy-seat-banner"
                     >
-                      <ShoppingCart className="h-4 w-4 mr-1" />
+                      <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
                       Buy a Seat
                     </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    onClick={() => setInviteDialogOpen(true)}
-                    data-testid="button-invite-team-member"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Invite Team Member
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {atCapacity && (
-                <div className="mb-4 flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-3">
-                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                      Seat limit reached
-                    </p>
-                    <p className="text-sm text-amber-700 dark:text-amber-400">
-                      You&apos;re using all {maxSeats} seat{maxSeats !== 1 ? "s" : ""} on your plan.
-                      Purchase an additional seat to invite more team members.
-                    </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setSeatLimitDialogOpen(true)}
-                    className="flex-shrink-0 border-amber-500 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900"
-                    data-testid="button-buy-seat-banner"
-                  >
-                    <ShoppingCart className="h-3.5 w-3.5 mr-1.5" />
-                    Buy a Seat
-                  </Button>
-                </div>
-              )}
-              {loadingTeam ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-14 w-full" />
-                  <Skeleton className="h-14 w-full" />
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-                  {team?.map((member) => {
-                    const RoleIcon = roleIcons[member.role] || Wrench;
-                    const isCurrentUser = member.id === currentUser?.id;
-                    const canRemove = !isCurrentUser && member.role !== "owner";
-                    const canResetPassword =
-                      !isCurrentUser &&
-                      member.role !== "owner" &&
-                      (currentUser?.role === "owner" ||
-                        (currentUser?.role === "admin" && member.role !== "admin"));
-                    return (
-                      <div
-                        key={member.companyUserId}
-                        className="flex items-center gap-3 p-3 rounded-md border"
-                        data-testid={`card-team-member-${member.id}`}
-                      >
-                        <Avatar>
-                          <AvatarImage src={member.profileImageUrl || undefined} />
-                          <AvatarFallback>
-                            {(member.firstName?.[0] || "").toUpperCase()}
-                            {(member.lastName?.[0] || "").toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className="font-medium truncate"
-                            data-testid={`text-member-name-${member.id}`}
-                          >
-                            {member.firstName} {member.lastName}
-                          </p>
-                          <p className="text-sm text-muted-foreground truncate">{member.email}</p>
-                        </div>
-                        <Badge
-                          variant="secondary"
-                          className="flex items-center gap-1"
-                          data-testid={`badge-member-role-${member.id}`}
+                )}
+                {loadingTeam ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-14 w-full" />
+                    <Skeleton className="h-14 w-full" />
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                    {team?.map((member) => {
+                      const RoleIcon = roleIcons[member.role] || Wrench;
+                      const isCurrentUser = member.id === currentUser?.id;
+                      const canRemove = !isCurrentUser && member.role !== "owner";
+                      const canResetPassword =
+                        !isCurrentUser &&
+                        member.role !== "owner" &&
+                        (currentUser?.role === "owner" ||
+                          (currentUser?.role === "admin" && member.role !== "admin"));
+                      return (
+                        <div
+                          key={member.companyUserId}
+                          className="flex items-center gap-3 p-3 rounded-md border"
+                          data-testid={`card-team-member-${member.id}`}
                         >
-                          <RoleIcon className="h-3 w-3" />
-                          {roleLabels[member.role] || member.role}
-                        </Badge>
-                        {canResetPassword && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-primary"
-                            onClick={() => setResetPasswordMember(member)}
-                            title="Reset password"
-                            data-testid={`button-reset-password-${member.id}`}
-                          >
-                            <KeyRound className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {currentUser?.role !== "tech" && settingsDepots.length > 0 && (
-                          <Select
-                            value={member.defaultDepotId || "none"}
-                            onValueChange={(v) => {
-                              const newDepotId = v === "none" ? null : v;
-                              apiRequest("PATCH", `/api/team/${member.id}/default-depot`, {
-                                depotId: newDepotId,
-                              }).then(() => {
-                                queryClient.invalidateQueries({
-                                  queryKey: ["/api/company/team"],
-                                });
-                                toast({ title: "Default depot updated" });
-                              });
-                            }}
-                          >
-                            <SelectTrigger
-                              className="h-7 text-xs w-32"
-                              data-testid={`select-depot-${member.id}`}
+                          <Avatar>
+                            <AvatarImage src={member.profileImageUrl || undefined} />
+                            <AvatarFallback>
+                              {(member.firstName?.[0] || "").toUpperCase()}
+                              {(member.lastName?.[0] || "").toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <p
+                              className="font-medium truncate"
+                              data-testid={`text-member-name-${member.id}`}
                             >
-                              <SelectValue placeholder="Depot" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">No depot</SelectItem>
-                              {settingsDepots.map((d) => (
-                                <SelectItem key={d.id} value={d.id}>
-                                  {d.name}
-                                  {d.isPrimary ? " (primary)" : ""}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
-                        {canRemove && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                            onClick={() => setRemovingMemberId(member.id)}
-                            data-testid={`button-remove-member-${member.id}`}
+                              {member.firstName} {member.lastName}
+                            </p>
+                            <p className="text-sm text-muted-foreground truncate">{member.email}</p>
+                          </div>
+                          <Badge
+                            variant="secondary"
+                            className="flex items-center gap-1"
+                            data-testid={`badge-member-role-${member.id}`}
                           >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {(!team || team.length === 0) && (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No team members yet
-                    </p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                            <RoleIcon className="h-3 w-3" />
+                            {roleLabels[member.role] || member.role}
+                          </Badge>
+                          {canResetPassword && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-primary"
+                              onClick={() => setResetPasswordMember(member)}
+                              title="Reset password"
+                              data-testid={`button-reset-password-${member.id}`}
+                            >
+                              <KeyRound className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {currentUser?.role !== "tech" && (
+                            <>
+                              <Select
+                                value={member.defaultDepotId || "none"}
+                                onValueChange={(v) => {
+                                  if (v === "__add_new__") {
+                                    setAddDepotForMemberId(member.id);
+                                    return;
+                                  }
+                                  const newDepotId = v === "none" ? null : v;
+                                  apiRequest("PATCH", `/api/team/${member.id}/default-depot`, {
+                                    depotId: newDepotId,
+                                  }).then(() => {
+                                    queryClient.invalidateQueries({
+                                      queryKey: ["/api/company/team"],
+                                    });
+                                    toast({ title: "Default depot updated" });
+                                  });
+                                }}
+                              >
+                                <SelectTrigger
+                                  className="h-7 text-xs w-32"
+                                  data-testid={`select-depot-${member.id}`}
+                                >
+                                  <SelectValue placeholder="Depot" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">No depot</SelectItem>
+                                  {settingsDepots.map((d) => (
+                                    <SelectItem key={d.id} value={d.id}>
+                                      {d.name}
+                                      {d.isPrimary ? " (primary)" : ""}
+                                    </SelectItem>
+                                  ))}
+                                  <SelectItem
+                                    value="__add_new__"
+                                    className="text-primary font-medium"
+                                  >
+                                    + Add new location...
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </>
+                          )}
+                          {canRemove && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => setRemovingMemberId(member.id)}
+                              data-testid={`button-remove-member-${member.id}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {(!team || team.length === 0) && (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No team members yet
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <AddDepotDialog
+              open={addDepotForMemberId !== null}
+              onOpenChange={(v) => {
+                if (!v) setAddDepotForMemberId(null);
+              }}
+              onCreated={(depot: DepotLike) => {
+                const memberId = addDepotForMemberId;
+                if (!memberId) return;
+                apiRequest("PATCH", `/api/team/${memberId}/default-depot`, {
+                  depotId: depot.id,
+                }).then(() => {
+                  queryClient.invalidateQueries({ queryKey: ["/api/company/team"] });
+                  toast({ title: "Default depot updated", description: depot.name });
+                });
+                setAddDepotForMemberId(null);
+              }}
+            />
+          </>
         );
       }
       case "change_password":

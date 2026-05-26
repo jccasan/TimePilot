@@ -280,6 +280,26 @@ function weekLabel(week: PlannerWeek): string {
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
+type DepotRecord = {
+  id: string;
+  name: string;
+  address: string;
+  isPrimary: boolean;
+  latitude: string;
+  longitude: string;
+};
+
+type RouteRecord = {
+  id: string;
+  depotId?: string | null;
+  technicianId?: string | null;
+};
+
+type TeamRecord = {
+  id: string;
+  defaultDepotId?: string | null;
+};
+
 export function WeeklyOptimizerPanel({
   open,
   onOpenChange,
@@ -318,6 +338,38 @@ export function WeeklyOptimizerPanel({
   }>({
     queryKey: ["/api/company"],
   });
+
+  const { data: plannerDepots = [] } = useQuery<DepotRecord[]>({
+    queryKey: ["/api/depots"],
+  });
+  const { data: plannerRoutes = [] } = useQuery<RouteRecord[]>({
+    queryKey: ["/api/routes"],
+  });
+  const { data: plannerTeam = [] } = useQuery<TeamRecord[]>({
+    queryKey: ["/api/company/team"],
+  });
+
+  const plannerPrimaryDepot = plannerDepots.find((d) => d.isPrimary);
+
+  function resolveDepotForRoute(routeId: string): { name: string; isDefault: boolean } | null {
+    const route = plannerRoutes.find((r) => r.id === routeId);
+    if (!route)
+      return plannerPrimaryDepot ? { name: plannerPrimaryDepot.name, isDefault: true } : null;
+    let depot: DepotRecord | undefined;
+    if (route.depotId) depot = plannerDepots.find((d) => d.id === route.depotId);
+    if (!depot && route.technicianId) {
+      const tech = plannerTeam.find((t) => t.id === route.technicianId);
+      if (tech?.defaultDepotId) depot = plannerDepots.find((d) => d.id === tech.defaultDepotId);
+    }
+    if (!depot && plannerPrimaryDepot) {
+      return {
+        name: plannerPrimaryDepot.name,
+        isDefault:
+          !route.depotId && !plannerTeam.find((t) => t.id === route.technicianId)?.defaultDepotId,
+      };
+    }
+    return depot ? { name: depot.name, isDefault: false } : null;
+  }
 
   useEffect(() => {
     if (company?.minStopsPerDay != null) setMinStopsInput(String(company.minStopsPerDay));
@@ -1018,129 +1070,146 @@ export function WeeklyOptimizerPanel({
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                           Planned Routes ({activeWeek.summary.routeCount})
                         </p>
-                        {activeWeek.plannedRoutes.map((route, rIdx) => (
-                          <Card
-                            key={route.id}
-                            data-testid={`route-card-${activeWeek.weekNumber}-${rIdx}`}
-                          >
-                            <CardHeader className="p-3 pb-2">
-                              <div className="flex items-center justify-between gap-2 flex-wrap">
-                                <CardTitle className="text-sm flex items-center gap-2">
-                                  <span
-                                    className="inline-block w-3 h-3 rounded-full shrink-0"
-                                    style={{
-                                      backgroundColor: ROUTE_COLORS[rIdx % ROUTE_COLORS.length],
-                                    }}
-                                  />
-                                  {route.routeName}
-                                  <Badge
-                                    variant={
-                                      route.feasibilityStatus === "feasible"
-                                        ? "outline"
+                        {activeWeek.plannedRoutes.map((route, rIdx) => {
+                          const depotInfo = resolveDepotForRoute(route.id);
+                          return (
+                            <Card
+                              key={route.id}
+                              data-testid={`route-card-${activeWeek.weekNumber}-${rIdx}`}
+                            >
+                              <CardHeader className="p-3 pb-2">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <CardTitle className="text-sm flex items-center gap-2">
+                                    <span
+                                      className="inline-block w-3 h-3 rounded-full shrink-0"
+                                      style={{
+                                        backgroundColor: ROUTE_COLORS[rIdx % ROUTE_COLORS.length],
+                                      }}
+                                    />
+                                    {route.routeName}
+                                    {depotInfo && (
+                                      <span
+                                        className="text-[10px] font-normal text-muted-foreground flex items-center gap-0.5"
+                                        data-testid={`text-planner-depot-${activeWeek.weekNumber}-${rIdx}`}
+                                      >
+                                        <Car className="h-2.5 w-2.5 shrink-0" />
+                                        {depotInfo.name}
+                                        {depotInfo.isDefault && (
+                                          <span className="text-amber-600 dark:text-amber-400 ml-0.5">
+                                            (default)
+                                          </span>
+                                        )}
+                                      </span>
+                                    )}
+                                    <Badge
+                                      variant={
+                                        route.feasibilityStatus === "feasible"
+                                          ? "outline"
+                                          : route.feasibilityStatus === "feasible_with_warnings"
+                                            ? "secondary"
+                                            : "destructive"
+                                      }
+                                      className="text-[10px]"
+                                    >
+                                      {route.feasibilityStatus === "feasible"
+                                        ? "Feasible"
                                         : route.feasibilityStatus === "feasible_with_warnings"
-                                          ? "secondary"
-                                          : "destructive"
-                                    }
-                                    className="text-[10px]"
-                                  >
-                                    {route.feasibilityStatus === "feasible"
-                                      ? "Feasible"
-                                      : route.feasibilityStatus === "feasible_with_warnings"
-                                        ? "Warnings"
-                                        : "Infeasible"}
-                                  </Badge>
-                                </CardTitle>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span className="flex items-center gap-1">
-                                    <DollarSign className="h-3 w-3" />
-                                    {formatCurrency(route.revenue)}
-                                  </span>
-                                  <span
-                                    className="flex items-center gap-1"
-                                    title="Direct-cost margin only — does not include overhead. Not comparable to fully-loaded customer profitability margin."
-                                  >
-                                    <TrendingUp className="h-3 w-3" />
-                                    {Math.round(route.profitMargin * 100)}% margin*
+                                          ? "Warnings"
+                                          : "Infeasible"}
+                                    </Badge>
+                                  </CardTitle>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span className="flex items-center gap-1">
+                                      <DollarSign className="h-3 w-3" />
+                                      {formatCurrency(route.revenue)}
+                                    </span>
+                                    <span
+                                      className="flex items-center gap-1"
+                                      title="Direct-cost margin only — does not include overhead. Not comparable to fully-loaded customer profitability margin."
+                                    >
+                                      <TrendingUp className="h-3 w-3" />
+                                      {Math.round(route.profitMargin * 100)}% margin*
+                                    </span>
+                                  </div>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="p-3 pt-0 space-y-3">
+                                <StopMiniMap
+                                  stops={route.assignedStops}
+                                  color={ROUTE_COLORS[rIdx % ROUTE_COLORS.length]}
+                                />
+                                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                  <Car className="h-3 w-3" />
+                                  <span>
+                                    {route.estimatedMiles.toFixed(1)} mi ·{" "}
+                                    {formatMinutes(route.totalRouteMinutes)} total ·{" "}
+                                    {route.stopCount} stops
                                   </span>
                                 </div>
-                              </div>
-                            </CardHeader>
-                            <CardContent className="p-3 pt-0 space-y-3">
-                              <StopMiniMap
-                                stops={route.assignedStops}
-                                color={ROUTE_COLORS[rIdx % ROUTE_COLORS.length]}
-                              />
-                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                                <Car className="h-3 w-3" />
-                                <span>
-                                  {route.estimatedMiles.toFixed(1)} mi ·{" "}
-                                  {formatMinutes(route.totalRouteMinutes)} total · {route.stopCount}{" "}
-                                  stops
-                                </span>
-                              </div>
-                              {route.warnings?.includes("route_over_duration") &&
-                                !dismissedOverDuration.has(
-                                  `${activeWeek.weekNumber}-${route.id}`
-                                ) && (
-                                  <div
-                                    className="flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 px-3 py-1.5"
-                                    data-testid={`warning-over-duration-${activeWeek.weekNumber}-${rIdx}`}
-                                  >
-                                    <div className="flex items-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-400">
-                                      <Clock className="h-3 w-3 shrink-0" />
-                                      <span>
-                                        Route exceeds the configured time budget (
-                                        {formatMinutes(route.totalRouteMinutes)})
+                                {route.warnings?.includes("route_over_duration") &&
+                                  !dismissedOverDuration.has(
+                                    `${activeWeek.weekNumber}-${route.id}`
+                                  ) && (
+                                    <div
+                                      className="flex items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 px-3 py-1.5"
+                                      data-testid={`warning-over-duration-${activeWeek.weekNumber}-${rIdx}`}
+                                    >
+                                      <div className="flex items-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-400">
+                                        <Clock className="h-3 w-3 shrink-0" />
+                                        <span>
+                                          Route exceeds the configured time budget (
+                                          {formatMinutes(route.totalRouteMinutes)})
+                                        </span>
+                                      </div>
+                                      <button
+                                        className="text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
+                                        onClick={() =>
+                                          setDismissedOverDuration(
+                                            (prev) =>
+                                              new Set([
+                                                ...prev,
+                                                `${activeWeek.weekNumber}-${route.id}`,
+                                              ])
+                                          )
+                                        }
+                                        data-testid={`dismiss-over-duration-${activeWeek.weekNumber}-${rIdx}`}
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </div>
+                                  )}
+                                <div className="space-y-0.5">
+                                  {route.assignedStops.map((stop, sIdx) => (
+                                    <div
+                                      key={stop.customerId}
+                                      className="flex items-center gap-2 text-xs py-0.5"
+                                    >
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[9px] px-1 py-0 w-5 h-5 flex items-center justify-center shrink-0"
+                                      >
+                                        {sIdx + 1}
+                                      </Badge>
+                                      <span className="truncate font-medium">
+                                        {stop.customerName}
+                                      </span>
+                                      <span className="text-muted-foreground ml-auto shrink-0">
+                                        {formatCurrency(stop.revenuePerVisit)}
                                       </span>
                                     </div>
-                                    <button
-                                      className="text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
-                                      onClick={() =>
-                                        setDismissedOverDuration(
-                                          (prev) =>
-                                            new Set([
-                                              ...prev,
-                                              `${activeWeek.weekNumber}-${route.id}`,
-                                            ])
-                                        )
-                                      }
-                                      data-testid={`dismiss-over-duration-${activeWeek.weekNumber}-${rIdx}`}
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </button>
-                                  </div>
-                                )}
-                              <div className="space-y-0.5">
-                                {route.assignedStops.map((stop, sIdx) => (
-                                  <div
-                                    key={stop.customerId}
-                                    className="flex items-center gap-2 text-xs py-0.5"
-                                  >
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[9px] px-1 py-0 w-5 h-5 flex items-center justify-center shrink-0"
-                                    >
-                                      {sIdx + 1}
-                                    </Badge>
-                                    <span className="truncate font-medium">
-                                      {stop.customerName}
-                                    </span>
-                                    <span className="text-muted-foreground ml-auto shrink-0">
-                                      {formatCurrency(stop.revenuePerVisit)}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                              {route.recommendations.length > 0 && (
-                                <div className="text-[10px] text-muted-foreground space-y-0.5 pt-1 border-t">
-                                  {route.recommendations.map((r, i) => (
-                                    <p key={i}>💡 {r}</p>
                                   ))}
                                 </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        ))}
+                                {route.recommendations.length > 0 && (
+                                  <div className="text-[10px] text-muted-foreground space-y-0.5 pt-1 border-t">
+                                    {route.recommendations.map((r, i) => (
+                                      <p key={i}>💡 {r}</p>
+                                    ))}
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
                         {activeWeek.plannedRoutes.length === 0 && (
                           <div className="text-center text-sm text-muted-foreground py-8 border rounded-lg bg-muted/20">
                             No routes planned for this week.
