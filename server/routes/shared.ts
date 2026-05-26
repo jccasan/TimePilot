@@ -188,6 +188,22 @@ export function handleError(res: Response, err: unknown) {
   if (e && typeof e === "object" && typeof e.status === "number") {
     return res.status(e.status).json({ error: e.message });
   }
+  // Stripe SDK errors carry `statusCode` (number) + `type` (string) instead of `status`
+  if (
+    e &&
+    typeof e === "object" &&
+    typeof e.statusCode === "number" &&
+    typeof e.type === "string" &&
+    e.type.startsWith("Stripe")
+  ) {
+    const httpStatus = e.statusCode >= 400 && e.statusCode < 600 ? e.statusCode : 400;
+    const message =
+      (e.message as string) ||
+      (e.raw as Record<string, unknown>)?.message ||
+      "Payment provider error";
+    console.error(`[Stripe API error] ${e.type}: ${message}`);
+    return res.status(httpStatus as number).json({ error: message });
+  }
   if (e?.name === "ZodError" || (e?.constructor as { name?: string })?.name === "ZodError") {
     const rawIssues = (e?.issues ?? e?.errors ?? []) as Array<{
       path?: string[];
