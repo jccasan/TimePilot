@@ -802,6 +802,7 @@ export interface IStorage {
     data: Partial<InsertImportBatch> & { completedAt?: Date }
   ): Promise<ImportBatch>;
   getImportBatches(companyId: string): Promise<ImportBatch[]>;
+  deleteImportBatch(id: string, companyId: string): Promise<void>;
 
   // Import Rows
   createImportRow(data: InsertImportRow): Promise<ImportRow>;
@@ -4140,6 +4141,12 @@ export class DatabaseStorage implements IStorage {
       .from(importBatches)
       .where(eq(importBatches.companyId, companyId))
       .orderBy(desc(importBatches.createdAt));
+  }
+
+  async deleteImportBatch(id: string, companyId: string): Promise<void> {
+    await db
+      .delete(importBatches)
+      .where(and(eq(importBatches.id, id), eq(importBatches.companyId, companyId)));
   }
 
   // ================ Import Rows ================

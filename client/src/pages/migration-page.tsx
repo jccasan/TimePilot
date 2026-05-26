@@ -40,6 +40,16 @@ import {
 } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Upload,
   FileText,
   AlertTriangle,
@@ -60,6 +70,7 @@ import {
   Clock,
   PlayCircle,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 
 interface ParsedInvoicePreview {
@@ -794,6 +805,8 @@ interface ImportBatchSummary {
 
 function InProgressBatchesList() {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const { data: batches, isLoading } = useQuery<ImportBatchSummary[]>({
     queryKey: ["/api/import-batches"],
@@ -802,6 +815,20 @@ function InProgressBatchesList() {
       return res.json();
     },
     refetchInterval: 5000,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (batchId: string) => {
+      const res = await apiRequest("DELETE", `/api/import-batches/${batchId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Import discarded" });
+      queryClient.invalidateQueries({ queryKey: ["/api/import-batches"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to discard import", variant: "destructive" });
+    },
   });
 
   const activeBatches = (batches || []).filter((b) => b.status !== "committed");
@@ -897,11 +924,49 @@ function InProgressBatchesList() {
                     Start New Import
                   </Button>
                 )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => setConfirmDeleteId(batch.id)}
+                  disabled={deleteMutation.isPending}
+                  data-testid={`button-delete-batch-${batch.id}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
               </div>
             </div>
           );
         })}
       </div>
+
+      <AlertDialog
+        open={!!confirmDeleteId}
+        onOpenChange={(open) => { if (!open) setConfirmDeleteId(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard this import?</AlertDialogTitle>
+            <AlertDialogDescription>
+              All staged rows for this import will be permanently deleted. This cannot be undone.
+              No contacts have been created yet.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (confirmDeleteId) deleteMutation.mutate(confirmDeleteId);
+                setConfirmDeleteId(null);
+              }}
+              data-testid="button-confirm-delete-batch"
+            >
+              Discard Import
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

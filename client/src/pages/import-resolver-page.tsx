@@ -36,9 +36,20 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Trash2,
   Users,
   Zap,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import type { ImportBatch, ImportRow, ImportRuleSuggestion } from "@shared/schema";
 
 interface PricingRulesConfig {
@@ -251,6 +262,7 @@ export default function ImportResolverPage() {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [rowEdits, setRowEdits] = useState<Record<string, Record<string, string>>>({});
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const healthQuery = useQuery<HealthData>({
     queryKey: ["/api/import-batches", batchId, "health"],
@@ -327,6 +339,21 @@ export default function ImportResolverPage() {
     },
     onError: () => {
       toast({ title: "Failed to accept suggestions", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", `/api/import-batches/${batchId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Import discarded" });
+      queryClient.invalidateQueries({ queryKey: ["/api/import-batches"] });
+      navigate("/migration");
+    },
+    onError: () => {
+      toast({ title: "Failed to discard import", variant: "destructive" });
     },
   });
 
@@ -596,6 +623,19 @@ export default function ImportResolverPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {!isCommitted && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleteMutation.isPending}
+              data-testid="button-discard-import"
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              Discard Import
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -1532,6 +1572,28 @@ export default function ImportResolverPage() {
           </TabsContent>
         </Tabs>
       </Card>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard this import?</AlertDialogTitle>
+            <AlertDialogDescription>
+              All staged rows will be permanently deleted. This cannot be undone. No contacts have
+              been created yet.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteMutation.mutate()}
+              data-testid="button-confirm-discard-import"
+            >
+              Discard Import
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

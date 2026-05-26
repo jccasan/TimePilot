@@ -277,6 +277,29 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
     }
   );
 
+  // DELETE /api/import-batches/:batchId - discard a non-committed import batch
+  app.delete(
+    "/api/import-batches/:batchId",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+        const batch = await storage.getImportBatch(p(req.params.batchId), companyId);
+        if (!batch) return res.status(404).json({ error: "Import batch not found" });
+        if (batch.status === "committed") {
+          return res
+            .status(400)
+            .json({ error: "Committed imports cannot be deleted" });
+        }
+        await storage.deleteImportBatch(batch.id, companyId);
+        res.json({ ok: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
   // PATCH /api/import-batches/:batchId/rows/bulk - bulk update selected rows
   app.patch(
     "/api/import-batches/:batchId/rows/bulk",
