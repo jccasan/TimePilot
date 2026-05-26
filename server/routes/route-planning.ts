@@ -2065,10 +2065,13 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
     isAuthenticated,
     async (req: Request, res: Response) => {
       try {
-        const { companyId, role } = await getCompanyContext(req);
-        requireRole(role, ["owner", "admin"]);
-
+        const { companyId, role, userId: currentUserId } = await getCompanyContext(req);
         const targetUserId = p(req.params.userId);
+
+        // Techs can only update their own depot; owner/admin can update anyone on the team
+        if (targetUserId !== currentUserId) {
+          requireRole(role, ["owner", "admin"]);
+        }
 
         // Verify target user belongs to caller's company
         const [membership] = await db

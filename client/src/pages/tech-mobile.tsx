@@ -37,6 +37,8 @@ import {
   ArrowRight,
   Flag,
   BarChart2,
+  Home,
+  ChevronRight,
 } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 const RouteMapView = lazy(() => import("@/components/route-map-view"));
@@ -245,6 +247,7 @@ export default function TechMobile() {
 
   const [onMyWaySending, setOnMyWaySending] = useState<string | null>(null);
   const [onMyWayCooldowns, setOnMyWayCooldowns] = useState<Record<string, number>>({});
+  const [showDepotPicker, setShowDepotPicker] = useState(false);
 
   const handleOnMyWay = (visitId: string) => {
     if (onMyWayCooldowns[visitId] && Date.now() < onMyWayCooldowns[visitId]) {
@@ -290,6 +293,34 @@ export default function TechMobile() {
   };
 
   const { data: company } = useQuery<{ name: string }>({ queryKey: ["/api/company"] });
+
+  const { data: currentUser } = useQuery<{ id: string; defaultDepotId?: string | null }>({
+    queryKey: ["/api/auth/user"],
+  });
+
+  type Depot = { id: string; name: string; address: string; isPrimary: boolean };
+  const { data: depots = [] } = useQuery<Depot[]>({ queryKey: ["/api/depots"] });
+
+  const activeDepot = depots.find((d) => d.id === currentUser?.defaultDepotId) ?? null;
+
+  const updateDepotMutation = useMutation({
+    mutationFn: (depotId: string | null) =>
+      apiRequest("PATCH", `/api/team/${currentUser?.id}/default-depot`, { depotId }).then((r) =>
+        r.json()
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setShowDepotPicker(false);
+      toast({ title: "Starting point updated" });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Failed to update starting point",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const {
     data: fetchedVisits,
@@ -518,12 +549,18 @@ export default function TechMobile() {
     const encoded = encodeURIComponent(address);
     const ua = navigator.userAgent;
     if (/iPad|iPhone|iPod/.test(ua)) {
-      return `maps://maps.apple.com/?daddr=${encoded}`;
+      const originParam = activeDepot ? `&saddr=${encodeURIComponent(activeDepot.address)}` : "";
+      return `maps://maps.apple.com/?daddr=${encoded}${originParam}`;
     }
     if (/Android/.test(ua)) {
+      const originParam = activeDepot ? `&origin=${encodeURIComponent(activeDepot.address)}` : "";
+      if (originParam) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${encoded}${originParam}`;
+      }
       return `geo:0,0?q=${encoded}`;
     }
-    return `https://www.google.com/maps/dir/?api=1&destination=${encoded}`;
+    const originParam = activeDepot ? `&origin=${encodeURIComponent(activeDepot.address)}` : "";
+    return `https://www.google.com/maps/dir/?api=1&destination=${encoded}${originParam}`;
   };
 
   const googleMapsDirectionsUrl = useMemo(() => {
@@ -532,16 +569,17 @@ export default function TechMobile() {
       .filter((v) => v.property?.streetAddress)
       .map((v) => `${v.property!.streetAddress}, ${v.property!.city}, ${v.property!.state}`);
     if (addrs.length === 0) return null;
+    const originParam = activeDepot ? `&origin=${encodeURIComponent(activeDepot.address)}` : "";
     if (addrs.length === 1) {
-      return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addrs[0])}`;
+      return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addrs[0])}${originParam}`;
     }
     const dest = encodeURIComponent(addrs[addrs.length - 1]);
     const waypoints = addrs
       .slice(0, -1)
       .map((a) => encodeURIComponent(a))
       .join("|");
-    return `https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${waypoints}&travelmode=driving`;
-  }, [visits]);
+    return `https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${waypoints}&travelmode=driving${originParam}`;
+  }, [visits, activeDepot]);
 
   useEffect(() => {
     if (pendingAdvanceAfter && visits) {
@@ -959,6 +997,30 @@ export default function TechMobile() {
               <div className="text-xs text-muted-foreground">stops</div>
             </div>
           </div>
+
+          {/* Depot / starting point row */}
+          <button
+            className="w-full flex items-center gap-3 p-3 rounded-lg border bg-card text-left hover:bg-accent transition-colors"
+            onClick={() => setShowDepotPicker(true)}
+            data-testid="button-depot-picker"
+          >
+            <Home className="h-4 w-4 text-primary shrink-0" />
+            <div className="flex-1 min-w-0">
+              {activeDepot ? (
+                <>
+                  <p className="text-xs text-muted-foreground">Starting from</p>
+                  <p className="text-sm font-medium truncate" data-testid="text-active-depot-name">
+                    {activeDepot.name}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground" data-testid="text-no-depot-nudge">
+                  Set your starting point for accurate directions
+                </p>
+              )}
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          </button>
 
           {/* Route stats */}
           <div className="grid grid-cols-2 gap-3">
@@ -2045,6 +2107,60 @@ export default function TechMobile() {
                   Open in Google Maps
                 </a>
               </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Depot Picker Dialog */}
+      <Dialog open={showDepotPicker} onOpenChange={setShowDepotPicker}>
+        <DialogContent className="max-w-sm" data-testid="dialog-depot-picker">
+          <DialogHeader>
+            <DialogTitle>Set Starting Point</DialogTitle>
+            <DialogDescription>
+              Choose the depot you are starting from today. This adds an accurate origin to your
+              navigation links.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {/* "Use my current location" option */}
+            <button
+              className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${!activeDepot ? "border-primary bg-primary/5" : "hover:bg-accent"}`}
+              onClick={() => currentUser?.id && updateDepotMutation.mutate(null)}
+              disabled={updateDepotMutation.isPending}
+              data-testid="button-select-current-location"
+            >
+              <Navigation className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">Use my current location</p>
+                <p className="text-xs text-muted-foreground">GPS position at time of navigation</p>
+              </div>
+              {!activeDepot && <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
+            </button>
+
+            {depots.map((depot) => {
+              const isSelected = activeDepot?.id === depot.id;
+              return (
+                <button
+                  key={depot.id}
+                  className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${isSelected ? "border-primary bg-primary/5" : "hover:bg-accent"}`}
+                  onClick={() => currentUser?.id && updateDepotMutation.mutate(depot.id)}
+                  disabled={updateDepotMutation.isPending}
+                  data-testid={`button-select-depot-${depot.id}`}
+                >
+                  <Home className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{depot.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{depot.address}</p>
+                  </div>
+                  {isSelected && <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
+                </button>
+              );
+            })}
+            {depots.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No depots configured yet. Ask your admin to add starting locations in Settings.
+              </p>
             )}
           </div>
         </DialogContent>
