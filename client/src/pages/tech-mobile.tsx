@@ -58,6 +58,7 @@ import {
 } from "@/lib/offline-store";
 import { isNetworkError } from "@/lib/offline-sync";
 import { compressImage } from "@/lib/compress-image";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 type TodayVisit = {
   id: string;
@@ -253,6 +254,9 @@ export default function TechMobile() {
   const [showDepotPicker, setShowDepotPicker] = useState(false);
   const [showHomeAddressDialog, setShowHomeAddressDialog] = useState(false);
   const [homeAddressInput, setHomeAddressInput] = useState("");
+  const [homeAddressCoords, setHomeAddressCoords] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
 
   const handleOnMyWay = (visitId: string) => {
     if (onMyWayCooldowns[visitId] && Date.now() < onMyWayCooldowns[visitId]) {
@@ -353,8 +357,12 @@ export default function TechMobile() {
   });
 
   const updateHomeAddressMutation = useMutation({
-    mutationFn: (homeAddress: string | null) =>
-      apiRequest("PATCH", `/api/team/${currentUser?.id}/home-address`, { homeAddress }).then((r) =>
+    mutationFn: (payload: {
+      homeAddress: string | null;
+      homeLatitude?: number;
+      homeLongitude?: number;
+    }) =>
+      apiRequest("PATCH", `/api/team/${currentUser?.id}/home-address`, payload).then((r) =>
         r.json()
       ),
     onSuccess: () => {
@@ -2235,7 +2243,13 @@ export default function TechMobile() {
       </Dialog>
 
       {/* Home Address Dialog */}
-      <Dialog open={showHomeAddressDialog} onOpenChange={setShowHomeAddressDialog}>
+      <Dialog
+        open={showHomeAddressDialog}
+        onOpenChange={(open) => {
+          setShowHomeAddressDialog(open);
+          if (!open) setHomeAddressCoords(null);
+        }}
+      >
         <DialogContent className="max-w-sm" data-testid="dialog-home-address">
           <DialogHeader>
             <DialogTitle>Home Address</DialogTitle>
@@ -2247,11 +2261,21 @@ export default function TechMobile() {
           <div className="space-y-4 py-2">
             <div className="space-y-1">
               <label className="text-sm font-medium">Street address</label>
-              <input
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                placeholder="123 Main St, City, State 12345"
+              <AddressAutocomplete
                 value={homeAddressInput}
-                onChange={(e) => setHomeAddressInput(e.target.value)}
+                onChange={(val) => {
+                  setHomeAddressInput(val);
+                  setHomeAddressCoords(null);
+                }}
+                onSelect={(parsed) => {
+                  if (parsed.latitude && parsed.longitude) {
+                    setHomeAddressCoords({
+                      lat: parseFloat(parsed.latitude),
+                      lng: parseFloat(parsed.longitude),
+                    });
+                  }
+                }}
+                placeholder="123 Main St, City, State 12345"
                 data-testid="input-home-address"
               />
               <p className="text-xs text-muted-foreground">
@@ -2267,7 +2291,7 @@ export default function TechMobile() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => updateHomeAddressMutation.mutate(null)}
+                onClick={() => updateHomeAddressMutation.mutate({ homeAddress: null })}
                 disabled={updateHomeAddressMutation.isPending}
                 data-testid="button-clear-home-address"
               >
@@ -2278,7 +2302,12 @@ export default function TechMobile() {
               onClick={() => {
                 const trimmed = homeAddressInput.trim();
                 if (!trimmed) return;
-                updateHomeAddressMutation.mutate(trimmed);
+                updateHomeAddressMutation.mutate({
+                  homeAddress: trimmed,
+                  ...(homeAddressCoords
+                    ? { homeLatitude: homeAddressCoords.lat, homeLongitude: homeAddressCoords.lng }
+                    : {}),
+                });
               }}
               disabled={updateHomeAddressMutation.isPending || !homeAddressInput.trim()}
               data-testid="button-save-home-address"

@@ -2190,8 +2190,16 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           );
         if (!membership) return res.status(404).json({ error: "Team member not found" });
 
-        const schema = z.object({ homeAddress: z.string().nullable() });
-        const { homeAddress } = schema.parse(req.body);
+        const schema = z.object({
+          homeAddress: z.string().nullable(),
+          homeLatitude: z.number().optional(),
+          homeLongitude: z.number().optional(),
+        });
+        const {
+          homeAddress,
+          homeLatitude: clientLat,
+          homeLongitude: clientLng,
+        } = schema.parse(req.body);
 
         if (!homeAddress) {
           await db
@@ -2211,20 +2219,31 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           });
         }
 
-        // Geocode the address
-        const coords = await geocodeAddress(homeAddress);
-        if (!coords) {
-          return res.status(422).json({
-            error: "Address could not be geocoded. Please enter a more specific address.",
-          });
+        let finalLat: number | null = null;
+        let finalLng: number | null = null;
+
+        if (clientLat != null && clientLng != null) {
+          // Use coords provided by client (from Mapbox autocomplete) — skip geocoding round-trip
+          finalLat = clientLat;
+          finalLng = clientLng;
+        } else {
+          // Fall back to server-side geocoding
+          const coords = await geocodeAddress(homeAddress);
+          if (!coords) {
+            return res.status(422).json({
+              error: "Address could not be geocoded. Please enter a more specific address.",
+            });
+          }
+          finalLat = parseFloat(coords.latitude);
+          finalLng = parseFloat(coords.longitude);
         }
 
         await db
           .update(users)
           .set({
             homeAddress,
-            homeLatitude: parseFloat(coords.latitude),
-            homeLongitude: parseFloat(coords.longitude),
+            homeLatitude: finalLat,
+            homeLongitude: finalLng,
             updatedAt: new Date(),
           })
           .where(eq(users.id, targetUserId));
@@ -2232,8 +2251,8 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         return res.json({
           success: true,
           homeAddress,
-          homeLatitude: parseFloat(coords.latitude),
-          homeLongitude: parseFloat(coords.longitude),
+          homeLatitude: finalLat,
+          homeLongitude: finalLng,
         });
       } catch (err) {
         handleError(res, err);
