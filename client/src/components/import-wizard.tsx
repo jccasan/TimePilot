@@ -1645,7 +1645,8 @@ function RouteDayPreviewStep({
 
         <div className="p-3 rounded-md bg-muted/50 border border-border text-xs text-muted-foreground">
           <Info className="w-3.5 h-3.5 inline mr-1 mb-0.5" />
-          {modeNote}
+          Existing service days from your CSV will be kept as-is. Use the dropdowns below to fix any
+          misassignments before staging.
         </div>
 
         <div className="flex items-center justify-between pt-2">
@@ -2456,7 +2457,25 @@ export function ImportWizard({
                 Back
               </Button>
               <Button
-                onClick={() => setStep(5)}
+                onClick={() => {
+                  const addressInputs = previewRows
+                    .filter((r) => !skippedRows.has(r.rowIndex))
+                    .slice(0, 200)
+                    .map((r) => {
+                      const t = r.transformed as Record<string, unknown>;
+                      return {
+                        rowIndex: r.rowIndex,
+                        streetAddress: (t.streetAddress as string | null) || null,
+                        city: (t.city as string | null) || null,
+                        state: (t.state as string | null) || null,
+                        zipCode: (t.zipCode as string | null) || null,
+                      };
+                    });
+                  if (addressInputs.some((a) => a.streetAddress)) {
+                    geocodePreviewMutation.mutate(addressInputs);
+                  }
+                  setStep(5);
+                }}
                 disabled={validCount === 0}
                 data-testid="button-to-layer2"
               >
