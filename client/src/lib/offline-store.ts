@@ -182,3 +182,20 @@ export async function clearAllPending(): Promise<void> {
   await db.clear("pendingMutations");
   await db.clear("pendingPhotos");
 }
+
+export interface CachedDepot {
+  id: string;
+  name: string;
+  address: string;
+  isPrimary: boolean;
+}
+
+const DEPOT_CACHE_KEY = "active-depot";
+
+export async function saveDepot(depot: CachedDepot | null): Promise<void> {
+  await cacheRouteData(DEPOT_CACHE_KEY, depot);
+}
+
+export async function getCachedDepot(): Promise<CachedDepot | null> {
+  return getCachedRouteData<CachedDepot | null>(DEPOT_CACHE_KEY);
+}

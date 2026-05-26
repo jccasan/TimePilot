@@ -52,6 +52,9 @@ import {
   getCachedRouteData,
   addPendingMutation,
   addPendingPhoto,
+  saveDepot,
+  getCachedDepot,
+  type CachedDepot,
 } from "@/lib/offline-store";
 import { isNetworkError } from "@/lib/offline-sync";
 import { compressImage } from "@/lib/compress-image";
@@ -294,14 +297,36 @@ export default function TechMobile() {
 
   const { data: company } = useQuery<{ name: string }>({ queryKey: ["/api/company"] });
 
-  const { data: currentUser } = useQuery<{ id: string; defaultDepotId?: string | null }>({
+  const { data: currentUser, isSuccess: userLoaded } = useQuery<{
+    id: string;
+    defaultDepotId?: string | null;
+  }>({
     queryKey: ["/api/auth/user"],
   });
 
   type Depot = { id: string; name: string; address: string; isPrimary: boolean };
-  const { data: depots = [] } = useQuery<Depot[]>({ queryKey: ["/api/depots"] });
+  const { data: depots = [], isSuccess: depotsLoaded } = useQuery<Depot[]>({
+    queryKey: ["/api/depots"],
+  });
 
   const activeDepot = depots.find((d) => d.id === currentUser?.defaultDepotId) ?? null;
+
+  const [cachedDepot, setCachedDepot] = useState<CachedDepot | null>(null);
+
+  useEffect(() => {
+    getCachedDepot().then((cached) => {
+      if (cached) setCachedDepot(cached);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (userLoaded && depotsLoaded && activeDepot !== null) {
+      saveDepot(activeDepot);
+      setCachedDepot(activeDepot);
+    }
+  }, [userLoaded, depotsLoaded, activeDepot?.id]);
+
+  const effectiveDepot = activeDepot ?? cachedDepot;
 
   const updateDepotMutation = useMutation({
     mutationFn: (depotId: string | null) =>
@@ -549,17 +574,23 @@ export default function TechMobile() {
     const encoded = encodeURIComponent(address);
     const ua = navigator.userAgent;
     if (/iPad|iPhone|iPod/.test(ua)) {
-      const originParam = activeDepot ? `&saddr=${encodeURIComponent(activeDepot.address)}` : "";
+      const originParam = effectiveDepot
+        ? `&saddr=${encodeURIComponent(effectiveDepot.address)}`
+        : "";
       return `maps://maps.apple.com/?daddr=${encoded}${originParam}`;
     }
     if (/Android/.test(ua)) {
-      const originParam = activeDepot ? `&origin=${encodeURIComponent(activeDepot.address)}` : "";
+      const originParam = effectiveDepot
+        ? `&origin=${encodeURIComponent(effectiveDepot.address)}`
+        : "";
       if (originParam) {
         return `https://www.google.com/maps/dir/?api=1&destination=${encoded}${originParam}`;
       }
       return `geo:0,0?q=${encoded}`;
     }
-    const originParam = activeDepot ? `&origin=${encodeURIComponent(activeDepot.address)}` : "";
+    const originParam = effectiveDepot
+      ? `&origin=${encodeURIComponent(effectiveDepot.address)}`
+      : "";
     return `https://www.google.com/maps/dir/?api=1&destination=${encoded}${originParam}`;
   };
 
@@ -569,7 +600,9 @@ export default function TechMobile() {
       .filter((v) => v.property?.streetAddress)
       .map((v) => `${v.property!.streetAddress}, ${v.property!.city}, ${v.property!.state}`);
     if (addrs.length === 0) return null;
-    const originParam = activeDepot ? `&origin=${encodeURIComponent(activeDepot.address)}` : "";
+    const originParam = effectiveDepot
+      ? `&origin=${encodeURIComponent(effectiveDepot.address)}`
+      : "";
     if (addrs.length === 1) {
       return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addrs[0])}${originParam}`;
     }
@@ -579,7 +612,7 @@ export default function TechMobile() {
       .map((a) => encodeURIComponent(a))
       .join("|");
     return `https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${waypoints}&travelmode=driving${originParam}`;
-  }, [visits, activeDepot]);
+  }, [visits, effectiveDepot]);
 
   useEffect(() => {
     if (pendingAdvanceAfter && visits) {
@@ -1006,11 +1039,11 @@ export default function TechMobile() {
           >
             <Home className="h-4 w-4 text-primary shrink-0" />
             <div className="flex-1 min-w-0">
-              {activeDepot ? (
+              {effectiveDepot ? (
                 <>
                   <p className="text-xs text-muted-foreground">Starting from</p>
                   <p className="text-sm font-medium truncate" data-testid="text-active-depot-name">
-                    {activeDepot.name}
+                    {effectiveDepot.name}
                   </p>
                 </>
               ) : (
@@ -2157,8 +2190,14 @@ export default function TechMobile() {
           <div className="space-y-2 py-2">
             {/* "Use my current location" option */}
             <button
-              className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${!activeDepot ? "border-primary bg-primary/5" : "hover:bg-accent"}`}
-              onClick={() => currentUser?.id && updateDepotMutation.mutate(null)}
+              className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${!effectiveDepot ? "border-primary bg-primary/5" : "hover:bg-accent"}`}
+              onClick={() => {
+                if (currentUser?.id) {
+                  saveDepot(null);
+                  setCachedDepot(null);
+                  updateDepotMutation.mutate(null);
+                }
+              }}
               disabled={updateDepotMutation.isPending}
               data-testid="button-select-current-location"
             >
@@ -2167,16 +2206,22 @@ export default function TechMobile() {
                 <p className="text-sm font-medium">Use my current location</p>
                 <p className="text-xs text-muted-foreground">GPS position at time of navigation</p>
               </div>
-              {!activeDepot && <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
+              {!effectiveDepot && <CheckCircle className="h-4 w-4 text-primary shrink-0 mt-0.5" />}
             </button>
 
             {depots.map((depot) => {
-              const isSelected = activeDepot?.id === depot.id;
+              const isSelected = effectiveDepot?.id === depot.id;
               return (
                 <button
                   key={depot.id}
                   className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${isSelected ? "border-primary bg-primary/5" : "hover:bg-accent"}`}
-                  onClick={() => currentUser?.id && updateDepotMutation.mutate(depot.id)}
+                  onClick={() => {
+                    if (currentUser?.id) {
+                      saveDepot(depot);
+                      setCachedDepot(depot);
+                      updateDepotMutation.mutate(depot.id);
+                    }
+                  }}
                   disabled={updateDepotMutation.isPending}
                   data-testid={`button-select-depot-${depot.id}`}
                 >
