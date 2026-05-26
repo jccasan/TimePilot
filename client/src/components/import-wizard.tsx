@@ -48,9 +48,6 @@ import {
   ClipboardPaste,
   FileImage,
   Link as LinkIcon,
-  Route,
-  RefreshCw,
-  Shuffle,
   CalendarDays,
 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -104,7 +101,6 @@ interface ImportResult {
 }
 
 type SourceSystem = "sweepandgo" | "jobber" | "generic" | "googlesheet" | "housecallpro";
-type RoutePreference = "preserve" | "rebuild" | "hybrid";
 type UploadMode = "csv" | "paste" | "googlesheet" | "screenshot";
 
 interface WizardAnswers {
@@ -113,7 +109,6 @@ interface WizardAnswers {
   knowsNextServiceDate: boolean | null;
   knowsServiceDays: boolean | null;
   knowsFrequency: boolean | null;
-  routePreference: RoutePreference | null;
 }
 
 export interface ImportWizardProps {
@@ -361,12 +356,12 @@ function ConfidenceBadge({ confidence }: { confidence: number }) {
 // Two-layer Progress Indicator
 
 const LAYER1_STEPS = ["Checklist", "Upload", "Map Fields", "Review Rows"];
-const LAYER2_STEPS = ["Route Mode", "Day Preview", "Confirm & Stage"];
+const LAYER2_STEPS = ["Day Preview", "Confirm & Stage"];
 
-// step 0-3 = layer 1, step 4-6 = layer 2
+// step 0-3 = layer 1, step 5-6 = layer 2
 function TwoLayerProgress({ step }: { step: number }) {
   const layer1Active = step <= 3;
-  const layer2Active = step >= 4;
+  const layer2Active = step >= 5;
 
   return (
     <div className="flex flex-col gap-2 mb-6" data-testid="two-layer-progress">
@@ -422,7 +417,7 @@ function TwoLayerProgress({ step }: { step: number }) {
           </div>
           <div className="flex items-center gap-1">
             {LAYER2_STEPS.map((label, i) => {
-              const globalStep = i + 4;
+              const globalStep = i + 5;
               return (
                 <div key={label} className="flex items-center gap-1">
                   <div
@@ -676,61 +671,6 @@ function MigrationChecklist({
               </Label>
             </div>
           </RadioGroup>
-        </div>
-
-        <Separator />
-
-        {/* Question 6: Route preference */}
-        <div className="space-y-3">
-          <Label className="text-sm font-semibold flex items-center gap-2">
-            <span className="inline-flex w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs items-center justify-center font-bold">
-              6
-            </span>
-            What would you like to do with your existing route days?
-          </Label>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {[
-              {
-                value: "preserve" as RoutePreference,
-                icon: <Route className="w-4 h-4" />,
-                label: "Preserve Current Days",
-                description: "Keep the service day from each customer's record",
-              },
-              {
-                value: "rebuild" as RoutePreference,
-                icon: <RefreshCw className="w-4 h-4" />,
-                label: "Rebuild Optimized Routes",
-                description: "ScooPilot assigns days based on geography and route density",
-              },
-              {
-                value: "hybrid" as RoutePreference,
-                icon: <Shuffle className="w-4 h-4" />,
-                label: "Hybrid",
-                description: "Keep confident assignments, flag inefficient ones for review",
-              },
-            ].map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => onChange({ routePreference: opt.value })}
-                className={`flex flex-col gap-2 p-3 rounded-lg border-2 text-left transition-colors ${
-                  answers.routePreference === opt.value
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/40"
-                }`}
-                data-testid={`checklist-route-${opt.value}`}
-              >
-                <div className="flex items-center gap-2">
-                  {opt.icon}
-                  <span className="text-sm font-medium">{opt.label}</span>
-                  {answers.routePreference === opt.value && (
-                    <Check className="w-3 h-3 text-primary ml-auto" />
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">{opt.description}</p>
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="flex items-center justify-between pt-2">
@@ -1121,117 +1061,6 @@ function UploadScreen({
   );
 }
 
-// Step 4: Route Assignment Mode
-
-function RouteAssignmentStep({
-  routePreference,
-  onChange,
-  onNext,
-  onBack,
-}: {
-  routePreference: RoutePreference | null;
-  onChange: (pref: RoutePreference) => void;
-  onNext: () => void;
-  onBack: () => void;
-}) {
-  const options = [
-    {
-      value: "preserve" as RoutePreference,
-      icon: <Route className="w-5 h-5" />,
-      label: "Preserve Current Days",
-      description:
-        "Keep the service day exactly as recorded in each customer's import data. Best if your existing schedule is already working well.",
-      badge: "Recommended if you have service days in your export",
-      color: "border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20",
-    },
-    {
-      value: "rebuild" as RoutePreference,
-      icon: <RefreshCw className="w-5 h-5" />,
-      label: "Rebuild Optimized Routes",
-      description:
-        "ScooPilot assigns service days based on address geography and route density. Best if your current routing is scattered or inefficient.",
-      badge: "Requires addresses in your data",
-      color: "border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/20",
-    },
-    {
-      value: "hybrid" as RoutePreference,
-      icon: <Shuffle className="w-5 h-5" />,
-      label: "Hybrid",
-      description:
-        "Keeps high-confidence day assignments from your data, and flags low-confidence ones for your review before committing.",
-      badge: "Review step before finalizing",
-      color: "border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20",
-    },
-  ];
-
-  return (
-    <Card data-testid="step-route-assignment">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CalendarDays className="w-5 h-5" />
-          How should we group your customers into routes?
-        </CardTitle>
-        <CardDescription>
-          Each customer needs a service day so they land on the right route. Tell us how to handle
-          that for the customers you're importing.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-3">
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onChange(opt.value)}
-              className={`w-full flex items-start gap-4 p-4 rounded-lg border-2 text-left transition-colors ${
-                routePreference === opt.value
-                  ? `border-primary bg-primary/5`
-                  : `${opt.color} hover:border-primary/50`
-              }`}
-              data-testid={`route-mode-${opt.value}`}
-            >
-              <div
-                className={`mt-0.5 ${routePreference === opt.value ? "text-primary" : "text-muted-foreground"}`}
-              >
-                {opt.icon}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">{opt.label}</span>
-                  {routePreference === opt.value && <Check className="w-4 h-4 text-primary" />}
-                  <Badge variant="secondary" className="text-xs">
-                    {opt.badge}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">{opt.description}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="p-3 rounded-md bg-muted/50 border border-border text-xs text-muted-foreground">
-          <Info className="w-3.5 h-3.5 inline mr-1 mb-0.5" />
-          Next you'll see your customers grouped by day on a map so you can spot any misassignments
-          before staging. After that you'll confirm and stage, then land in the{" "}
-          <strong className="text-foreground">Review page</strong> to fill in any remaining service
-          details and commit your contacts to the CRM.
-        </div>
-
-        <div className="flex items-center justify-between pt-2">
-          <Button variant="ghost" onClick={onBack} data-testid="button-back-route">
-            <ChevronLeft className="w-4 h-4 mr-1" />
-            Back
-          </Button>
-          <Button onClick={onNext} disabled={!routePreference} data-testid="button-preview-days">
-            Preview Route Days
-            <ChevronRight className="w-4 h-4 ml-1" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 // Step 5: Route Day Preview
 
 const WEEK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -1343,7 +1172,6 @@ function haversineDistanceMiles(lat1: number, lon1: number, lat2: number, lon2: 
 function RouteDayPreviewStep({
   previewRows,
   skippedRows,
-  routePreference,
   geocodedPositions,
   onNext,
   onBack,
@@ -1352,7 +1180,6 @@ function RouteDayPreviewStep({
 }: {
   previewRows: TransformedRow[];
   skippedRows: Set<number>;
-  routePreference: RoutePreference | null;
   geocodedPositions: Record<number, { lat: number; lng: number }>;
   onNext: () => void;
   onBack: () => void;
@@ -1416,13 +1243,6 @@ function RouteDayPreviewStep({
   const orderedDays = [...WEEK_DAYS, "Saturday", "Sunday", "Unassigned"];
   const allDays = orderedDays.filter((d) => dayGroups[d]?.length);
   const total = Object.values(dayGroups).reduce((s, g) => s + g.length, 0);
-
-  const modeNote =
-    routePreference === "rebuild"
-      ? "All service days will be cleared and re-assigned by the resolver using address geography."
-      : routePreference === "preserve"
-        ? "Existing service days from your CSV will be kept as-is. Use the dropdowns below to fix any misassignments before staging."
-        : "Days present in your CSV are kept; gaps are flagged for resolver review. Reassign below as needed.";
 
   function handleReassign(rowIndex: number, newDay: string) {
     setLocalOverrides((prev) => ({ ...prev, [rowIndex]: newDay }));
@@ -1862,7 +1682,6 @@ export function ImportWizard({
     knowsNextServiceDate: null,
     knowsServiceDays: null,
     knowsFrequency: null,
-    routePreference: null,
   });
 
   // CSV data
@@ -2049,7 +1868,6 @@ export function ImportWizard({
       targetSchema: string;
       skippedRows: number[];
       editedCells: Record<string, string>;
-      routePreference?: RoutePreference | null;
       platform?: SourceSystem | null;
       knowsNextServiceDate?: boolean | null;
     }) => {
@@ -2125,7 +1943,6 @@ export function ImportWizard({
       targetSchema,
       skippedRows: Array.from(skippedRows),
       editedCells,
-      routePreference: wizardAnswers.routePreference,
       platform: wizardAnswers.sourceSystem,
       knowsNextServiceDate: wizardAnswers.knowsNextServiceDate,
     });
@@ -2639,7 +2456,7 @@ export function ImportWizard({
                 Back
               </Button>
               <Button
-                onClick={() => setStep(4)}
+                onClick={() => setStep(5)}
                 disabled={validCount === 0}
                 data-testid="button-to-layer2"
               >
@@ -2651,44 +2468,14 @@ export function ImportWizard({
         </Card>
       )}
 
-      {/* Step 4: Route Assignment Mode */}
-      {step === 4 && (
-        <RouteAssignmentStep
-          routePreference={wizardAnswers.routePreference}
-          onChange={(pref) => setWizardAnswers((prev) => ({ ...prev, routePreference: pref }))}
-          onNext={() => {
-            // Trigger batch geocode for map preview before entering step 5
-            const addressInputs = previewRows
-              .filter((r) => !skippedRows.has(r.rowIndex))
-              .slice(0, 200)
-              .map((r) => {
-                const t = r.transformed as Record<string, unknown>;
-                return {
-                  rowIndex: r.rowIndex,
-                  streetAddress: (t.streetAddress as string | null) || null,
-                  city: (t.city as string | null) || null,
-                  state: (t.state as string | null) || null,
-                  zipCode: (t.zipCode as string | null) || null,
-                };
-              });
-            if (addressInputs.some((a) => a.streetAddress)) {
-              geocodePreviewMutation.mutate(addressInputs);
-            }
-            setStep(5);
-          }}
-          onBack={() => setStep(3)}
-        />
-      )}
-
       {/* Step 5: Route Day Distribution Preview */}
       {step === 5 && (
         <RouteDayPreviewStep
           previewRows={previewRows}
           skippedRows={skippedRows}
-          routePreference={wizardAnswers.routePreference}
           geocodedPositions={geocodedPositions}
           onNext={() => setStep(6)}
-          onBack={() => setStep(4)}
+          onBack={() => setStep(3)}
           onDayOverride={(rowIndex, newDay) =>
             setEditedCells((prev) => ({ ...prev, [`${rowIndex}:serviceDay`]: newDay }))
           }
@@ -2858,19 +2645,6 @@ export function ImportWizard({
                   <li className="flex items-center gap-2">
                     <Check className="w-3.5 h-3.5 text-green-600" />
                     <span>Billing rules assigned via AI defaults for each contact</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-green-600" />
-                    <span>
-                      Route mode:{" "}
-                      <strong className="text-foreground">
-                        {wizardAnswers.routePreference === "preserve"
-                          ? "Preserve existing service days"
-                          : wizardAnswers.routePreference === "rebuild"
-                            ? "Rebuild with optimized routing"
-                            : "Hybrid — keep present, review absent"}
-                      </strong>
-                    </span>
                   </li>
                   {needsServiceSetupCount > 0 && (
                     <li className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
