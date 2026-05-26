@@ -535,6 +535,8 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       if (updated.length === 0) {
         return res.status(409).json({ error: "Feedback already submitted" });
       }
+      // Only alert if no alert was already sent at rating time; prevents double-alerting.
+      if (!existingResponse.alertSent) {
       try {
         const company = await storage.getCompany(row.companyId);
         const contact = await storage.getContact(row.contactId, row.companyId);
@@ -610,6 +612,7 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       } catch (alertErr) {
         console.error("[ReviewAlert] Failed to send owner alert:", alertErr);
       }
+      } // end if (!existingResponse.alertSent)
       res.json({ success: true, branch: existingResponse.branch });
     } catch (err) {
       handleError(res, err);

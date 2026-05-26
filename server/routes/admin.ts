@@ -2319,6 +2319,9 @@ Respond with exactly one category from the list above and nothing else.`;
             ? ROUTE_FIELDS
             : CONTACT_FIELDS;
 
+      if (!process.env.CLAUDE_API_KEY) {
+        return res.status(503).json({ error: "AI features are not configured" });
+      }
       if (company?.aiImportMappingEnabled) {
         const result = await aiMapColumns(
           headers,
@@ -2632,7 +2635,10 @@ Respond with exactly one category from the list above and nothing else.`;
           .from(companies)
           .where(eq(companies.id, companyId));
 
-        if (!company?.roverAiEnabled || !aiKeyAvailable) {
+        if (!aiKeyAvailable) {
+          return res.status(503).json({ error: "AI features are not configured", fallback: true });
+        }
+        if (!company?.roverAiEnabled) {
           return res.status(400).json({ error: "AI chat is disabled", fallback: true });
         }
 
