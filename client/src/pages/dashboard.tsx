@@ -686,7 +686,7 @@ const WIDGET_DEFS: {
   },
   {
     id: "voice_agent",
-    label: "Voice Agent",
+    label: "Voice/Chat Agent",
     icon: Bot,
     description: "Live phone number, webhook health, and last call time",
     defaultW: 4,
@@ -2954,7 +2954,7 @@ function VoiceAgentWidget() {
   return (
     <Card className="h-full flex flex-col" data-testid="widget-voice-agent">
       <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2 pt-4 px-4">
-        <CardTitle className="text-sm font-medium">Voice Agent</CardTitle>
+        <CardTitle className="text-sm font-medium">Voice/Chat Agent</CardTitle>
         <Bot className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent className="flex-1 flex flex-col justify-between px-4 pb-3 pt-0 gap-2">

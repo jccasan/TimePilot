@@ -1937,7 +1937,7 @@ function VoiceApiDocsSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Phone className="h-5 w-5" />
-          Voice Agent API
+          Voice/Chat Agent API
         </CardTitle>
         <CardDescription>
           Connect your AI voice agent (Vapi, Retell, Bland, or custom) to handle customer calls. Use

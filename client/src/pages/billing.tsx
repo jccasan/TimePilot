@@ -349,7 +349,7 @@ export default function Billing() {
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold mb-3">Voice Agent Add-on</h2>
+        <h2 className="text-lg font-semibold mb-3">Voice/Chat Agent Add-on</h2>
         {subscription?.voicePlan?.status === "active" ? (
           <Card className="border-primary" data-testid="card-voice-plan-active">
             <CardHeader>

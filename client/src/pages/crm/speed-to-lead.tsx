@@ -810,9 +810,7 @@ function SetupTab() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
-                    requestNumberChangeMutation.mutate(portNumber.trim() || undefined)
-                  }
+                  onClick={() => requestNumberChangeMutation.mutate(portNumber.trim() || undefined)}
                   disabled={
                     requestNumberChangeMutation.isPending ||
                     !!lrConfig.portingRequested ||

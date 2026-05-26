@@ -143,7 +143,7 @@ export default function VoiceSignup() {
             <span className="text-lg font-semibold">ScooPilot</span>
           </div>
           <h1 className="text-3xl font-bold" data-testid="text-voice-signup-heading">
-            Voice Agent for {info.companyName}
+            Voice/Chat Agent for {info.companyName}
           </h1>
           <p className="text-muted-foreground max-w-lg mx-auto">
             Add an AI-powered voice agent to handle scheduling calls, appointment booking, and
