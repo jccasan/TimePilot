@@ -237,13 +237,63 @@ async function fetchZipPolygonsInViewport(
 
 // ─── ZIP Map ──────────────────────────────────────────────────────────────────
 
+const COLOR_ZONE_CONFIGURED_BORDER = "#d97706"; // amber-600 for configured zones
+
+const DAY_LABELS: Record<string, string> = {
+  monday: "Monday",
+  tuesday: "Tuesday",
+  wednesday: "Wednesday",
+  thursday: "Thursday",
+  friday: "Friday",
+  saturday: "Saturday",
+  sunday: "Sunday",
+  tbd: "TBD",
+};
+
+export type ServiceZoneInfo = {
+  zipCode: string;
+  dayOfWeek: string;
+  priceSurchargePercent?: number | null;
+};
+
+function isConfiguredZone(zone: ServiceZoneInfo): boolean {
+  return zone.dayOfWeek !== "tbd" || (zone.priceSurchargePercent ?? 0) > 0;
+}
+
+function getZipLayerStyle(
+  zip: string,
+  isSel: boolean,
+  zonesMap: Map<string, ServiceZoneInfo>
+): L.PathOptions {
+  const zone = zonesMap.get(zip);
+  const configured = !!(zone && isConfiguredZone(zone));
+  return {
+    color: configured ? COLOR_ZONE_CONFIGURED_BORDER : "#15803d",
+    weight: configured ? 2.5 : 1.5,
+    dashArray: configured ? "5 3" : undefined,
+    fillColor: isSel ? COLOR_SEL : COLOR_UNSEL,
+    fillOpacity: isSel ? 0.45 : configured ? 0.18 : 0.12,
+  };
+}
+
+function buildZonePopupHtml(zip: string, zone: ServiceZoneInfo): string {
+  const surcharge = zone.priceSurchargePercent ?? 0;
+  const dayLabel = DAY_LABELS[zone.dayOfWeek] ?? zone.dayOfWeek;
+  return `<div style="font-size:12px;line-height:1.6;min-width:120px;">
+    <strong style="font-size:13px;display:block;margin-bottom:3px;">${zip}</strong>
+    <span style="color:#555;">Day:</span> ${dayLabel}<br/>
+    <span style="color:#555;">Surcharge:</span> ${surcharge > 0 ? `${surcharge}%` : "None"}
+  </div>`;
+}
+
 type ZipMapProps = {
   value: string;
   onChange: (zips: string) => void;
   addressHint?: string | null;
+  serviceZones?: ServiceZoneInfo[];
 };
 
-export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
+export function ZipMapSelector({ value, onChange, addressHint, serviceZones }: ZipMapProps) {
   const { country } = useAddressLabels();
   const isCanada = country === "ca";
   const postalSingular = isCanada ? "postal code" : "ZIP";
@@ -255,6 +305,7 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
   const layersRef = useRef<Map<string, L.GeoJSON>>(new Map());
   const selectedRef = useRef<Set<string>>(new Set());
   const loadingRef = useRef(false);
+  const zonesMapRef = useRef<Map<string, ServiceZoneInfo>>(new Map());
 
   const [selectedZips, setSelectedZips] = useState<string[]>(() => {
     const initial = value
@@ -345,12 +396,7 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
           if (!zip || (!isZip(zip) && !isFSA(zip)) || layersRef.current.has(zip)) return;
           const isSel = selectedRef.current.has(zip);
           const layer = L.geoJSON(feat as any, {
-            style: {
-              color: "#15803d",
-              weight: 1.5,
-              fillColor: isSel ? COLOR_SEL : COLOR_UNSEL,
-              fillOpacity: isSel ? 0.45 : 0.12,
-            },
+            style: getZipLayerStyle(zip, isSel, zonesMapRef.current),
           });
           layer.on("mouseover", () => {
             if (!selectedRef.current.has(zip))
@@ -358,18 +404,24 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
           });
           layer.on("mouseout", () => {
             if (!selectedRef.current.has(zip))
-              layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
+              layer.setStyle(getZipLayerStyle(zip, false, zonesMapRef.current));
           });
           layer.on("click", () => {
             const next = new Set(selectedRef.current);
             if (next.has(zip)) {
               next.delete(zip);
-              layer.setStyle({ fillColor: COLOR_UNSEL, fillOpacity: 0.12 });
             } else {
               next.add(zip);
-              layer.setStyle({ fillColor: COLOR_SEL, fillOpacity: 0.45 });
             }
+            layer.setStyle(getZipLayerStyle(zip, next.has(zip), zonesMapRef.current));
             syncSelected(next);
+            const zone = zonesMapRef.current.get(zip);
+            if (zone && mapRef.current) {
+              L.popup({ closeButton: true, maxWidth: 200 })
+                .setLatLng(layer.getBounds().getCenter())
+                .setContent(buildZonePopupHtml(zip, zone))
+                .openOn(mapRef.current);
+            }
           });
           const ring =
             feat.geometry.type === "Polygon"
@@ -475,13 +527,20 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
 
   useEffect(() => {
     layersRef.current.forEach((layer, zip) => {
-      layer.setStyle(
-        selectedRef.current.has(zip)
-          ? { fillColor: COLOR_SEL, fillOpacity: 0.45 }
-          : { fillColor: COLOR_UNSEL, fillOpacity: 0.12 }
-      );
+      layer.setStyle(getZipLayerStyle(zip, selectedRef.current.has(zip), zonesMapRef.current));
     });
   }, [selectedZips]);
+
+  useEffect(() => {
+    const map = new Map<string, ServiceZoneInfo>();
+    (serviceZones ?? []).forEach((z) => map.set(z.zipCode.trim().toUpperCase(), z));
+    zonesMapRef.current = map;
+    layersRef.current.forEach((layer, zip) => {
+      layer.setStyle(getZipLayerStyle(zip, selectedRef.current.has(zip), zonesMapRef.current));
+    });
+  }, [serviceZones]);
+
+  const configuredZoneCount = (serviceZones ?? []).filter(isConfiguredZone).length;
 
   return (
     <div className="space-y-2">
@@ -505,9 +564,28 @@ export function ZipMapSelector({ value, onChange, addressHint }: ZipMapProps) {
           </div>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">
-        Click {postalAreaLabel} to select your service territory. Zoom in for more detail.
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          Click {postalAreaLabel} to select your service territory. Zoom in for more detail.
+        </p>
+        {configuredZoneCount > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0" data-testid="legend-configured-zones">
+            <span
+              style={{
+                display: "inline-block",
+                width: 18,
+                height: 10,
+                borderRadius: 2,
+                border: "2.5px dashed #d97706",
+                background: "rgba(75,158,95,0.18)",
+              }}
+            />
+            <span className="text-xs text-muted-foreground">
+              {configuredZoneCount} zone{configuredZoneCount !== 1 ? "s" : ""} configured
+            </span>
+          </div>
+        )}
+      </div>
       <div className="flex gap-2">
         <input
           type="text"

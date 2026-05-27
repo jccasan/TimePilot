@@ -6026,6 +6026,17 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
 
   const addressHint = company?.address ?? null;
 
+  const { data: existingZones } = useQuery<
+    {
+      zipCode: string;
+      dayOfWeek: string;
+      priceSurchargePercent: number | null;
+      isActive: boolean;
+    }[]
+  >({
+    queryKey: ["/api/service-zones"],
+  });
+
   const [mode, setMode] = useState<"zip" | "radius">("zip");
   const [zipValue, setZipValue] = useState<string>("");
   const [radiusMiles, setRadiusMiles] = useState<number>(15);
@@ -6169,6 +6180,7 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
               setInvalidZips([]);
             }}
             addressHint={addressHint}
+            serviceZones={existingZones?.filter((z) => z.isActive)}
           />
         ) : (
           <div className="space-y-3">
