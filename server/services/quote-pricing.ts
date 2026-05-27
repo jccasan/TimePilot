@@ -117,10 +117,21 @@ function getYardSizeLabel(size: string): string {
   return size;
 }
 
+type FirstTimeCleanupConfig = {
+  baseAmount?: number;
+  firstTimeCleanupMode?: "fixed" | "hourly" | "bucket";
+  hourlyRate?: number;
+  estimatedHours?: number;
+  bucketFirstPrice?: number;
+  bucketAdditionalPrice?: number;
+  defaultBucketCount?: number;
+};
+
 export function calculateResidentialPricing(
   input: ResidentialQuoteInput,
   config?: Partial<QuoteDefaults> | null,
-  yardSizeTiers?: YardSizeTier[] | null
+  yardSizeTiers?: YardSizeTier[] | null,
+  firstTimeCleanupConfig?: FirstTimeCleanupConfig | null
 ): TierPricing {
   const d = { ...DEFAULT_QUOTE_DEFAULTS, ...(config || {}) };
 
@@ -138,10 +149,26 @@ export function calculateResidentialPricing(
 
   let initialCleanFee = 0;
   if (input.isFirstTime) {
-    initialCleanFee = Math.min(
-      Math.round(basePerVisit * d.initialCleanMultiplier * 100) / 100,
-      d.initialCleanCap
-    );
+    if (firstTimeCleanupConfig) {
+      const mode = firstTimeCleanupConfig.firstTimeCleanupMode ?? "fixed";
+      if (mode === "hourly") {
+        const rate = firstTimeCleanupConfig.hourlyRate ?? 0;
+        const hours = firstTimeCleanupConfig.estimatedHours ?? 1;
+        initialCleanFee = Math.round(rate * hours * 100) / 100;
+      } else if (mode === "bucket") {
+        const firstBucket = firstTimeCleanupConfig.bucketFirstPrice ?? 0;
+        const addlBucket = firstTimeCleanupConfig.bucketAdditionalPrice ?? 0;
+        const buckets = Math.max(1, firstTimeCleanupConfig.defaultBucketCount ?? 1);
+        initialCleanFee = Math.round((firstBucket + Math.max(0, buckets - 1) * addlBucket) * 100) / 100;
+      } else {
+        initialCleanFee = firstTimeCleanupConfig.baseAmount ?? 0;
+      }
+    } else {
+      initialCleanFee = Math.min(
+        Math.round(basePerVisit * d.initialCleanMultiplier * 100) / 100,
+        d.initialCleanCap
+      );
+    }
   }
 
   const essential = Math.round(basePerVisit * 100) / 100;

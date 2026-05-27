@@ -144,6 +144,12 @@ export interface FirstTimeCleanupConfig {
     discountAmount?: number;
     discountPercent?: number;
   };
+  firstTimeCleanupMode?: "fixed" | "hourly" | "bucket";
+  hourlyRate?: number;
+  estimatedHours?: number;
+  bucketFirstPrice?: number;
+  bucketAdditionalPrice?: number;
+  defaultBucketCount?: number;
 }
 
 export interface PricingRulesConfig {

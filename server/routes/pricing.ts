@@ -214,6 +214,12 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
                 discountAmount: z.number().optional(),
                 discountPercent: z.number().optional(),
               }),
+              firstTimeCleanupMode: z.enum(["fixed", "hourly", "bucket"]).optional(),
+              hourlyRate: z.number().min(0).optional(),
+              estimatedHours: z.number().min(0).optional(),
+              bucketFirstPrice: z.number().min(0).optional(),
+              bucketAdditionalPrice: z.number().min(0).optional(),
+              defaultBucketCount: z.number().int().min(1).optional(),
             })
             .optional(),
         });
@@ -580,6 +586,38 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
     }
   });
 
+  const firstTimeCleanupConfigSchema = z
+    .object({
+      baseAmount: z.number().min(0),
+      modifiers: z
+        .array(
+          z.object({
+            id: z.string(),
+            type: z.enum(["per_unit", "hourly", "flat_fee"]),
+            label: z.string(),
+            pricePerUnit: z.number().optional(),
+            rate: z.number().optional(),
+            estimatedHours: z.number().optional(),
+            amount: z.number().optional(),
+          })
+        )
+        .optional(),
+      conversionDiscount: z
+        .object({
+          type: z.enum(["waive", "discount_amount", "discount_percent", "none"]),
+          discountAmount: z.number().optional(),
+          discountPercent: z.number().optional(),
+        })
+        .optional(),
+      firstTimeCleanupMode: z.enum(["fixed", "hourly", "bucket"]).optional(),
+      hourlyRate: z.number().min(0).optional(),
+      estimatedHours: z.number().min(0).optional(),
+      bucketFirstPrice: z.number().min(0).optional(),
+      bucketAdditionalPrice: z.number().min(0).optional(),
+      defaultBucketCount: z.number().int().min(1).optional(),
+    })
+    .optional();
+
   const pricingRulesSchema = z
     .object({
       basePrices: z.object({
@@ -601,6 +639,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           surcharge: z.number().min(0),
         })
       ),
+      firstTimeCleanupConfig: firstTimeCleanupConfigSchema,
     })
     .optional();
 
