@@ -6018,6 +6018,8 @@ function parseServiceAreaDescription(desc: string): {
   return { mode: "zip", zipValue: trimmed, radiusMiles: 15 };
 }
 
+const ZIP_REGEX = /^\d{5}$/;
+
 function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -6028,6 +6030,8 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
   const [zipValue, setZipValue] = useState<string>("");
   const [radiusMiles, setRadiusMiles] = useState<number>(15);
   const [isSaving, setIsSaving] = useState(false);
+  const [savedZipCount, setSavedZipCount] = useState<number | null>(null);
+  const [invalidZips, setInvalidZips] = useState<string[]>([]);
   // Incremented when we pre-populate ZIP from async company data, forcing ZipMapSelector
   // to remount with the correct value (its internal useState only reads `value` on mount).
   const [zipMapKey, setZipMapKey] = useState(0);
@@ -6049,11 +6053,11 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
   }, [company]);
 
   async function handleSave() {
+    setInvalidZips([]);
+    setSavedZipCount(null);
     setIsSaving(true);
     try {
-      const newDescription = mode === "zip" ? zipValue : `${radiusMiles} miles radius`;
-
-      const zipList =
+      const allZips =
         mode === "zip"
           ? zipValue
               .split(",")
@@ -6061,9 +6065,24 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
               .filter(Boolean)
           : [];
 
+      const validZips = [...new Set(allZips.filter((z) => ZIP_REGEX.test(z)))];
+      const badZips = allZips.filter((z) => !ZIP_REGEX.test(z));
+
+      if (badZips.length > 0) {
+        setInvalidZips(badZips);
+        toast({
+          title: "Invalid ZIP codes removed",
+          description: `${badZips.join(", ")} ${badZips.length === 1 ? "is" : "are"} not valid 5-digit US ZIP codes and will be skipped.`,
+          variant: "destructive",
+        });
+      }
+
+      // Build description from sanitized ZIPs so invalid entries are never persisted
+      const newDescription = mode === "zip" ? validZips.join(", ") : `${radiusMiles} miles radius`;
+
       await apiRequest("POST", "/api/company/sync-service-area", {
         serviceAreaDescription: newDescription,
-        zipCodes: zipList,
+        zipCodes: validZips,
       });
 
       await Promise.all([
@@ -6072,7 +6091,15 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
         qc.invalidateQueries({ queryKey: ["/api/service-zones"] }),
       ]);
 
-      toast({ title: "Service area saved", description: "Your service area has been updated." });
+      if (mode === "zip") {
+        setSavedZipCount(validZips.length);
+      } else {
+        setSavedZipCount(null);
+      }
+
+      if (badZips.length === 0) {
+        toast({ title: "Service area saved", description: "Your service area has been updated." });
+      }
     } catch {
       toast({
         title: "Save failed",
@@ -6083,6 +6110,8 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
       setIsSaving(false);
     }
   }
+
+  const signupUrl = company?.slug ? `${window.location.origin}/signup/${company.slug}` : "";
 
   return (
     <Card className="h-full overflow-auto">
@@ -6106,6 +6135,8 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
               onChange={() => {
                 setMode("zip");
                 setZipMapKey((k) => k + 1);
+                setSavedZipCount(null);
+                setInvalidZips([]);
               }}
               data-testid="radio-sa-mode-zip"
             />
@@ -6117,7 +6148,11 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
               name="sa-mode"
               value="radius"
               checked={mode === "radius"}
-              onChange={() => setMode("radius")}
+              onChange={() => {
+                setMode("radius");
+                setSavedZipCount(null);
+                setInvalidZips([]);
+              }}
               data-testid="radio-sa-mode-radius"
             />
             Radius
@@ -6128,7 +6163,11 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
           <ZipMapSelector
             key={zipMapKey}
             value={zipValue}
-            onChange={setZipValue}
+            onChange={(v) => {
+              setZipValue(v);
+              setSavedZipCount(null);
+              setInvalidZips([]);
+            }}
             addressHint={addressHint}
           />
         ) : (
@@ -6151,6 +6190,39 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
               </span>
             </div>
             <RadiusMapSelector radiusMiles={radiusMiles} addressHint={addressHint} />
+          </div>
+        )}
+
+        {invalidZips.length > 0 && (
+          <div
+            className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            data-testid="warning-invalid-zips"
+          >
+            The following entries are not valid 5-digit US ZIP codes and were not saved:{" "}
+            <span className="font-medium">{invalidZips.join(", ")}</span>
+          </div>
+        )}
+
+        {savedZipCount !== null && (
+          <div
+            className="rounded-md border border-green-600/40 bg-green-50 dark:bg-green-950/30 px-3 py-2 text-sm text-green-800 dark:text-green-300 flex items-center justify-between gap-3"
+            data-testid="summary-saved-zip-count"
+          >
+            <span>
+              Your signup widget now serves <span className="font-semibold">{savedZipCount}</span>{" "}
+              {savedZipCount === 1 ? "ZIP code" : "ZIP codes"}.
+            </span>
+            {signupUrl && (
+              <a
+                href={signupUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 text-green-700 dark:text-green-400 underline underline-offset-2 hover:text-green-900 dark:hover:text-green-200 text-xs font-medium"
+                data-testid="link-preview-signup-widget"
+              >
+                Preview widget
+              </a>
+            )}
           </div>
         )}
 
