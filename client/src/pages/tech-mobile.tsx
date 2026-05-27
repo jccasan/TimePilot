@@ -503,10 +503,19 @@ export default function TechMobile() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        console.log("[GPS] Permission granted on mount:", pos.coords.latitude, pos.coords.longitude);
+        console.log(
+          "[GPS] Permission granted on mount:",
+          pos.coords.latitude,
+          pos.coords.longitude
+        );
       },
       (err) => {
-        console.error("[GPS] Permission prompt error on mount — code:", err.code, "message:", err.message);
+        console.error(
+          "[GPS] Permission prompt error on mount — code:",
+          err.code,
+          "message:",
+          err.message
+        );
       },
       { timeout: 10000, enableHighAccuracy: true }
     );
