@@ -3051,9 +3051,12 @@ function MyPricingTab() {
   const [isDirty, setIsDirty] = useState(false);
 
   // ── Sync from server on first load ───────────────────────────────────────────
+  // Wait for both pricingConfigData AND companyData to be resolved before syncing
+  // so tier labels from yardSizeTierConfig are available on the first hydration.
+  // companyData === undefined means the query is still in-flight; null/object = done.
   const syncedRef = useRef(false);
   useEffect(() => {
-    if (pricingConfigData && !syncedRef.current) {
+    if (pricingConfigData && companyData !== undefined && !syncedRef.current) {
       syncedRef.current = true;
       const rules = pricingConfigData.pricingRules ?? DEFAULT_PRICING_RULES;
       const cfg = { ...DEFAULT_PRICING_CONFIG, ...pricingConfigData };
