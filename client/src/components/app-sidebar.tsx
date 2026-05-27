@@ -85,6 +85,7 @@ type MenuItem = {
   requiresSubscription?: boolean;
   requiresVoice?: boolean;
   excludedTiers?: string[];
+  demoOnly?: boolean;
 };
 
 // Nav items accessible to lead_response_operator role
@@ -92,8 +93,9 @@ const LR_OPERATOR_NAV: {
   title: string;
   url: string;
   icon: React.ComponentType<{ className?: string }>;
+  demoOnly?: boolean;
 }[] = [
-  { title: "Speed to Lead", url: "/crm/speed-to-lead", icon: PhoneIncoming },
+  { title: "Speed to Lead", url: "/crm/speed-to-lead", icon: PhoneIncoming, demoOnly: true },
   { title: "Contacts and Leads", url: "/contacts?leadSource=lead_response", icon: ContactRound },
   { title: "Messages", url: "/communications", icon: MessageSquare },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -267,6 +269,7 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
         url: "/crm/speed-to-lead",
         icon: PhoneIncoming,
         requiresSubscription: true,
+        demoOnly: true,
       },
     ],
   },
@@ -335,6 +338,11 @@ export function AppSidebar({
   const hasMainSubscription =
     isPlatformAdmin || subscriptionStatus === "active" || subscriptionStatus === "trialing";
   const hasVoicePlan = voicePlanStatus === "active";
+
+  const { data: demoStatus } = useQuery<{ isDemo: boolean }>({
+    queryKey: ["/api/demo/status"],
+  });
+  const isDemo = demoStatus?.isDemo ?? false;
 
   const { data: company } = useQuery<{ logoUrl: string | null; name: string }>({
     queryKey: ["/api/company"],
@@ -498,7 +506,7 @@ export function AppSidebar({
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
-                {LR_OPERATOR_NAV.map((item) => {
+                {LR_OPERATOR_NAV.filter((item) => !item.demoOnly || isDemo).map((item) => {
                   const isActive =
                     location === item.url ||
                     location.startsWith(item.url.split("?")[0] + "/") ||
@@ -556,7 +564,11 @@ export function AppSidebar({
                     <SidebarGroupContent>
                       <SidebarMenu>
                         {section.items
-                          .filter((item) => !(item as any).adminOnly || isAdmin)
+                          .filter(
+                            (item) =>
+                              (!(item as any).adminOnly || isAdmin) &&
+                              (!item.demoOnly || isDemo)
+                          )
                           .map((item) => {
                             const isActive =
                               item.url === "/"
