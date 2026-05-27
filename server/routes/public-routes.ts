@@ -2032,4 +2032,146 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
       }
     }
   );
+
+  // ── Direct-Accept: one-click quote acceptance from email links ───────────
+  app.get("/api/public/quotes/direct-accept", async (req: Request, res: Response) => {
+    try {
+      const requestToken =
+        typeof req.query.token === "string" ? req.query.token.trim() : "";
+      const frequency =
+        typeof req.query.frequency === "string" ? req.query.frequency.trim() : "";
+      const tier = typeof req.query.tier === "string" ? req.query.tier.trim() : "";
+
+      if (!requestToken) {
+        return res.status(400).send("Missing quote access token.");
+      }
+
+      const result = await db.execute(
+        sql`SELECT * FROM quotes WHERE quote_token = ${requestToken}`
+      );
+      const quoteRow = result.rows?.[0];
+      if (!quoteRow) {
+        return res.status(404).send("Quote not found.");
+      }
+
+      const company = await storage.getCompany(quoteRow.company_id as string);
+      const companyName = company?.name || "your service provider";
+      const contactName = (quoteRow.contact_name as string) || "there";
+
+      const confirmUrl = `/portal/quote-accepted?name=${encodeURIComponent(contactName)}&company=${encodeURIComponent(companyName)}`;
+
+      // If already accepted, go straight to confirmation
+      if (quoteRow.status === "accepted") {
+        return res.redirect(confirmUrl);
+      }
+
+      if (quoteRow.status !== "sent" && quoteRow.status !== "draft") {
+        return res.status(400).send(`This quote has already been ${quoteRow.status}.`);
+      }
+
+      if (quoteRow.expires_at && new Date(quoteRow.expires_at as string) < new Date()) {
+        return res.status(400).send("This quote has expired.");
+      }
+
+      const quoteType = quoteRow.type as string;
+      const hasLineItems =
+        Array.isArray(quoteRow.line_items) && (quoteRow.line_items as unknown[]).length > 0;
+
+      let selectedTier = "essential";
+      let selectedPrice: string;
+      let selectedFrequency: string | null = null;
+
+      if (hasLineItems) {
+        const lineItemsArr = quoteRow.line_items as { unitPrice: number; quantity: number }[];
+        const total = lineItemsArr.reduce((sum, li) => sum + li.unitPrice * li.quantity, 0);
+        selectedPrice = total.toFixed(2);
+      } else if (
+        quoteType === "residential" &&
+        frequency &&
+        ["weekly", "biweekly", "monthly"].includes(frequency)
+      ) {
+        selectedTier = "essential";
+        selectedPrice = String(quoteRow.essential_price || "0");
+        selectedFrequency = frequency;
+      } else if (
+        quoteType === "commercial" &&
+        tier &&
+        ["essential", "premium", "deluxe"].includes(tier)
+      ) {
+        selectedTier = tier;
+        const priceKey = `${tier}_price` as string;
+        selectedPrice = String(quoteRow[priceKey] || "0");
+      } else {
+        return res
+          .status(400)
+          .send("Invalid or missing selection. Please use the full quote link.");
+      }
+
+      const contactId = quoteRow.contact_id as string | null;
+      const propertyId = quoteRow.property_id as string | null;
+      const companyId = quoteRow.company_id as string;
+      const quoteNumber = quoteRow.quote_number as string | null;
+      const planFrequency = selectedFrequency || (quoteRow.frequency as string) || "weekly";
+
+      if (contactId && propertyId) {
+        const { normalizeQuoteFrequency } = await import("./shared");
+        const portalSvcName = `${selectedTier.charAt(0).toUpperCase() + selectedTier.slice(1)} Service (Quote #${quoteNumber || quoteRow.id})`;
+        const createdPlan = await storage.createServicePlan({
+          companyId,
+          contactId,
+          propertyId,
+          frequency: normalizeQuoteFrequency(planFrequency),
+          pricePerVisit: selectedPrice,
+          startDate: new Date().toISOString().split("T")[0],
+          dayOfWeek: "tbd",
+          isActive: true,
+          serviceName: portalSvcName,
+          jobType: "recurring",
+          jobStatus: "active",
+          stopOrder: 0,
+        });
+
+        if (createdPlan) {
+          try {
+            const { generateVisitsForPlans } = await import("../jobs/auto-visits");
+            const anchor = new Date();
+            const sixMonthsOut = new Date(anchor);
+            sixMonthsOut.setDate(sixMonthsOut.getDate() + 182);
+            await generateVisitsForPlans(
+              companyId,
+              [createdPlan.id],
+              anchor.toISOString().split("T")[0],
+              sixMonthsOut.toISOString().split("T")[0]
+            );
+          } catch (genErr) {
+            console.error("[direct-accept] Failed to auto-generate visits:", genErr);
+          }
+        }
+      }
+
+      await db.execute(sql`
+        UPDATE quotes SET
+          status = 'accepted',
+          selected_tier = ${selectedTier},
+          selected_frequency = ${selectedFrequency},
+          selected_price = ${selectedPrice},
+          accepted_at = NOW(),
+          accepted_via = 'direct_link',
+          updated_at = NOW()
+        WHERE id = ${quoteRow.id}
+      `);
+
+      if (contactId) {
+        const contact = await storage.getContactById(contactId);
+        if (contact && contact.status === "lead") {
+          await storage.updateContact(contactId, companyId, { status: "active" });
+        }
+      }
+
+      return res.redirect(confirmUrl);
+    } catch (err) {
+      console.error("[direct-accept] Error:", err);
+      return res.status(500).send("Something went wrong. Please try the full quote link.");
+    }
+  });
 }

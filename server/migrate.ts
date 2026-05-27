@@ -1389,6 +1389,10 @@ export async function runStartupMigrations(): Promise<void> {
     await client.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS signup_source VARCHAR(100)`);
     console.log("[Migration] companies.signup_source column verified");
 
+    // ── Quote selected_frequency column ──────────────────────────────────────
+    await client.query(`ALTER TABLE quotes ADD COLUMN IF NOT EXISTS selected_frequency VARCHAR(50)`);
+    console.log("[Migration] quotes.selected_frequency column verified");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

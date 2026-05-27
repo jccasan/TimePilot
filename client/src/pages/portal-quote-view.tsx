@@ -32,6 +32,11 @@ interface LineItem {
   quantity: number;
 }
 
+interface FrequencyOption {
+  perVisit: number;
+  monthlyEstimate: number;
+}
+
 interface PortalQuote {
   id: string;
   quoteNumber: string;
@@ -58,6 +63,11 @@ interface PortalQuote {
   discountType?: string | null;
   discountValue?: string | null;
   discountLabel?: string | null;
+  frequencyOptions?: {
+    weekly: FrequencyOption;
+    biweekly: FrequencyOption;
+    monthly: FrequencyOption;
+  } | null;
 }
 
 const SERVICE_DAYS = [
@@ -72,6 +82,7 @@ const SERVICE_DAYS = [
 
 export default function PortalQuoteView({ quoteId, token }: { quoteId: string; token: string }) {
   const [selectedTier, setSelectedTier] = useState<string>("");
+  const [selectedFrequency, setSelectedFrequency] = useState<string>("");
   const [serviceDay, setServiceDay] = useState<string>("tbd");
   const [startDate, setStartDate] = useState<string>("");
 
@@ -93,7 +104,17 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
   });
 
   const acceptMutation = useMutation({
-    mutationFn: async ({ tier, day, date }: { tier: string; day: string; date: string }) => {
+    mutationFn: async ({
+      tier,
+      frequency,
+      day,
+      date,
+    }: {
+      tier?: string;
+      frequency?: string;
+      day: string;
+      date: string;
+    }) => {
       const res = await fetch(
         `/api/portal/quotes/${quoteId}/accept?token=${encodeURIComponent(token)}`,
         {
@@ -101,6 +122,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             tier,
+            frequency,
             serviceDay: day || "tbd",
             startDate: date || undefined,
           }),
@@ -298,17 +320,36 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
                 ? "3x Weekly"
                 : quote.frequency || "";
 
-  const canAccept = hasLineItems || allPricesIdentical || !!selectedTier;
+  const isResidentialFrequencyMode =
+    quote.type === "residential" && !!quote.frequencyOptions && !hasLineItems;
+
+  const canAccept =
+    hasLineItems ||
+    allPricesIdentical ||
+    (isResidentialFrequencyMode ? !!selectedFrequency : !!selectedTier);
+
+  const freqLabelMap: Record<string, string> = {
+    weekly: "Weekly",
+    biweekly: "Bi-Weekly",
+    monthly: "Monthly",
+  };
+
   const acceptLabel =
     hasLineItems || allPricesIdentical
       ? approvalEnabled
         ? "Approve & Start Service"
         : "Accept Quote"
-      : selectedTier
-        ? approvalEnabled
-          ? `Approve ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
-          : `Accept ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
-        : "Select a plan to continue";
+      : isResidentialFrequencyMode
+        ? selectedFrequency
+          ? approvalEnabled
+            ? `Approve ${freqLabelMap[selectedFrequency] || selectedFrequency} Service`
+            : `Accept ${freqLabelMap[selectedFrequency] || selectedFrequency} Service`
+          : "Select a frequency to continue"
+        : selectedTier
+          ? approvalEnabled
+            ? `Approve ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
+            : `Accept ${tiers.find((t) => t.key === selectedTier)?.name} Plan`
+          : "Select a plan to continue";
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -331,7 +372,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
             {companyName}
           </h1>
           <p className="text-muted-foreground">
-            Service {quote.type === "commercial" ? "Proposal" : "Quote"} #{quote.quoteNumber}
+            Service Proposal #{quote.quoteNumber}
           </p>
         </div>
 
@@ -427,6 +468,58 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
               </table>
             </CardContent>
           </Card>
+        ) : isResidentialFrequencyMode ? (
+          <>
+            <h2 className="text-lg font-semibold text-center mb-4">
+              Choose Your Service Frequency
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              {(
+                [
+                  { key: "weekly", label: "Weekly" },
+                  { key: "biweekly", label: "Bi-Weekly", recommended: true },
+                  { key: "monthly", label: "Monthly" },
+                ] as { key: "weekly" | "biweekly" | "monthly"; label: string; recommended?: boolean }[]
+              ).map((opt) => {
+                const fo = quote.frequencyOptions![opt.key];
+                return (
+                  <div
+                    key={opt.key}
+                    data-testid={`portal-freq-${opt.key}`}
+                    className={`relative border-2 rounded-xl cursor-pointer transition-all ${
+                      selectedFrequency === opt.key
+                        ? "border-green-500 bg-green-50 ring-2 ring-offset-2 scale-[1.02]"
+                        : "border-gray-200 hover:border-gray-300 hover:shadow-md"
+                    }`}
+                    onClick={() => setSelectedFrequency(opt.key)}
+                  >
+                    {opt.recommended && (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                        <Badge className="bg-green-600 text-white">Most Popular</Badge>
+                      </div>
+                    )}
+                    <div className="p-6 text-center">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">
+                        {opt.label}
+                      </p>
+                      <p className="text-3xl font-bold text-green-700 mb-1">
+                        {formatMoney(fo.perVisit)}
+                        <span className="text-sm font-normal text-muted-foreground">/visit</span>
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        ~{formatMoney(fo.monthlyEstimate)}/month
+                      </p>
+                    </div>
+                    {selectedFrequency === opt.key && (
+                      <div className="px-4 py-2 bg-green-50 border-t border-green-500 text-center">
+                        <p className="text-sm font-semibold text-green-700">Selected</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         ) : allPricesIdentical ? (
           <Card className="mb-6" data-testid="card-single-price">
             <CardContent className="p-8 text-center">
@@ -582,12 +675,20 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
             className="bg-green-600 hover:bg-green-700 font-semibold"
             disabled={acceptMutation.isPending || !canAccept}
             onClick={() => {
-              const tier = hasLineItems || allPricesIdentical ? "essential" : selectedTier;
-              acceptMutation.mutate({
-                tier,
-                day: serviceDay,
-                date: startDate,
-              });
+              if (isResidentialFrequencyMode) {
+                acceptMutation.mutate({
+                  frequency: selectedFrequency,
+                  day: serviceDay,
+                  date: startDate,
+                });
+              } else {
+                const tier = hasLineItems || allPricesIdentical ? "essential" : selectedTier;
+                acceptMutation.mutate({
+                  tier,
+                  day: serviceDay,
+                  date: startDate,
+                });
+              }
             }}
           >
             {acceptMutation.isPending ? (

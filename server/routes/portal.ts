@@ -1174,6 +1174,15 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         lineItems: quoteRow.line_items || null,
         approvalEnabled: quoteRow.approval_enabled !== false,
         acceptedVia: (quoteRow.accepted_via as string | null) || null,
+        frequencyOptions:
+          (
+            (quoteRow.pricing_breakdown as Record<string, unknown> | null)
+              ?.frequencyOptions as {
+              weekly: { perVisit: number; monthlyEstimate: number };
+              biweekly: { perVisit: number; monthlyEstimate: number };
+              monthly: { perVisit: number; monthlyEstimate: number };
+            } | null
+          ) ?? null,
       };
 
       const company = await storage.getCompany(quoteRow.company_id as string);
@@ -1208,7 +1217,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
     try {
       const quoteId = p(req.params.id);
       const requestToken = typeof req.query.token === "string" ? req.query.token.trim() : "";
-      const { tier, serviceDay, startDate } = req.body;
+      const { tier, frequency: chosenFrequency, serviceDay, startDate } = req.body;
 
       const result = await db.execute(sql`SELECT * FROM quotes WHERE id = ${quoteId}`);
       const quoteRow = result.rows?.[0];
@@ -1230,8 +1239,15 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const hasLineItems =
         Array.isArray(quoteRow.line_items) && (quoteRow.line_items as unknown[]).length > 0;
 
+      const quoteType = quoteRow.type as string;
+      const isResidentialFrequencyChoice =
+        quoteType === "residential" &&
+        !!chosenFrequency &&
+        ["weekly", "biweekly", "monthly"].includes(chosenFrequency);
+
       let selectedTier = tier || "essential";
       let selectedPrice: string;
+      let selectedFrequency: string | null = null;
 
       if (hasLineItems) {
         const lineItemsArr = quoteRow.line_items as {
@@ -1241,6 +1257,10 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         const total = lineItemsArr.reduce((sum, li) => sum + li.unitPrice * li.quantity, 0);
         selectedPrice = total.toFixed(2);
         selectedTier = "essential";
+      } else if (isResidentialFrequencyChoice) {
+        selectedTier = "essential";
+        selectedPrice = String(quoteRow.essential_price || "0");
+        selectedFrequency = chosenFrequency;
       } else {
         if (!tier || !["essential", "premium", "deluxe"].includes(tier)) {
           return res
@@ -1255,7 +1275,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
       const propertyId = quoteRow.property_id as string | null;
       const companyId = quoteRow.company_id as string;
       const quoteNumber = quoteRow.quote_number as string | null;
-      const frequency = (quoteRow.frequency as string) || "weekly";
+      const frequency = selectedFrequency || (quoteRow.frequency as string) || "weekly";
 
       const today = new Date().toISOString().split("T")[0];
       const planStartDate =
@@ -1300,6 +1320,7 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         UPDATE quotes SET
           status = 'accepted',
           selected_tier = ${selectedTier},
+          selected_frequency = ${selectedFrequency},
           selected_price = ${selectedPrice},
           accepted_at = NOW(),
           accepted_via = 'portal',

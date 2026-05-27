@@ -214,7 +214,7 @@ export async function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
       .fontSize(9)
       .fillColor("rgba(255,255,255,0.7)")
       .font("Helvetica")
-      .text("Environmental Maintenance Proposal", 50, headerTextY + 22, { align: "center" });
+      .text("Service Proposal", 50, headerTextY + 22, { align: "center" });
 
     doc
       .fontSize(9)
@@ -922,9 +922,21 @@ export async function generateQuoteDocx(data: QuoteDocData): Promise<Buffer> {
           new Paragraph({
             children: [
               new TextRun({
-                text: `Service Quote #${data.quoteNumber}`,
+                text: "Service Proposal",
+                color: "1a7a4c",
+                size: 26,
+                bold: true,
+              }),
+            ],
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 60 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `#${data.quoteNumber}`,
                 color: "64748b",
-                size: 22,
+                size: 20,
               }),
             ],
             alignment: AlignmentType.CENTER,

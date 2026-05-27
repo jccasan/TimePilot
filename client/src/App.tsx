@@ -60,6 +60,7 @@ const PortalResetPassword = lazy(() => import("@/pages/portal-reset-password"));
 const PortalVerifyEmail = lazy(() => import("@/pages/portal-verify-email"));
 const PortalCustomer = lazy(() => import("@/pages/portal-customer"));
 const PortalQuoteView = lazy(() => import("@/pages/portal-quote-view"));
+const PortalQuoteAccepted = lazy(() => import("@/pages/portal-quote-accepted"));
 const InvoicePayPage = lazy(() => import("@/pages/invoice-pay"));
 const Pricing = lazy(() => import("@/pages/pricing"));
 const UnifiedPricingEngine = lazy(() => import("@/pages/unified-pricing-engine"));
@@ -891,6 +892,7 @@ function PortalRouter() {
         <Route path="/portal/client">
           <Redirect to="/portal/customer" />
         </Route>
+        <Route path="/portal/quote-accepted" component={PortalQuoteAccepted} />
         <Route path="/portal/:slug/quotes/:quoteId">
           {(params: any) => {
             const searchParams = new URLSearchParams(window.location.search);

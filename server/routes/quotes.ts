@@ -19,6 +19,7 @@ import {
   renderQuoteSmsText,
   type ResidentialQuoteInput,
   type CommercialQuoteInput,
+  calculateResidentialPricing,
 } from "../services/quote-pricing";
 import { generateQuotePdf, generateQuoteDocx } from "../services/quote-document";
 import { type InsertQuote } from "@shared/schema";
@@ -834,6 +835,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         } as Partial<import("@shared/schema").InsertQuote>);
       }
       const acceptUrl = `${req.protocol}://${req.get("host")}/portal/${slug}/quotes/${quote.id}?token=${encodeURIComponent(quoteToken)}`;
+      const directAcceptBase = `${req.protocol}://${req.get("host")}/api/public/quotes/direct-accept?token=${encodeURIComponent(quoteToken)}`;
 
       const rawLogoUrlSend = company?.logoUrl ?? null;
       const logoUrl = rawLogoUrlSend
@@ -841,6 +843,83 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           ? rawLogoUrlSend
           : `${getBaseUrl(req)}${rawLogoUrlSend}`
         : undefined;
+
+      // Compute frequency-option pricing for residential quotes
+      let frequencyOptions:
+        | {
+            weekly: { perVisit: number; monthlyEstimate: number; acceptUrl: string };
+            biweekly: { perVisit: number; monthlyEstimate: number; acceptUrl: string };
+            monthly: { perVisit: number; monthlyEstimate: number; acceptUrl: string };
+          }
+        | undefined;
+      if (quote.type === "residential") {
+        const companyQuoteDefaults = company.quoteDefaults ?? null;
+        const companyPricingConfig = (company as Record<string, unknown>).pricingConfig as
+          | {
+              pricingRules?: {
+                yardSizeTiers?: {
+                  name?: string;
+                  upToAcres: number | null;
+                  surcharge: number;
+                }[];
+              };
+            }
+          | null
+          | undefined;
+        const companyYardSizeTiers =
+          companyPricingConfig?.pricingRules?.yardSizeTiers ?? null;
+        const baseInput = {
+          type: "residential" as const,
+          dogCount:
+            typeof quote.dogCount === "number"
+              ? quote.dogCount
+              : parseInt(String(quote.dogCount ?? "1"), 10) || 1,
+          yardSize: (quote.yardSize as string) || "Standard",
+          isFirstTime: quote.isFirstTime === true,
+        };
+        const weeklyP = calculateResidentialPricing(
+          { ...baseInput, frequency: "weekly" },
+          companyQuoteDefaults,
+          companyYardSizeTiers
+        );
+        const biweeklyP = calculateResidentialPricing(
+          { ...baseInput, frequency: "biweekly" },
+          companyQuoteDefaults,
+          companyYardSizeTiers
+        );
+        const monthlyP = calculateResidentialPricing(
+          { ...baseInput, frequency: "monthly" },
+          companyQuoteDefaults,
+          companyYardSizeTiers
+        );
+        frequencyOptions = {
+          weekly: {
+            perVisit: weeklyP.essential,
+            monthlyEstimate: (weeklyP.breakdown.monthlyEstimate as number) || 0,
+            acceptUrl: `${directAcceptBase}&frequency=weekly`,
+          },
+          biweekly: {
+            perVisit: biweeklyP.essential,
+            monthlyEstimate: (biweeklyP.breakdown.monthlyEstimate as number) || 0,
+            acceptUrl: `${directAcceptBase}&frequency=biweekly`,
+          },
+          monthly: {
+            perVisit: monthlyP.essential,
+            monthlyEstimate: (monthlyP.breakdown.monthlyEstimate as number) || 0,
+            acceptUrl: `${directAcceptBase}&frequency=monthly`,
+          },
+        };
+      }
+
+      // Per-tier direct-accept URLs for commercial quotes
+      const tierAcceptUrls =
+        quote.type === "commercial"
+          ? {
+              essential: `${directAcceptBase}&tier=essential`,
+              premium: `${directAcceptBase}&tier=premium`,
+              deluxe: `${directAcceptBase}&tier=deluxe`,
+            }
+          : undefined;
 
       const renderData = {
         companyName: company.name,
@@ -865,6 +944,8 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
             unitPrice: number;
             quantity: number;
           }[]) || undefined,
+        frequencyOptions,
+        tierAcceptUrls,
       };
 
       const html =
@@ -923,11 +1004,17 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
 
       const expiresAt = quote.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       const approvalEnabledFlag = req.body.approvalEnabled === false ? false : true;
+      const existingBreakdown =
+        (quote.pricingBreakdown as Record<string, unknown> | null) || {};
+      const updatedBreakdown = frequencyOptions
+        ? { ...existingBreakdown, frequencyOptions }
+        : existingBreakdown;
       const updatedQuote = await storage.updateQuote(p(req.params.id), companyId, {
         status: "sent",
         sentAt: new Date(),
         expiresAt,
         approvalEnabled: approvalEnabledFlag,
+        pricingBreakdown: updatedBreakdown,
       } as Partial<import("@shared/schema").InsertQuote>);
 
       res.json({ ...results, quote: updatedQuote });

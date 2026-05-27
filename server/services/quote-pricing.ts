@@ -373,6 +373,11 @@ export function renderResidentialProposalHtml(data: {
   images?: { url: string; caption: string; sqft?: number }[];
   baseUrl?: string;
   lineItems?: { pricingItemId: string; name: string; unitPrice: number; quantity: number }[];
+  frequencyOptions?: {
+    weekly: { perVisit: number; monthlyEstimate: number; acceptUrl: string };
+    biweekly: { perVisit: number; monthlyEstimate: number; acceptUrl: string };
+    monthly: { perVisit: number; monthlyEstimate: number; acceptUrl: string };
+  };
 }): string {
   const { pricing } = data;
   const e = {
@@ -395,6 +400,26 @@ export function renderResidentialProposalHtml(data: {
         : data.frequency === "monthly"
           ? "Monthly"
           : "One-time";
+
+  function frequencyCard(
+    label: string,
+    perVisit: number,
+    monthlyEstimate: number,
+    cardAcceptUrl: string,
+    recommended?: boolean
+  ) {
+    const color = recommended ? "#1a7a4c" : "#64748b";
+    return `
+      <div class="tier-card" style="flex: 1; min-width: 200px; border: 2px solid ${recommended ? color : "#e2e8f0"}; border-radius: 12px; overflow: hidden; ${recommended ? "box-shadow: 0 4px 12px rgba(0,0,0,0.1);" : ""}">
+        ${recommended ? `<div style="background-color: ${color}; color: white; text-align: center; padding: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Most Popular</div>` : ""}
+        <div style="padding: 20px; text-align: center;">
+          <h3 style="margin: 0 0 8px; font-size: 18px; color: #1e293b;">${label}</h3>
+          <p style="margin: 0 0 4px; font-size: 30px; font-weight: 700; color: ${color};">$${perVisit.toFixed(2)}<span style="font-size: 14px; font-weight: 400; color: #64748b;">/visit</span></p>
+          <p style="margin: 0 0 16px; font-size: 13px; color: #64748b;">~$${monthlyEstimate.toFixed(2)}/month</p>
+          <a href="${cardAcceptUrl}" style="display: block; background-color: ${color}; color: white; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 600;">Sign Up for ${label}</a>
+        </div>
+      </div>`;
+  }
 
   function tierCard(
     name: string,
@@ -427,6 +452,17 @@ export function renderResidentialProposalHtml(data: {
       : "";
 
   const hasLineItems = Array.isArray(data.lineItems) && data.lineItems.length > 0;
+
+  const pricingBreakdownBox = `
+        <div style="background-color: #f8fafc; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
+          <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #334155;">Your Pricing</p>
+          <table style="width: 100%; font-size: 13px; color: #475569;">
+            ${pricing.breakdown.baseRate ? `<tr><td style="padding: 2px 0;">Base rate</td><td style="text-align: right;">$${Number(pricing.breakdown.baseRate).toFixed(2)}</td></tr>` : ""}
+            ${pricing.breakdown.dogSurcharge && pricing.breakdown.dogSurcharge > 0 ? `<tr><td style="padding: 2px 0;">Dog surcharge (${pricing.breakdown.dogCount || ""})</td><td style="text-align: right;">+$${Number(pricing.breakdown.dogSurcharge).toFixed(2)}</td></tr>` : ""}
+            ${pricing.breakdown.acreageSurcharge && pricing.breakdown.acreageSurcharge > 0 ? `<tr><td style="padding: 2px 0;">Yard size (${escapeHtml(String(pricing.breakdown.yardSize || ""))})</td><td style="text-align: right;">+$${Number(pricing.breakdown.acreageSurcharge).toFixed(2)}</td></tr>` : ""}
+            ${pricing.breakdown.heavyAccumulation ? `<tr><td style="padding: 2px 0;">Heavy accumulation (${pricing.breakdown.heavyAccumulationMultiplier}x)</td><td style="text-align: right;">applied</td></tr>` : ""}
+          </table>
+        </div>`;
 
   function renderLineItemsTable(): string {
     const items = data.lineItems!;
@@ -467,19 +503,19 @@ export function renderResidentialProposalHtml(data: {
 
   const pricingSection = hasLineItems
     ? renderLineItemsTable()
-    : `
-        <div style="background-color: #f8fafc; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
-          <p style="margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #334155;">Pricing Breakdown</p>
-          <table style="width: 100%; font-size: 13px; color: #475569;">
-            ${pricing.breakdown.baseRate ? `<tr><td style="padding: 2px 0;">Base rate</td><td style="text-align: right;">$${Number(pricing.breakdown.baseRate).toFixed(2)}</td></tr>` : ""}
-            ${pricing.breakdown.dogSurcharge && pricing.breakdown.dogSurcharge > 0 ? `<tr><td style="padding: 2px 0;">Dog surcharge (${pricing.breakdown.dogCount || ""})</td><td style="text-align: right;">+$${Number(pricing.breakdown.dogSurcharge).toFixed(2)}</td></tr>` : ""}
-            ${pricing.breakdown.acreageSurcharge && pricing.breakdown.acreageSurcharge > 0 ? `<tr><td style="padding: 2px 0;">Yard size (${escapeHtml(String(pricing.breakdown.yardSize || ""))})</td><td style="text-align: right;">+$${Number(pricing.breakdown.acreageSurcharge).toFixed(2)}</td></tr>` : ""}
-            ${pricing.breakdown.heavyAccumulation ? `<tr><td style="padding: 2px 0;">Heavy accumulation (${pricing.breakdown.heavyAccumulationMultiplier}x)</td><td style="text-align: right;">applied</td></tr>` : ""}
-          </table>
-        </div>
-
+    : data.frequencyOptions
+      ? `
+        ${pricingBreakdownBox}
+        <h2 style="margin: 0 0 16px; font-size: 18px; color: #1e293b; text-align: center;">Choose Your Service Frequency</h2>
+        <div class="tier-cards" style="display: flex; gap: 16px; flex-wrap: wrap;">
+          ${frequencyCard("Weekly", data.frequencyOptions.weekly.perVisit, data.frequencyOptions.weekly.monthlyEstimate, data.frequencyOptions.weekly.acceptUrl)}
+          ${frequencyCard("Bi-Weekly", data.frequencyOptions.biweekly.perVisit, data.frequencyOptions.biweekly.monthlyEstimate, data.frequencyOptions.biweekly.acceptUrl, true)}
+          ${frequencyCard("Monthly", data.frequencyOptions.monthly.perVisit, data.frequencyOptions.monthly.monthlyEstimate, data.frequencyOptions.monthly.acceptUrl)}
+        </div>`
+      : `
+        ${pricingBreakdownBox}
+        <p style="margin: 0 0 24px; font-size: 14px; color: #475569;">Service Frequency: <strong>${frequencyLabel}</strong></p>
         <h2 style="margin: 0 0 16px; font-size: 18px; color: #1e293b; text-align: center;">Choose Your Service Level</h2>
-
         <div class="tier-cards" style="display: flex; gap: 16px; flex-wrap: wrap;">
           ${tierCard("Essential", pricing.essential, pricing.essentialFeatures, "#64748b")}
           ${tierCard("Property Care", pricing.premium, pricing.premiumFeatures, "#1a7a4c", true)}
@@ -507,14 +543,14 @@ export function renderResidentialProposalHtml(data: {
       <div style="background-color: #1a7a4c; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
         ${e.companyLogo ? `<img src="${e.companyLogo}" alt="${e.companyName}" style="max-height: 50px; margin-bottom: 8px;" />` : ""}
         <h1 style="color: white; margin: 0; font-size: 22px;">${e.companyName}</h1>
-        <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 14px;">Service Quote #${e.quoteNumber}</p>
+        <p style="color: rgba(255,255,255,0.9); margin: 4px 0 0; font-size: 17px; font-weight: 600;">Service Proposal</p>
+        <p style="color: rgba(255,255,255,0.6); margin: 2px 0 0; font-size: 13px;">#${e.quoteNumber}</p>
       </div>
 
       <div class="quote-body" style="padding: 24px; border: 1px solid #e2e8f0; border-top: none;">
         <p style="margin: 0 0 4px; font-size: 14px; color: #64748b;">Prepared for</p>
         <p style="margin: 0 0 16px; font-size: 18px; font-weight: 600; color: #1e293b;">${e.contactName}</p>
-        ${e.propertyAddress ? `<p style="margin: 0 0 16px; font-size: 14px; color: #475569;">📍 ${e.propertyAddress}</p>` : ""}
-        <p style="margin: 0 0 24px; font-size: 14px; color: #475569;">Service Frequency: <strong>${frequencyLabel}</strong></p>
+        ${e.propertyAddress ? `<p style="margin: 0 0 16px; font-size: 14px; color: #475569;">${e.propertyAddress}</p>` : ""}
 
         ${pricingSection}
 
@@ -544,7 +580,13 @@ export function renderResidentialProposalHtml(data: {
 
         ${
           e.acceptUrl
-            ? `
+            ? data.frequencyOptions
+              ? `
+          <div style="margin-top: 24px; padding: 16px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; text-align: center;">
+            <p style="margin: 0 0 8px; font-size: 14px; color: #374151;">Ready to get started? Click any option above to sign up instantly${e.companyPhone ? `, or call/text ${e.companyPhone}` : ""}.</p>
+            <a href="${e.acceptUrl}" style="font-size: 13px; color: #1a7a4c; text-decoration: underline;">View full quote</a>
+          </div>`
+              : `
           <div class="cta-wrap" style="text-align: center; margin: 28px 0 20px;">
             <a href="${e.acceptUrl}" class="cta-link" style="display: inline-block; background-color: #1a7a4c; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600;">View & Accept Quote</a>
           </div>`
@@ -575,6 +617,11 @@ export function renderCommercialProposalHtml(data: {
   acceptUrl?: string;
   images?: { url: string; caption: string; sqft?: number }[];
   baseUrl?: string;
+  tierAcceptUrls?: {
+    essential: string;
+    premium: string;
+    deluxe: string;
+  };
 }): string {
   const { pricing } = data;
   const breakdown = pricing.breakdown || {};
@@ -591,7 +638,7 @@ export function renderCommercialProposalHtml(data: {
     expiresAt: data.expiresAt,
   };
 
-  function tierRow(name: string, price: number, features: string[]) {
+  function tierRow(name: string, price: number, features: string[], acceptUrl?: string) {
     return `
       <tr>
         <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #1e293b;">${escapeHtml(name)}</td>
@@ -602,6 +649,7 @@ export function renderCommercialProposalHtml(data: {
           <ul style="margin: 0; padding: 0 0 0 16px; font-size: 13px; color: #475569;">
             ${features.map((f) => `<li style="padding: 3px 0;">${escapeHtml(f)}</li>`).join("")}
           </ul>
+          ${acceptUrl ? `<div style="margin-top: 12px; text-align: center;"><a href="${acceptUrl}" style="display: inline-block; background-color: #1a7a4c; color: white; text-decoration: none; padding: 8px 24px; border-radius: 6px; font-size: 13px; font-weight: 600;">Sign Up for ${escapeHtml(name)}</a></div>` : ""}
         </td>
       </tr>`;
   }
@@ -621,8 +669,8 @@ export function renderCommercialProposalHtml(data: {
       <div style="background-color: #0f172a; padding: 32px; text-align: center; border-radius: 8px 8px 0 0;">
         ${e.companyLogo ? `<img src="${e.companyLogo}" alt="${e.companyName}" style="max-height: 50px; margin-bottom: 12px;" />` : ""}
         <h1 style="color: white; margin: 0; font-size: 24px; letter-spacing: 0.5px;">${e.companyName}</h1>
-        <p style="color: rgba(255,255,255,0.7); margin: 8px 0 0; font-size: 16px;">Environmental Maintenance Proposal</p>
-        <p style="color: rgba(255,255,255,0.5); margin: 4px 0 0; font-size: 13px;">Quote #${e.quoteNumber}</p>
+        <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0; font-size: 18px; font-weight: 600;">Service Proposal</p>
+        <p style="color: rgba(255,255,255,0.6); margin: 4px 0 0; font-size: 13px;">#${e.quoteNumber}</p>
       </div>
 
       <div class="comm-body" style="padding: 32px; border: 1px solid #e2e8f0; border-top: none;">
@@ -715,9 +763,9 @@ export function renderCommercialProposalHtml(data: {
 
         <h2 style="margin: 24px 0 12px; font-size: 18px; color: #0f172a; border-bottom: 2px solid #1a7a4c; padding-bottom: 8px;">Service Tiers</h2>
         <table style="width: 100%; border-collapse: collapse;">
-          ${tierRow("Essential", pricing.essential, pricing.essentialFeatures)}
-          ${tierRow("Property Care", pricing.premium, pricing.premiumFeatures)}
-          ${tierRow("Deluxe", pricing.deluxe, pricing.deluxeFeatures)}
+          ${tierRow("Essential", pricing.essential, pricing.essentialFeatures, data.tierAcceptUrls?.essential)}
+          ${tierRow("Property Care", pricing.premium, pricing.premiumFeatures, data.tierAcceptUrls?.premium)}
+          ${tierRow("Deluxe", pricing.deluxe, pricing.deluxeFeatures, data.tierAcceptUrls?.deluxe)}
         </table>
 
         <div style="margin-top: 24px; padding: 16px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
@@ -763,16 +811,12 @@ export function renderCommercialProposalHtml(data: {
 
         ${e.notes ? `<div style="margin-top: 20px; padding: 12px 16px; background-color: #f8fafc; border-radius: 8px;"><p style="margin: 0; font-size: 13px; color: #475569;">${e.notes}</p></div>` : ""}
 
-        ${
-          e.acceptUrl
-            ? `
-          <div class="cta-wrap" style="text-align: center; margin: 28px 0 20px;">
-            <a href="${e.acceptUrl}" class="cta-link" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600;">Review & Accept Proposal</a>
-          </div>`
-            : ""
-        }
+        <div style="margin-top: 24px; padding: 16px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; text-align: center;">
+          <p style="margin: 0 0 8px; font-size: 14px; color: #374151;">Ready to get started? Click the tier above that best fits your property${e.companyPhone ? `, or call/text ${e.companyPhone}` : ""}.</p>
+          ${e.acceptUrl ? `<a href="${e.acceptUrl}" style="font-size: 13px; color: #1a7a4c; text-decoration: underline;">View full proposal</a>` : ""}
+        </div>
 
-        ${e.expiresAt ? `<p style="text-align: center; font-size: 12px; color: #94a3b8;">This proposal is valid until ${new Date(e.expiresAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>` : ""}
+        ${e.expiresAt ? `<p style="text-align: center; font-size: 12px; color: #94a3b8; margin-top: 16px;">This proposal is valid until ${new Date(e.expiresAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</p>` : ""}
       </div>
 
       <div style="padding: 16px; text-align: center; font-size: 11px; color: #94a3b8;">

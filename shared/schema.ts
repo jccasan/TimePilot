@@ -3015,6 +3015,7 @@ export const quotes = pgTable(
     deluxePrice: decimal("deluxe_price", { precision: 10, scale: 2 }),
     initialCleanFee: decimal("initial_clean_fee", { precision: 10, scale: 2 }),
     selectedTier: quoteTierEnum("selected_tier"),
+    selectedFrequency: varchar("selected_frequency", { length: 50 }),
     selectedPrice: decimal("selected_price", { precision: 10, scale: 2 }),
     essentialFeatures: jsonb("essential_features").$type<string[]>(),
     premiumFeatures: jsonb("premium_features").$type<string[]>(),
