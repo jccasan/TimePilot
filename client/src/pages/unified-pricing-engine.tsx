@@ -3120,7 +3120,7 @@ function MyPricingTab() {
 
   // ── Tier add / remove ────────────────────────────────────────────────────────
   const MAX_TIERS = 6;
-  const MIN_REQUIRED = 3;
+  const MIN_REQUIRED = 2;
 
   const addTier = () => {
     if (localTiers.length >= MAX_TIERS) return;
