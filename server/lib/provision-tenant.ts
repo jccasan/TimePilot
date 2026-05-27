@@ -23,7 +23,7 @@ export interface ProvisionTenantParams {
 export interface ProvisionTenantResult {
   alreadyExists: false;
   user: Awaited<ReturnType<typeof createUserWithTempPassword>>;
-  company: { id: string; name: string; slug: string };
+  company: { id: string; name: string; slug: string | null };
   tempPassword: string;
 }
 
@@ -168,9 +168,7 @@ export async function provisionNewTenant(
     ownerName: [safeFirst, safeLast].filter(Boolean).join(" "),
     tier: "free_trial",
     source,
-  }).catch((err) =>
-    console.error("[ProvisionTenant] Admin signup notification failed:", err)
-  );
+  }).catch((err) => console.error("[ProvisionTenant] Admin signup notification failed:", err));
 
   return { alreadyExists: false, user, company, tempPassword };
 }
