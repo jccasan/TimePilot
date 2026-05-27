@@ -138,8 +138,8 @@ export interface CleanupFeeModifier {
 
 export interface FirstTimeCleanupConfig {
   baseAmount: number;
-  modifiers: CleanupFeeModifier[];
-  conversionDiscount: {
+  modifiers?: CleanupFeeModifier[];
+  conversionDiscount?: {
     type: "waive" | "discount_amount" | "discount_percent" | "none";
     discountAmount?: number;
     discountPercent?: number;

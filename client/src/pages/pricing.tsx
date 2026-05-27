@@ -205,10 +205,12 @@ function PricingRulesPanel({
   const twiceWeeklyEnabled = localRules.enabledFrequencies?.twiceWeekly !== false;
   const monthlyEnabled = localRules.enabledFrequencies?.monthly === true;
   const monthlyLinked = localRules.monthlyLinkedToCleanup === true;
-  const cleanupConfig = localRules.firstTimeCleanupConfig ?? {
-    baseAmount: 0,
-    modifiers: [] as CleanupFeeModifier[],
-    conversionDiscount: { type: "none" as const },
+  const cleanupConfig = {
+    baseAmount: localRules.firstTimeCleanupConfig?.baseAmount ?? 0,
+    modifiers: localRules.firstTimeCleanupConfig?.modifiers ?? ([] as CleanupFeeModifier[]),
+    conversionDiscount: localRules.firstTimeCleanupConfig?.conversionDiscount ?? {
+      type: "none" as const,
+    },
   };
 
   useEffect(() => {

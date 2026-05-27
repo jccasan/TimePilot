@@ -159,7 +159,8 @@ export function calculateResidentialPricing(
         const firstBucket = firstTimeCleanupConfig.bucketFirstPrice ?? 0;
         const addlBucket = firstTimeCleanupConfig.bucketAdditionalPrice ?? 0;
         const buckets = Math.max(1, firstTimeCleanupConfig.defaultBucketCount ?? 1);
-        initialCleanFee = Math.round((firstBucket + Math.max(0, buckets - 1) * addlBucket) * 100) / 100;
+        initialCleanFee =
+          Math.round((firstBucket + Math.max(0, buckets - 1) * addlBucket) * 100) / 100;
       } else {
         initialCleanFee = firstTimeCleanupConfig.baseAmount ?? 0;
       }
@@ -376,10 +377,11 @@ export function calculateCommercialPricing(
 export function calculateQuotePricing(
   input: QuoteInput,
   config?: Partial<QuoteDefaults> | null,
-  yardSizeTiers?: YardSizeTier[] | null
+  yardSizeTiers?: YardSizeTier[] | null,
+  firstTimeCleanupConfig?: FirstTimeCleanupConfig | null
 ): TierPricing {
   if (input.type === "residential") {
-    return calculateResidentialPricing(input, config, yardSizeTiers);
+    return calculateResidentialPricing(input, config, yardSizeTiers, firstTimeCleanupConfig);
   }
   return calculateCommercialPricing(input, config);
 }

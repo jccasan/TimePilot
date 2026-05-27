@@ -3134,7 +3134,7 @@ function MyPricingTab() {
   };
 
   const removeTier = (idx: number) => {
-    if (idx < MIN_REQUIRED || localTiers.length <= MIN_REQUIRED) return;
+    if (idx < 2 || localTiers.length <= MIN_REQUIRED) return;
     setLocalTiers((prev) => {
       const next = [...prev];
       next.splice(idx, 1);
@@ -3348,7 +3348,7 @@ function MyPricingTab() {
                     </td>
                   ))}
                   <td className="pr-2 text-center align-middle">
-                    {ti >= MIN_REQUIRED && (
+                    {ti >= 2 && localTiers.length > MIN_REQUIRED && (
                       <button
                         className="text-muted-foreground hover:text-destructive transition-colors"
                         onClick={() => removeTier(ti)}

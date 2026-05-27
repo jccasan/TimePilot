@@ -331,11 +331,14 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         | {
             pricingRules?: {
               yardSizeTiers?: { name?: string; upToAcres: number | null; surcharge: number }[];
+              firstTimeCleanupConfig?: import("@shared/schema").FirstTimeCleanupConfig;
             };
           }
         | null
         | undefined;
       const companyYardSizeTiers = companyPricingConfig?.pricingRules?.yardSizeTiers ?? null;
+      const companyFirstTimeCleanupConfig =
+        companyPricingConfig?.pricingRules?.firstTimeCleanupConfig ?? null;
 
       const type = req.query.type as string;
       if (type === "residential") {
@@ -348,7 +351,12 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           frequency: frequency as ResidentialQuoteInput["frequency"],
           isFirstTime: req.query.isFirstTime === "true",
         };
-        const pricing = calculateQuotePricing(input, companyQuoteDefaults, companyYardSizeTiers);
+        const pricing = calculateQuotePricing(
+          input,
+          companyQuoteDefaults,
+          companyYardSizeTiers,
+          companyFirstTimeCleanupConfig
+        );
         res.json(pricing);
       } else if (type === "commercial") {
         const frequency = (req.query.frequency as string) || "1x_weekly";
@@ -862,11 +870,14 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
                   upToAcres: number | null;
                   surcharge: number;
                 }[];
+                firstTimeCleanupConfig?: import("@shared/schema").FirstTimeCleanupConfig;
               };
             }
           | null
           | undefined;
         const companyYardSizeTiers = companyPricingConfig?.pricingRules?.yardSizeTiers ?? null;
+        const companyFirstTimeCleanupConfig =
+          companyPricingConfig?.pricingRules?.firstTimeCleanupConfig ?? null;
         const baseInput = {
           type: "residential" as const,
           dogCount:
@@ -879,17 +890,20 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         const weeklyP = calculateResidentialPricing(
           { ...baseInput, frequency: "weekly" },
           companyQuoteDefaults,
-          companyYardSizeTiers
+          companyYardSizeTiers,
+          companyFirstTimeCleanupConfig
         );
         const biweeklyP = calculateResidentialPricing(
           { ...baseInput, frequency: "biweekly" },
           companyQuoteDefaults,
-          companyYardSizeTiers
+          companyYardSizeTiers,
+          companyFirstTimeCleanupConfig
         );
         const monthlyP = calculateResidentialPricing(
           { ...baseInput, frequency: "monthly" },
           companyQuoteDefaults,
-          companyYardSizeTiers
+          companyYardSizeTiers,
+          companyFirstTimeCleanupConfig
         );
         frequencyOptions = {
           weekly: {
