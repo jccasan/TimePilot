@@ -1,8 +1,9 @@
 import type { Express, Request } from "express";
 import multer from "multer";
 import { db } from "../db";
-import { sql, eq, and, ilike, desc, or, isNull } from "drizzle-orm";
+import { sql, eq, and, ilike, desc, or, isNull, inArray } from "drizzle-orm";
 import { isAuthenticated, getCompanyContext } from "./shared";
+import { contacts as operationalContacts } from "@shared/schema";
 import {
   isValidEmail,
   normalizePhone,
@@ -455,6 +456,64 @@ export function registerCrmRoutes(app: Express) {
       .delete(crmContacts)
       .where(and(eq(crmContacts.id, req.params.id), eq(crmContacts.companyId, getCompanyId(req))));
     res.status(204).send();
+  });
+
+  app.post("/api/crm/contacts/sync-from-customers", async (req, res) => {
+    try {
+      const companyId = getCompanyId(req);
+
+      const customers = await db
+        .select()
+        .from(operationalContacts)
+        .where(
+          and(
+            eq(operationalContacts.companyId, companyId),
+            inArray(operationalContacts.status, ["active", "paused"])
+          )
+        );
+
+      if (customers.length === 0) {
+        return res.json({ created: 0, skipped: 0, total: 0 });
+      }
+
+      const customerIds = customers.map((c) => c.id.toString());
+      const existing = await db
+        .select({ mainContactId: crmContacts.mainContactId })
+        .from(crmContacts)
+        .where(
+          and(
+            eq(crmContacts.companyId, companyId),
+            inArray(crmContacts.mainContactId, customerIds)
+          )
+        );
+
+      const alreadyLinked = new Set(existing.map((e) => e.mainContactId));
+      const toCreate = customers.filter((c) => !alreadyLinked.has(c.id.toString()));
+
+      if (toCreate.length > 0) {
+        await db.insert(crmContacts).values(
+          toCreate.map((c) => ({
+            companyId,
+            firstName: c.firstName,
+            lastName: c.lastName,
+            email: c.email ?? undefined,
+            phone: c.phone ?? undefined,
+            status: "customer",
+            source: "auto-sync",
+            mainContactId: c.id.toString(),
+          }))
+        );
+      }
+
+      return res.json({
+        created: toCreate.length,
+        skipped: customers.length - toCreate.length,
+        total: customers.length,
+      });
+    } catch (err) {
+      console.error("[CRM] sync-from-customers error:", err);
+      return res.status(500).json({ message: "Sync failed" });
+    }
   });
 
   app.get("/api/crm/contacts/export/csv", async (req, res) => {

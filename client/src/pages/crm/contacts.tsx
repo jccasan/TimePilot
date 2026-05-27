@@ -30,7 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Search, Users, Trash2, Download, Star, Upload } from "lucide-react";
+import { Plus, Search, Users, Trash2, Download, Star, Upload, RefreshCw } from "lucide-react";
 import type { CrmContact } from "@shared/crm-schema";
 import { CrmImportModal } from "@/components/crm-import-modal";
 
@@ -162,6 +162,27 @@ export default function CrmContacts() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/crm/contacts"] }),
   });
 
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/crm/contacts/sync-from-customers");
+      if (!res.ok) throw new Error((await res.json()).message ?? "Sync failed");
+      return res.json() as Promise<{ created: number; skipped: number; total: number }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/stats"] });
+      toast({
+        title: `Sync complete`,
+        description:
+          data.created > 0
+            ? `${data.created} new customer${data.created !== 1 ? "s" : ""} added to CRM${data.skipped > 0 ? `, ${data.skipped} already linked` : ""}.`
+            : `All ${data.total} customer${data.total !== 1 ? "s" : ""} already in CRM.`,
+      });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" }),
+  });
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -208,6 +229,17 @@ export default function CrmContacts() {
             data-testid="button-crm-import-contacts"
           >
             <Upload className="w-4 h-4" /> Import CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            data-testid="button-crm-sync-customers"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+            {syncMutation.isPending ? "Syncing..." : "Sync Customers"}
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
