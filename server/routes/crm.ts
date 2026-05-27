@@ -481,10 +481,7 @@ export function registerCrmRoutes(app: Express) {
         .select({ mainContactId: crmContacts.mainContactId })
         .from(crmContacts)
         .where(
-          and(
-            eq(crmContacts.companyId, companyId),
-            inArray(crmContacts.mainContactId, customerIds)
-          )
+          and(eq(crmContacts.companyId, companyId), inArray(crmContacts.mainContactId, customerIds))
         );
 
       const alreadyLinked = new Set(existing.map((e) => e.mainContactId));

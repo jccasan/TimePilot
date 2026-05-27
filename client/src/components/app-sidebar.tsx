@@ -566,8 +566,7 @@ export function AppSidebar({
                         {section.items
                           .filter(
                             (item) =>
-                              (!(item as any).adminOnly || isAdmin) &&
-                              (!item.demoOnly || isDemo)
+                              (!(item as any).adminOnly || isAdmin) && (!item.demoOnly || isDemo)
                           )
                           .map((item) => {
                             const isActive =

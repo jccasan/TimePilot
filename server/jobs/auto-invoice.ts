@@ -5,42 +5,59 @@ import { and, eq, gte, isNull, lte } from "drizzle-orm";
 import { getCompanyToday } from "../utils/company-date";
 import { upsertHealthCheckResult } from "./system-health-check";
 import { calculateProratedAmount, monthlyRateForPlan, isProratable } from "../services/proration";
+import { acquireJobLock, releaseJobLock } from "../lib/job-lock";
+
+const AUTO_INVOICE_LOCK = "auto_invoice";
+const AUTO_INVOICE_TTL_SECONDS = 23 * 60 * 60; // 23 hours — just under the 24-hour interval
 
 export async function runAutoInvoice() {
+  const acquired = await acquireJobLock(AUTO_INVOICE_LOCK, AUTO_INVOICE_TTL_SECONDS);
+  if (!acquired) {
+    console.log(
+      `[auto-invoice] Lock not acquired — another instance is already running. Skipping.`
+    );
+    return { totalInvoicesCreated: 0, errors: 0, skipped: true };
+  }
+
   console.log(`[auto-invoice] Starting auto-invoice run`);
 
-  const allCompanies = await storage.getAllCompanies();
   let totalInvoicesCreated = 0;
   let errors = 0;
 
-  for (const company of allCompanies) {
-    try {
-      const tz = company.timezone || "America/New_York";
-      const companyToday = getCompanyToday(tz);
+  try {
+    const allCompanies = await storage.getAllCompanies();
 
-      const missedDates = getMissedDates(company.lastAutoInvoiceRun, companyToday);
-      const datesToProcess = missedDates.length > 0 ? missedDates : [companyToday];
+    for (const company of allCompanies) {
+      try {
+        const tz = company.timezone || "America/New_York";
+        const companyToday = getCompanyToday(tz);
 
-      for (const dateStr of datesToProcess) {
-        const result = await processCompanyAutoInvoice(company.id, dateStr, tz);
-        totalInvoicesCreated += result.invoicesCreated;
+        const missedDates = getMissedDates(company.lastAutoInvoiceRun, companyToday);
+        const datesToProcess = missedDates.length > 0 ? missedDates : [companyToday];
+
+        for (const dateStr of datesToProcess) {
+          const result = await processCompanyAutoInvoice(company.id, dateStr, tz);
+          totalInvoicesCreated += result.invoicesCreated;
+        }
+
+        await storage.updateCompany(company.id, { lastAutoInvoiceRun: companyToday });
+      } catch (err) {
+        errors++;
+        console.error(`[auto-invoice] Error processing company ${company.id}:`, err);
       }
-
-      await storage.updateCompany(company.id, { lastAutoInvoiceRun: companyToday });
-    } catch (err) {
-      errors++;
-      console.error(`[auto-invoice] Error processing company ${company.id}:`, err);
     }
-  }
 
-  const msg = `Completed: ${totalInvoicesCreated} draft invoices created, ${errors} company errors`;
-  console.log(`[auto-invoice] ${msg}`);
-  await upsertHealthCheckResult(
-    "job_auto_invoice",
-    errors === 0 ? "pass" : "warn",
-    "high",
-    msg
-  ).catch(() => {});
+    const msg = `Completed: ${totalInvoicesCreated} draft invoices created, ${errors} company errors`;
+    console.log(`[auto-invoice] ${msg}`);
+    await upsertHealthCheckResult(
+      "job_auto_invoice",
+      errors === 0 ? "pass" : "warn",
+      "high",
+      msg
+    ).catch(() => {});
+  } finally {
+    await releaseJobLock(AUTO_INVOICE_LOCK);
+  }
 
   return { totalInvoicesCreated, errors };
 }

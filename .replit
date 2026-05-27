@@ -75,6 +75,10 @@ args = "fix-all"
 task = "workflow.run"
 args = "schema-check"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "check-inline-migrations"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -190,6 +194,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/check-schema.sh"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[[workflows.workflow]]
+name = "check-inline-migrations"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/check-inline-migrations.sh"
 
 [workflows.workflow.metadata]
 isValidation = true

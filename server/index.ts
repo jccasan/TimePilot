@@ -349,6 +349,16 @@ async function syncSubscriptionTiers() {
   }
 }
 
+// =============================================================================
+// INLINE MIGRATION BLOCK — FROZEN BASELINE
+// =============================================================================
+// The ~72 ALTER TABLE statements below are a frozen historical baseline.
+// DO NOT add new ALTER TABLE statements to this file.
+// New schema changes MUST go into drizzle/migrations/ as proper Drizzle
+// migration files so they are trackable, reversible, and environment-safe.
+// The scripts/check-inline-migrations.sh guard will fail CI if this count grows.
+// =============================================================================
+
 async function ensureCompanyColumns() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -2848,6 +2858,25 @@ async function ensureVoicePortingColumn() {
   }
 }
 
+async function ensureJobLocksTable() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS job_locks (
+        job_name TEXT PRIMARY KEY,
+        locked_at TIMESTAMP NOT NULL,
+        locked_until TIMESTAMP NOT NULL
+      );
+    `);
+    console.log("[Migration] job_locks table ensured");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure job_locks table:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function seedHistoricalDemoData() {
   try {
     const { Pool } = await import("pg");
@@ -3295,6 +3324,7 @@ async function migrateYardSizeTiers() {
   await ensureSmsSessionsTable();
   await ensureCustomFieldDefinitionsTable();
   await ensureVoicePortingColumn();
+  await ensureJobLocksTable();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();
   await migrateYardSizeTiers();

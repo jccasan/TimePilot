@@ -3736,3 +3736,15 @@ export const insertInboundEmailSchema = createInsertSchema(inboundEmails).omit({
 });
 export type InboundEmail = typeof inboundEmails.$inferSelect;
 export type InsertInboundEmail = z.infer<typeof insertInboundEmailSchema>;
+
+// ---------------------------------------------------------------------------
+// job_locks — distributed job lock table for preventing concurrent execution
+// of named background jobs across multiple process instances.
+// ---------------------------------------------------------------------------
+export const jobLocks = pgTable("job_locks", {
+  jobName: text("job_name").primaryKey(),
+  lockedAt: timestamp("locked_at").notNull(),
+  lockedUntil: timestamp("locked_until").notNull(),
+});
+
+export type JobLock = typeof jobLocks.$inferSelect;

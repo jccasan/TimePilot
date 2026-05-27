@@ -2626,11 +2626,13 @@ export class DatabaseStorage implements IStorage {
     invoiceData: InsertInvoice,
     lineItems: Omit<InsertInvoiceLineItem, "invoiceId">[]
   ): Promise<Invoice> {
-    const [invoice] = await db.insert(invoices).values(invoiceData).returning();
-    for (const item of lineItems) {
-      await db.insert(invoiceLineItems).values({ ...item, invoiceId: invoice.id });
-    }
-    return invoice;
+    return db.transaction(async (tx) => {
+      const [invoice] = await tx.insert(invoices).values(invoiceData).returning();
+      for (const item of lineItems) {
+        await tx.insert(invoiceLineItems).values({ ...item, invoiceId: invoice.id });
+      }
+      return invoice;
+    });
   }
 
   async getUninvoicedSummary(companyId: string): Promise<{

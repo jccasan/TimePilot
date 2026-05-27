@@ -1,53 +1,69 @@
 import { storage } from "../storage";
 import { getCompanyToday } from "../utils/company-date";
 import type { VacationHold, ServicePlan } from "@shared/schema";
+import { acquireJobLock, releaseJobLock } from "../lib/job-lock";
+
+const AUTO_VISITS_LOCK = "auto_visits";
+const AUTO_VISITS_TTL_SECONDS = 23 * 60 * 60; // 23 hours — just under the 24-hour interval
 
 export async function runAutoVisits() {
+  const acquired = await acquireJobLock(AUTO_VISITS_LOCK, AUTO_VISITS_TTL_SECONDS);
+  if (!acquired) {
+    console.log("[auto-visits] Lock not acquired — another instance is already running. Skipping.");
+    return { totalCreated: 0, companiesProcessed: 0, errors: 0, skipped: true };
+  }
+
   console.log("[auto-visits] Starting auto visit generation...");
 
-  const allCompanies = await storage.getAllCompanies();
   let totalCreated = 0;
   let companiesProcessed = 0;
   let errors = 0;
 
-  for (const company of allCompanies) {
-    if (!company.autoVisitsEnabled) continue;
+  try {
+    const allCompanies = await storage.getAllCompanies();
 
-    try {
-      const companyToday = getCompanyToday(company.timezone || "America/New_York");
-      const startDate = new Date(companyToday + "T00:00:00Z");
-      startDate.setUTCDate(startDate.getUTCDate() + 1);
-      const endDate = new Date(companyToday + "T00:00:00Z");
-      endDate.setUTCDate(endDate.getUTCDate() + 182);
+    for (const company of allCompanies) {
+      if (!company.autoVisitsEnabled) continue;
 
-      const startStr = startDate.toISOString().split("T")[0];
-      const endStr = endDate.toISOString().split("T")[0];
+      try {
+        const companyToday = getCompanyToday(company.timezone || "America/New_York");
+        const startDate = new Date(companyToday + "T00:00:00Z");
+        startDate.setUTCDate(startDate.getUTCDate() + 1);
+        const endDate = new Date(companyToday + "T00:00:00Z");
+        endDate.setUTCDate(endDate.getUTCDate() + 182);
 
-      const created = await generateVisitsForCompany(company.id, startStr, endStr);
-      totalCreated += created;
-      companiesProcessed++;
+        const startStr = startDate.toISOString().split("T")[0];
+        const endStr = endDate.toISOString().split("T")[0];
 
-      if (created > 0) {
-        storage
-          .createNotification({
-            companyId: company.id,
-            type: "general",
-            title: "Visits Auto-Generated",
-            message: `${created} visit${created !== 1 ? "s" : ""} created for the next 6 months (${startStr} to ${endStr}).`,
-            isRead: false,
-            linkUrl: "/scheduling",
-          })
-          .catch(console.error);
+        const created = await generateVisitsForCompany(company.id, startStr, endStr);
+        totalCreated += created;
+        companiesProcessed++;
+
+        if (created > 0) {
+          storage
+            .createNotification({
+              companyId: company.id,
+              type: "general",
+              title: "Visits Auto-Generated",
+              message: `${created} visit${created !== 1 ? "s" : ""} created for the next 6 months (${startStr} to ${endStr}).`,
+              isRead: false,
+              linkUrl: "/scheduling",
+            })
+            .catch(console.error);
+        }
+      } catch (err) {
+        errors++;
+        console.error(`[auto-visits] Error processing company ${company.id}:`, err);
       }
-    } catch (err) {
-      errors++;
-      console.error(`[auto-visits] Error processing company ${company.id}:`, err);
     }
+
+    console.log(
+      `[auto-visits] Completed: ${companiesProcessed} companies, ${totalCreated} visits created, ${errors} errors`
+    );
+  } finally {
+    await releaseJobLock(AUTO_VISITS_LOCK);
   }
 
-  console.log(
-    `[auto-visits] Completed: ${companiesProcessed} companies, ${totalCreated} visits created, ${errors} errors`
-  );
   return { companiesProcessed, totalCreated, errors };
 }
 
