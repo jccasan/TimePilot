@@ -1,0 +1,24 @@
+1. server/index.ts is a 3,362-line file containing 133 inline ALTER TABLE statements that run on startup.
+This is the single biggest resilience risk. Schema changes are not tracked migrations -- they're IF NOT EXISTS patches that fire every boot. You have 3 Drizzle migration files for 91 tables because the rest of the schema history lives in startup SQL. The immediate risks: if that startup block fails mid-way, you get a partially-migrated schema with no rollback. If a change runs on prod but not a branch, you have silent drift. db:push is the package.json script, which means the ORM schema and the live DB can diverge without you knowing. This needs to be unwound into proper numbered migrations.
+2. createInvoiceWithLineItems is not transactional.
+The function inserts the invoice header, then loops inserting line items -- no transaction wrapper. If a line item insert fails mid-loop, you get an invoice with missing line items. It's in storage.ts at line 2625. This is the most financially dangerous gap. The fix is one db.transaction() wrapper.
+3. Background jobs run as setInterval in a single process with no concurrency control.
+auto-invoice, auto-visits, reminders -- all fire on process-level timers. If the process restarts (Replit cold start, deploy, crash), some jobs might not have run. If there's ever horizontal scaling, every instance fires every job. The catch-up logic in auto-invoice handles missed days, but there's no distributed lock preventing two instances from running simultaneously. Right now on Replit single-instance this is fine, but it's a fragility you should know about before you move to a more serious host.
+4. Only 9 test files covering ~60,000 lines of application code.
+The tests that exist are good (quote rendering, route optimizer, economics engine). But most of the route handlers -- all 39,000 lines of them -- have zero test coverage. api.test.ts exists but a single file won't cover much. This means refactoring anything is a manual verification exercise.
+5. storage.ts is 5,800 lines and will become unmanageable.
+Not a current bug, but a future one. Every data access method is in one file. When you add features, it gets worse. At some point bugs hide in there because no one can hold the whole thing in their head.
+What's NOT a problem:
+
+Multi-tenant isolation is solid
+Auth is real and consistent
+The security hardening done in March was legitimate
+Drizzle ORM means SQL injection isn't a concern
+Financial calculation logic has tests
+
+Priority order to fix:
+
+Wrap createInvoiceWithLineItems in a transaction (30 minutes, zero risk)
+Document the inline-migration pattern so new columns go into real migrations from now on -- don't try to unwind the existing ones, just stop adding to them
+Add a distributed lock or idempotency check to the critical jobs (auto-invoice especially) before you scale beyond one instance
+Let storage.ts be until it causes a real bug, then split it by domain
