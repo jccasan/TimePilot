@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
-import type { PricingRulesConfig } from "@shared/schema";
+import type { PricingRulesConfig, YardSizeTierConfig } from "@shared/schema";
 
 type YardSizeTier = PricingRulesConfig["yardSizeTiers"][number];
 
@@ -18,6 +18,7 @@ export interface YardSizeTierEditorProps {
   tiers: YardSizeTier[];
   onChange: (tiers: YardSizeTier[]) => void;
   maxTiers?: number;
+  yardSizeTierConfig?: YardSizeTierConfig;
 }
 
 const TOTAL_ROWS = 6;
@@ -30,14 +31,28 @@ const ACRE_OPTIONS: { label: string; value: number }[] = Array.from({ length: 28
 
 type RowDraft = { name: string; upToAcres: number; surcharge: string };
 
-function toProp(tiers: YardSizeTier[]): RowDraft[] {
-  const rows: RowDraft[] = tiers.slice(0, TOTAL_ROWS).map((t) => ({
-    name: t.name ?? "",
-    upToAcres: t.upToAcres ?? 0.25,
-    surcharge: String(t.surcharge),
-  }));
+const TIER_KEYS: (keyof YardSizeTierConfig)[] = [
+  "tier1",
+  "tier2",
+  "tier3",
+  "tier4",
+  "tier5",
+  "tier6",
+];
+
+function toProp(tiers: YardSizeTier[], config?: YardSizeTierConfig): RowDraft[] {
+  const rows: RowDraft[] = tiers.slice(0, TOTAL_ROWS).map((t, i) => {
+    const configLabel = config?.[TIER_KEYS[i]]?.label;
+    return {
+      name: t.name?.trim() ? t.name : (configLabel ?? ""),
+      upToAcres: t.upToAcres ?? 0.25,
+      surcharge: String(t.surcharge),
+    };
+  });
   while (rows.length < TOTAL_ROWS) {
-    rows.push({ name: "", upToAcres: 0.25, surcharge: "" });
+    const i = rows.length;
+    const configLabel = config?.[TIER_KEYS[i]]?.label;
+    rows.push({ name: configLabel ?? "", upToAcres: 0.25, surcharge: "" });
   }
   return rows;
 }
@@ -51,12 +66,16 @@ function toTiers(rows: RowDraft[]): YardSizeTier[] {
   }));
 }
 
-export function YardSizeTierEditor({ tiers, onChange }: YardSizeTierEditorProps) {
-  const [rows, setRows] = useState<RowDraft[]>(() => toProp(tiers));
+export function YardSizeTierEditor({
+  tiers,
+  onChange,
+  yardSizeTierConfig,
+}: YardSizeTierEditorProps) {
+  const [rows, setRows] = useState<RowDraft[]>(() => toProp(tiers, yardSizeTierConfig));
 
   useEffect(() => {
-    setRows(toProp(tiers));
-  }, [tiers]);
+    setRows(toProp(tiers, yardSizeTierConfig));
+  }, [tiers, yardSizeTierConfig]);
 
   const lastUsedIndex = (() => {
     let last = -1;

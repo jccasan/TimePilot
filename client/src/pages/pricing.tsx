@@ -14,6 +14,7 @@ import type {
   PricingConfig,
   ServiceBillingRule,
   CleanupFeeModifier,
+  YardSizeTierConfig,
 } from "@shared/schema";
 import { DEFAULT_PRICING_RULES } from "@shared/schema";
 import {
@@ -185,12 +186,14 @@ function PricingRulesPanel({
   isGenerating,
   onSave,
   isSaving,
+  yardSizeTierConfig,
 }: {
   rules: PricingRulesConfig;
   onGenerate: (rules: PricingRulesConfig) => void;
   isGenerating: boolean;
   onSave: (rules: PricingRulesConfig) => void;
   isSaving: boolean;
+  yardSizeTierConfig?: YardSizeTierConfig;
 }) {
   const [localRules, setLocalRules] = useState<PricingRulesConfig>(rules);
   const { formatMoney } = useCurrency();
@@ -525,7 +528,11 @@ function PricingRulesPanel({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <YardSizeTierEditor tiers={localRules.yardSizeTiers} onChange={handleYardTiersChange} />
+            <YardSizeTierEditor
+              tiers={localRules.yardSizeTiers}
+              onChange={handleYardTiersChange}
+              yardSizeTierConfig={yardSizeTierConfig}
+            />
           </CardContent>
         </Card>
 
@@ -831,6 +838,7 @@ export default function Pricing() {
     billingCadence: string;
     billingTrigger: string;
     defaultPaymentBehavior: string;
+    yardSizeTierConfig?: YardSizeTierConfig;
   }>({
     queryKey: ["/api/company"],
   });
@@ -1253,6 +1261,7 @@ export default function Pricing() {
               isGenerating={generateFromRulesMutation.isPending}
               onSave={(rules) => saveRulesMutation.mutate(rules)}
               isSaving={saveRulesMutation.isPending}
+              yardSizeTierConfig={company?.yardSizeTierConfig}
             />
           )}
 
