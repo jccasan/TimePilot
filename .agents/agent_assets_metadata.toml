@@ -24,3 +24,9 @@ id = "euw531FeweMXyooKmfS1w"
 uri = "file://scoopilot-financial-calculations.csv"
 type = "table"
 title = "ScooPilot Financial Calculations Reference"
+
+[[outputs]]
+id = "3SHbPPjUY4AxSCsEdDile"
+uri = "file://scoopilot-review.tar.gz"
+type = "unspecified"
+title = "Scoopilot — Full Codebase (for code review)"
