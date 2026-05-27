@@ -6036,9 +6036,9 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
 
   useEffect(() => {
     if (hasInitialized.current || !company) return;
+    hasInitialized.current = true;
     const desc = company.serviceAreaDescription ?? "";
     if (!desc) return;
-    hasInitialized.current = true;
     const parsed = parseServiceAreaDescription(desc);
     setMode(parsed.mode);
     setZipValue(parsed.zipValue);
@@ -6103,7 +6103,10 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
               name="sa-mode"
               value="zip"
               checked={mode === "zip"}
-              onChange={() => setMode("zip")}
+              onChange={() => {
+                setMode("zip");
+                setZipMapKey((k) => k + 1);
+              }}
               data-testid="radio-sa-mode-zip"
             />
             ZIP Codes
