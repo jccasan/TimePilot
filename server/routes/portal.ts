@@ -1175,14 +1175,11 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         approvalEnabled: quoteRow.approval_enabled !== false,
         acceptedVia: (quoteRow.accepted_via as string | null) || null,
         frequencyOptions:
-          (
-            (quoteRow.pricing_breakdown as Record<string, unknown> | null)
-              ?.frequencyOptions as {
-              weekly: { perVisit: number; monthlyEstimate: number };
-              biweekly: { perVisit: number; monthlyEstimate: number };
-              monthly: { perVisit: number; monthlyEstimate: number };
-            } | null
-          ) ?? null,
+          ((quoteRow.pricing_breakdown as Record<string, unknown> | null)?.frequencyOptions as {
+            weekly: { perVisit: number; monthlyEstimate: number };
+            biweekly: { perVisit: number; monthlyEstimate: number };
+            monthly: { perVisit: number; monthlyEstimate: number };
+          } | null) ?? null,
       };
 
       const company = await storage.getCompany(quoteRow.company_id as string);
@@ -1259,8 +1256,32 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
         selectedTier = "essential";
       } else if (isResidentialFrequencyChoice) {
         selectedTier = "essential";
-        selectedPrice = String(quoteRow.essential_price || "0");
         selectedFrequency = chosenFrequency;
+        // Prefer the per-visit price that was presented to the customer for this frequency
+        const storedFreqOpts = (
+          (quoteRow.pricing_breakdown as Record<string, unknown> | null)
+            ?.frequencyOptions as Record<string, { perVisit?: number }> | null
+        )?.[chosenFrequency];
+        if (storedFreqOpts?.perVisit) {
+          selectedPrice = storedFreqOpts.perVisit.toFixed(2);
+        } else {
+          // Fallback: recalculate
+          const { calculateResidentialPricing: calcRes } =
+            await import("../services/quote-pricing");
+          const company2 = await storage.getCompany(quoteRow.company_id as string);
+          const fallbackResult = calcRes(
+            {
+              type: "residential",
+              dogCount: parseInt(String(quoteRow.dog_count ?? "1"), 10) || 1,
+              yardSize: (quoteRow.yard_size as string) || "Standard",
+              frequency: chosenFrequency as "weekly" | "biweekly" | "monthly",
+              isFirstTime: quoteRow.is_first_time === true,
+            },
+            company2?.quoteDefaults ?? null,
+            null
+          );
+          selectedPrice = fallbackResult.essential.toFixed(2);
+        }
       } else {
         if (!tier || !["essential", "premium", "deluxe"].includes(tier)) {
           return res

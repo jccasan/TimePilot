@@ -2036,10 +2036,8 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
   // ── Direct-Accept: one-click quote acceptance from email links ───────────
   app.get("/api/public/quotes/direct-accept", async (req: Request, res: Response) => {
     try {
-      const requestToken =
-        typeof req.query.token === "string" ? req.query.token.trim() : "";
-      const frequency =
-        typeof req.query.frequency === "string" ? req.query.frequency.trim() : "";
+      const requestToken = typeof req.query.token === "string" ? req.query.token.trim() : "";
+      const frequency = typeof req.query.frequency === "string" ? req.query.frequency.trim() : "";
       const tier = typeof req.query.tier === "string" ? req.query.tier.trim() : "";
 
       if (!requestToken) {
@@ -2091,8 +2089,32 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         ["weekly", "biweekly", "monthly"].includes(frequency)
       ) {
         selectedTier = "essential";
-        selectedPrice = String(quoteRow.essential_price || "0");
         selectedFrequency = frequency;
+        // Prefer the per-visit price presented to the customer for this frequency
+        const storedFreqOpts = (
+          (quoteRow.pricing_breakdown as Record<string, unknown> | null)
+            ?.frequencyOptions as Record<string, { perVisit?: number }> | null
+        )?.[frequency];
+        if (storedFreqOpts?.perVisit) {
+          selectedPrice = storedFreqOpts.perVisit.toFixed(2);
+        } else {
+          // Fallback: recalculate using same engine as send route
+          const { calculateResidentialPricing: calcRes } =
+            await import("../services/quote-pricing");
+          const quoteCompany = await storage.getCompany(quoteRow.company_id as string);
+          const fallback = calcRes(
+            {
+              type: "residential",
+              dogCount: parseInt(String(quoteRow.dog_count ?? "1"), 10) || 1,
+              yardSize: (quoteRow.yard_size as string) || "Standard",
+              frequency: frequency as "weekly" | "biweekly" | "monthly",
+              isFirstTime: quoteRow.is_first_time === true,
+            },
+            quoteCompany?.quoteDefaults ?? null,
+            null
+          );
+          selectedPrice = fallback.essential.toFixed(2);
+        }
       } else if (
         quoteType === "commercial" &&
         tier &&
@@ -2145,6 +2167,17 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
             );
           } catch (genErr) {
             console.error("[direct-accept] Failed to auto-generate visits:", genErr);
+          }
+
+          try {
+            const { startBillingOnboardingSequence } =
+              await import("../services/billing-onboarding");
+            await startBillingOnboardingSequence(createdPlan.contactId, companyId, createdPlan);
+          } catch (billingErr) {
+            console.error(
+              "[direct-accept] Failed to start billing onboarding sequence:",
+              billingErr
+            );
           }
         }
       }

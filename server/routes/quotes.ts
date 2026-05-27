@@ -866,8 +866,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
             }
           | null
           | undefined;
-        const companyYardSizeTiers =
-          companyPricingConfig?.pricingRules?.yardSizeTiers ?? null;
+        const companyYardSizeTiers = companyPricingConfig?.pricingRules?.yardSizeTiers ?? null;
         const baseInput = {
           type: "residential" as const,
           dogCount:
@@ -1004,8 +1003,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
 
       const expiresAt = quote.expiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       const approvalEnabledFlag = req.body.approvalEnabled === false ? false : true;
-      const existingBreakdown =
-        (quote.pricingBreakdown as Record<string, unknown> | null) || {};
+      const existingBreakdown = (quote.pricingBreakdown as Record<string, unknown> | null) || {};
       const updatedBreakdown = frequencyOptions
         ? { ...existingBreakdown, frequencyOptions }
         : existingBreakdown;

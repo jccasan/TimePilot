@@ -371,9 +371,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
           >
             {companyName}
           </h1>
-          <p className="text-muted-foreground">
-            Service Proposal #{quote.quoteNumber}
-          </p>
+          <p className="text-muted-foreground">Service Proposal #{quote.quoteNumber}</p>
         </div>
 
         <Card className="mb-6">
@@ -479,7 +477,11 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
                   { key: "weekly", label: "Weekly" },
                   { key: "biweekly", label: "Bi-Weekly", recommended: true },
                   { key: "monthly", label: "Monthly" },
-                ] as { key: "weekly" | "biweekly" | "monthly"; label: string; recommended?: boolean }[]
+                ] as {
+                  key: "weekly" | "biweekly" | "monthly";
+                  label: string;
+                  recommended?: boolean;
+                }[]
               ).map((opt) => {
                 const fo = quote.frequencyOptions![opt.key];
                 return (
@@ -499,9 +501,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
                       </div>
                     )}
                     <div className="p-6 text-center">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">
-                        {opt.label}
-                      </p>
+                      <p className="text-sm font-medium text-muted-foreground mb-1">{opt.label}</p>
                       <p className="text-3xl font-bold text-green-700 mb-1">
                         {formatMoney(fo.perVisit)}
                         <span className="text-sm font-normal text-muted-foreground">/visit</span>
