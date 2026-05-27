@@ -3144,17 +3144,85 @@ function MyPricingTab() {
     setIsDirty(true);
   };
 
-  // ── Tier inline rename ───────────────────────────────────────────────────────
+  // ── Tier inline rename (saves immediately on commit) ─────────────────────────
+  const TIER_KEYS = ["tier1", "tier2", "tier3", "tier4", "tier5", "tier6"] as const;
+
+  const commitRenameMutation = useMutation({
+    mutationFn: async (renamedTiers: typeof localTiers) => {
+      const normalizedTiers: PricingRulesConfig["yardSizeTiers"] = renamedTiers.map((t, i) => ({
+        name: t.name,
+        upToAcres: i === renamedTiers.length - 1 ? null : t.upToAcres,
+        surcharge: Math.round((t.surcharge ?? 0) * 100) / 100,
+      }));
+
+      const baseAmount =
+        cleanupMode === "fixed"
+          ? cleanupFixedAmount
+          : cleanupMode === "hourly"
+            ? Math.round(cleanupHourlyRate * cleanupEstimatedHours * 100) / 100
+            : cleanupBucketFirst;
+
+      const existingCleanup = (pricingRules.firstTimeCleanupConfig ?? {}) as Record<
+        string,
+        unknown
+      >;
+
+      const existingTierConfig = (companyData?.yardSizeTierConfig ?? {}) as Record<string, unknown>;
+      const updatedTierConfig: Record<string, unknown> = { ...existingTierConfig };
+      renamedTiers.forEach((t, i) => {
+        const key = TIER_KEYS[i];
+        if (key) {
+          const existing = existingTierConfig[key] as
+            | { label?: string; price?: number }
+            | undefined;
+          updatedTierConfig[key] = { ...(existing ?? {}), label: t.name };
+        }
+      });
+
+      await Promise.all([
+        apiRequest("PUT", "/api/pricing-rules", {
+          basePrices: {
+            weekly: Math.max(0, bases.weekly),
+            biWeekly: Math.max(0, bases.biweekly),
+            twiceWeekly:
+              pricingRules.basePrices.twiceWeekly ?? DEFAULT_PRICING_RULES.basePrices.twiceWeekly,
+            monthly: Math.max(0, bases.monthly),
+            oneTime: Math.max(0, bases.onetime),
+          },
+          perDogRule,
+          yardSizeTiers: normalizedTiers,
+          firstTimeCleanupConfig: {
+            ...existingCleanup,
+            baseAmount,
+            firstTimeCleanupMode: cleanupMode,
+            hourlyRate: cleanupHourlyRate,
+            estimatedHours: cleanupEstimatedHours,
+            bucketFirstPrice: cleanupBucketFirst,
+            bucketAdditionalPrice: cleanupBucketAdditional,
+            defaultBucketCount: cleanupDefaultBuckets,
+          },
+        }),
+        apiRequest("PATCH", "/api/company", { yardSizeTierConfig: updatedTierConfig }),
+      ]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      syncedRef.current = false;
+      setIsDirty(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Rename failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const commitTierRename = (idx: number, name: string) => {
     const trimmed = name.trim() || localTiers[idx]?.name || `Tier ${idx + 1}`;
-    setLocalTiers((prev) => {
-      const next = [...prev];
-      if (next[idx]) next[idx] = { ...next[idx], name: trimmed };
-      return next;
-    });
+    const newTiers = localTiers.map((t, i) => (i === idx ? { ...t, name: trimmed } : t));
+    setLocalTiers(newTiers);
     setEditingTierIdx(null);
     setEditingTierName("");
-    setIsDirty(true);
+    commitRenameMutation.mutate(newTiers);
   };
 
   // ── Cleanup fee computed total ───────────────────────────────────────────────
