@@ -386,6 +386,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "newClientDepositEnabled",
         "newClientDepositType",
         "newClientDepositValue",
+        "serviceAreaDescription",
       ];
       const updates: Partial<Record<keyof InsertCompany, unknown>> = {};
       for (const key of allowed as (keyof InsertCompany)[]) {
@@ -637,6 +638,161 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
+
+  // ── Service Area Bulk Sync ───────────────────────────────────────────────
+
+  /**
+   * POST /api/company/sync-service-zones
+   * Auth: user session (owner/admin)
+   * Body: { zipCodes: string[] }
+   *
+   * Bulk-syncs the service_zones table from a ZIP code list:
+   *  - New ZIPs are inserted as active with 0% surcharge and dayOfWeek = 'tbd'
+   *  - ZIPs already present are activated if inactive
+   *  - ZIPs no longer in the list are deactivated (not deleted, preserving surcharge settings)
+   */
+  app.post(
+    "/api/company/sync-service-zones",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+
+        const { zipCodes } = req.body;
+        if (!Array.isArray(zipCodes)) {
+          return res.status(400).json({ error: "zipCodes must be an array" });
+        }
+
+        const newZips = new Set<string>(
+          zipCodes
+            .map((z: unknown) => String(z).trim().toUpperCase())
+            .filter((z: string) => z.length > 0)
+        );
+
+        const existing = await storage.getServiceZones(companyId);
+        const existingByZip = new Map<string, (typeof existing)[number]>();
+        for (const zone of existing) {
+          existingByZip.set(zone.zipCode.toUpperCase(), zone);
+        }
+
+        const ops: Promise<unknown>[] = [];
+
+        for (const zip of newZips) {
+          const zone = existingByZip.get(zip);
+          if (!zone) {
+            ops.push(
+              storage.createServiceZone({
+                companyId,
+                zipCode: zip,
+                dayOfWeek: "tbd",
+                isActive: true,
+                priceSurchargePercent: 0,
+              })
+            );
+          } else if (!zone.isActive) {
+            ops.push(storage.updateServiceZone(zone.id, companyId, { isActive: true }));
+          }
+        }
+
+        for (const [zip, zone] of existingByZip) {
+          if (!newZips.has(zip) && zone.isActive) {
+            ops.push(storage.updateServiceZone(zone.id, companyId, { isActive: false }));
+          }
+        }
+
+        await Promise.all(ops);
+
+        const updated = await storage.getServiceZones(companyId);
+        return res.json({ success: true, zones: updated });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  /**
+   * POST /api/company/sync-service-area
+   * Auth: user session (owner/admin)
+   * Body: { serviceAreaDescription: string; zipCodes: string[] }
+   *
+   * Orchestrates all three service-area writes atomically:
+   *  1. Updates companies.service_area_description
+   *  2. Upserts lead_response_configs.service_zip_codes
+   *  3. Bulk-syncs service_zones (insert new, activate existing, deactivate removed)
+   *
+   * If any write fails the entire request returns 500 so the caller knows
+   * the full sync did not complete, avoiding partial-write data drift.
+   */
+  app.post(
+    "/api/company/sync-service-area",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role, ["owner", "admin"]);
+
+        const { serviceAreaDescription, zipCodes } = req.body;
+
+        if (typeof serviceAreaDescription !== "string") {
+          return res.status(400).json({ error: "serviceAreaDescription must be a string" });
+        }
+        if (!Array.isArray(zipCodes)) {
+          return res.status(400).json({ error: "zipCodes must be an array" });
+        }
+
+        // 1. Update company description
+        const updatedCompany = await storage.updateCompany(companyId, {
+          serviceAreaDescription,
+        });
+
+        // 2. Upsert lead_response_config.serviceZipCodes
+        const zipCsvOrNull = zipCodes.length > 0 ? zipCodes.join(",") : null;
+        await storage.upsertLeadResponseConfig(companyId, {
+          serviceZipCodes: zipCsvOrNull,
+        });
+
+        // 3. Sync service_zones
+        const newZips = new Set<string>(
+          zipCodes
+            .map((z: unknown) => String(z).trim().toUpperCase())
+            .filter((z: string) => z.length > 0)
+        );
+        const existing = await storage.getServiceZones(companyId);
+        const existingByZip = new Map<string, (typeof existing)[number]>();
+        for (const zone of existing) {
+          existingByZip.set(zone.zipCode.toUpperCase(), zone);
+        }
+        const zoneOps: Promise<unknown>[] = [];
+        for (const zip of newZips) {
+          const zone = existingByZip.get(zip);
+          if (!zone) {
+            zoneOps.push(
+              storage.createServiceZone({
+                companyId,
+                zipCode: zip,
+                dayOfWeek: "tbd",
+                isActive: true,
+                priceSurchargePercent: 0,
+              })
+            );
+          } else if (!zone.isActive) {
+            zoneOps.push(storage.updateServiceZone(zone.id, companyId, { isActive: true }));
+          }
+        }
+        for (const [zip, zone] of existingByZip) {
+          if (!newZips.has(zip) && zone.isActive) {
+            zoneOps.push(storage.updateServiceZone(zone.id, companyId, { isActive: false }));
+          }
+        }
+        await Promise.all(zoneOps);
+
+        return res.json({ success: true, company: updatedCompany });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // ── Demo Mode API ────────────────────────────────────────────────────────
 

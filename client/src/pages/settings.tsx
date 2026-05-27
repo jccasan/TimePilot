@@ -98,6 +98,7 @@ import { ChevronDown } from "lucide-react";
 import { TIER_CONFIG, type CustomFieldDefinition } from "@shared/schema";
 import { useUpload } from "@/hooks/use-upload";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { ZipMapSelector, RadiusMapSelector } from "@/components/zip-map-selector";
 import { LearnHowButton } from "@/components/interactive-tutorial";
 import { useTutorialContext } from "@/hooks/use-tutorials";
 import { useAddressLabels } from "@/hooks/use-address-labels";
@@ -635,6 +636,7 @@ type Company = {
   newClientDepositType?: string | null;
   newClientDepositValue?: string | null;
   country?: string | null;
+  serviceAreaDescription?: string | null;
 };
 
 type SettingsLayoutItem = {
@@ -748,6 +750,14 @@ const SETTINGS_BLOCK_DEFS: {
     minW: 4,
     minH: 5,
   },
+  {
+    id: "service_area",
+    label: "Service Area",
+    defaultW: 6,
+    defaultH: 10,
+    minW: 4,
+    minH: 8,
+  },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -781,6 +791,7 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "calendar_sync",
   "email_forwarding",
   "starting_points",
+  "service_area",
 ];
 
 function generateDefaultSettingsLayout(): SettingsLayoutItem[] {
@@ -5984,6 +5995,177 @@ type Depot = {
   isPrimary: boolean;
 };
 
+/**
+ * Parse a serviceAreaDescription string into mode/zipValue/radiusMiles.
+ * Handles both the legacy onboarding format and the new settings format:
+ *   - Onboarding: "Within 15 miles of your business address"
+ *   - Settings:   "15 miles radius"
+ */
+function parseServiceAreaDescription(desc: string): {
+  mode: "zip" | "radius";
+  zipValue: string;
+  radiusMiles: number;
+} {
+  const trimmed = desc.trim();
+  const onboardingMatch = trimmed.match(/^Within\s+(\d+(?:\.\d+)?)\s+miles?\s+of\b/i);
+  if (onboardingMatch) {
+    return { mode: "radius", zipValue: "", radiusMiles: parseFloat(onboardingMatch[1]) };
+  }
+  const newFormatMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*miles?\s+radius$/i);
+  if (newFormatMatch) {
+    return { mode: "radius", zipValue: "", radiusMiles: parseFloat(newFormatMatch[1]) };
+  }
+  return { mode: "zip", zipValue: trimmed, radiusMiles: 15 };
+}
+
+function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const addressHint = company?.address ?? null;
+
+  const [mode, setMode] = useState<"zip" | "radius">("zip");
+  const [zipValue, setZipValue] = useState<string>("");
+  const [radiusMiles, setRadiusMiles] = useState<number>(15);
+  const [isSaving, setIsSaving] = useState(false);
+  // Incremented when we pre-populate ZIP from async company data, forcing ZipMapSelector
+  // to remount with the correct value (its internal useState only reads `value` on mount).
+  const [zipMapKey, setZipMapKey] = useState(0);
+
+  const hasInitialized = useRef(false);
+
+  useEffect(() => {
+    if (hasInitialized.current || !company) return;
+    const desc = company.serviceAreaDescription ?? "";
+    if (!desc) return;
+    hasInitialized.current = true;
+    const parsed = parseServiceAreaDescription(desc);
+    setMode(parsed.mode);
+    setZipValue(parsed.zipValue);
+    setRadiusMiles(parsed.radiusMiles);
+    if (parsed.mode === "zip" && parsed.zipValue) {
+      setZipMapKey((k) => k + 1);
+    }
+  }, [company]);
+
+  async function handleSave() {
+    setIsSaving(true);
+    try {
+      const newDescription = mode === "zip" ? zipValue : `${radiusMiles} miles radius`;
+
+      const zipList =
+        mode === "zip"
+          ? zipValue
+              .split(",")
+              .map((z) => z.trim())
+              .filter(Boolean)
+          : [];
+
+      await apiRequest("POST", "/api/company/sync-service-area", {
+        serviceAreaDescription: newDescription,
+        zipCodes: zipList,
+      });
+
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["/api/company"] }),
+        qc.invalidateQueries({ queryKey: ["/api/lead-response/config"] }),
+        qc.invalidateQueries({ queryKey: ["/api/service-zones"] }),
+      ]);
+
+      toast({ title: "Service area saved", description: "Your service area has been updated." });
+    } catch {
+      toast({
+        title: "Save failed",
+        description: "Could not save service area.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <Card className="h-full overflow-auto">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MapPin className="h-5 w-5" />
+          Service Area
+        </CardTitle>
+        <CardDescription>
+          Update the ZIP codes or radius that define your service territory
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-4">
+          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+            <input
+              type="radio"
+              name="sa-mode"
+              value="zip"
+              checked={mode === "zip"}
+              onChange={() => setMode("zip")}
+              data-testid="radio-sa-mode-zip"
+            />
+            ZIP Codes
+          </label>
+          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+            <input
+              type="radio"
+              name="sa-mode"
+              value="radius"
+              checked={mode === "radius"}
+              onChange={() => setMode("radius")}
+              data-testid="radio-sa-mode-radius"
+            />
+            Radius
+          </label>
+        </div>
+
+        {mode === "zip" ? (
+          <ZipMapSelector
+            key={zipMapKey}
+            value={zipValue}
+            onChange={setZipValue}
+            addressHint={addressHint}
+          />
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="1"
+                max="100"
+                value={radiusMiles}
+                onChange={(e) => setRadiusMiles(parseInt(e.target.value))}
+                className="flex-1"
+                data-testid="input-sa-radius-slider"
+              />
+              <span
+                className="text-sm font-medium w-24 text-right"
+                data-testid="text-sa-radius-value"
+              >
+                {radiusMiles} miles
+              </span>
+            </div>
+            <RadiusMapSelector radiusMiles={radiusMiles} addressHint={addressHint} />
+          </div>
+        )}
+
+        <div className="flex justify-end pt-2">
+          <Button onClick={handleSave} disabled={isSaving} data-testid="button-save-service-area">
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Service Area
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DepotsSettingsBlock() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -8244,6 +8426,8 @@ export default function Settings() {
         );
       case "starting_points":
         return <DepotsSettingsBlock />;
+      case "service_area":
+        return <ServiceAreaSettingsBlock company={company ?? null} />;
       default:
         return null;
     }
