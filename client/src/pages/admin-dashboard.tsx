@@ -505,6 +505,12 @@ export default function AdminDashboard() {
     queryFn: adminFetchFn("/api/admin/companies"),
   });
 
+  const { data: signupSources } = useQuery<Record<string, number>>({
+    queryKey: ["/api/admin/signup-sources"],
+    queryFn: adminFetchFn("/api/admin/signup-sources"),
+    staleTime: 300000,
+  });
+
   const { data: inactiveUsers } = useQuery<Record<string, any[]>>({
     queryKey: ["/api/admin/inactive-users"],
     queryFn: adminFetchFn("/api/admin/inactive-users"),
@@ -1339,6 +1345,46 @@ export default function AdminDashboard() {
                 </div>
               );
             })()}
+          </CardContent>
+        </Card>
+      )}
+
+      {signupSources && Object.keys(signupSources).length > 0 && (
+        <Card data-testid="card-signup-sources">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-base font-semibold">
+              Signups by Source — Last 30 Days
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="space-y-2">
+              {Object.entries(signupSources)
+                .sort(([, a], [, b]) => b - a)
+                .map(([source, count]) => {
+                  const total = Object.values(signupSources).reduce((s, n) => s + n, 0);
+                  const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                  const isFacebook = source === "Facebook Lead Ad";
+                  return (
+                    <div
+                      key={source}
+                      className="flex items-center gap-3"
+                      data-testid={`row-source-${source.replace(/\s+/g, "-").toLowerCase()}`}
+                    >
+                      <span className="text-sm min-w-[140px] truncate">{source}</span>
+                      <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-2 rounded-full ${isFacebook ? "bg-blue-500" : "bg-primary"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-semibold tabular-nums w-6 text-right">
+                        {count}
+                      </span>
+                      <span className="text-xs text-muted-foreground w-8 text-right">{pct}%</span>
+                    </div>
+                  );
+                })}
+            </div>
           </CardContent>
         </Card>
       )}

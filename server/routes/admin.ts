@@ -144,6 +144,29 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.get("/api/admin/signup-sources", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const rows = await db
+        .select({
+          signupSource: companies.signupSource,
+          count: sql<number>`COUNT(*)::int`,
+        })
+        .from(companies)
+        .where(gte(companies.createdAt, since))
+        .groupBy(companies.signupSource);
+
+      const result: Record<string, number> = {};
+      for (const row of rows) {
+        const label = row.signupSource || "Direct";
+        result[label] = (result[label] ?? 0) + row.count;
+      }
+      res.json(result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
   app.get("/api/admin/system-health", isAdmin, async (_req: Request, res: Response) => {
     try {
       const { systemHealthChecks } = await import("@shared/schema");

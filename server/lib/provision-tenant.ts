@@ -91,6 +91,7 @@ export async function provisionNewTenant(
         subscriptionStatus: "trialing",
         trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
         signupCountry: "US",
+        signupSource: source,
       })
       .returning();
 

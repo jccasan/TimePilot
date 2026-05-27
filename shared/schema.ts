@@ -423,6 +423,7 @@ export const companies = pgTable("companies", {
   subscriptionUpdatedAt: timestamp("subscription_updated_at"),
   churnReason: varchar("churn_reason", { length: 100 }),
   signupCountry: varchar("signup_country", { length: 5 }),
+  signupSource: varchar("signup_source", { length: 100 }),
   verificationUrl: text("verification_url"),
   churnNotes: text("churn_notes"),
   voicePlanTier: varchar("voice_plan_tier", { length: 50 }),

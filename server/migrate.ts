@@ -1385,6 +1385,10 @@ export async function runStartupMigrations(): Promise<void> {
       }
     }
 
+    // ── Facebook Lead Ad signup source column ────────────────────────────────
+    await client.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS signup_source VARCHAR(100)`);
+    console.log("[Migration] companies.signup_source column verified");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

@@ -51,6 +51,7 @@ interface EnrichedCompany extends Company {
   contactCount: number;
   smsSegments: number;
   voiceMinutes: number;
+  signupSource: string | null;
 }
 
 interface PendingApprovalCompany {
@@ -112,6 +113,7 @@ function formatTrialDaysRemaining(trialEndsAt: string | Date | null | undefined)
 
 export default function AdminTenants() {
   const [search, setSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -297,16 +299,34 @@ export default function AdminTenants() {
 
   const filtered = useMemo(() => {
     if (!companies) return [];
-    const active = companies.filter((c) => !INACTIVE_STATUSES.includes(c.subscriptionStatus ?? ""));
+    let active = companies.filter((c) => !INACTIVE_STATUSES.includes(c.subscriptionStatus ?? ""));
+    if (sourceFilter !== "all") {
+      active = active.filter((c) => {
+        const src = c.signupSource || "Direct";
+        return src === sourceFilter;
+      });
+    }
     if (!search.trim()) return active;
     const q = search.toLowerCase();
     return active.filter(
       (c) =>
         c.name?.toLowerCase().includes(q) ||
         c.id?.toLowerCase().includes(q) ||
-        c.subscriptionTier?.toLowerCase().includes(q)
+        c.subscriptionTier?.toLowerCase().includes(q) ||
+        (c.signupSource || "Direct").toLowerCase().includes(q)
     );
-  }, [companies, search]);
+  }, [companies, search, sourceFilter]);
+
+  const sourceCounts = useMemo(() => {
+    if (!companies) return {} as Record<string, number>;
+    const active = companies.filter((c) => !INACTIVE_STATUSES.includes(c.subscriptionStatus ?? ""));
+    const counts: Record<string, number> = {};
+    for (const c of active) {
+      const src = c.signupSource || "Direct";
+      counts[src] = (counts[src] ?? 0) + 1;
+    }
+    return counts;
+  }, [companies]);
 
   const cancelledCompanies = useMemo(() => {
     if (!companies) return [];
@@ -383,15 +403,32 @@ export default function AdminTenants() {
         </TabsList>
 
         <TabsContent value="all" className="mt-4 space-y-4">
-          <div className="relative max-w-md">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by name, ID, or tier..."
-              className="pl-9"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              data-testid="input-admin-search"
-            />
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="relative max-w-md flex-1 min-w-[180px]">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, ID, tier, or source..."
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                data-testid="input-admin-search"
+              />
+            </div>
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="w-[200px]" data-testid="select-source-filter">
+                <SelectValue placeholder="All sources" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All sources</SelectItem>
+                {Object.entries(sourceCounts)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([src, cnt]) => (
+                    <SelectItem key={src} value={src}>
+                      {src} ({cnt})
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {companiesLoading ? (
@@ -445,6 +482,15 @@ export default function AdminTenants() {
                                 </span>
                               );
                             })()}
+                          {c.signupSource && (
+                            <Badge
+                              variant="outline"
+                              className={`text-xs ${c.signupSource === "Facebook Lead Ad" ? "border-blue-400 text-blue-700 dark:border-blue-600 dark:text-blue-300" : ""}`}
+                              data-testid={`badge-source-${c.id}`}
+                            >
+                              {c.signupSource}
+                            </Badge>
+                          )}
                           {c.nearUserLimit && (
                             <Badge
                               variant="destructive"
