@@ -1,0 +1,28 @@
+Three problems:
+1. The watchPosition call is conditional.
+It only fires when showMapOverlay && viewMode === "route". If a tech opens the app and never hits that specific view state, the permission prompt never fires. The browser only asks for permission when the API is actually called -- so if the condition isn't met, silence.
+2. The error handler is swallowing the failure silently.
+js() => {
+  // Permission denied or unavailable — proceed without position dot
+}
+This means if there is a prompt and the tech denies it, or if it fails for any reason, nothing happens and nothing is logged. You have no visibility into whether it's a permission issue, a timeout, or a context issue.
+3. The manifest is missing the permissions declaration.
+PWA manifests should declare geolocation in a permissions array. Some browsers and especially Android Chrome use this to pre-warm the permission prompt when the PWA is installed. Without it, the prompt behavior is inconsistent across devices.
+The fix:
+Add an explicit permission request on tech app load, separate from the map overlay condition:
+typescriptuseEffect(() => {
+  if (!navigator.geolocation) {
+    console.warn('[GPS] Geolocation not supported');
+    return;
+  }
+  // Request permission immediately on mount with a one-shot call
+  navigator.geolocation.getCurrentPosition(
+    (pos) => console.log('[GPS] Permission granted, position acquired'),
+    (err) => console.error('[GPS] Permission error:', err.code, err.message),
+    { timeout: 10000, enableHighAccuracy: true }
+  );
+}, []); // fires once on mount, triggers the permission prompt
+Then add to manifest.json:
+json"permissions": ["geolocation"]
+The getCurrentPosition on mount forces the permission dialog immediately when the tech opens the app, before they reach any map view. Once granted, the watchPosition in the map overlay will work without re-prompting.
+Also replace the silent error handler in the watchPosition with actual logging so you can see what's happening in production. What device/browser are your techs using -- iOS Safari, Android Chrome, or mixed?

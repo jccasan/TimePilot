@@ -2490,18 +2490,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNextInvoiceNumber(companyId: string): Promise<string> {
-    const [result] = await db
-      .select({
-        maxNum: sql<string>`MAX(
-        CASE WHEN ${invoices.invoiceNumber} ~ '^INV-[0-9]+$'
-        THEN CAST(SUBSTRING(${invoices.invoiceNumber} FROM 5) AS integer)
-        ELSE 0 END
-      )`,
-      })
-      .from(invoices)
-      .where(eq(invoices.companyId, companyId));
-    const num = (parseInt(result?.maxNum || "0") || 0) + 1;
-    return `INV-${String(num).padStart(5, "0")}`;
+    // Atomically increment invoice_number_next and return the pre-increment value
+    // along with the company's configured prefix.
+    const result = await db.execute<{ seq: number; prefix: string }>(
+      sql`UPDATE companies
+          SET invoice_number_next = invoice_number_next + 1
+          WHERE id = ${companyId}
+          RETURNING invoice_number_next - 1 AS seq, invoice_number_prefix AS prefix`
+    );
+    const row = result.rows[0];
+    const prefix = row?.prefix ?? "INV-";
+    const seq = Number(row?.seq ?? 1);
+    return `${prefix}${String(seq).padStart(5, "0")}`;
   }
 
   async getFailedPaymentsCount(companyId: string): Promise<number> {

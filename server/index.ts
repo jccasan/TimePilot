@@ -2858,6 +2858,38 @@ async function ensureVoicePortingColumn() {
   }
 }
 
+async function ensureInvoiceNumberColumns() {
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  try {
+    await pool.query(`
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS invoice_number_prefix VARCHAR(20) NOT NULL DEFAULT 'INV-';
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS invoice_number_next INTEGER NOT NULL DEFAULT 1;
+    `);
+    // Seed invoice_number_next for existing companies based on their highest INV- invoice
+    await pool.query(`
+      UPDATE companies c
+      SET invoice_number_next = sub.next_num
+      FROM (
+        SELECT company_id,
+               MAX(CASE WHEN invoice_number ~ '^INV-[0-9]+$'
+                   THEN CAST(SUBSTRING(invoice_number FROM 5) AS INTEGER) + 1
+                   ELSE 1 END) AS next_num
+        FROM invoices
+        GROUP BY company_id
+      ) sub
+      WHERE c.id = sub.company_id
+        AND c.invoice_number_next = 1
+        AND sub.next_num > 1
+    `);
+    console.log("[Migration] invoice_number_prefix/next columns ensured");
+  } catch (err) {
+    console.error("[Migration] Failed to ensure invoice number columns:", err);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function ensureJobLocksTable() {
   const { Pool } = await import("pg");
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -3324,6 +3356,7 @@ async function migrateYardSizeTiers() {
   await ensureSmsSessionsTable();
   await ensureCustomFieldDefinitionsTable();
   await ensureVoicePortingColumn();
+  await ensureInvoiceNumberColumns();
   await ensureJobLocksTable();
   await seedPoopScoopDemoData();
   await seedHistoricalDemoData();

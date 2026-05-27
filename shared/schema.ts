@@ -492,6 +492,8 @@ export const companies = pgTable("companies", {
   newClientDepositEnabled: boolean("new_client_deposit_enabled").notNull().default(false),
   newClientDepositType: varchar("new_client_deposit_type", { length: 10 }),
   newClientDepositValue: decimal("new_client_deposit_value", { precision: 10, scale: 2 }),
+  invoiceNumberPrefix: varchar("invoice_number_prefix", { length: 20 }).notNull().default("INV-"),
+  invoiceNumberNext: integer("invoice_number_next").notNull().default(1),
   crmGrandfathered: boolean("crm_grandfathered").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

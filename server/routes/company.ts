@@ -387,6 +387,8 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "newClientDepositType",
         "newClientDepositValue",
         "serviceAreaDescription",
+        "invoiceNumberPrefix",
+        "invoiceNumberNext",
       ];
       const updates: Partial<Record<keyof InsertCompany, unknown>> = {};
       for (const key of allowed as (keyof InsertCompany)[]) {
