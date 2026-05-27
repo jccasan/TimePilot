@@ -584,6 +584,7 @@ export default function TechRoutes() {
           }
         },
         (geoErr) => {
+          console.error("[GPS] getCurrentPosition error — code:", geoErr.code, "message:", geoErr.message);
           setOnMyWaySending(null);
           toast({
             title: "Location unavailable",

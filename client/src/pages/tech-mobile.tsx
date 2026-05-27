@@ -500,14 +500,27 @@ export default function TechMobile() {
   }, [allVisitsFlat]);
 
   useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        console.log("[GPS] Permission granted on mount:", pos.coords.latitude, pos.coords.longitude);
+      },
+      (err) => {
+        console.error("[GPS] Permission prompt error on mount — code:", err.code, "message:", err.message);
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  }, []);
+
+  useEffect(() => {
     if (!showMapOverlay && viewMode !== "route") return;
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setTechPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
-      () => {
-        // Permission denied or unavailable — proceed without position dot
+      (err) => {
+        console.error("[GPS] watchPosition error — code:", err.code, "message:", err.message);
       },
       { timeout: 8000, maximumAge: 30000, enableHighAccuracy: true }
     );
