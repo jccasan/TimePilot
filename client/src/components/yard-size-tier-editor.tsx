@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -8,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
 import type { PricingRulesConfig } from "@shared/schema";
 
 type YardSizeTier = PricingRulesConfig["yardSizeTiers"][number];
@@ -97,12 +99,17 @@ export function YardSizeTierEditor({ tiers, onChange }: YardSizeTierEditorProps)
     onChange(toTiers(newRows));
   };
 
+  const clearOptionalRow = (index: number) => {
+    updateRow(index, { name: "", surcharge: "" });
+  };
+
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-[1fr_140px_110px] gap-2 px-1 mb-1">
+      <div className="grid grid-cols-[1fr_140px_110px_24px] gap-2 px-1 mb-1">
         <span className="text-xs font-medium text-muted-foreground">Tier Name</span>
         <span className="text-xs font-medium text-muted-foreground text-center">Upper Bound</span>
         <span className="text-xs font-medium text-muted-foreground text-center">Surcharge</span>
+        <span />
       </div>
 
       {rows.map((row, index) => {
@@ -117,17 +124,22 @@ export function YardSizeTierEditor({ tiers, onChange }: YardSizeTierEditorProps)
           : (availableOptions[0]?.value ?? 0.25);
 
         return (
-          <div key={index} className="grid grid-cols-[1fr_140px_110px] gap-2 items-start">
+          <div key={index} className="grid grid-cols-[1fr_140px_110px_24px] gap-2 items-start">
             <div>
               <Input
                 value={row.name}
                 onChange={(e) => updateRow(index, { name: e.target.value })}
                 placeholder={
-                  isRequired ? `Tier ${index + 1} name (required)` : "Leave blank if not used"
+                  isRequired
+                    ? `Tier ${index + 1} name (required)`
+                    : isUsed
+                      ? row.name
+                      : "Optional — click to add"
                 }
                 className={cn(
                   "h-8 text-sm",
-                  hasNameError && "border-destructive focus-visible:ring-destructive"
+                  hasNameError && "border-destructive focus-visible:ring-destructive",
+                  !isRequired && !isUsed && "border-dashed text-muted-foreground"
                 )}
                 data-testid={`input-yard-name-${index}`}
               />
@@ -137,7 +149,7 @@ export function YardSizeTierEditor({ tiers, onChange }: YardSizeTierEditorProps)
             </div>
 
             {!isUsed ? (
-              <div className="h-8 rounded-md border bg-muted/20 flex items-center justify-center text-xs text-muted-foreground/40">
+              <div className="h-8 rounded-md border border-dashed bg-muted/10 flex items-center justify-center text-xs text-muted-foreground/40">
                 —
               </div>
             ) : isLastUsed ? (
@@ -163,7 +175,7 @@ export function YardSizeTierEditor({ tiers, onChange }: YardSizeTierEditorProps)
             )}
 
             {!isUsed ? (
-              <div className="h-8 rounded-md border bg-muted/20 flex items-center justify-center text-xs text-muted-foreground/40">
+              <div className="h-8 rounded-md border border-dashed bg-muted/10 flex items-center justify-center text-xs text-muted-foreground/40">
                 —
               </div>
             ) : (
@@ -181,13 +193,30 @@ export function YardSizeTierEditor({ tiers, onChange }: YardSizeTierEditorProps)
                 />
               </div>
             )}
+
+            {!isRequired && isUsed ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                onClick={() => clearOptionalRow(index)}
+                title="Remove this tier"
+                data-testid={`button-remove-tier-${index}`}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            ) : (
+              <span />
+            )}
           </div>
         );
       })}
 
       <p className="text-xs text-muted-foreground pt-1">
         Tiers 1–{REQUIRED_ROWS} are required. The last filled tier is unbounded and applies to any
-        larger yard. Tiers {REQUIRED_ROWS + 1}–{TOTAL_ROWS} are optional.
+        larger yard. Tiers {REQUIRED_ROWS + 1}–{TOTAL_ROWS} are optional — fill in the name to
+        activate.
       </p>
     </div>
   );

@@ -7,7 +7,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
 import { useAddressLabels } from "@/hooks/use-address-labels";
-import type { PricingConfig, PricingRulesConfig } from "@shared/schema";
+import type { PricingConfig, PricingRulesConfig, YardSizeTierConfig } from "@shared/schema";
 import { DEFAULT_PRICING_CONFIG, DEFAULT_PRICING_RULES } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -2288,23 +2288,51 @@ function CostsTab() {
 
 // ─── Pricing Engine tab ───────────────────────────────────────────────────────
 
+const TIER_CONFIG_KEYS = ["tier1", "tier2", "tier3", "tier4", "tier5", "tier6"] as const;
+
+/**
+ * Resolve a display label for a yard-size tier.
+ * Priority: pricingRules tier name → company yardSizeTierConfig label → "Tier N"
+ */
+function resolveTierLabel(
+  t: PricingRulesConfig["yardSizeTiers"][number],
+  i: number,
+  yardSizeTierConfig?: YardSizeTierConfig | null
+): string {
+  if (t.name) return t.name;
+  const cfgKey = TIER_CONFIG_KEYS[i];
+  const cfgLabel = cfgKey ? yardSizeTierConfig?.[cfgKey]?.label : undefined;
+  if (cfgLabel) return cfgLabel;
+  return `Tier ${i + 1}`;
+}
+
 /**
  * Convert pricingRules.yardSizeTiers into display tiers with computed midpointAcres.
  * Falls back to DEFAULT_PRICING_RULES.yardSizeTiers when the saved list is empty.
+ * Uses yardSizeTierConfig labels as a secondary fallback for display names.
  */
 function toActiveTiers(
-  yardSizeTiers: PricingRulesConfig["yardSizeTiers"]
+  yardSizeTiers: PricingRulesConfig["yardSizeTiers"],
+  yardSizeTierConfig?: YardSizeTierConfig | null
 ): Array<{ label: string; midpointAcres: number; upToAcres: number | null }> {
   if (!yardSizeTiers || yardSizeTiers.length === 0)
     return DEFAULT_PRICING_RULES.yardSizeTiers.map((t, i) => {
       const prevBound = i > 0 ? (DEFAULT_PRICING_RULES.yardSizeTiers[i - 1].upToAcres ?? 0) : 0;
       const midpointAcres = t.upToAcres !== null ? (prevBound + t.upToAcres) / 2 : prevBound + 0.5;
-      return { label: t.name || `Tier ${i + 1}`, midpointAcres, upToAcres: t.upToAcres };
+      return {
+        label: resolveTierLabel(t, i, yardSizeTierConfig),
+        midpointAcres,
+        upToAcres: t.upToAcres,
+      };
     });
   return yardSizeTiers.map((t, i) => {
     const prevBound = i > 0 ? (yardSizeTiers[i - 1].upToAcres ?? 0) : 0;
     const midpointAcres = t.upToAcres !== null ? (prevBound + t.upToAcres) / 2 : prevBound + 0.5;
-    return { label: t.name || `Tier ${i + 1}`, midpointAcres, upToAcres: t.upToAcres };
+    return {
+      label: resolveTierLabel(t, i, yardSizeTierConfig),
+      midpointAcres,
+      upToAcres: t.upToAcres,
+    };
   });
 }
 
@@ -2352,6 +2380,9 @@ function PricingEngineTab() {
   const { data: overheadTotal } = useQuery<{ totalMonthlyOverheadCents: number }>({
     queryKey: ["/api/overhead-costs/total"],
   });
+  const { data: companyData } = useQuery<{ yardSizeTierConfig?: YardSizeTierConfig | null }>({
+    queryKey: ["/api/company"],
+  });
 
   const config: PricingConfig = pricingConfigData
     ? { ...DEFAULT_PRICING_CONFIG, ...pricingConfigData }
@@ -2361,8 +2392,8 @@ function PricingEngineTab() {
   const totalMonthlyOverheadDollars = (overheadTotal?.totalMonthlyOverheadCents ?? 0) / 100;
 
   // Dynamic tiers derived from saved pricingRules (falls back to DEFAULT_PRICING_RULES.yardSizeTiers
-  // when the account has never configured tiers).
-  const activeTiers = toActiveTiers(pricingRules.yardSizeTiers);
+  // when the account has never configured tiers). Company yardSizeTierConfig provides label fallbacks.
+  const activeTiers = toActiveTiers(pricingRules.yardSizeTiers, companyData?.yardSizeTierConfig);
 
   const [marginPct, setMarginPct] = useState(() => config.targetProfitMarginPct || 30);
 
@@ -2940,13 +2971,16 @@ function MyPricingTab() {
   const { data: pricingConfigData, isLoading } = useQuery<PricingConfig>({
     queryKey: ["/api/pricing-config"],
   });
+  const { data: companyData } = useQuery<{ yardSizeTierConfig?: YardSizeTierConfig | null }>({
+    queryKey: ["/api/company"],
+  });
 
   const config: PricingConfig = pricingConfigData
     ? { ...DEFAULT_PRICING_CONFIG, ...pricingConfigData }
     : DEFAULT_PRICING_CONFIG;
   const pricingRules: PricingRulesConfig = pricingConfigData?.pricingRules ?? DEFAULT_PRICING_RULES;
 
-  const activeTiers = toActiveTiers(pricingRules.yardSizeTiers);
+  const activeTiers = toActiveTiers(pricingRules.yardSizeTiers, companyData?.yardSizeTierConfig);
 
   const [bases, setBases] = useState<Bases>(() => {
     const w = pricingRules.basePrices.weekly ?? DEFAULT_PRICING_RULES.basePrices.weekly;
