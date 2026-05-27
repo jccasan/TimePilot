@@ -1395,6 +1395,29 @@ export async function runStartupMigrations(): Promise<void> {
     );
     console.log("[Migration] quotes.selected_frequency column verified");
 
+    // ── Invoice number customization columns ──────────────────────────────────
+    await client.query(`
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS invoice_number_prefix VARCHAR(20) NOT NULL DEFAULT 'INV-';
+      ALTER TABLE companies ADD COLUMN IF NOT EXISTS invoice_number_next INTEGER NOT NULL DEFAULT 1;
+    `);
+    // Seed invoice_number_next for existing companies from their max INV-NNNNN invoice
+    await client.query(`
+      UPDATE companies c
+      SET invoice_number_next = sub.next_num
+      FROM (
+        SELECT company_id,
+               MAX(CASE WHEN invoice_number ~ '^INV-[0-9]+$'
+                   THEN CAST(SUBSTRING(invoice_number FROM 5) AS INTEGER) + 1
+                   ELSE 1 END) AS next_num
+        FROM invoices
+        GROUP BY company_id
+      ) sub
+      WHERE c.id = sub.company_id
+        AND c.invoice_number_next = 1
+        AND sub.next_num > 1
+    `);
+    console.log("[Migration] companies.invoice_number_prefix/next columns ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);
