@@ -79,7 +79,6 @@ export function ServiceZoneMap({
   useEffect(() => {
     if (!tokenData?.token || !mapContainerRef.current || mapRef.current) return;
 
-    let cancelled = false;
     const container = mapContainerRef.current;
 
     mapboxgl.accessToken = tokenData.token;
@@ -98,10 +97,8 @@ export function ServiceZoneMap({
       });
 
       mapRef.current = map;
-    })();
 
     return () => {
-      cancelled = true;
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;

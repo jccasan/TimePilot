@@ -241,7 +241,6 @@ export default function FieldView() {
           setMapLoaded(true);
         });
       }
-    })();
 
     return () => {
       cancelled = true;
@@ -251,12 +250,7 @@ export default function FieldView() {
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) return;
 
-    let cancelled = false;
-
-    (() => {
-      if (cancelled) return;
-
-      markersRef.current.forEach((m) => m.remove());
+    markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
 
       for (const visit of validVisits) {
@@ -340,11 +334,6 @@ export default function FieldView() {
         });
         mapRef.current.fitBounds(bounds, { padding: 60 });
       }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [mapLoaded, validVisits, nextStopIds, overdueIdSet, techByRouteId]);
 
   useEffect(() => {

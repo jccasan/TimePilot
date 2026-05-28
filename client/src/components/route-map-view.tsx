@@ -235,7 +235,6 @@ export default function RouteMapView({
           map.fitBounds(bounds, { padding: 60 });
         }
       });
-    })();
 
     return () => {
       cancelled = true;
