@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense, Component } from "react";
+import type { ReactNode } from "react";
 import { LiveRoutePlayback } from "@/components/live-route-playback";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -10,6 +11,27 @@ import { useCurrency } from "@/hooks/use-currency";
 import { useToast } from "@/hooks/use-toast";
 import type { Route, ServicePlan, Contact, Property, Visit } from "@shared/schema";
 type RouteWithOptStatus = Route & { isOptimizedCurrent?: boolean };
+
+class MapErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { failed: false };
+  }
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground border rounded">
+          Map unavailable
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1608,14 +1630,18 @@ function SavingsSummaryDialog({
           {hasMaps && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="before-after-maps">
               <div className="h-52" data-testid="map-before-container">
-                <Suspense fallback={<Skeleton className="w-full h-full rounded" />}>
-                  <MiniRouteMap stops={stopsBefore!} label="Before" />
-                </Suspense>
+                <MapErrorBoundary>
+                  <Suspense fallback={<Skeleton className="w-full h-full rounded" />}>
+                    <MiniRouteMap stops={stopsBefore!} label="Before" />
+                  </Suspense>
+                </MapErrorBoundary>
               </div>
               <div className="h-52" data-testid="map-after-container">
-                <Suspense fallback={<Skeleton className="w-full h-full rounded" />}>
-                  <MiniRouteMap stops={stopsAfter!} label="After" />
-                </Suspense>
+                <MapErrorBoundary>
+                  <Suspense fallback={<Skeleton className="w-full h-full rounded" />}>
+                    <MiniRouteMap stops={stopsAfter!} label="After" />
+                  </Suspense>
+                </MapErrorBoundary>
               </div>
             </div>
           )}
