@@ -287,7 +287,13 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
               );
               const hasCoords = existing.rows?.[0]?.start_latitude != null;
               if (!hasCoords) {
-                const coords = await geocodeAddress(data.address as string, null, null, null, country);
+                const coords = await geocodeAddress(
+                  data.address as string,
+                  null,
+                  null,
+                  null,
+                  country
+                );
                 if (coords) {
                   await db.execute(
                     sql`UPDATE companies SET start_latitude = ${coords.latitude}, start_longitude = ${coords.longitude} WHERE id = ${companyId}`

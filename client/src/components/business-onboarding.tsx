@@ -712,7 +712,10 @@ function BusinessIntelligenceStep({
                   />
                   <span className="text-sm font-medium w-16 shrink-0">{radiusMiles} mi</span>
                 </div>
-                <RadiusMapSelector radiusMiles={radiusMiles} addressHint={addressHint ?? companyData.address} />
+                <RadiusMapSelector
+                  radiusMiles={radiusMiles}
+                  addressHint={addressHint ?? companyData.address}
+                />
               </div>
             )}
           </div>

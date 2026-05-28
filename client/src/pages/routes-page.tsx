@@ -107,6 +107,7 @@ import { useTutorialContext } from "@/hooks/use-tutorials";
 import type { RouteStop } from "@/components/route-map-view";
 import type { ZoneEntry } from "@/components/service-zone-map";
 const RouteMapView = lazy(() => import("@/components/route-map-view"));
+const MiniRouteMap = lazy(() => import("@/components/mini-route-map"));
 const ServiceZoneMap = lazy(() => import("@/components/service-zone-map"));
 import {
   DndContext,
@@ -1579,15 +1580,23 @@ function SavingsSummaryDialog({
   open,
   onOpenChange,
   result,
+  stopsBefore,
+  stopsAfter,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   result: OptimizeResult | null;
+  stopsBefore: RouteStop[] | null;
+  stopsAfter: RouteStop[] | null;
 }) {
   if (!result) return null;
+  const hasMaps = (stopsBefore?.length ?? 0) >= 2 && (stopsAfter?.length ?? 0) >= 2;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm" data-testid="dialog-savings-summary">
+      <DialogContent
+        className={hasMaps ? "sm:max-w-3xl" : "sm:max-w-sm"}
+        data-testid="dialog-savings-summary"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <TrendingDown className="h-5 w-5 text-primary" />
@@ -1596,6 +1605,20 @@ function SavingsSummaryDialog({
           <DialogDescription>Route has been optimized for minimum travel time.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
+          {hasMaps && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="before-after-maps">
+              <div className="h-52" data-testid="map-before-container">
+                <Suspense fallback={<Skeleton className="w-full h-full rounded" />}>
+                  <MiniRouteMap stops={stopsBefore!} label="Before" />
+                </Suspense>
+              </div>
+              <div className="h-52" data-testid="map-after-container">
+                <Suspense fallback={<Skeleton className="w-full h-full rounded" />}>
+                  <MiniRouteMap stops={stopsAfter!} label="After" />
+                </Suspense>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Card>
               <CardContent className="p-4 text-center">
@@ -1668,6 +1691,8 @@ export default function RoutesPage() {
   } | null>(null);
   const [savingsResult, setSavingsResult] = useState<OptimizeResult | null>(null);
   const [showSavings, setShowSavings] = useState(false);
+  const [stopsBeforeOptimize, setStopsBeforeOptimize] = useState<RouteStop[] | null>(null);
+  const [stopsAfterOptimize, setStopsAfterOptimize] = useState<RouteStop[] | null>(null);
   const [unassigningRouteId, setUnassigningRouteId] = useState<string | null>(null);
   const [confirmUnassignAll, setConfirmUnassignAll] = useState<string | null>(null);
   const [moveToDayRouteId, setMoveToDayRouteId] = useState<string | null>(null);
@@ -2437,9 +2462,8 @@ export default function RoutesPage() {
       const res = await apiRequest("POST", `/api/routes/${routeId}/optimize`);
       return res.json() as Promise<OptimizeResult>;
     },
-    onSuccess: (data, routeId) => {
+    onSuccess: async (data, routeId) => {
       setOptimizingRouteId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       setRouteMetrics((prev) => {
         const next = { ...prev };
@@ -2447,6 +2471,30 @@ export default function RoutesPage() {
         return next;
       });
       if (data.optimized) {
+        // Explicitly refetch so we have the authoritative post-optimization stop order
+        // before opening the dialog — avoids race with background invalidation.
+        await queryClient.refetchQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+        const freshPlans =
+          queryClient.getQueryData<ServicePlan[]>(["/api/service-plans?isActive=true"]) ?? [];
+        const freshContacts = queryClient.getQueryData<Contact[]>(["/api/contacts"]) ?? [];
+        const freshProperties = queryClient.getQueryData<Property[]>(["/api/properties"]) ?? [];
+        const stopsAfter = freshPlans
+          .filter((p) => p.routeId === routeId)
+          .sort((a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0))
+          .map((plan, idx) => {
+            const contact = freshContacts.find((c) => c.id === plan.contactId);
+            const property = freshProperties.find((p) => p.id === plan.propertyId);
+            return {
+              id: plan.id,
+              stopNumber: idx + 1,
+              contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
+              streetAddress: property?.streetAddress ?? "",
+              latitude: Number(property?.latitude ?? 0),
+              longitude: Number(property?.longitude ?? 0),
+            };
+          })
+          .filter((s) => s.latitude !== 0 && s.longitude !== 0);
+        setStopsAfterOptimize(stopsAfter);
         setSavingsResult(data);
         setShowSavings(true);
         setGeocodeAlert(null);
@@ -2458,10 +2506,13 @@ export default function RoutesPage() {
             variant: "default",
           });
         }
-      } else if (data.geocodeFailure && data.failedStops && data.failedStops.length > 0) {
-        setGeocodeAlert({ routeId, stops: data.failedStops });
       } else {
-        toast({ title: "Could not optimize", description: data.message });
+        queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+        if (data.geocodeFailure && data.failedStops && data.failedStops.length > 0) {
+          setGeocodeAlert({ routeId, stops: data.failedStops });
+        } else {
+          toast({ title: "Could not optimize", description: data.message });
+        }
       }
     },
     onError: (err: Error) => {
@@ -2476,8 +2527,7 @@ export default function RoutesPage() {
       const res = await apiRequest("POST", `/api/routes/${routeId}/optimize`);
       return res.json() as Promise<OptimizeResult>;
     },
-    onSuccess: (data, routeId) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+    onSuccess: async (data, routeId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
       setRouteMetrics((prev) => {
         const next = { ...prev };
@@ -2485,6 +2535,28 @@ export default function RoutesPage() {
         return next;
       });
       if (data.optimized) {
+        await queryClient.refetchQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+        const freshPlans =
+          queryClient.getQueryData<ServicePlan[]>(["/api/service-plans?isActive=true"]) ?? [];
+        const freshContacts = queryClient.getQueryData<Contact[]>(["/api/contacts"]) ?? [];
+        const freshProperties = queryClient.getQueryData<Property[]>(["/api/properties"]) ?? [];
+        const stopsAfter = freshPlans
+          .filter((p) => p.routeId === routeId)
+          .sort((a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0))
+          .map((plan, idx) => {
+            const contact = freshContacts.find((c) => c.id === plan.contactId);
+            const property = freshProperties.find((p) => p.id === plan.propertyId);
+            return {
+              id: plan.id,
+              stopNumber: idx + 1,
+              contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
+              streetAddress: property?.streetAddress ?? "",
+              latitude: Number(property?.latitude ?? 0),
+              longitude: Number(property?.longitude ?? 0),
+            };
+          })
+          .filter((s) => s.latitude !== 0 && s.longitude !== 0);
+        setStopsAfterOptimize(stopsAfter);
         setGeocodeAlert(null);
         setHighlightedStopIds(new Set());
         setSavingsResult(data);
@@ -2496,16 +2568,19 @@ export default function RoutesPage() {
             variant: "default",
           });
         }
-      } else if (data.geocodeFailure && data.failedStops && data.failedStops.length > 0) {
-        setGeocodeAlert({ routeId, stops: data.failedStops });
-        toast({
-          title: "Some stops still ungeocoded",
-          description: `${data.failedStops.length} stop${data.failedStops.length !== 1 ? "s" : ""} could not be geocoded. Check their addresses.`,
-          variant: "destructive",
-        });
       } else {
-        setGeocodeAlert(null);
-        toast({ title: "Could not optimize", description: data.message });
+        queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+        if (data.geocodeFailure && data.failedStops && data.failedStops.length > 0) {
+          setGeocodeAlert({ routeId, stops: data.failedStops });
+          toast({
+            title: "Some stops still ungeocoded",
+            description: `${data.failedStops.length} stop${data.failedStops.length !== 1 ? "s" : ""} could not be geocoded. Check their addresses.`,
+            variant: "destructive",
+          });
+        } else {
+          setGeocodeAlert(null);
+          toast({ title: "Could not optimize", description: data.message });
+        }
       }
     },
     onError: (err: Error) => {
@@ -2730,6 +2805,25 @@ export default function RoutesPage() {
     else createRouteMutation.mutate(data);
   }
 
+  function buildRouteStopsForOptimize(routeId: string): RouteStop[] {
+    return servicePlans
+      .filter((p) => p.routeId === routeId)
+      .sort((a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0))
+      .map((plan, idx) => {
+        const contact = contacts.find((c) => c.id === plan.contactId);
+        const property = properties.find((p) => p.id === plan.propertyId);
+        return {
+          id: plan.id,
+          stopNumber: idx + 1,
+          contactName: contact ? `${contact.firstName} ${contact.lastName}` : "Unknown",
+          streetAddress: property?.streetAddress ?? "",
+          latitude: Number(property?.latitude ?? 0),
+          longitude: Number(property?.longitude ?? 0),
+        };
+      })
+      .filter((s) => s.latitude !== 0 && s.longitude !== 0);
+  }
+
   function handleOptimizeClick(routeId: string, stopCount: number) {
     const route = allRoutes.find((r) => r.id === routeId);
     if (route?.isLocked) {
@@ -2745,6 +2839,9 @@ export default function RoutesPage() {
 
   function handleConfirmOptimize() {
     if (!confirmOptimize) return;
+    const beforeStops = buildRouteStopsForOptimize(confirmOptimize.routeId);
+    setStopsBeforeOptimize(beforeStops);
+    setStopsAfterOptimize(null);
     optimizeRouteMutation.mutate(confirmOptimize.routeId);
     setConfirmOptimize(null);
   }
@@ -3043,7 +3140,14 @@ export default function RoutesPage() {
                                 size="sm"
                                 variant="outline"
                                 className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-950/50"
-                                onClick={() => retryGeocodeMutation.mutate(geocodeAlert.routeId)}
+                                onClick={() => {
+                                  const beforeStops = buildRouteStopsForOptimize(
+                                    geocodeAlert.routeId
+                                  );
+                                  setStopsBeforeOptimize(beforeStops);
+                                  setStopsAfterOptimize(null);
+                                  retryGeocodeMutation.mutate(geocodeAlert.routeId);
+                                }}
                                 disabled={retryGeocodeMutation.isPending}
                                 data-testid="button-retry-geocoding"
                               >
@@ -3604,6 +3708,8 @@ export default function RoutesPage() {
         open={showSavings}
         onOpenChange={setShowSavings}
         result={savingsResult}
+        stopsBefore={stopsBeforeOptimize}
+        stopsAfter={stopsAfterOptimize}
       />
       <RouteVisitDetailSheet
         visit={detailVisit}
