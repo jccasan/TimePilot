@@ -83,20 +83,20 @@ export function ServiceZoneMap({
 
     mapboxgl.accessToken = tokenData.token;
 
-      const map = new mapboxgl.Map({
-        container,
-        style: "mapbox://styles/mapbox/streets-v12",
-        center: [-98.5, 39.8],
-        zoom: 4,
-      });
+    const map = new mapboxgl.Map({
+      container,
+      style: "mapbox://styles/mapbox/streets-v12",
+      center: [-98.5, 39.8],
+      zoom: 4,
+    });
 
-      map.addControl(new mapboxgl.NavigationControl(), "top-right");
+    map.addControl(new mapboxgl.NavigationControl(), "top-right");
 
-      map.on("load", () => {
-        setMapLoaded(true);
-      });
+    map.on("load", () => {
+      setMapLoaded(true);
+    });
 
-      mapRef.current = map;
+    mapRef.current = map;
 
     return () => {
       if (mapRef.current) {

@@ -71,170 +71,170 @@ export default function RouteMapView({
 
     mapboxgl.accessToken = tokenData.token;
 
-      const companyLat =
-        companyLatitude != null && Number.isFinite(companyLatitude) ? companyLatitude : null;
-      const companyLng =
-        companyLongitude != null && Number.isFinite(companyLongitude) ? companyLongitude : null;
-      const hasCompanyCoords = companyLat !== null && companyLng !== null;
-      const center: [number, number] =
-        stops.length > 0
-          ? [stops[0].longitude, stops[0].latitude]
-          : hasCompanyCoords
-            ? [companyLng, companyLat]
-            : [-98.5795, 39.8283];
-      const defaultZoom = stops.length > 0 ? 12 : hasCompanyCoords ? 12 : 8;
+    const companyLat =
+      companyLatitude != null && Number.isFinite(companyLatitude) ? companyLatitude : null;
+    const companyLng =
+      companyLongitude != null && Number.isFinite(companyLongitude) ? companyLongitude : null;
+    const hasCompanyCoords = companyLat !== null && companyLng !== null;
+    const center: [number, number] =
+      stops.length > 0
+        ? [stops[0].longitude, stops[0].latitude]
+        : hasCompanyCoords
+          ? [companyLng, companyLat]
+          : [-98.5795, 39.8283];
+    const defaultZoom = stops.length > 0 ? 12 : hasCompanyCoords ? 12 : 8;
 
-      const map = new mapboxgl.Map({
-        container,
-        style: "mapbox://styles/mapbox/streets-v12",
-        center,
-        zoom: defaultZoom,
+    const map = new mapboxgl.Map({
+      container,
+      style: "mapbox://styles/mapbox/streets-v12",
+      center,
+      zoom: defaultZoom,
+    });
+
+    mapRef.current = map;
+
+    map.on("load", () => {
+      if (cancelled) return;
+      setMapLoaded(true);
+
+      const validStops = stops.filter((s) => s.latitude && s.longitude);
+
+      // Render depot markers (purple square "D") for each unique starting point.
+      // Supports both the new depots[] array and the legacy single-depot props.
+      const depotList: DepotPin[] =
+        depots && depots.length > 0
+          ? depots
+          : depotLatitude != null &&
+              Number.isFinite(depotLatitude) &&
+              depotLongitude != null &&
+              Number.isFinite(depotLongitude)
+            ? [
+                {
+                  latitude: depotLatitude!,
+                  longitude: depotLongitude!,
+                  name: depotName || "Depot",
+                },
+              ]
+            : [];
+
+      depotList.forEach((depot, idx) => {
+        const depotEl = document.createElement("div");
+        depotEl.setAttribute("data-testid", `marker-depot-${idx}`);
+        depotEl.style.width = "32px";
+        depotEl.style.height = "32px";
+        depotEl.style.borderRadius = "6px";
+        depotEl.style.backgroundColor = DEPOT_COLOR;
+        depotEl.style.color = "white";
+        depotEl.style.display = "flex";
+        depotEl.style.alignItems = "center";
+        depotEl.style.justifyContent = "center";
+        depotEl.style.fontSize = "16px";
+        depotEl.style.fontWeight = "bold";
+        depotEl.style.border = "2px solid white";
+        depotEl.style.boxShadow = "0 2px 6px rgba(0,0,0,0.4)";
+        depotEl.textContent = "D";
+
+        const depotPopupEl = document.createElement("div");
+        depotPopupEl.style.padding = "4px";
+        const depotLabel = document.createElement("strong");
+        depotLabel.textContent = depot.name;
+        depotPopupEl.appendChild(depotLabel);
+        const depotPopup = new mapboxgl.Popup({ offset: 25 }).setDOMContent(depotPopupEl);
+
+        new mapboxgl.Marker({ element: depotEl })
+          .setLngLat([depot.longitude, depot.latitude])
+          .setPopup(depotPopup)
+          .addTo(map);
       });
 
-      mapRef.current = map;
+      validStops.forEach((stop) => {
+        const color = stop.routeColor || DEFAULT_COLOR;
+        const isSelected = stop.id != null && stop.id === selectedStopId;
+        const el = document.createElement("div");
+        el.className = "route-map-marker";
+        el.setAttribute("data-testid", `marker-stop-${stop.stopNumber}`);
+        el.style.width = isSelected ? "34px" : "28px";
+        el.style.height = isSelected ? "34px" : "28px";
+        el.style.borderRadius = "50%";
+        el.style.backgroundColor = isSelected ? SELECTED_COLOR : color;
+        el.style.color = "white";
+        el.style.display = "flex";
+        el.style.alignItems = "center";
+        el.style.justifyContent = "center";
+        el.style.fontSize = "12px";
+        el.style.fontWeight = "bold";
+        el.style.border = isSelected ? "3px solid white" : "2px solid white";
+        el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
+        el.style.cursor = "pointer";
+        el.style.transition = "all 0.15s ease";
+        el.textContent = String(stop.stopNumber);
 
-      map.on("load", () => {
-        if (cancelled) return;
-        setMapLoaded(true);
+        if (onStopClick && stop.id) {
+          el.addEventListener("click", () => onStopClick(stop.id!));
+        }
 
-        const validStops = stops.filter((s) => s.latitude && s.longitude);
+        const popupEl = document.createElement("div");
+        popupEl.dataset.testid = `popup-stop-${stop.stopNumber}`;
+        popupEl.style.padding = "4px";
+        const strong = document.createElement("strong");
+        strong.textContent = `Stop #${stop.stopNumber}`;
+        const br1 = document.createElement("br");
+        const addrSpan = document.createElement("span");
+        addrSpan.textContent = stop.streetAddress;
+        const br2 = document.createElement("br");
+        const nameSpan = document.createElement("span");
+        nameSpan.style.color = "#666";
+        nameSpan.textContent = stop.contactName;
+        popupEl.append(strong, br1, addrSpan, br2, nameSpan);
+        const popup = new mapboxgl.Popup({ offset: 25 }).setDOMContent(popupEl);
 
-        // Render depot markers (purple square "D") for each unique starting point.
-        // Supports both the new depots[] array and the legacy single-depot props.
-        const depotList: DepotPin[] =
-          depots && depots.length > 0
-            ? depots
-            : depotLatitude != null &&
-                Number.isFinite(depotLatitude) &&
-                depotLongitude != null &&
-                Number.isFinite(depotLongitude)
-              ? [
-                  {
-                    latitude: depotLatitude!,
-                    longitude: depotLongitude!,
-                    name: depotName || "Depot",
-                  },
-                ]
-              : [];
+        const marker = new mapboxgl.Marker({ element: el })
+          .setLngLat([stop.longitude, stop.latitude])
+          .setPopup(popup)
+          .addTo(map);
 
-        depotList.forEach((depot, idx) => {
-          const depotEl = document.createElement("div");
-          depotEl.setAttribute("data-testid", `marker-depot-${idx}`);
-          depotEl.style.width = "32px";
-          depotEl.style.height = "32px";
-          depotEl.style.borderRadius = "6px";
-          depotEl.style.backgroundColor = DEPOT_COLOR;
-          depotEl.style.color = "white";
-          depotEl.style.display = "flex";
-          depotEl.style.alignItems = "center";
-          depotEl.style.justifyContent = "center";
-          depotEl.style.fontSize = "16px";
-          depotEl.style.fontWeight = "bold";
-          depotEl.style.border = "2px solid white";
-          depotEl.style.boxShadow = "0 2px 6px rgba(0,0,0,0.4)";
-          depotEl.textContent = "D";
-
-          const depotPopupEl = document.createElement("div");
-          depotPopupEl.style.padding = "4px";
-          const depotLabel = document.createElement("strong");
-          depotLabel.textContent = depot.name;
-          depotPopupEl.appendChild(depotLabel);
-          const depotPopup = new mapboxgl.Popup({ offset: 25 }).setDOMContent(depotPopupEl);
-
-          new mapboxgl.Marker({ element: depotEl })
-            .setLngLat([depot.longitude, depot.latitude])
-            .setPopup(depotPopup)
-            .addTo(map);
-        });
-
-        validStops.forEach((stop) => {
-          const color = stop.routeColor || DEFAULT_COLOR;
-          const isSelected = stop.id != null && stop.id === selectedStopId;
-          const el = document.createElement("div");
-          el.className = "route-map-marker";
-          el.setAttribute("data-testid", `marker-stop-${stop.stopNumber}`);
-          el.style.width = isSelected ? "34px" : "28px";
-          el.style.height = isSelected ? "34px" : "28px";
-          el.style.borderRadius = "50%";
-          el.style.backgroundColor = isSelected ? SELECTED_COLOR : color;
-          el.style.color = "white";
-          el.style.display = "flex";
-          el.style.alignItems = "center";
-          el.style.justifyContent = "center";
-          el.style.fontSize = "12px";
-          el.style.fontWeight = "bold";
-          el.style.border = isSelected ? "3px solid white" : "2px solid white";
-          el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
-          el.style.cursor = "pointer";
-          el.style.transition = "all 0.15s ease";
-          el.textContent = String(stop.stopNumber);
-
-          if (onStopClick && stop.id) {
-            el.addEventListener("click", () => onStopClick(stop.id!));
-          }
-
-          const popupEl = document.createElement("div");
-          popupEl.dataset.testid = `popup-stop-${stop.stopNumber}`;
-          popupEl.style.padding = "4px";
-          const strong = document.createElement("strong");
-          strong.textContent = `Stop #${stop.stopNumber}`;
-          const br1 = document.createElement("br");
-          const addrSpan = document.createElement("span");
-          addrSpan.textContent = stop.streetAddress;
-          const br2 = document.createElement("br");
-          const nameSpan = document.createElement("span");
-          nameSpan.style.color = "#666";
-          nameSpan.textContent = stop.contactName;
-          popupEl.append(strong, br1, addrSpan, br2, nameSpan);
-          const popup = new mapboxgl.Popup({ offset: 25 }).setDOMContent(popupEl);
-
-          const marker = new mapboxgl.Marker({ element: el })
-            .setLngLat([stop.longitude, stop.latitude])
-            .setPopup(popup)
-            .addTo(map);
-
-          if (stop.id) {
-            markerMapRef.current.set(stop.id, { marker, color });
-          }
-        });
-
-        const colorGroups = new Map<string, RouteStop[]>();
-        validStops.forEach((stop) => {
-          const color = stop.routeColor || DEFAULT_COLOR;
-          if (!colorGroups.has(color)) colorGroups.set(color, []);
-          colorGroups.get(color)!.push(stop);
-        });
-
-        let lineIndex = 0;
-        colorGroups.forEach((groupStops, color) => {
-          if (groupStops.length < 2) return;
-          const coordinates = groupStops.map((s) => [s.longitude, s.latitude]);
-          const sourceId = `route-line-${lineIndex}`;
-          const layerId = `route-line-layer-${lineIndex}`;
-          map.addSource(sourceId, {
-            type: "geojson",
-            data: {
-              type: "Feature",
-              properties: {},
-              geometry: { type: "LineString", coordinates },
-            },
-          });
-          map.addLayer({
-            id: layerId,
-            type: "line",
-            source: sourceId,
-            layout: { "line-join": "round", "line-cap": "round" },
-            paint: { "line-color": color, "line-width": 3, "line-opacity": 0.7 },
-          });
-          lineIndex++;
-        });
-
-        if (validStops.length > 1) {
-          const bounds = new mapboxgl.LngLatBounds();
-          validStops.forEach((s) => bounds.extend([s.longitude, s.latitude]));
-          map.fitBounds(bounds, { padding: 60 });
+        if (stop.id) {
+          markerMapRef.current.set(stop.id, { marker, color });
         }
       });
+
+      const colorGroups = new Map<string, RouteStop[]>();
+      validStops.forEach((stop) => {
+        const color = stop.routeColor || DEFAULT_COLOR;
+        if (!colorGroups.has(color)) colorGroups.set(color, []);
+        colorGroups.get(color)!.push(stop);
+      });
+
+      let lineIndex = 0;
+      colorGroups.forEach((groupStops, color) => {
+        if (groupStops.length < 2) return;
+        const coordinates = groupStops.map((s) => [s.longitude, s.latitude]);
+        const sourceId = `route-line-${lineIndex}`;
+        const layerId = `route-line-layer-${lineIndex}`;
+        map.addSource(sourceId, {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates },
+          },
+        });
+        map.addLayer({
+          id: layerId,
+          type: "line",
+          source: sourceId,
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: { "line-color": color, "line-width": 3, "line-opacity": 0.7 },
+        });
+        lineIndex++;
+      });
+
+      if (validStops.length > 1) {
+        const bounds = new mapboxgl.LngLatBounds();
+        validStops.forEach((s) => bounds.extend([s.longitude, s.latitude]));
+        map.fitBounds(bounds, { padding: 60 });
+      }
+    });
 
     return () => {
       cancelled = true;

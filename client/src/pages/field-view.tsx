@@ -221,26 +221,26 @@ export default function FieldView() {
 
     mapboxgl.accessToken = tokenData.token;
 
-      if (!mapRef.current) {
-        const center: [number, number] =
-          validVisits.length > 0
-            ? [validVisits[0].property!.longitude!, validVisits[0].property!.latitude!]
-            : [-98.5795, 39.8283];
+    if (!mapRef.current) {
+      const center: [number, number] =
+        validVisits.length > 0
+          ? [validVisits[0].property!.longitude!, validVisits[0].property!.latitude!]
+          : [-98.5795, 39.8283];
 
-        const map = new mapboxgl.Map({
-          container,
-          style: "mapbox://styles/mapbox/streets-v12",
-          center,
-          zoom: validVisits.length > 0 ? 11 : 4,
-        });
+      const map = new mapboxgl.Map({
+        container,
+        style: "mapbox://styles/mapbox/streets-v12",
+        center,
+        zoom: validVisits.length > 0 ? 11 : 4,
+      });
 
-        mapRef.current = map;
+      mapRef.current = map;
 
-        map.on("load", () => {
-          if (cancelled) return;
-          setMapLoaded(true);
-        });
-      }
+      map.on("load", () => {
+        if (cancelled) return;
+        setMapLoaded(true);
+      });
+    }
 
     return () => {
       cancelled = true;
@@ -251,89 +251,89 @@ export default function FieldView() {
     if (!mapRef.current || !mapLoaded) return;
 
     markersRef.current.forEach((m) => m.remove());
-      markersRef.current = [];
+    markersRef.current = [];
 
-      for (const visit of validVisits) {
-        const lat = visit.property!.latitude!;
-        const lng = visit.property!.longitude!;
-        const isNext = nextStopIds.has(visit.id);
-        const isOverdue = overdueIdSet.has(visit.id);
-        const pinColor = getPinColor(visit, isNext, isOverdue);
-        const techName = techByRouteId.get(visit.routeId ?? null);
+    for (const visit of validVisits) {
+      const lat = visit.property!.latitude!;
+      const lng = visit.property!.longitude!;
+      const isNext = nextStopIds.has(visit.id);
+      const isOverdue = overdueIdSet.has(visit.id);
+      const pinColor = getPinColor(visit, isNext, isOverdue);
+      const techName = techByRouteId.get(visit.routeId ?? null);
 
-        const el = document.createElement("div");
-        el.style.width = "30px";
-        el.style.height = "30px";
-        el.style.borderRadius = "50%";
-        el.style.backgroundColor = pinColor;
-        el.style.color = "white";
-        el.style.display = "flex";
-        el.style.alignItems = "center";
-        el.style.justifyContent = "center";
-        el.style.fontSize = "11px";
-        el.style.fontWeight = "bold";
-        el.style.border = "2.5px solid white";
-        el.style.boxShadow = "0 2px 6px rgba(0,0,0,0.35)";
-        el.style.cursor = "pointer";
-        el.setAttribute("data-testid", `map-pin-${visit.id}`);
-        el.textContent = String(visit.stopOrder > 0 ? visit.stopOrder : "");
+      const el = document.createElement("div");
+      el.style.width = "30px";
+      el.style.height = "30px";
+      el.style.borderRadius = "50%";
+      el.style.backgroundColor = pinColor;
+      el.style.color = "white";
+      el.style.display = "flex";
+      el.style.alignItems = "center";
+      el.style.justifyContent = "center";
+      el.style.fontSize = "11px";
+      el.style.fontWeight = "bold";
+      el.style.border = "2.5px solid white";
+      el.style.boxShadow = "0 2px 6px rgba(0,0,0,0.35)";
+      el.style.cursor = "pointer";
+      el.setAttribute("data-testid", `map-pin-${visit.id}`);
+      el.textContent = String(visit.stopOrder > 0 ? visit.stopOrder : "");
 
-        const contactName = visit.contact
-          ? `${visit.contact.firstName} ${visit.contact.lastName}`
-          : "Unknown";
-        const address = visit.property?.streetAddress ?? "";
-        const city = visit.property?.city ? `, ${visit.property.city}` : "";
-        const routeLabel = visit.routeName ? `Route: ${visit.routeName}` : "Unassigned";
-        const techLabel = techName ? `Tech: ${techName}` : "";
-        const statusLabel = visit.status.replace(/_/g, " ");
-        const statusColor = pinColor;
+      const contactName = visit.contact
+        ? `${visit.contact.firstName} ${visit.contact.lastName}`
+        : "Unknown";
+      const address = visit.property?.streetAddress ?? "";
+      const city = visit.property?.city ? `, ${visit.property.city}` : "";
+      const routeLabel = visit.routeName ? `Route: ${visit.routeName}` : "Unassigned";
+      const techLabel = techName ? `Tech: ${techName}` : "";
+      const statusLabel = visit.status.replace(/_/g, " ");
+      const statusColor = pinColor;
 
-        const popupEl = document.createElement("div");
-        popupEl.dataset.testid = `popup-visit-${visit.id}`;
-        Object.assign(popupEl.style, { padding: "6px 4px", fontFamily: "sans-serif" });
-        const titleEl = document.createElement("div");
-        Object.assign(titleEl.style, { fontWeight: "600", fontSize: "13px", marginBottom: "2px" });
-        titleEl.textContent = `Stop #${visit.stopOrder} — ${contactName}`;
-        const addrEl = document.createElement("div");
-        Object.assign(addrEl.style, { fontSize: "12px", color: "#555", marginBottom: "4px" });
-        addrEl.textContent = `${address}${city}`;
-        popupEl.append(titleEl, addrEl);
-        if (techLabel) {
-          const techEl = document.createElement("div");
-          Object.assign(techEl.style, { fontSize: "11px", color: "#444", marginBottom: "2px" });
-          techEl.textContent = techLabel;
-          popupEl.append(techEl);
-        }
-        const routeEl = document.createElement("div");
-        Object.assign(routeEl.style, { fontSize: "11px", color: "#888", marginBottom: "3px" });
-        routeEl.textContent = routeLabel;
-        const statusEl = document.createElement("span");
-        Object.assign(statusEl.style, {
-          background: statusColor,
-          color: "white",
-          padding: "1px 6px",
-          borderRadius: "10px",
-          fontSize: "10px",
-        });
-        statusEl.textContent = statusLabel;
-        popupEl.append(routeEl, statusEl);
-        const popup = new mapboxgl.Popup({ offset: 20, maxWidth: "240px" }).setDOMContent(popupEl);
-
-        const marker = new mapboxgl.Marker({ element: el })
-          .setLngLat([lng, lat])
-          .setPopup(popup)
-          .addTo(mapRef.current);
-
-        markersRef.current.push(marker);
+      const popupEl = document.createElement("div");
+      popupEl.dataset.testid = `popup-visit-${visit.id}`;
+      Object.assign(popupEl.style, { padding: "6px 4px", fontFamily: "sans-serif" });
+      const titleEl = document.createElement("div");
+      Object.assign(titleEl.style, { fontWeight: "600", fontSize: "13px", marginBottom: "2px" });
+      titleEl.textContent = `Stop #${visit.stopOrder} — ${contactName}`;
+      const addrEl = document.createElement("div");
+      Object.assign(addrEl.style, { fontSize: "12px", color: "#555", marginBottom: "4px" });
+      addrEl.textContent = `${address}${city}`;
+      popupEl.append(titleEl, addrEl);
+      if (techLabel) {
+        const techEl = document.createElement("div");
+        Object.assign(techEl.style, { fontSize: "11px", color: "#444", marginBottom: "2px" });
+        techEl.textContent = techLabel;
+        popupEl.append(techEl);
       }
+      const routeEl = document.createElement("div");
+      Object.assign(routeEl.style, { fontSize: "11px", color: "#888", marginBottom: "3px" });
+      routeEl.textContent = routeLabel;
+      const statusEl = document.createElement("span");
+      Object.assign(statusEl.style, {
+        background: statusColor,
+        color: "white",
+        padding: "1px 6px",
+        borderRadius: "10px",
+        fontSize: "10px",
+      });
+      statusEl.textContent = statusLabel;
+      popupEl.append(routeEl, statusEl);
+      const popup = new mapboxgl.Popup({ offset: 20, maxWidth: "240px" }).setDOMContent(popupEl);
 
-      if (validVisits.length > 1) {
-        const bounds = new mapboxgl.LngLatBounds();
-        validVisits.forEach((v) => {
-          bounds.extend([v.property!.longitude!, v.property!.latitude!]);
-        });
-        mapRef.current.fitBounds(bounds, { padding: 60 });
-      }
+      const marker = new mapboxgl.Marker({ element: el })
+        .setLngLat([lng, lat])
+        .setPopup(popup)
+        .addTo(mapRef.current);
+
+      markersRef.current.push(marker);
+    }
+
+    if (validVisits.length > 1) {
+      const bounds = new mapboxgl.LngLatBounds();
+      validVisits.forEach((v) => {
+        bounds.extend([v.property!.longitude!, v.property!.latitude!]);
+      });
+      mapRef.current.fitBounds(bounds, { padding: 60 });
+    }
   }, [mapLoaded, validVisits, nextStopIds, overdueIdSet, techByRouteId]);
 
   useEffect(() => {

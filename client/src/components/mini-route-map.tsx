@@ -68,9 +68,7 @@ export default function MiniRouteMap({ stops, label }: MiniRouteMapProps) {
         el.style.boxShadow = "0 1px 3px rgba(0,0,0,0.35)";
         el.textContent = String(stop.stopNumber);
 
-        new mapboxgl.Marker({ element: el })
-          .setLngLat([stop.longitude, stop.latitude])
-          .addTo(map);
+        new mapboxgl.Marker({ element: el }).setLngLat([stop.longitude, stop.latitude]).addTo(map);
       });
 
       if (validStops.length >= 2) {

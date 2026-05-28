@@ -1,5 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useMemo, useCallback, useEffect, useRef, lazy, Suspense, Component } from "react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+  lazy,
+  Suspense,
+  Component,
+} from "react";
 import type { ReactNode } from "react";
 import { LiveRoutePlayback } from "@/components/live-route-playback";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -2850,9 +2859,9 @@ export default function RoutesPage() {
     // Use stopsByRoute (which correctly resolves date-specific routes via
     // visit.routeId) rather than filtering servicePlans by plan.routeId,
     // which misses stops on date-specific routes.
-    const plans = (stopsByRoute[routeId] ?? []).slice().sort(
-      (a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0)
-    );
+    const plans = (stopsByRoute[routeId] ?? [])
+      .slice()
+      .sort((a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0));
     return plans
       .map((plan, idx) => {
         const contact = contacts.find((c) => c.id === plan.contactId);
