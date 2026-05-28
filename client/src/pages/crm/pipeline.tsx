@@ -21,6 +21,17 @@ interface PaginatedResult<T> {
   totalPages: number;
 }
 
+const DEFAULT_STAGE_COLORS = [
+  "#4ade80",
+  "#60a5fa",
+  "#f59e0b",
+  "#a78bfa",
+  "#f87171",
+  "#34d399",
+  "#fb923c",
+  "#38bdf8",
+];
+
 export default function CrmPipeline() {
   const { toast } = useToast();
 
@@ -96,14 +107,16 @@ export default function CrmPipeline() {
       ) : (
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-3 min-w-max">
-            {stages.map((stage) => {
+            {stages.map((stage, idx) => {
               const stageDeal = dealsByStage[stage.slug] ?? [];
               const val = stageValue(stage.slug);
               return (
                 <div
                   key={stage.id}
                   className="w-64 rounded-lg border border-border/50 bg-muted/30 flex flex-col"
-                  style={{ borderTop: `3px solid ${stage.color}` }}
+                  style={{
+                    borderTop: `3px solid ${stage.color || DEFAULT_STAGE_COLORS[idx % DEFAULT_STAGE_COLORS.length]}`,
+                  }}
                   data-testid={`column-crm-${stage.slug}`}
                 >
                   <div className="p-3 border-b border-border/30">
