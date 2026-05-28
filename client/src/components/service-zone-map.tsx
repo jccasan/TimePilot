@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,15 +80,9 @@ export function ServiceZoneMap({
     if (!tokenData?.token || !mapContainerRef.current || mapRef.current) return;
 
     let cancelled = false;
+    const container = mapContainerRef.current;
 
-    (async () => {
-      const mapboxgl = (await import("mapbox-gl")).default;
-      await import("mapbox-gl/dist/mapbox-gl.css");
-
-      if (cancelled || !mapContainerRef.current) return;
-      const container = mapContainerRef.current;
-
-      mapboxgl.accessToken = tokenData.token;
+    mapboxgl.accessToken = tokenData.token;
 
       const map = new mapboxgl.Map({
         container,
@@ -113,10 +109,8 @@ export function ServiceZoneMap({
     };
   }, [tokenData?.token]);
 
-  const updateMarkers = useCallback(async () => {
+  const updateMarkers = useCallback(() => {
     if (!mapRef.current || !mapLoaded) return;
-
-    const mapboxgl = (await import("mapbox-gl")).default;
 
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];

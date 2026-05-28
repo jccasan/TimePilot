@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useRef, useState, useMemo } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -215,13 +217,9 @@ export default function FieldView() {
     if (!tokenData?.token || !mapContainerRef.current) return;
 
     let cancelled = false;
+    const container = mapContainerRef.current;
 
-    (async () => {
-      const mapboxgl = (await import("mapbox-gl")).default;
-      if (cancelled || !mapContainerRef.current) return;
-      const container = mapContainerRef.current;
-
-      mapboxgl.accessToken = tokenData.token;
+    mapboxgl.accessToken = tokenData.token;
 
       if (!mapRef.current) {
         const center: [number, number] =
@@ -255,8 +253,7 @@ export default function FieldView() {
 
     let cancelled = false;
 
-    (async () => {
-      const mapboxgl = (await import("mapbox-gl")).default;
+    (() => {
       if (cancelled) return;
 
       markersRef.current.forEach((m) => m.remove());

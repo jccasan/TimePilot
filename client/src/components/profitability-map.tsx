@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 export type MapStop = {
@@ -84,7 +85,6 @@ export default function ProfitabilityMap({
     let cancelled = false;
 
     (async () => {
-      const mapboxgl = (await import("mapbox-gl")).default;
       if (cancelled || !mapContainerRef.current) return;
       const container = mapContainerRef.current;
 

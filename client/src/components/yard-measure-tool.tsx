@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useRef, useEffect, useCallback } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Undo2, Trash2, Save, MousePointerClick, ZoomIn, ZoomOut } from "lucide-react";
@@ -493,10 +495,8 @@ export function YardMeasureTool({
   useEffect(() => {
     if (!mapboxToken || !mapContainerRef.current || mapRef.current || mapError) return;
 
-    const initMap = async () => {
+    const initMap = () => {
       try {
-        const mapboxgl = (await import("mapbox-gl")).default;
-        await import("mapbox-gl/dist/mapbox-gl.css");
         (mapboxgl as any).accessToken = mapboxToken;
 
         if (!mapboxgl.supported()) {

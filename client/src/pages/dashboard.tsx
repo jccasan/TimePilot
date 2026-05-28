@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useCallback, useMemo, useEffect, useRef, type ReactNode } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -2680,10 +2682,7 @@ function RouteMapPreviewWidget() {
   useEffect(() => {
     if (!mapContainerRef.current || !tokenData?.token || !mapData || mapRef.current) return;
 
-    const loadMap = async () => {
-      const mapboxgl = (await import("mapbox-gl")).default;
-      await import("mapbox-gl/dist/mapbox-gl.css");
-
+    const loadMap = () => {
       if (!mapContainerRef.current) return;
       const container = mapContainerRef.current;
 

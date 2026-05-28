@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 export type RouteStop = {
@@ -66,13 +67,9 @@ export default function RouteMapView({
     if (mapRef.current) return;
 
     let cancelled = false;
+    const container = mapContainerRef.current;
 
-    (async () => {
-      const mapboxgl = (await import("mapbox-gl")).default;
-      if (cancelled || !mapContainerRef.current) return;
-      const container = mapContainerRef.current;
-
-      mapboxgl.accessToken = tokenData.token;
+    mapboxgl.accessToken = tokenData.token;
 
       const companyLat =
         companyLatitude != null && Number.isFinite(companyLatitude) ? companyLatitude : null;
