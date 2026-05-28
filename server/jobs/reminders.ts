@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { eq, and, lte, sql } from "drizzle-orm";
+import { eq, and, lte, sql, or, isNull } from "drizzle-orm";
 import {
   contacts,
   visits,
@@ -12,6 +12,7 @@ import {
   type ReminderRule,
   type InvoiceReminderSettings,
 } from "@shared/schema";
+import { crmTasks } from "@shared/crm-schema";
 import { storage } from "../storage";
 import { upsertHealthCheckResult } from "./system-health-check";
 import { sendEmail } from "../services/email";
@@ -205,7 +206,43 @@ export async function runReminders() {
     }
   }
 
-  const msg = `Completed: ${totalServiceReminders} service reminders, ${totalInvoiceReminders} invoice reminders, ${errors} errors`;
+  // ── CRM Task Reminders ──────────────────────────────────────
+  let crmTaskReminderCount = 0;
+  try {
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const cutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const pendingTasks = await db
+      .select()
+      .from(crmTasks)
+      .where(
+        and(
+          lte(crmTasks.dueDate, in24h),
+          eq(crmTasks.status, "pending"),
+          or(isNull(crmTasks.lastReminderSentAt), lte(crmTasks.lastReminderSentAt, cutoff24h))
+        )
+      );
+    for (const task of pendingTasks) {
+      try {
+        await storage.createNotification({
+          companyId: task.companyId,
+          title: "CRM Task Due Soon",
+          message: `Task "${task.title}" is due ${task.dueDate ? (new Date(task.dueDate) <= now ? "now (overdue)" : "within 24 hours") : "soon"}.`,
+          type: "system_warning",
+          isRead: false,
+          linkUrl: `/crm/tasks`,
+        });
+        await db.update(crmTasks).set({ lastReminderSentAt: now }).where(eq(crmTasks.id, task.id));
+        crmTaskReminderCount++;
+      } catch (err) {
+        console.error(`[reminders] Failed to send CRM task reminder for task ${task.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error("[reminders] Error in CRM task reminders:", err);
+  }
+
+  const msg = `Completed: ${totalServiceReminders} service reminders, ${totalInvoiceReminders} invoice reminders, ${crmTaskReminderCount} CRM task reminders, ${errors} errors`;
   console.log(`[reminders] ${msg}`);
   await upsertHealthCheckResult(
     "job_reminders",

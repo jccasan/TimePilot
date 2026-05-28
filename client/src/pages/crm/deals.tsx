@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -29,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Search, TrendingUp, Trash2, Upload } from "lucide-react";
+import { Plus, Search, TrendingUp, Trash2, Upload, Settings } from "lucide-react";
 import type { CrmDeal, CrmContact } from "@shared/crm-schema";
 import { CrmImportModal } from "@/components/crm-import-modal";
 
@@ -40,7 +41,22 @@ interface PaginatedResult<T> {
   totalPages: number;
 }
 
-const stages = ["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"];
+interface PipelineStage {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+  isWon: boolean;
+  isLost: boolean;
+}
+
+interface TeamMember {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
 const stageBadgeVariant = (s: string): "default" | "outline" | "destructive" | "secondary" =>
   s === "closed_won" ? "default" : s === "closed_lost" ? "destructive" : "outline";
 
@@ -93,6 +109,7 @@ export default function CrmDeals() {
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const queryParams = useMemo(() => {
     const p = new URLSearchParams();
@@ -112,6 +129,14 @@ export default function CrmDeals() {
   });
   const deals = result?.data ?? [];
 
+  const { data: pipelineStages = [] } = useQuery<PipelineStage[]>({
+    queryKey: ["/api/crm/pipeline-stages"],
+    queryFn: async () => {
+      const res = await fetch("/api/crm/pipeline-stages", { credentials: "include" });
+      return res.json();
+    },
+  });
+
   const { data: contactsResult } = useQuery<PaginatedResult<CrmContact>>({
     queryKey: ["/api/crm/contacts", "all"],
     queryFn: async () => {
@@ -120,6 +145,14 @@ export default function CrmDeals() {
     },
   });
   const contacts = contactsResult?.data ?? [];
+
+  const { data: teamMembers = [] } = useQuery<TeamMember[]>({
+    queryKey: ["/api/company/team"],
+    queryFn: async () => {
+      const res = await fetch("/api/company/team", { credentials: "include" });
+      return res.json();
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
@@ -145,6 +178,54 @@ export default function CrmDeals() {
       toast({ title: "Deal deleted" });
     },
   });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async (data: { ids: string[]; stage?: string; assignedTo?: string }) => {
+      const res = await apiRequest("POST", "/api/crm/deals/bulk-update", data);
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data: { updated: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/deals"] });
+      setSelectedIds(new Set());
+      toast({ title: `${data.updated} deal(s) updated` });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await apiRequest("POST", "/api/crm/deals/bulk-delete", { ids });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data: { deleted: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/deals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/stats"] });
+      setSelectedIds(new Set());
+      toast({ title: `${data.deleted} deal(s) deleted` });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === deals.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(deals.map((d) => d.id)));
+    }
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -173,6 +254,17 @@ export default function CrmDeals() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/crm/pipeline-stages">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              title="Pipeline Stage Settings"
+              data-testid="button-crm-pipeline-stage-settings"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+          </Link>
           <Link href="/crm/pipeline">
             <Button variant="outline" size="sm" data-testid="button-crm-view-pipeline">
               View Pipeline Board
@@ -220,11 +312,24 @@ export default function CrmDeals() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {stages.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s.replace("_", " ")}
-                          </SelectItem>
-                        ))}
+                        {pipelineStages.length > 0
+                          ? pipelineStages.map((s) => (
+                              <SelectItem key={s.slug} value={s.slug}>
+                                {s.name}
+                              </SelectItem>
+                            ))
+                          : [
+                              "lead",
+                              "qualified",
+                              "proposal",
+                              "negotiation",
+                              "closed_won",
+                              "closed_lost",
+                            ].map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {s.replace("_", " ")}
+                              </SelectItem>
+                            ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -286,14 +391,103 @@ export default function CrmDeals() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Stages</SelectItem>
-            {stages.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s.replace("_", " ")}
-              </SelectItem>
-            ))}
+            {pipelineStages.length > 0
+              ? pipelineStages.map((s) => (
+                  <SelectItem key={s.slug} value={s.slug}>
+                    {s.name}
+                  </SelectItem>
+                ))
+              : ["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"].map(
+                  (s) => (
+                    <SelectItem key={s} value={s}>
+                      {s.replace("_", " ")}
+                    </SelectItem>
+                  )
+                )}
           </SelectContent>
         </Select>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div
+          className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-primary/5 border border-primary/20"
+          data-testid="bulk-action-bar-deals"
+        >
+          <span className="text-sm font-medium">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-2 ml-auto">
+            <Select
+              onValueChange={(stage) =>
+                bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), stage })
+              }
+            >
+              <SelectTrigger className="h-8 w-[160px] text-xs" data-testid="select-crm-bulk-stage">
+                <SelectValue placeholder="Move to stage..." />
+              </SelectTrigger>
+              <SelectContent>
+                {pipelineStages.length > 0
+                  ? pipelineStages.map((s) => (
+                      <SelectItem key={s.slug} value={s.slug}>
+                        {s.name}
+                      </SelectItem>
+                    ))
+                  : [
+                      "lead",
+                      "qualified",
+                      "proposal",
+                      "negotiation",
+                      "closed_won",
+                      "closed_lost",
+                    ].map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s.replace("_", " ")}
+                      </SelectItem>
+                    ))}
+              </SelectContent>
+            </Select>
+            {teamMembers.length > 0 && (
+              <Select
+                onValueChange={(userId) =>
+                  bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), assignedTo: userId })
+                }
+              >
+                <SelectTrigger
+                  className="h-8 w-[150px] text-xs"
+                  data-testid="select-crm-bulk-assign-deals"
+                >
+                  <SelectValue placeholder="Assign to..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamMembers.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.firstName} {m.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1.5"
+              disabled={bulkDeleteMutation.isPending}
+              onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+              data-testid="button-crm-bulk-delete-deals"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8"
+              onClick={() => setSelectedIds(new Set())}
+              data-testid="button-crm-bulk-deselect-deals"
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">Loading...</div>
@@ -308,6 +502,13 @@ export default function CrmDeals() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={selectedIds.size === deals.length && deals.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                      data-testid="checkbox-crm-select-all-deals"
+                    />
+                  </TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Value</TableHead>
                   <TableHead>Stage</TableHead>
@@ -318,7 +519,18 @@ export default function CrmDeals() {
               </TableHeader>
               <TableBody>
                 {deals.map((deal) => (
-                  <TableRow key={deal.id} data-testid={`row-crm-deal-${deal.id}`}>
+                  <TableRow
+                    key={deal.id}
+                    className={selectedIds.has(deal.id) ? "bg-primary/5" : ""}
+                    data-testid={`row-crm-deal-${deal.id}`}
+                  >
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(deal.id)}
+                        onCheckedChange={() => toggleSelect(deal.id)}
+                        data-testid={`checkbox-crm-deal-${deal.id}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <Link
                         href={`/crm/deals/${deal.id}`}
@@ -331,7 +543,8 @@ export default function CrmDeals() {
                     <TableCell>${((deal.value || 0) / 100).toLocaleString()}</TableCell>
                     <TableCell>
                       <Badge variant={stageBadgeVariant(deal.stage)} className="text-[10px]">
-                        {deal.stage.replace("_", " ")}
+                        {pipelineStages.find((s) => s.slug === deal.stage)?.name ??
+                          deal.stage.replace("_", " ")}
                       </Badge>
                     </TableCell>
                     <TableCell>{deal.probability || 0}%</TableCell>

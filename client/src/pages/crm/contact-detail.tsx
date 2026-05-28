@@ -34,8 +34,18 @@ import {
   Pencil,
   X,
   Check,
+  Phone,
+  ExternalLink,
+  Activity,
 } from "lucide-react";
-import type { CrmContact, CrmDeal, CrmTask, CrmNote, CrmEmail } from "@shared/crm-schema";
+import type {
+  CrmContact,
+  CrmDeal,
+  CrmTask,
+  CrmNote,
+  CrmEmail,
+  CrmActivity,
+} from "@shared/crm-schema";
 
 const contactStatuses = ["active", "inactive", "lead", "customer", "archived"];
 const contactSources = ["manual", "web_form", "import", "referral", "campaign", "auto-sync"];
@@ -45,6 +55,7 @@ export default function CrmContactDetail() {
   const { toast } = useToast();
   const [noteOpen, setNoteOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
+  const [callOpen, setCallOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [isEditing, setIsEditing] = useState(false);
@@ -87,6 +98,14 @@ export default function CrmContactDetail() {
     queryKey: ["/api/crm/contacts", id, "emails"],
     queryFn: async () => {
       const res = await fetch(`/api/crm/contacts/${id}/emails`, { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const { data: activities = [] } = useQuery<CrmActivity[]>({
+    queryKey: ["/api/crm/activities", { contactId: id }],
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/activities?contactId=${id}`, { credentials: "include" });
       return res.json();
     },
   });
@@ -140,6 +159,24 @@ export default function CrmContactDetail() {
     },
   });
 
+  const callMutation = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => {
+      const res = await apiRequest("POST", "/api/crm/activities", {
+        ...data,
+        type: "call",
+        contactId: id,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/contacts", id, "tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/activities", { contactId: id }] });
+      setCallOpen(false);
+      toast({ title: "Call logged" });
+    },
+    onError: () => toast({ title: "Error logging call", variant: "destructive" }),
+  });
+
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading...</div>;
   if (!contact) return <div className="p-6 text-muted-foreground">Contact not found.</div>;
 
@@ -168,6 +205,18 @@ export default function CrmContactDetail() {
         <Badge variant="outline" className="ml-2">
           {contact.status}
         </Badge>
+        {contact.mainContactId && (
+          <Link href={`/contacts/${contact.mainContactId}`}>
+            <Badge
+              variant="secondary"
+              className="ml-1 gap-1 cursor-pointer hover:bg-secondary/80"
+              data-testid="badge-crm-linked-client"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Linked Client
+            </Badge>
+          </Link>
+        )}
         <div className="ml-auto flex items-center gap-2">
           {isEditing ? (
             <>
@@ -295,6 +344,108 @@ export default function CrmContactDetail() {
                   data-testid="button-crm-submit-task"
                 >
                   Create Task
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={callOpen} onOpenChange={setCallOpen}>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                data-testid="button-crm-log-call"
+              >
+                <Phone className="w-4 h-4" /> Log Call
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Log Call</DialogTitle>
+              </DialogHeader>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const fd = new FormData(e.currentTarget);
+                  const nextActionDate = fd.get("nextActionDate") as string;
+                  callMutation.mutate({
+                    description: fd.get("description") || undefined,
+                    callDirection: fd.get("callDirection") as string,
+                    callOutcome: (fd.get("callOutcome") as string) || undefined,
+                    callDurationMinutes: fd.get("callDurationMinutes")
+                      ? parseInt(fd.get("callDurationMinutes") as string)
+                      : undefined,
+                    nextActionDate: nextActionDate || undefined,
+                  });
+                }}
+                className="space-y-4"
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Direction</Label>
+                    <Select name="callDirection" defaultValue="outbound">
+                      <SelectTrigger data-testid="select-crm-call-direction">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="outbound">Outbound (I called)</SelectItem>
+                        <SelectItem value="inbound">Inbound (They called)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Outcome</Label>
+                    <Select name="callOutcome" defaultValue="answered">
+                      <SelectTrigger data-testid="select-crm-call-outcome">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="answered">Answered</SelectItem>
+                        <SelectItem value="left_voicemail">Left Voicemail</SelectItem>
+                        <SelectItem value="no_answer">No Answer</SelectItem>
+                        <SelectItem value="busy">Busy</SelectItem>
+                        <SelectItem value="wrong_number">Wrong Number</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Duration (minutes)</Label>
+                  <Input
+                    name="callDurationMinutes"
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 5"
+                    data-testid="input-crm-call-duration"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Notes</Label>
+                  <Textarea
+                    name="description"
+                    rows={3}
+                    placeholder="What was discussed..."
+                    data-testid="input-crm-call-notes"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Schedule Follow-up</Label>
+                  <Input
+                    name="nextActionDate"
+                    type="date"
+                    data-testid="input-crm-call-next-action"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    A follow-up task will be created automatically if a date is set.
+                  </p>
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={callMutation.isPending}
+                  data-testid="button-crm-submit-call"
+                >
+                  {callMutation.isPending ? "Logging..." : "Log Call"}
                 </Button>
               </form>
             </DialogContent>
@@ -493,6 +644,10 @@ export default function CrmContactDetail() {
                   <Mail className="w-4 h-4 mr-1" />
                   Emails ({emails.length})
                 </TabsTrigger>
+                <TabsTrigger value="activity" data-testid="tab-crm-activity">
+                  <Activity className="w-4 h-4 mr-1" />
+                  Activity ({activities.length})
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="deals" className="space-y-2 mt-4">
                 {deals.length === 0 ? (
@@ -617,7 +772,7 @@ export default function CrmContactDetail() {
               </TabsContent>
               <TabsContent value="emails" className="space-y-2 mt-4">
                 {emails.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No emails yet.</p>
+                  <p className="text-sm text-muted-foreground">No email logs yet.</p>
                 ) : (
                   emails.map((em) => (
                     <div
@@ -625,12 +780,94 @@ export default function CrmContactDetail() {
                       className="p-3 rounded border border-border/50"
                       data-testid={`item-crm-email-${em.id}`}
                     >
-                      <p className="text-sm font-medium">{em.subject}</p>
+                      <p className="text-sm font-medium">{em.subject || "(no subject)"}</p>
                       <p className="text-xs text-muted-foreground">
-                        {em.direction} · {em.status}
+                        Email logged · {em.direction === "outbound" ? "I sent" : "I received"}
+                        {em.createdAt
+                          ? ` · ${new Date(em.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : ""}
                       </p>
                     </div>
                   ))
+                )}
+              </TabsContent>
+              <TabsContent value="activity" className="space-y-2 mt-4">
+                {activities.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No activity logged yet.</p>
+                ) : (
+                  activities.map((act) => {
+                    const outcomeColors: Record<string, string> = {
+                      answered: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+                      left_voicemail:
+                        "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+                      no_answer:
+                        "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+                      busy: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+                      wrong_number: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+                    };
+                    const outcomeLabel: Record<string, string> = {
+                      answered: "Answered",
+                      left_voicemail: "Left Voicemail",
+                      no_answer: "No Answer",
+                      busy: "Busy",
+                      wrong_number: "Wrong Number",
+                    };
+                    const outcomeCls =
+                      act.callOutcome && outcomeColors[act.callOutcome]
+                        ? outcomeColors[act.callOutcome]
+                        : "bg-muted text-muted-foreground";
+                    return (
+                      <div
+                        key={act.id}
+                        className="flex items-start gap-3 p-3 rounded border border-border/50"
+                        data-testid={`item-crm-activity-${act.id}`}
+                      >
+                        <Phone className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium capitalize">
+                              {act.type === "call"
+                                ? act.callDirection === "inbound"
+                                  ? "Inbound call"
+                                  : "Outbound call"
+                                : act.type}
+                            </span>
+                            {act.callOutcome && (
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${outcomeCls}`}
+                                data-testid={`badge-crm-call-outcome-${act.id}`}
+                              >
+                                {outcomeLabel[act.callOutcome] ?? act.callOutcome}
+                              </span>
+                            )}
+                            {act.callDurationMinutes != null && act.callDurationMinutes > 0 && (
+                              <span
+                                className="text-xs text-muted-foreground"
+                                data-testid={`text-crm-call-duration-${act.id}`}
+                              >
+                                {act.callDurationMinutes} min
+                              </span>
+                            )}
+                          </div>
+                          {act.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                              {act.description}
+                            </p>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {act.createdAt
+                              ? new Date(act.createdAt).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : ""}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </TabsContent>
             </Tabs>

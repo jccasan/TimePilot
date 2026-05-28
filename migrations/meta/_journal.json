@@ -15,6 +15,34 @@
       "when": 1779974052565,
       "tag": "0001_add_timecard_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779700000000,
+      "tag": "0001_add_contact_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1779800000000,
+      "tag": "0002_calendar_feed",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779900000000,
+      "tag": "0003_quote_selected_frequency",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779972729387,
+      "tag": "0004_crm_pipeline_stages",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "id": "4c34191e-9c8c-4e2f-b130-c188fb2f523e",
+  "id": "2c6d921b-cfb4-484d-93de-b110c374814b",
   "prevId": "5028b742-14dc-4cc9-9eb1-c67750870aa2",
   "version": "7",
   "dialect": "postgresql",
@@ -2181,25 +2181,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "timecard_enabled": {
-          "name": "timecard_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "timecard_trial_ends_at": {
-          "name": "timecard_trial_ends_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "stripe_timecard_subscription_id": {
-          "name": "stripe_timecard_subscription_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
         },
         "review_request_enabled": {
           "name": "review_request_enabled",
@@ -11901,24 +11882,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "period_id": {
-          "name": "period_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "edited_by": {
-          "name": "edited_by",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "edited_at": {
-          "name": "edited_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -12007,15 +11970,6 @@
           "tableFrom": "time_entries",
           "tableTo": "routes",
           "columnsFrom": ["route_id"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "time_entries_edited_by_users_id_fk": {
-          "name": "time_entries_edited_by_users_id_fk",
-          "tableFrom": "time_entries",
-          "tableTo": "users",
-          "columnsFrom": ["edited_by"],
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
@@ -13074,6 +13028,30 @@
         "crm_company_id": {
           "name": "crm_company_id",
           "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "call_direction": {
+          "name": "call_direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "call_outcome": {
+          "name": "call_outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "call_duration_minutes": {
+          "name": "call_duration_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_action_date": {
+          "name": "next_action_date",
+          "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
@@ -14212,6 +14190,79 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.crm_pipeline_stages": {
+      "name": "crm_pipeline_stages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "company_id": {
+          "name": "company_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'#6b7280'"
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "is_won": {
+          "name": "is_won",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "is_lost": {
+          "name": "is_lost",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.crm_project_tasks": {
       "name": "crm_project_tasks",
       "schema": "",
@@ -14832,6 +14883,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "last_reminder_sent_at": {
+          "name": "last_reminder_sent_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -15054,454 +15111,6 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.time_entry_breaks": {
-      "name": "time_entry_breaks",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "varchar(255)",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "time_entry_id": {
-          "name": "time_entry_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "break_start": {
-          "name": "break_start",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "break_end": {
-          "name": "break_end",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "duration_minutes": {
-          "name": "duration_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notes": {
-          "name": "notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "time_entry_breaks_company_entry_idx": {
-          "name": "time_entry_breaks_company_entry_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "time_entry_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "time_entry_breaks_company_id_companies_id_fk": {
-          "name": "time_entry_breaks_company_id_companies_id_fk",
-          "tableFrom": "time_entry_breaks",
-          "tableTo": "companies",
-          "columnsFrom": ["company_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "time_entry_breaks_time_entry_id_time_entries_id_fk": {
-          "name": "time_entry_breaks_time_entry_id_time_entries_id_fk",
-          "tableFrom": "time_entry_breaks",
-          "tableTo": "time_entries",
-          "columnsFrom": ["time_entry_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.timecard_periods": {
-      "name": "timecard_periods",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "varchar(255)",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "period_start": {
-          "name": "period_start",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "period_end": {
-          "name": "period_end",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "timecard_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'draft'"
-        },
-        "submitted_at": {
-          "name": "submitted_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "approved_by": {
-          "name": "approved_by",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "approved_at": {
-          "name": "approved_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rejected_by": {
-          "name": "rejected_by",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rejected_at": {
-          "name": "rejected_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "rejection_notes": {
-          "name": "rejection_notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "total_regular_minutes": {
-          "name": "total_regular_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "total_overtime_minutes": {
-          "name": "total_overtime_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "total_break_minutes": {
-          "name": "total_break_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "timecard_periods_company_user_idx": {
-          "name": "timecard_periods_company_user_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "timecard_periods_company_status_idx": {
-          "name": "timecard_periods_company_status_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "timecard_periods_company_period_idx": {
-          "name": "timecard_periods_company_period_idx",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "period_start",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "period_end",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "timecard_periods_unique_company_user_period": {
-          "name": "timecard_periods_unique_company_user_period",
-          "columns": [
-            {
-              "expression": "company_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "period_start",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "timecard_periods_company_id_companies_id_fk": {
-          "name": "timecard_periods_company_id_companies_id_fk",
-          "tableFrom": "timecard_periods",
-          "tableTo": "companies",
-          "columnsFrom": ["company_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "timecard_periods_user_id_users_id_fk": {
-          "name": "timecard_periods_user_id_users_id_fk",
-          "tableFrom": "timecard_periods",
-          "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "timecard_periods_approved_by_users_id_fk": {
-          "name": "timecard_periods_approved_by_users_id_fk",
-          "tableFrom": "timecard_periods",
-          "tableTo": "users",
-          "columnsFrom": ["approved_by"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "timecard_periods_rejected_by_users_id_fk": {
-          "name": "timecard_periods_rejected_by_users_id_fk",
-          "tableFrom": "timecard_periods",
-          "tableTo": "users",
-          "columnsFrom": ["rejected_by"],
-          "columnsTo": ["id"],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.timecard_settings": {
-      "name": "timecard_settings",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "varchar(255)",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "company_id": {
-          "name": "company_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pay_period_type": {
-          "name": "pay_period_type",
-          "type": "pay_period_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'bi-weekly'"
-        },
-        "pay_period_anchor_date": {
-          "name": "pay_period_anchor_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "overtime_weekly_hours": {
-          "name": "overtime_weekly_hours",
-          "type": "numeric(4, 1)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'40.0'"
-        },
-        "overtime_daily_hours": {
-          "name": "overtime_daily_hours",
-          "type": "numeric(4, 1)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "export_templates": {
-          "name": "export_templates",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "timecard_settings_company_id_companies_id_fk": {
-          "name": "timecard_settings_company_id_companies_id_fk",
-          "tableFrom": "timecard_settings",
-          "tableTo": "companies",
-          "columnsFrom": ["company_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "timecard_settings_company_id_unique": {
-          "name": "timecard_settings_company_id_unique",
-          "nullsNotDistinct": false,
-          "columns": ["company_id"]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -15879,16 +15488,6 @@
       "name": "yard_difficulty",
       "schema": "public",
       "values": ["flat", "moderate", "difficult"]
-    },
-    "public.pay_period_type": {
-      "name": "pay_period_type",
-      "schema": "public",
-      "values": ["weekly", "bi-weekly", "semi-monthly", "monthly"]
-    },
-    "public.timecard_status": {
-      "name": "timecard_status",
-      "schema": "public",
-      "values": ["draft", "submitted", "approved", "rejected"]
     }
   },
   "schemas": {},

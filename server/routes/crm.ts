@@ -82,6 +82,7 @@ import {
   crmWebhookDeliveries,
   crmWebForms,
   crmFormSubmissions,
+  crmPipelineStages,
   insertCrmContactSchema,
   insertCrmCompanySchema,
   insertCrmDealSchema,
@@ -203,7 +204,18 @@ export function registerCrmRoutes(app: Express) {
       db
         .select({ count: sql<number>`count(*)` })
         .from(crmDeals)
-        .where(and(eq(crmDeals.stage, "closed_won"), eq(crmDeals.companyId, c))),
+        .where(
+          and(
+            eq(crmDeals.companyId, c),
+            inArray(
+              crmDeals.stage,
+              db
+                .select({ slug: crmPipelineStages.slug })
+                .from(crmPipelineStages)
+                .where(and(eq(crmPipelineStages.companyId, c), eq(crmPipelineStages.isWon, true)))
+            )
+          )
+        ),
     ]);
     res.json({
       contacts: Number(contacts.count),
@@ -218,17 +230,166 @@ export function registerCrmRoutes(app: Express) {
     });
   });
 
+  // ─── Pipeline Stages ──────────────────────────────────
+  const DEFAULT_PIPELINE_STAGES = [
+    { name: "Lead", slug: "lead", color: "#6b7280", position: 0, isWon: false, isLost: false },
+    {
+      name: "Qualified",
+      slug: "qualified",
+      color: "#3b82f6",
+      position: 1,
+      isWon: false,
+      isLost: false,
+    },
+    {
+      name: "Proposal",
+      slug: "proposal",
+      color: "#8b5cf6",
+      position: 2,
+      isWon: false,
+      isLost: false,
+    },
+    {
+      name: "Negotiation",
+      slug: "negotiation",
+      color: "#f59e0b",
+      position: 3,
+      isWon: false,
+      isLost: false,
+    },
+    { name: "Won", slug: "closed_won", color: "#10b981", position: 4, isWon: true, isLost: false },
+    {
+      name: "Lost",
+      slug: "closed_lost",
+      color: "#ef4444",
+      position: 5,
+      isWon: false,
+      isLost: true,
+    },
+  ];
+
+  async function getOrSeedPipelineStages(companyId: string) {
+    const existing = await db
+      .select()
+      .from(crmPipelineStages)
+      .where(eq(crmPipelineStages.companyId, companyId))
+      .orderBy(crmPipelineStages.position);
+    if (existing.length > 0) return existing;
+    await db
+      .insert(crmPipelineStages)
+      .values(DEFAULT_PIPELINE_STAGES.map((s) => ({ ...s, companyId })));
+    return await db
+      .select()
+      .from(crmPipelineStages)
+      .where(eq(crmPipelineStages.companyId, companyId))
+      .orderBy(crmPipelineStages.position);
+  }
+
+  app.get("/api/crm/pipeline-stages", async (req, res) => {
+    const c = getCompanyId(req);
+    const stages = await getOrSeedPipelineStages(c);
+    const dealCounts = await db
+      .select({ stage: crmDeals.stage, count: sql<number>`count(*)` })
+      .from(crmDeals)
+      .where(eq(crmDeals.companyId, c))
+      .groupBy(crmDeals.stage);
+    const countMap: Record<string, number> = {};
+    for (const row of dealCounts) countMap[row.stage] = Number(row.count);
+    res.json(stages.map((s) => ({ ...s, dealCount: countMap[s.slug] ?? 0 })));
+  });
+
+  app.post("/api/crm/pipeline-stages", async (req, res) => {
+    const c = getCompanyId(req);
+    const { name, color, isWon, isLost } = req.body;
+    if (!name) return res.status(400).json({ message: "name is required" });
+    const slug = name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
+    const all = await db.select().from(crmPipelineStages).where(eq(crmPipelineStages.companyId, c));
+    const position = all.length;
+    const [stage] = await db
+      .insert(crmPipelineStages)
+      .values({
+        companyId: c,
+        name,
+        slug,
+        color: color || "#6b7280",
+        position,
+        isWon: !!isWon,
+        isLost: !!isLost,
+      })
+      .returning();
+    res.status(201).json(stage);
+  });
+
+  app.patch("/api/crm/pipeline-stages/:id", async (req, res) => {
+    const c = getCompanyId(req);
+    const { name, color, isWon, isLost } = req.body;
+    const [stage] = await db
+      .update(crmPipelineStages)
+      .set({ name, color, isWon, isLost })
+      .where(and(eq(crmPipelineStages.id, req.params.id), eq(crmPipelineStages.companyId, c)))
+      .returning();
+    if (!stage) return res.status(404).json({ message: "Stage not found" });
+    res.json(stage);
+  });
+
+  app.delete("/api/crm/pipeline-stages/:id", async (req, res) => {
+    const c = getCompanyId(req);
+    const [stage] = await db
+      .select()
+      .from(crmPipelineStages)
+      .where(and(eq(crmPipelineStages.id, req.params.id), eq(crmPipelineStages.companyId, c)));
+    if (!stage) return res.status(404).json({ message: "Stage not found" });
+    const [dealCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(crmDeals)
+      .where(and(eq(crmDeals.companyId, c), eq(crmDeals.stage, stage.slug)));
+    const count = Number(dealCount.count);
+    if (count > 0)
+      return res
+        .status(409)
+        .json({ message: `Cannot delete: ${count} deal(s) use this stage`, count });
+    await db
+      .delete(crmPipelineStages)
+      .where(and(eq(crmPipelineStages.id, req.params.id), eq(crmPipelineStages.companyId, c)));
+    res.status(204).send();
+  });
+
+  app.post("/api/crm/pipeline-stages/reorder", async (req, res) => {
+    const c = getCompanyId(req);
+    const { order } = req.body as { order: string[] };
+    if (!Array.isArray(order))
+      return res.status(400).json({ message: "order must be an array of ids" });
+    await Promise.all(
+      order.map((id, idx) =>
+        db
+          .update(crmPipelineStages)
+          .set({ position: idx })
+          .where(and(eq(crmPipelineStages.id, id), eq(crmPipelineStages.companyId, c)))
+      )
+    );
+    res.json({ ok: true });
+  });
+
   // ─── Reports ──────────────────────────────────────────
   app.get("/api/crm/reports/pipeline", async (req, res) => {
     const c = getCompanyId(req);
-    const stages = ["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"];
+    const stages = await getOrSeedPipelineStages(c);
     const result = await Promise.all(
       stages.map(async (stage) => {
         const [r] = await db
           .select({ count: sql<number>`count(*)`, value: sql<number>`coalesce(sum(value), 0)` })
           .from(crmDeals)
-          .where(and(eq(crmDeals.stage, stage), eq(crmDeals.companyId, c)));
-        return { stage, count: Number(r.count), value: Number(r.value) };
+          .where(and(eq(crmDeals.stage, stage.slug), eq(crmDeals.companyId, c)));
+        return {
+          stage: stage.slug,
+          name: stage.name,
+          count: Number(r.count),
+          value: Number(r.value),
+        };
       })
     );
     res.json(result);
@@ -251,14 +412,17 @@ export function registerCrmRoutes(app: Express) {
 
   app.get("/api/crm/reports/deals", async (req, res) => {
     const c = getCompanyId(req);
+    const stages = await getOrSeedPipelineStages(c);
+    const wonSlugs = new Set(stages.filter((s) => s.isWon).map((s) => s.slug));
+    const lostSlugs = new Set(stages.filter((s) => s.isLost).map((s) => s.slug));
     const all = await db.select().from(crmDeals).where(eq(crmDeals.companyId, c));
     const months: Record<string, { won: number; lost: number }> = {};
     for (const d of all) {
-      if (d.stage === "closed_won" || d.stage === "closed_lost") {
+      if (wonSlugs.has(d.stage) || lostSlugs.has(d.stage)) {
         const date = d.createdAt ? new Date(d.createdAt) : new Date();
         const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
         if (!months[key]) months[key] = { won: 0, lost: 0 };
-        if (d.stage === "closed_won") months[key].won++;
+        if (wonSlugs.has(d.stage)) months[key].won++;
         else months[key].lost++;
       }
     }
@@ -285,11 +449,14 @@ export function registerCrmRoutes(app: Express) {
 
   app.get("/api/crm/activities", async (req, res) => {
     const c = getCompanyId(req);
+    const { contactId } = req.query as { contactId?: string };
+    const conditions = [eq(crmActivities.companyId, c)];
+    if (contactId) conditions.push(eq(crmActivities.contactId, contactId));
     res.json(
       await db
         .select()
         .from(crmActivities)
-        .where(eq(crmActivities.companyId, c))
+        .where(and(...conditions))
         .orderBy(desc(crmActivities.createdAt))
     );
   });
@@ -1118,13 +1285,73 @@ export function registerCrmRoutes(app: Express) {
   });
 
   app.patch("/api/crm/deals/:id", async (req, res) => {
+    const companyId = getCompanyId(req);
+    const [priorDeal] = await db
+      .select()
+      .from(crmDeals)
+      .where(and(eq(crmDeals.id, req.params.id), eq(crmDeals.companyId, companyId)));
+    if (!priorDeal) return res.status(404).json({ message: "Deal not found" });
+
     const [d] = await db
       .update(crmDeals)
       .set(req.body)
-      .where(and(eq(crmDeals.id, req.params.id), eq(crmDeals.companyId, getCompanyId(req))))
+      .where(and(eq(crmDeals.id, req.params.id), eq(crmDeals.companyId, companyId)))
       .returning();
     if (!d) return res.status(404).json({ message: "Deal not found" });
     await logCrmAudit(req, "updated", "deal", d.id, { stage: d.stage });
+
+    // ── Two-Way Contact Sync: when deal moves to a won stage ──
+    if (d.stage !== priorDeal.stage && d.contactId) {
+      const stages = await getOrSeedPipelineStages(companyId);
+      const newStage = stages.find((s) => s.slug === d.stage);
+      const oldStage = stages.find((s) => s.slug === priorDeal.stage);
+      if (newStage?.isWon && !oldStage?.isWon) {
+        const [crmContact] = await db
+          .select()
+          .from(crmContacts)
+          .where(and(eq(crmContacts.id, d.contactId), eq(crmContacts.companyId, companyId)));
+        if (crmContact) {
+          if (!crmContact.mainContactId) {
+            // Try to find existing operational contact by email
+            let opContactId: string | null = null;
+            if (crmContact.email) {
+              const [existing] = await db
+                .select({ id: operationalContacts.id })
+                .from(operationalContacts)
+                .where(
+                  and(
+                    eq(operationalContacts.companyId, companyId),
+                    eq(operationalContacts.email, crmContact.email)
+                  )
+                )
+                .limit(1);
+              if (existing) opContactId = existing.id.toString();
+            }
+            // Create operational contact if not found
+            if (!opContactId) {
+              const [created] = await db
+                .insert(operationalContacts)
+                .values({
+                  companyId,
+                  firstName: crmContact.firstName,
+                  lastName: crmContact.lastName,
+                  email: crmContact.email ?? undefined,
+                  phone: crmContact.phone ?? undefined,
+                  status: "estimate",
+                })
+                .returning({ id: operationalContacts.id });
+              opContactId = created.id.toString();
+            }
+            // Write mainContactId back to CRM contact
+            await db
+              .update(crmContacts)
+              .set({ mainContactId: opContactId })
+              .where(eq(crmContacts.id, crmContact.id));
+          }
+        }
+      }
+    }
+
     res.json(d);
   });
 
@@ -1725,15 +1952,109 @@ export function registerCrmRoutes(app: Express) {
     res.status(204).send();
   });
 
+  // ─── CRM Bulk Actions ─────────────────────────────────
+  app.post("/api/crm/deals/bulk-update", async (req, res) => {
+    const c = getCompanyId(req);
+    const { ids, stage, assignedTo } = req.body as {
+      ids: string[];
+      stage?: string;
+      assignedTo?: string;
+    };
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: "ids must be a non-empty array" });
+    const updates: Record<string, unknown> = {};
+    if (stage !== undefined) {
+      const stages = await getOrSeedPipelineStages(c);
+      if (!stages.some((s) => s.slug === stage))
+        return res.status(400).json({ message: `Invalid stage: ${stage}` });
+      updates.stage = stage;
+    }
+    if (assignedTo !== undefined) updates.assignedTo = assignedTo;
+    if (Object.keys(updates).length === 0)
+      return res.status(400).json({ message: "No updates provided" });
+    await db
+      .update(crmDeals)
+      .set(updates)
+      .where(and(eq(crmDeals.companyId, c), inArray(crmDeals.id, ids)));
+    res.json({ updated: ids.length });
+  });
+
+  app.post("/api/crm/deals/bulk-delete", async (req, res) => {
+    const c = getCompanyId(req);
+    const { ids } = req.body as { ids: string[] };
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: "ids must be a non-empty array" });
+    await db.delete(crmDeals).where(and(eq(crmDeals.companyId, c), inArray(crmDeals.id, ids)));
+    res.json({ deleted: ids.length });
+  });
+
+  app.post("/api/crm/tasks/bulk-update", async (req, res) => {
+    const c = getCompanyId(req);
+    const { ids, status, assignedTo } = req.body as {
+      ids: string[];
+      status?: string;
+      assignedTo?: string;
+    };
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: "ids must be a non-empty array" });
+    const updates: Record<string, unknown> = {};
+    if (status !== undefined) {
+      updates.status = status;
+      if (status === "completed") updates.completedAt = new Date();
+    }
+    if (assignedTo !== undefined) updates.assignedTo = assignedTo;
+    if (Object.keys(updates).length === 0)
+      return res.status(400).json({ message: "No updates provided" });
+    await db
+      .update(crmTasks)
+      .set(updates)
+      .where(and(eq(crmTasks.companyId, c), inArray(crmTasks.id, ids)));
+    res.json({ updated: ids.length });
+  });
+
+  app.post("/api/crm/tasks/bulk-delete", async (req, res) => {
+    const c = getCompanyId(req);
+    const { ids } = req.body as { ids: string[] };
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: "ids must be a non-empty array" });
+    await db.delete(crmTasks).where(and(eq(crmTasks.companyId, c), inArray(crmTasks.id, ids)));
+    res.json({ deleted: ids.length });
+  });
+
   // ─── CRM Activities ───────────────────────────────────
   app.post("/api/crm/activities", async (req, res) => {
     const parsed = insertCrmActivitySchema.safeParse(req.body);
     if (!parsed.success)
       return res.status(400).json({ message: fromError(parsed.error).toString() });
+    const companyId = getCompanyId(req);
+    const actorUserId = req.session?.userId ?? null;
     const [act] = await db
       .insert(crmActivities)
-      .values({ ...parsed.data, companyId: getCompanyId(req) })
+      .values({ ...parsed.data, companyId })
       .returning();
+
+    // Auto-create follow-up task if nextActionDate is set and type is call
+    if (parsed.data.type === "call" && parsed.data.nextActionDate && parsed.data.contactId) {
+      const [contact] = await db
+        .select({ firstName: crmContacts.firstName, lastName: crmContacts.lastName })
+        .from(crmContacts)
+        .where(
+          and(eq(crmContacts.id, parsed.data.contactId), eq(crmContacts.companyId, companyId))
+        );
+      const contactName = contact ? `${contact.firstName} ${contact.lastName}` : "contact";
+      await db.insert(crmTasks).values({
+        companyId,
+        title: `Follow up with ${contactName}`,
+        type: "call",
+        priority: "medium",
+        status: "pending",
+        dueDate: new Date(parsed.data.nextActionDate),
+        contactId: parsed.data.contactId,
+        dealId: parsed.data.dealId ?? null,
+        assignedTo: actorUserId,
+      });
+    }
+
     res.status(201).json(act);
   });
 

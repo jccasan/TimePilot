@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -30,6 +31,13 @@ interface PaginatedResult<T> {
   total: number;
   page: number;
   totalPages: number;
+}
+
+interface TeamMember {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
 }
 
 const taskPriorities = ["low", "medium", "high", "urgent"];
@@ -94,6 +102,7 @@ export default function CrmTasks() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const queryParams = useMemo(() => {
     const p = new URLSearchParams();
@@ -112,6 +121,14 @@ export default function CrmTasks() {
     },
   });
   const tasks = result?.data ?? [];
+
+  const { data: teamMembers = [] } = useQuery<TeamMember[]>({
+    queryKey: ["/api/company/team"],
+    queryFn: async () => {
+      const res = await fetch("/api/company/team", { credentials: "include" });
+      return res.json();
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
@@ -145,6 +162,54 @@ export default function CrmTasks() {
       toast({ title: "Task deleted" });
     },
   });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async (data: { ids: string[]; status?: string; assignedTo?: string }) => {
+      const res = await apiRequest("POST", "/api/crm/tasks/bulk-update", data);
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data: { updated: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/tasks"] });
+      setSelectedIds(new Set());
+      toast({ title: `${data.updated} task(s) updated` });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await apiRequest("POST", "/api/crm/tasks/bulk-delete", { ids });
+      if (!res.ok) throw new Error((await res.json()).message);
+      return res.json();
+    },
+    onSuccess: (data: { deleted: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/stats"] });
+      setSelectedIds(new Set());
+      toast({ title: `${data.deleted} task(s) deleted` });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === tasks.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(tasks.map((t) => t.id)));
+    }
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -296,6 +361,84 @@ export default function CrmTasks() {
         </Select>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div
+          className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-primary/5 border border-primary/20"
+          data-testid="bulk-action-bar-tasks"
+        >
+          <span className="text-sm font-medium">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5"
+              disabled={bulkUpdateMutation.isPending}
+              onClick={() =>
+                bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), status: "completed" })
+              }
+              data-testid="button-crm-bulk-complete-tasks"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Mark Complete
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5"
+              disabled={bulkUpdateMutation.isPending}
+              onClick={() =>
+                bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), status: "pending" })
+              }
+              data-testid="button-crm-bulk-reopen-tasks"
+            >
+              <Circle className="w-3.5 h-3.5" />
+              Reopen
+            </Button>
+            {teamMembers.length > 0 && (
+              <Select
+                onValueChange={(userId) =>
+                  bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), assignedTo: userId })
+                }
+              >
+                <SelectTrigger
+                  className="h-8 w-[150px] text-xs"
+                  data-testid="select-crm-bulk-assign-tasks"
+                >
+                  <SelectValue placeholder="Assign to..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamMembers.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.firstName} {m.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-8 gap-1.5"
+              disabled={bulkDeleteMutation.isPending}
+              onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+              data-testid="button-crm-bulk-delete-tasks"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8"
+              onClick={() => setSelectedIds(new Set())}
+              data-testid="button-crm-bulk-deselect-tasks"
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="text-center py-12 text-muted-foreground">Loading...</div>
       ) : tasks.length === 0 ? (
@@ -305,13 +448,26 @@ export default function CrmTasks() {
         </div>
       ) : (
         <>
+          <div className="flex items-center gap-2 pb-1">
+            <Checkbox
+              checked={selectedIds.size === tasks.length && tasks.length > 0}
+              onCheckedChange={toggleSelectAll}
+              data-testid="checkbox-crm-select-all-tasks"
+            />
+            <span className="text-xs text-muted-foreground">Select all</span>
+          </div>
           <div className="space-y-1.5">
             {tasks.map((task) => (
               <div
                 key={task.id}
-                className={`flex items-center gap-3 p-3 rounded border border-border/50 bg-card/50 ${task.status === "completed" ? "opacity-60" : ""}`}
+                className={`flex items-center gap-3 p-3 rounded border border-border/50 bg-card/50 ${task.status === "completed" ? "opacity-60" : ""} ${selectedIds.has(task.id) ? "bg-primary/5 border-primary/20" : ""}`}
                 data-testid={`row-crm-task-${task.id}`}
               >
+                <Checkbox
+                  checked={selectedIds.has(task.id)}
+                  onCheckedChange={() => toggleSelect(task.id)}
+                  data-testid={`checkbox-crm-task-${task.id}`}
+                />
                 <Button
                   variant="ghost"
                   size="icon"

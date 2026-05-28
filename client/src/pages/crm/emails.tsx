@@ -169,7 +169,7 @@ export default function CrmEmails() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Log Email</DialogTitle>
+              <DialogTitle>Log an Email</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -209,8 +209,8 @@ export default function CrmEmails() {
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     data-testid="select-crm-email-direction"
                   >
-                    <option value="outbound">Outbound</option>
-                    <option value="inbound">Inbound</option>
+                    <option value="outbound">I sent</option>
+                    <option value="inbound">I received</option>
                   </select>
                 </div>
                 <div className="space-y-1.5">
@@ -230,13 +230,16 @@ export default function CrmEmails() {
                   </select>
                 </div>
               </div>
+              <p className="text-xs text-muted-foreground">
+                This saves a record of an email. To send email, use your regular email client.
+              </p>
               <Button
                 type="submit"
                 className="w-full"
                 disabled={createMutation.isPending}
                 data-testid="button-crm-submit-email"
               >
-                {createMutation.isPending ? "Logging..." : "Log Email"}
+                {createMutation.isPending ? "Saving..." : "Save Log"}
               </Button>
             </form>
           </DialogContent>

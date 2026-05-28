@@ -1,7 +1,46 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  varchar,
+  integer,
+  timestamp,
+  jsonb,
+  boolean,
+  uniqueIndex,
+  index,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+// ─── CRM Pipeline Stages ─────────────────────────────────────
+export const crmPipelineStages = pgTable(
+  "crm_pipeline_stages",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    companyId: varchar("company_id").notNull(),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    color: text("color").notNull().default("#6b7280"),
+    position: integer("position").notNull().default(0),
+    isWon: boolean("is_won").notNull().default(false),
+    isLost: boolean("is_lost").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("uq_crm_pipeline_stages_company_slug").on(t.companyId, t.slug),
+    index("idx_crm_pipeline_stages_company_pos").on(t.companyId, t.position),
+  ]
+);
+
+export const insertCrmPipelineStageSchema = createInsertSchema(crmPipelineStages).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCrmPipelineStage = z.infer<typeof insertCrmPipelineStageSchema>;
+export type CrmPipelineStage = typeof crmPipelineStages.$inferSelect;
 
 // ─── CRM Contacts ────────────────────────────────────────────
 export const crmContacts = pgTable("crm_contacts", {
@@ -104,6 +143,7 @@ export const crmTasks = pgTable("crm_tasks", {
   dealId: varchar("deal_id"),
   crmCompanyId: varchar("crm_company_id"),
   completedAt: timestamp("completed_at"),
+  lastReminderSentAt: timestamp("last_reminder_sent_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -126,14 +166,22 @@ export const crmActivities = pgTable("crm_activities", {
   contactId: varchar("contact_id"),
   dealId: varchar("deal_id"),
   crmCompanyId: varchar("crm_company_id"),
+  callDirection: text("call_direction"),
+  callOutcome: text("call_outcome"),
+  callDurationMinutes: integer("call_duration_minutes"),
+  nextActionDate: timestamp("next_action_date"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertCrmActivitySchema = createInsertSchema(crmActivities).omit({
-  id: true,
-  companyId: true,
-  createdAt: true,
-});
+export const insertCrmActivitySchema = createInsertSchema(crmActivities)
+  .omit({
+    id: true,
+    companyId: true,
+    createdAt: true,
+  })
+  .extend({
+    nextActionDate: z.coerce.date().optional().nullable(),
+  });
 export type InsertCrmActivity = z.infer<typeof insertCrmActivitySchema>;
 export type CrmActivity = typeof crmActivities.$inferSelect;
 

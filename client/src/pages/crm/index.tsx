@@ -21,6 +21,7 @@ const CrmSequences = lazy(() => import("./sequences"));
 const CrmForms = lazy(() => import("./forms"));
 const CrmAuditLog = lazy(() => import("./audit-log"));
 const CrmReports = lazy(() => import("./reports"));
+const CrmPipelineStages = lazy(() => import("./pipeline-stages"));
 const VoiceChatAgentPage = lazy(() => import("./voice-agent"));
 const SpeedToLeadPage = lazy(() => import("./speed-to-lead"));
 
@@ -55,6 +56,7 @@ export default function CrmRouter() {
         <Route path="/crm/forms" component={CrmForms} />
         <Route path="/crm/audit-log" component={CrmAuditLog} />
         <Route path="/crm/reports" component={CrmReports} />
+        <Route path="/crm/pipeline-stages" component={CrmPipelineStages} />
         <Route path="/crm/voice-agent" component={VoiceChatAgentPage} />
         <Route path="/crm/speed-to-lead" component={SpeedToLeadPage} />
         <Route>
