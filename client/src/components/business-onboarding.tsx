@@ -486,6 +486,7 @@ function CompanyProfileStep({
 
 function BusinessIntelligenceStep({
   companyData,
+  addressHint,
   onNext,
   onBack,
   onSkip,
@@ -493,6 +494,7 @@ function BusinessIntelligenceStep({
   isFetchingData,
 }: {
   companyData: BusinessOnboardingStatus["companyData"];
+  addressHint?: string;
   onNext: (data: { businessDescription: string; serviceAreaDescription: string }) => void;
   onBack: () => void;
   onSkip: () => void;
@@ -688,7 +690,7 @@ function BusinessIntelligenceStep({
                 <ZipMapSelector
                   value={serviceArea}
                   onChange={setServiceArea}
-                  addressHint={companyData.address}
+                  addressHint={addressHint ?? companyData.address}
                 />
               </div>
             ) : (
@@ -710,7 +712,7 @@ function BusinessIntelligenceStep({
                   />
                   <span className="text-sm font-medium w-16 shrink-0">{radiusMiles} mi</span>
                 </div>
-                <RadiusMapSelector radiusMiles={radiusMiles} addressHint={companyData.address} />
+                <RadiusMapSelector radiusMiles={radiusMiles} addressHint={addressHint ?? companyData.address} />
               </div>
             )}
           </div>
@@ -1533,6 +1535,7 @@ export default function BusinessOnboarding({
 
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  const [pendingAddress, setPendingAddress] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (status) {
@@ -1661,7 +1664,10 @@ export default function BusinessOnboarding({
           {currentStep === 0 && (
             <CompanyProfileStep
               companyData={status.companyData}
-              onNext={(data) => stepMutation.mutate({ step: 0, data })}
+              onNext={(data) => {
+                setPendingAddress((data as Record<string, unknown>).address as string | undefined);
+                stepMutation.mutate({ step: 0, data });
+              }}
               isPending={stepMutation.isPending}
             />
           )}
@@ -1669,6 +1675,7 @@ export default function BusinessOnboarding({
           {currentStep === 1 && (
             <BusinessIntelligenceStep
               companyData={status.companyData}
+              addressHint={pendingAddress ?? status.companyData.address ?? undefined}
               onNext={(data) => stepMutation.mutate({ step: 1, data })}
               onBack={handleBack}
               onSkip={handleSkip}
