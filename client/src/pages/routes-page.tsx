@@ -2478,8 +2478,17 @@ export default function RoutesPage() {
           queryClient.getQueryData<ServicePlan[]>(["/api/service-plans?isActive=true"]) ?? [];
         const freshContacts = queryClient.getQueryData<Contact[]>(["/api/contacts"]) ?? [];
         const freshProperties = queryClient.getQueryData<Property[]>(["/api/properties"]) ?? [];
+        // Use visit-based route lookup (mirrors stopsByRoute) so date-specific
+        // routes resolve correctly — plan.routeId points to the recurring route,
+        // not the date-specific one.
+        const cachedVisits =
+          queryClient.getQueryData<Visit[]>(["/api/visits/range", selectedDayDate]) ?? [];
+        const planToVisitRoute = new Map<string, string>();
+        for (const v of cachedVisits) {
+          if (v.servicePlanId && v.routeId) planToVisitRoute.set(v.servicePlanId, v.routeId);
+        }
         const stopsAfter = freshPlans
-          .filter((p) => p.routeId === routeId)
+          .filter((p) => (planToVisitRoute.get(p.id) ?? p.routeId) === routeId)
           .sort((a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0))
           .map((plan, idx) => {
             const contact = freshContacts.find((c) => c.id === plan.contactId);
@@ -2540,8 +2549,14 @@ export default function RoutesPage() {
           queryClient.getQueryData<ServicePlan[]>(["/api/service-plans?isActive=true"]) ?? [];
         const freshContacts = queryClient.getQueryData<Contact[]>(["/api/contacts"]) ?? [];
         const freshProperties = queryClient.getQueryData<Property[]>(["/api/properties"]) ?? [];
+        const cachedVisits =
+          queryClient.getQueryData<Visit[]>(["/api/visits/range", selectedDayDate]) ?? [];
+        const planToVisitRoute = new Map<string, string>();
+        for (const v of cachedVisits) {
+          if (v.servicePlanId && v.routeId) planToVisitRoute.set(v.servicePlanId, v.routeId);
+        }
         const stopsAfter = freshPlans
-          .filter((p) => p.routeId === routeId)
+          .filter((p) => (planToVisitRoute.get(p.id) ?? p.routeId) === routeId)
           .sort((a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0))
           .map((plan, idx) => {
             const contact = freshContacts.find((c) => c.id === plan.contactId);
@@ -2806,9 +2821,13 @@ export default function RoutesPage() {
   }
 
   function buildRouteStopsForOptimize(routeId: string): RouteStop[] {
-    return servicePlans
-      .filter((p) => p.routeId === routeId)
-      .sort((a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0))
+    // Use stopsByRoute (which correctly resolves date-specific routes via
+    // visit.routeId) rather than filtering servicePlans by plan.routeId,
+    // which misses stops on date-specific routes.
+    const plans = (stopsByRoute[routeId] ?? []).slice().sort(
+      (a, b) => (a.stopOrder ?? 0) - (b.stopOrder ?? 0)
+    );
+    return plans
       .map((plan, idx) => {
         const contact = contacts.find((c) => c.id === plan.contactId);
         const property = properties.find((p) => p.id === plan.propertyId);
