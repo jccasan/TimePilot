@@ -43,12 +43,24 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
   // Fallback: the UI can assign stops to a route via visit.routeId rather than
   // servicePlan.routeId (e.g. one-time route overrides or demo data). Mirror that
   // dual-lookup so the optimizer sees the same stops the UI shows.
+  // Use a ±30-day window so both past visits and upcoming (future-dated) visits
+  // are included — the user may be viewing any date on the route calendar.
   if (routePlans.length <= 1) {
     const tz = company?.timezone ?? "America/New_York";
     const today = getCompanyToday(tz);
-    const todayVisits = await storage.getVisitsForDateRange(companyId, today, today);
+    const d = new Date(today + "T12:00:00Z");
+    const windowStart = new Date(d);
+    windowStart.setUTCDate(d.getUTCDate() - 30);
+    const windowEnd = new Date(d);
+    windowEnd.setUTCDate(d.getUTCDate() + 30);
+    const toYMD = (dt: Date) => dt.toISOString().split("T")[0];
+    const windowVisits = await storage.getVisitsForDateRange(
+      companyId,
+      toYMD(windowStart),
+      toYMD(windowEnd)
+    );
     const visitPlanIds = new Set(
-      todayVisits
+      windowVisits
         .filter((v) => v.routeId === route.id && v.servicePlanId && v.status !== "cancelled")
         .map((v) => v.servicePlanId as string)
     );
