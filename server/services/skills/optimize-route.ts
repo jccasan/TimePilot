@@ -35,8 +35,27 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
     };
   }
 
+  const company = await storage.getCompany(companyId);
+
   const plans = await storage.getServicePlans(companyId, { isActive: true });
-  const routePlans = plans.filter((sp) => sp.routeId === route.id);
+  let routePlans = plans.filter((sp) => sp.routeId === route.id);
+
+  // Fallback: the UI can assign stops to a route via visit.routeId rather than
+  // servicePlan.routeId (e.g. one-time route overrides or demo data). Mirror that
+  // dual-lookup so the optimizer sees the same stops the UI shows.
+  if (routePlans.length <= 1) {
+    const tz = company?.timezone ?? "America/New_York";
+    const today = getCompanyToday(tz);
+    const todayVisits = await storage.getVisitsForDateRange(companyId, today, today);
+    const visitPlanIds = new Set(
+      todayVisits
+        .filter((v) => v.routeId === route.id && v.servicePlanId && v.status !== "cancelled")
+        .map((v) => v.servicePlanId as string)
+    );
+    if (visitPlanIds.size > routePlans.length) {
+      routePlans = plans.filter((sp) => visitPlanIds.has(sp.id));
+    }
+  }
 
   if (routePlans.length <= 1) {
     return {
@@ -54,8 +73,6 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
       data: { stopCount: routePlans.length },
     };
   }
-
-  const company = await storage.getCompany(companyId);
 
   const allProperties = await storage.getProperties(companyId);
   let propertyMap = new Map(allProperties.map((p) => [p.id, p]));
