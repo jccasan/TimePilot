@@ -8,6 +8,13 @@
       "when": 1779652346523,
       "tag": "0000_graceful_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779974052565,
+      "tag": "0001_add_timecard_schema",
+      "breakpoints": true
     }
   ]
 }

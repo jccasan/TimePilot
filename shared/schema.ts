@@ -466,6 +466,9 @@ export const companies = pgTable("companies", {
   demoAutoCompleteToday: boolean("demo_auto_complete_today").notNull().default(false),
   demoAutoPayInvoices: boolean("demo_auto_pay_invoices").notNull().default(false),
   demoLivePlaybackEnabled: boolean("demo_live_playback_enabled").notNull().default(false),
+  timecardEnabled: boolean("timecard_enabled").notNull().default(false),
+  timecardTrialEndsAt: timestamp("timecard_trial_ends_at"),
+  stripeTimecardSubscriptionId: varchar("stripe_timecard_subscription_id", { length: 255 }),
   reviewRequestEnabled: boolean("review_request_enabled").notNull().default(false),
   reviewRouterEnabled: boolean("review_router_enabled").notNull().default(true),
   googleReviewUrl: text("google_review_url"),
@@ -2153,6 +2156,11 @@ export const timeEntries = pgTable(
     clockOut: timestamp("clock_out"),
     durationMinutes: integer("duration_minutes"),
     notes: text("notes"),
+    periodId: varchar("period_id", { length: 255 }),
+    editedBy: varchar("edited_by", { length: 255 }).references(() => users.id, {
+      onDelete: "set null",
+    }),
+    editedAt: timestamp("edited_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
