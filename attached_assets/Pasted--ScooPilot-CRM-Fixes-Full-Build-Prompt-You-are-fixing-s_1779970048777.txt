@@ -1,0 +1,282 @@
+# ScooPilot — CRM Fixes: Full Build Prompt
+
+You are fixing six gaps in ScooPilot's CRM. These are all contained changes. None require new infrastructure. Build all six in order. Stop at the end of each and wait for confirmation before proceeding.
+
+## Critical Rules
+
+1. **Do not modify server/storage.ts** for new CRM functionality. CRM data access uses `db` directly in `server/routes/crm.ts` — follow that existing pattern.
+2. **Do not restructure crm.ts**. Add to it, don't reorganize it.
+3. **Do not add any startup SQL to server/index.ts**. All schema changes go through `npx drizzle-kit generate`.
+4. **Follow existing patterns exactly**: `getCompanyId(req)` for tenant isolation in CRM routes, `isAuthenticated` middleware, Zod validation on all inputs.
+5. For notifications, use `storage.createNotification()` which already exists.
+6. For task reminders, extend `server/jobs/reminders.ts` — do not create a new job file.
+
+---
+
+## Fix 1 — Configurable Pipeline Stages
+
+### Problem
+Pipeline stages are hardcoded as `["lead", "qualified", "proposal", "negotiation", "closed_won", "closed_lost"]` in `server/routes/crm.ts` line 224. Operators cannot customize them.
+
+### Schema Change
+Add a new table to `shared/crm-schema.ts`:
+
+```
+crmPipelineStages
+  id: varchar PK, gen_random_uuid()
+  companyId: varchar FK → companies.id, onDelete: cascade, notNull
+  name: text, notNull — display name e.g. "Follow-up Scheduled"
+  slug: text, notNull — machine key e.g. "follow_up_scheduled", used in crmDeals.stage
+  color: text, nullable — hex color for kanban display
+  position: integer, notNull — sort order, 0-indexed
+  isWon: boolean, notNull, default: false — marks this as a "won" terminal stage
+  isLost: boolean, notNull, default: false — marks this as a "lost" terminal stage
+  createdAt: timestamp, defaultNow(), notNull
+
+  Unique constraint: (companyId, slug)
+  Index: (companyId, position)
+```
+
+Run `npx drizzle-kit generate`, show output, stop for confirmation.
+
+### Default Stages
+When a company accesses `/api/crm/pipeline-stages` for the first time and has no stages, seed the defaults:
+
+```
+{ name: "Lead",        slug: "lead",        position: 0, isWon: false, isLost: false }
+{ name: "Qualified",   slug: "qualified",   position: 1, isWon: false, isLost: false }
+{ name: "Proposal",    slug: "proposal",    position: 2, isWon: false, isLost: false }
+{ name: "Negotiation", slug: "negotiation", position: 3, isWon: false, isLost: false }
+{ name: "Closed Won",  slug: "closed_won",  position: 4, isWon: true,  isLost: false }
+{ name: "Closed Lost", slug: "closed_lost", position: 5, isWon: false, isLost: true  }
+```
+
+### API Endpoints (add to crm.ts)
+```
+GET    /api/crm/pipeline-stages           — list stages for company, sorted by position. Seed defaults if empty.
+POST   /api/crm/pipeline-stages           — create stage. Body: { name, color?, position? }. Auto-generates slug from name.
+PATCH  /api/crm/pipeline-stages/:id       — update name, color, position, isWon, isLost
+DELETE /api/crm/pipeline-stages/:id       — only if no deals use this stage. Return 400 with count if deals exist.
+POST   /api/crm/pipeline-stages/reorder   — body: { stages: [{ id, position }] }. Bulk update positions.
+```
+
+### Update Existing Code
+- Replace the hardcoded `stages` array on line 224 of `crm.ts` with a dynamic query: fetch `crmPipelineStages` for the company, use `isWon`/`isLost` flags instead of hardcoded slug comparisons.
+- Update the pipeline report endpoint to use dynamic stages.
+- Update won/lost deal logic to use `isWon` and `isLost` flags instead of `stage === "closed_won"` checks.
+- The `crmDeals.stage` column continues to store the slug string — no schema change to deals.
+
+### Settings UI
+Add a "Pipeline Stages" section to the CRM settings page:
+- Drag-and-drop reorder (call reorder endpoint on drop)
+- Add stage button: name input, color picker (optional)
+- Edit inline: click name to rename, click color swatch to change
+- Delete button: disabled with tooltip if deals exist in that stage
+- Won/Lost toggle per stage
+
+---
+
+## Fix 2 — Task Reminders
+
+### Problem
+CRM tasks with `dueDate` set fire no reminders. The `reminders.ts` job handles service and invoice reminders only.
+
+### Changes to server/jobs/reminders.ts
+Add a new step at the end of the existing job loop (after invoice reminders, before the completion log). Do not restructure the file.
+
+```typescript
+// CRM Task Reminders
+// For each company, find CRM tasks where:
+//   status = 'pending' AND dueDate is within the next 24 hours OR already past
+//   AND no reminder has been sent in the last 24 hours (use a simple lastReminderSentAt field — see schema below)
+// For each matching task:
+//   - Create an in-app notification via storage.createNotification():
+//     { companyId, title: 'Task Due', message: `"${task.title}" is due ${dueString}`, type: 'task_reminder', entityId: task.id }
+//   - If task.assignedTo is set: scope notification to that user
+//   - Set task.lastReminderSentAt = now
+// Log: [reminders] N CRM task reminders sent
+```
+
+### Schema Change (shared/crm-schema.ts)
+Add one column to `crmTasks`:
+```
+lastReminderSentAt: timestamp, nullable
+```
+
+Add via `npx drizzle-kit generate`.
+
+### Notification display
+The existing notifications UI already displays notifications. No UI change required — task reminders will appear automatically in the notification bell.
+
+---
+
+## Fix 3 — Call Logging
+
+### Problem
+`crmActivities.type` accepts `"call"` but there's no structured outcome, duration, or next action. Call activities are indistinguishable from other activities.
+
+### Schema Change (shared/crm-schema.ts)
+Add four columns to `crmActivities`:
+```
+callOutcome: text, nullable — 'answered' | 'no_answer' | 'left_voicemail' | 'busy' | 'wrong_number'
+callDurationMinutes: integer, nullable
+callDirection: text, nullable — 'inbound' | 'outbound'
+nextActionDate: timestamp, nullable — follow-up date set during the call log
+```
+
+Add via `npx drizzle-kit generate`.
+
+### API Changes
+Update `POST /api/crm/activities` to accept and store the new fields when `type === 'call'`.
+Update `GET /api/crm/activities` to return the new fields.
+
+### UI Changes
+When adding an activity and type = "Call", show additional fields:
+- Direction: Inbound / Outbound (toggle)
+- Outcome: dropdown (Answered / No Answer / Left Voicemail / Busy / Wrong Number)
+- Duration: number input in minutes (optional)
+- Next follow-up date: date picker (optional) — if set, auto-create a follow-up task linked to the same contact/deal
+
+**Auto-create follow-up task logic:**
+If `nextActionDate` is set when logging a call, automatically create a `crmTask`:
+```
+{ title: 'Follow up with {contactName}', type: 'call', dueDate: nextActionDate, contactId: activity.contactId, dealId: activity.dealId, assignedTo: activity.createdBy }
+```
+
+On the contact/deal timeline, call activities display with an outcome badge (color-coded: green = answered, yellow = voicemail, red = no answer) and duration.
+
+---
+
+## Fix 4 — Bulk Actions on Deals and Tasks
+
+### Problem
+Contacts have bulk actions (`/api/contacts/bulk-update`, `/api/contacts/bulk-delete`). Deals and tasks have neither.
+
+### API Endpoints (add to crm.ts)
+
+**Deals:**
+```
+POST /api/crm/deals/bulk-update
+  Body: { ids: string[], updates: { stage?: string, assignedTo?: string, status?: string } }
+  Updates all matching deals for the company. Validates stage slug exists in crmPipelineStages.
+
+POST /api/crm/deals/bulk-delete
+  Body: { ids: string[] }
+  Deletes all matching deals for the company.
+```
+
+**Tasks:**
+```
+POST /api/crm/tasks/bulk-update
+  Body: { ids: string[], updates: { status?: string, assignedTo?: string, priority?: string } }
+  If status = 'completed': set completedAt = now on all matching tasks.
+
+POST /api/crm/tasks/bulk-delete
+  Body: { ids: string[] }
+```
+
+All bulk endpoints: always filter by `companyId` — never operate across tenants. Return `{ updated: N }` or `{ deleted: N }`.
+
+### UI Changes
+On the Deals list and Tasks list views, add:
+- Checkbox column for row selection
+- Select all checkbox in header
+- Bulk action bar appears when 1+ rows selected: shows count, action buttons (stage/assign/delete for deals; complete/assign/delete for tasks)
+- Follows the exact same UI pattern as the existing bulk actions on the Contacts page
+
+---
+
+## Fix 5 — Two-Way Contact Sync
+
+### Problem
+`POST /api/crm/contacts/sync-from-customers` pushes operational contacts (scooping clients) into CRM. The reverse — when a CRM lead converts to a paying client — does nothing automatically.
+
+### What "converts" means
+A CRM contact converts when a deal linked to that contact reaches a stage where `isWon = true` (from Fix 1). This is the trigger.
+
+### Implementation
+In the `PATCH /api/crm/deals/:id` handler, after updating the deal:
+
+```typescript
+// If deal stage changed to a won stage (isWon = true):
+if (updatedDeal.stage changed AND newStage.isWon === true) {
+  // Find the linked CRM contact
+  const crmContact = await db.select().from(crmContacts)
+    .where(and(eq(crmContacts.id, deal.contactId), eq(crmContacts.companyId, companyId)))
+    .limit(1);
+
+  if (crmContact && crmContact.mainContactId) {
+    // Already linked to an operational contact — nothing to do
+  } else if (crmContact) {
+    // Check if an operational contact exists with matching email
+    const existing = await db.select().from(operationalContacts)
+      .where(and(
+        eq(operationalContacts.companyId, companyId),
+        eq(operationalContacts.email, crmContact.email)
+      )).limit(1);
+
+    if (existing.length === 0 && crmContact.email) {
+      // Create operational contact from CRM contact data
+      const newContact = await storage.createContact({
+        companyId,
+        firstName: crmContact.firstName,
+        lastName: crmContact.lastName,
+        email: crmContact.email,
+        phone: crmContact.phone ?? undefined,
+        status: 'estimate', // not yet active, just created
+      });
+      // Link back
+      await db.update(crmContacts)
+        .set({ mainContactId: newContact.id.toString() })
+        .where(eq(crmContacts.id, crmContact.id));
+    } else if (existing.length > 0) {
+      // Link to existing operational contact
+      await db.update(crmContacts)
+        .set({ mainContactId: existing[0].id.toString() })
+        .where(eq(crmContacts.id, crmContact.id));
+    }
+  }
+}
+```
+
+No UI change required. The link is visible on the CRM contact record via the existing `mainContactId` field — add a "Linked Client" badge on the contact detail page showing the operational contact name with a link to their client record.
+
+---
+
+## Fix 6 — CRM Email UI Label Fix
+
+### Problem
+The email compose UI in the CRM implies it sends email but it only logs a record. No actual email is sent. This misleads operators.
+
+### Changes
+This is a frontend-only fix. No backend changes.
+
+**On the CRM contact detail page, email tab:**
+- Rename the "Compose Email" or "Send Email" button to **"Log Email"**
+- Change the modal/form title to **"Log an Email"**
+- Change the submit button from "Send" to **"Save Log"**
+- Add a small note below the form: *"This logs a record of an email. To send email, use your regular email client."*
+- Change the `direction` field default to show both options clearly: "I sent this email" (outbound) / "I received this email" (inbound)
+
+**On the activity timeline:**
+- Email entries from the log should show "Email logged" not "Email sent"
+
+---
+
+## Final Checklist
+
+- [ ] crmPipelineStages table created, migration generated and reviewed
+- [ ] Default stages seeded on first access
+- [ ] Hardcoded stage array replaced with dynamic query in crm.ts
+- [ ] Won/lost logic uses isWon/isLost flags not slug comparisons
+- [ ] Pipeline stages settings UI with drag-and-drop reorder
+- [ ] lastReminderSentAt added to crmTasks, migration generated
+- [ ] Task reminders step added to reminders.ts job
+- [ ] callOutcome, callDurationMinutes, callDirection, nextActionDate added to crmActivities
+- [ ] Call logging UI shows structured fields when type = Call
+- [ ] Auto-create follow-up task when nextActionDate set
+- [ ] Bulk update and delete endpoints for deals and tasks
+- [ ] Bulk action UI on deals and tasks lists matching contacts pattern
+- [ ] Won deal triggers operational contact creation or link
+- [ ] "Linked Client" badge on CRM contact detail
+- [ ] Email log UI relabeled throughout — no backend changes
