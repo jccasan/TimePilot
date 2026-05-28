@@ -632,6 +632,23 @@ export async function runStartupMigrations(): Promise<void> {
     // crm_projects: schema has crm_company_id
     await client.query(`ALTER TABLE crm_projects ADD COLUMN IF NOT EXISTS crm_company_id VARCHAR`);
 
+    // crm_pipeline_stages: initial CREATE TABLE was missing slug, is_won, is_lost
+    await client.query(
+      `ALTER TABLE crm_pipeline_stages ADD COLUMN IF NOT EXISTS slug TEXT`
+    );
+    await client.query(
+      `UPDATE crm_pipeline_stages SET slug = lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')) WHERE slug IS NULL`
+    );
+    await client.query(
+      `ALTER TABLE crm_pipeline_stages ADD COLUMN IF NOT EXISTS is_won BOOLEAN NOT NULL DEFAULT false`
+    );
+    await client.query(
+      `ALTER TABLE crm_pipeline_stages ADD COLUMN IF NOT EXISTS is_lost BOOLEAN NOT NULL DEFAULT false`
+    );
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS uq_crm_pipeline_stages_company_slug ON crm_pipeline_stages (company_id, slug) WHERE slug IS NOT NULL`
+    );
+
     // crm_project_tasks: schema uses `status TEXT` (not completed BOOLEAN)
     await client.query(
       `ALTER TABLE crm_project_tasks ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'`
