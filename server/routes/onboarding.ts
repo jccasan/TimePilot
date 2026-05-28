@@ -7,6 +7,7 @@ import { getUserByEmail, createUserWithTempPassword } from "../services/app-auth
 import { sendEmail } from "../services/email";
 import { reportMeteredUsageSet } from "../services/stripe";
 import { syncLeadResponseConfigToAirtable } from "../services/airtable";
+import { geocodeAddress } from "../services/geocode";
 
 import {
   isAuthenticated,
@@ -276,6 +277,27 @@ export async function registerOnboardingRoutes(app: Express): Promise<void> {
           currency = ${currency},
           business_onboarding_step = ${step + 1}
           WHERE id = ${companyId}`);
+
+          // Geocode the address and populate start_latitude/start_longitude if
+          // they are not yet set (preserves any deliberately configured depot).
+          if (data.address) {
+            try {
+              const existing = await db.execute(
+                sql`SELECT start_latitude FROM companies WHERE id = ${companyId} LIMIT 1`
+              );
+              const hasCoords = existing.rows?.[0]?.start_latitude != null;
+              if (!hasCoords) {
+                const coords = await geocodeAddress(data.address as string, null, null, null, country);
+                if (coords) {
+                  await db.execute(
+                    sql`UPDATE companies SET start_latitude = ${coords.latitude}, start_longitude = ${coords.longitude} WHERE id = ${companyId}`
+                  );
+                }
+              }
+            } catch {
+              // Non-fatal — optimizer will still work, just without a start point
+            }
+          }
         } else if (step === 1 && data) {
           await db.execute(
             sql`UPDATE companies SET business_description = ${data.businessDescription || null}, service_area_description = ${data.serviceAreaDescription || null}, business_onboarding_step = ${step + 1} WHERE id = ${companyId}`
