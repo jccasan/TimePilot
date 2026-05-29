@@ -243,7 +243,8 @@ function exportPdf(
   title: string,
   headers: string[],
   rows: (string | number | null | undefined)[][],
-  subtitle?: string
+  subtitle?: string,
+  companyName?: string
 ) {
   const doc = new jsPDF({ orientation: "landscape" });
   const GREEN: [number, number, number] = [45, 138, 94];
@@ -256,6 +257,11 @@ function exportPdf(
   doc.setFont("helvetica", "bold");
   doc.setTextColor(255, 255, 255);
   doc.text(title, 14, 13);
+  if (companyName) {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(companyName, doc.internal.pageSize.width - 14, 13, { align: "right" });
+  }
   if (subtitle) {
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
@@ -289,7 +295,8 @@ async function exportChartPdf(
   title: string,
   chartRef: React.RefObject<HTMLDivElement>,
   headers: string[],
-  rows: (string | number | null | undefined)[][]
+  rows: (string | number | null | undefined)[][],
+  companyName?: string
 ) {
   const { default: html2canvas } = await import("html2canvas");
   const doc = new jsPDF({ orientation: "landscape" });
@@ -302,6 +309,11 @@ async function exportChartPdf(
   doc.setFont("helvetica", "bold");
   doc.setTextColor(255, 255, 255);
   doc.text(title, 14, 13);
+  if (companyName) {
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(companyName, doc.internal.pageSize.width - 14, 13, { align: "right" });
+  }
   doc.setFontSize(8);
   doc.setTextColor(...GRAY);
   doc.setFont("helvetica", "normal");
@@ -444,9 +456,11 @@ function KpiStrip() {
 function FinanceTab({
   period,
   onPeriodChange,
+  companyName,
 }: {
   period: string;
   onPeriodChange: (v: string) => void;
+  companyName?: string;
 }) {
   const { data: summary, isLoading: summaryLoading } = useQuery<ReportData>({
     queryKey: [`/api/reports/summary?period=${period}`],
@@ -493,7 +507,8 @@ function FinanceTab({
         fmt(r.days90plus),
         fmt(r.total),
       ]),
-      `Accounts receivable aging — ${new Date().toLocaleDateString()}`
+      `Accounts receivable aging — ${new Date().toLocaleDateString()}`,
+      companyName
     );
   }, [openBalance]);
 
@@ -512,7 +527,8 @@ function FinanceTab({
       "Revenue by Period",
       revenueChartRef,
       ["Month", "Revenue"],
-      summary.monthlyRevenue.map((r) => [r.month, fmt(r.revenue)])
+      summary.monthlyRevenue.map((r) => [r.month, fmt(r.revenue)]),
+      companyName
     );
   }, [summary]);
 
@@ -536,7 +552,8 @@ function FinanceTab({
       "Revenue by Service Frequency",
       rfChartRef,
       ["Frequency", "Plans", "Est. Monthly Revenue"],
-      revFreq.map((r) => [r.frequency, r.planCount, fmt(r.estimatedMonthlyRevenue)])
+      revFreq.map((r) => [r.frequency, r.planCount, fmt(r.estimatedMonthlyRevenue)]),
+      companyName
     );
   }, [revFreq]);
 
@@ -923,7 +940,7 @@ function FinanceTab({
 
 // ─── Operations Tab ───────────────────────────────────────────────────────────
 
-function OperationsTab() {
+function OperationsTab({ companyName }: { companyName?: string }) {
   const today = new Date().toISOString().split("T")[0];
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(thirtyDaysAgo);
@@ -977,7 +994,8 @@ function OperationsTab() {
         r.status,
         r.durationMinutes != null ? `${Math.round(r.durationMinutes)} min` : "—",
       ]),
-      `${appliedStart} to ${appliedEnd}`
+      `${appliedStart} to ${appliedEnd}`,
+      companyName
     );
   }, [jobs, appliedStart, appliedEnd]);
 
@@ -1026,7 +1044,8 @@ function OperationsTab() {
         Number(r.avgDistanceMiles).toFixed(1),
         fmt(Number(r.revenuePerStop)),
       ]),
-      `${appliedStart} to ${appliedEnd}`
+      `${appliedStart} to ${appliedEnd}`,
+      companyName
     );
   }, [routeSummary, appliedStart, appliedEnd]);
 
@@ -1059,7 +1078,8 @@ function OperationsTab() {
         `${r.completionRate}%`,
         r.avgMinutesPerStop,
       ]),
-      `${appliedStart} to ${appliedEnd}`
+      `${appliedStart} to ${appliedEnd}`,
+      companyName
     );
   }, [techPerf, appliedStart, appliedEnd]);
 
@@ -1435,9 +1455,11 @@ function OperationsTab() {
 function CustomersTab({
   period,
   onPeriodChange,
+  companyName,
 }: {
   period: string;
   onPeriodChange: (v: string) => void;
+  companyName?: string;
 }) {
   const months = periodToMonths(period);
 
@@ -1470,7 +1492,8 @@ function CustomersTab({
       "Active Clients Trend",
       activeClientsChartRef,
       ["Month", "Active Clients"],
-      activeClientsTrend.map((d) => [d.label, d.activeCount])
+      activeClientsTrend.map((d) => [d.label, d.activeCount]),
+      companyName
     );
   }, [activeClientsTrend]);
 
@@ -1488,7 +1511,9 @@ function CustomersTab({
     exportPdf(
       "Cross-sell Fulfilled",
       ["Contact", "Upgrade Type", "Detail", "Est. Monthly"],
-      crossSell.map((r) => [r.contactName, r.upgradeType, r.detail, fmt(r.monthlyValue)])
+      crossSell.map((r) => [r.contactName, r.upgradeType, r.detail, fmt(r.monthlyValue)]),
+      undefined,
+      companyName
     );
   }, [crossSell]);
 
@@ -1516,7 +1541,8 @@ function CustomersTab({
       "New vs Lost Clients",
       newVsLostChartRef,
       ["Month", "New", "Cancelled", "Net"],
-      metrics.monthly.map((m) => [m.month, m.newClients, m.cancelledClients, m.netClients])
+      metrics.monthly.map((m) => [m.month, m.newClients, m.cancelledClients, m.netClients]),
+      companyName
     );
   }, [metrics]);
 
@@ -2334,7 +2360,7 @@ function ReportBuilderDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
                     <SelectItem key={d} value={String(d)}>
                       {d}
                     </SelectItem>
@@ -2411,6 +2437,9 @@ export default function Reports() {
   // Global period selector — shared between Finance + Customers
   const [period, setPeriod] = useState("6m");
 
+  const { data: companyData } = useQuery<{ name: string }>({ queryKey: ["/api/company"] });
+  const companyName = companyData?.name;
+
   return (
     <div className="p-4 md:p-6 overflow-auto h-full">
       <div className="mb-5">
@@ -2453,15 +2482,15 @@ export default function Reports() {
         </TabsList>
 
         <TabsContent value="finance">
-          <FinanceTab period={period} onPeriodChange={setPeriod} />
+          <FinanceTab period={period} onPeriodChange={setPeriod} companyName={companyName} />
         </TabsContent>
 
         <TabsContent value="operations">
-          <OperationsTab />
+          <OperationsTab companyName={companyName} />
         </TabsContent>
 
         <TabsContent value="customers">
-          <CustomersTab period={period} onPeriodChange={setPeriod} />
+          <CustomersTab period={period} onPeriodChange={setPeriod} companyName={companyName} />
         </TabsContent>
 
         <TabsContent value="metrics">

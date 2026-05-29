@@ -2543,7 +2543,16 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
     try {
       const { companyId } = await getCompanyContext(req);
       const id = String(req.params.id);
-      const report = await storage.updateScheduledReport(id, companyId, req.body);
+      const { name, sections, frequency, dayOfWeek, dayOfMonth, sendHour, recipients } = req.body;
+      const report = await storage.updateScheduledReport(id, companyId, {
+        name,
+        sections,
+        frequency,
+        dayOfWeek,
+        dayOfMonth,
+        sendHour,
+        recipients,
+      });
       res.json(report);
     } catch (err) {
       handleError(res, err);
