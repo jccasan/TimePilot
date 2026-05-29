@@ -2344,8 +2344,23 @@ async function backfillPropertyCoordinates() {
       console.log(
         `[Geocode Backfill] Found ${rows.length} properties missing coordinates, geocoding now...`
       );
+
+      // Check that we have a Mapbox token before attempting any API calls.
+      const hasToken = !!(process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN);
+      if (!hasToken) {
+        console.error(
+          "[Geocode Backfill] No MAPBOX_PUBLIC_TOKEN or MAPBOX_SECRET_TOKEN — cannot geocode"
+        );
+        return;
+      }
+
       let geocoded = 0;
+      const failed: string[] = [];
+
       for (const row of rows) {
+        const addressStr = [row.street_address, row.city, row.state, row.zip_code]
+          .filter(Boolean)
+          .join(", ");
         try {
           const coords = await geocodeAddress(
             row.street_address,
@@ -2359,12 +2374,31 @@ async function backfillPropertyCoordinates() {
               [coords.latitude, coords.longitude, row.id]
             );
             geocoded++;
+            console.log(
+              `[Geocode Backfill] OK  ${addressStr} → (${coords.latitude}, ${coords.longitude})`
+            );
+          } else {
+            failed.push(`${row.id}: ${addressStr}`);
+            console.warn(`[Geocode Backfill] MISS ${addressStr} — no result from Mapbox`);
           }
-        } catch {
-          // Skip individual failures silently
+        } catch (err) {
+          failed.push(`${row.id}: ${addressStr}`);
+          console.warn(
+            `[Geocode Backfill] ERR  ${addressStr} —`,
+            err instanceof Error ? err.message : String(err)
+          );
         }
+        // Small delay to stay within Mapbox rate limits (600 req/min on free tier)
+        await new Promise((resolve) => setTimeout(resolve, 110));
       }
+
       console.log(`[Geocode Backfill] Geocoded ${geocoded} of ${rows.length} properties`);
+      if (failed.length > 0) {
+        console.warn(
+          `[Geocode Backfill] ${failed.length} properties could not be geocoded — review their addresses:\n` +
+            failed.map((f) => `  • ${f}`).join("\n")
+        );
+      }
     } finally {
       await pool.query(`SELECT pg_advisory_unlock(hashtext('property_geocode_backfill'))`);
     }

@@ -713,12 +713,8 @@ export async function runStartupMigrations(): Promise<void> {
     );
 
     // crm_activities: call-tracking and next-action columns missing from CREATE TABLE
-    await client.query(
-      `ALTER TABLE crm_activities ADD COLUMN IF NOT EXISTS call_direction TEXT`
-    );
-    await client.query(
-      `ALTER TABLE crm_activities ADD COLUMN IF NOT EXISTS call_outcome TEXT`
-    );
+    await client.query(`ALTER TABLE crm_activities ADD COLUMN IF NOT EXISTS call_direction TEXT`);
+    await client.query(`ALTER TABLE crm_activities ADD COLUMN IF NOT EXISTS call_outcome TEXT`);
     await client.query(
       `ALTER TABLE crm_activities ADD COLUMN IF NOT EXISTS call_duration_minutes INTEGER`
     );
@@ -727,12 +723,8 @@ export async function runStartupMigrations(): Promise<void> {
     );
 
     // crm_email_campaigns: from_email and from_name missing from initial CREATE TABLE
-    await client.query(
-      `ALTER TABLE crm_email_campaigns ADD COLUMN IF NOT EXISTS from_email TEXT`
-    );
-    await client.query(
-      `ALTER TABLE crm_email_campaigns ADD COLUMN IF NOT EXISTS from_name TEXT`
-    );
+    await client.query(`ALTER TABLE crm_email_campaigns ADD COLUMN IF NOT EXISTS from_email TEXT`);
+    await client.query(`ALTER TABLE crm_email_campaigns ADD COLUMN IF NOT EXISTS from_name TEXT`);
 
     // crm_campaign_recipients table (missing from initial migration)
     await client.query(`
@@ -1516,14 +1508,14 @@ export async function runStartupMigrations(): Promise<void> {
     await client.query(
       `ALTER TABLE visits ADD COLUMN IF NOT EXISTS proof_of_service_photo_before TEXT`
     );
-    await client.query(
-      `ALTER TABLE visits ADD COLUMN IF NOT EXISTS gate_closed_photo TEXT`
-    );
+    await client.query(`ALTER TABLE visits ADD COLUMN IF NOT EXISTS gate_closed_photo TEXT`);
     // invoices: reminder_count (automated invoice follow-up tracking)
     await client.query(
       `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 0`
     );
-    console.log("[Migration] Main-schema missing columns ensured (dedicated_phone_number, billing_onboarding_stage, proof photos, reminder_count)");
+    console.log(
+      "[Migration] Main-schema missing columns ensured (dedicated_phone_number, billing_onboarding_stage, proof photos, reminder_count)"
+    );
 
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {

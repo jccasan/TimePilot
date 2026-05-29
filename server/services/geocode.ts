@@ -126,14 +126,19 @@ export async function geocodeAddress(
   const cached = geocodeCache.get(cacheKey);
   if (cached && isFresh(cached)) return cached.value;
 
-  // L2: database cache (only serve if within the 30-day DB TTL)
+  // L2: database cache (only serve POSITIVE hits within the 30-day DB TTL)
+  // Negative (null) results are intentionally not served from the DB cache so that
+  // the geocode backfill can retry properties that previously failed — e.g. due to
+  // Mapbox rate-limits, a bad token, or a transient network error on a prior startup.
   try {
     const dbEntry = await storage.getGeocodeCache(cacheKey);
-    if (dbEntry && Date.now() - dbEntry.cachedAt.getTime() < DB_TTL_MS) {
-      const result =
-        dbEntry.latitude && dbEntry.longitude
-          ? { latitude: dbEntry.latitude, longitude: dbEntry.longitude }
-          : null;
+    if (
+      dbEntry &&
+      dbEntry.latitude &&
+      dbEntry.longitude &&
+      Date.now() - dbEntry.cachedAt.getTime() < DB_TTL_MS
+    ) {
+      const result = { latitude: dbEntry.latitude, longitude: dbEntry.longitude };
       geocodeCache.set(cacheKey, { value: result, storedAt: Date.now() });
       return result;
     }
