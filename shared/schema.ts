@@ -617,6 +617,8 @@ export const contacts = pgTable(
     utmMedium: varchar("utm_medium", { length: 255 }),
     utmCampaign: varchar("utm_campaign", { length: 255 }),
     cancellationReason: text("cancellation_reason"),
+    billingSetupToken: text("billing_setup_token"),
+    billingSetupTokenExpiresAt: timestamp("billing_setup_token_expires_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

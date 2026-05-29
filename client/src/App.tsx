@@ -105,6 +105,7 @@ const UnmatchedEmails = lazy(() => import("@/pages/unmatched-emails"));
 const FleetPage = lazy(() => import("@/pages/fleet"));
 const FleetDetailPage = lazy(() => import("@/pages/fleet-detail"));
 const FleetSummaryPage = lazy(() => import("@/pages/fleet-summary"));
+const BillingSetupPage = lazy(() => import("@/pages/billing-setup-page"));
 
 function PageLoader() {
   return (
@@ -943,6 +944,9 @@ function AppContent() {
   const isInvoicePayPath =
     typeof window !== "undefined" && /^\/invoice\/[^/]+\/pay$/.test(window.location.pathname);
 
+  const isBillingSetupPath =
+    typeof window !== "undefined" && /^\/billing-setup\/[^/]+/.test(window.location.pathname);
+
   const isPrivacyPolicyPath =
     typeof window !== "undefined" && window.location.pathname === "/privacy-policy";
 
@@ -1039,6 +1043,14 @@ function AppContent() {
     return (
       <Suspense fallback={<PageLoader />}>
         <InvoicePayPage />
+      </Suspense>
+    );
+  }
+
+  if (isBillingSetupPath) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <BillingSetupPage />
       </Suspense>
     );
   }

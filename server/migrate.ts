@@ -1725,6 +1725,19 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] FleetPilot vehicle limit column and demo access ensured");
 
+    // Billing setup token columns for public card-setup links (Task #1200)
+    await client.query(`
+      ALTER TABLE contacts
+        ADD COLUMN IF NOT EXISTS billing_setup_token TEXT,
+        ADD COLUMN IF NOT EXISTS billing_setup_token_expires_at TIMESTAMP
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_contacts_billing_setup_token
+        ON contacts (billing_setup_token)
+        WHERE billing_setup_token IS NOT NULL
+    `);
+    console.log("[Migration] contacts.billing_setup_token columns verified");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

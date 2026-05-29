@@ -761,6 +761,21 @@ export async function suggestServiceDay(
   return [...dayBest.values()].sort((a, b) => a.distanceKm - b.distanceKm)[0];
 }
 
+const BILLING_SETUP_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+export async function generateBillingSetupToken(
+  contactId: string,
+  companyId: string
+): Promise<string> {
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + BILLING_SETUP_TOKEN_TTL_MS);
+  await storage.updateContact(contactId, companyId, {
+    billingSetupToken: token,
+    billingSetupTokenExpiresAt: expiresAt,
+  });
+  return token;
+}
+
 export async function provisionPortalAccess(
   contactId: string,
   companyId: string,
@@ -826,6 +841,17 @@ export async function provisionPortalAccess(
   const portalUrl = `${portalBaseUrl}/portal/login`;
   const serviceDetails = opts?.serviceDetails;
 
+  // Generate billing setup token if Stripe Connect is configured for the company
+  let billingSetupUrl: string | null = null;
+  if (company?.stripeConnectOnboarded) {
+    try {
+      const billingToken = await generateBillingSetupToken(contactId, companyId);
+      billingSetupUrl = `${portalBaseUrl}/billing-setup/${billingToken}`;
+    } catch (tokenErr) {
+      console.error("[provisionPortalAccess] Failed to generate billing setup token:", tokenErr);
+    }
+  }
+
   const serviceSection = serviceDetails
     ? `
         <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; margin: 16px 0;">
@@ -835,6 +861,19 @@ export async function provisionPortalAccess(
           ${serviceDetails.pricePerVisit ? `<p style="margin: 4px 0;">💵 <strong>Price per Visit:</strong> $${serviceDetails.pricePerVisit}</p>` : ""}
           ${serviceDetails.nextVisitDate ? `<p style="margin: 4px 0;">📆 <strong>Next Visit:</strong> ${serviceDetails.nextVisitDate}</p>` : ""}
         </div>`
+    : "";
+
+  const billingSection = billingSetupUrl
+    ? `
+        <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 16px; border-radius: 8px; margin: 16px 0;">
+          <p style="margin: 0 0 8px 0; font-weight: bold; color: #1e40af;">Add a Payment Method</p>
+          <p style="margin: 0 0 12px 0; font-size: 14px; color: #374151;">Save a card on file for easy invoice payments — no portal login required.</p>
+          <a href="${billingSetupUrl}" style="display: inline-block; background-color: #1d4ed8; color: white; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 14px;">Add Payment Method</a>
+        </div>`
+    : "";
+
+  const billingText = billingSetupUrl
+    ? `\nAdd a Payment Method (no login needed): ${billingSetupUrl}\n`
     : "";
 
   const serviceText = serviceDetails
@@ -856,7 +895,7 @@ export async function provisionPortalAccess(
     subject: `Your ${company?.name || "ScooPilot"} Customer Portal Access`,
     senderName: company?.name || undefined,
     replyTo: company?.email || undefined,
-    text: `Hi ${contact.firstName},\n\nYou now have access to the customer portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\n${serviceText ? "Your Service Details:\n" + serviceText + "\n\n" : ""}Please log in and change your password.\n\nThank you!`,
+    text: `Hi ${contact.firstName},\n\nYou now have access to the customer portal for ${company?.name || "ScooPilot"}.\n\nPortal Link: ${portalUrl}\nEmail: ${contact.email}\nTemporary Password: ${tempPassword}\n\n${serviceText ? "Your Service Details:\n" + serviceText + "\n\n" : ""}${billingText}Please log in and change your password.\n\nThank you!`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #2d8a5e; padding: 20px; text-align: center;">
@@ -871,6 +910,7 @@ export async function provisionPortalAccess(
             <p style="margin: 0;">Temporary Password: <strong>${tempPassword}</strong></p>
           </div>
           ${serviceSection}
+          ${billingSection}
           <a href="${portalUrl}" style="display: inline-block; background-color: #2d8a5e; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin: 16px 0;">Log In to Portal</a>
           <p style="color: #6b7280; font-size: 14px;">Or copy this link: ${portalUrl}</p>
           <p style="color: #6b7280; font-size: 14px;">View your service schedule, invoices, and manage your account.</p>

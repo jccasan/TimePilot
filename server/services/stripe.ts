@@ -307,6 +307,26 @@ export async function createCheckoutSession(params: {
   return { url: session.url!, sessionId: session.id };
 }
 
+export async function createBillingSetupCheckoutSession(params: {
+  customerId: string;
+  successUrl: string;
+  cancelUrl: string;
+  stripeConnectAccountId?: string | null;
+}): Promise<{ url: string; sessionId: string }> {
+  const stripe = getStripe();
+  const session = await stripe.checkout.sessions.create(
+    {
+      customer: params.customerId,
+      mode: "setup",
+      payment_method_types: ["card"],
+      success_url: params.successUrl,
+      cancel_url: params.cancelUrl,
+    },
+    reqOpts(params.stripeConnectAccountId)
+  );
+  return { url: session.url!, sessionId: session.id };
+}
+
 export async function detachPaymentMethod(
   paymentMethodId: string,
   stripeAccount?: string | null

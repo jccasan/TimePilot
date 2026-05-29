@@ -28,6 +28,7 @@ import {
   createSetupIntent,
   retrieveSetupIntent,
   getCustomerPaymentMethods,
+  createBillingSetupCheckoutSession,
 } from "../services/stripe";
 import { checkIpRisk, getClientIp, getCountryCode } from "../services/ip-risk";
 import { calculateQuotePricing, type ResidentialQuoteInput } from "../services/quote-pricing";
@@ -1736,6 +1737,143 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
           })();
         }
       }
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
+   * GET /api/public/billing-setup/:token
+   * Validates a billing setup token and returns basic display info.
+   */
+  app.get("/api/public/billing-setup/:token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ error: "Token is required" });
+      }
+
+      const billingResult = await db.execute(sql`
+        SELECT c.id, c.company_id, c.first_name, c.billing_setup_token, c.billing_setup_token_expires_at,
+               c.stripe_customer_id, co.name AS company_name, co.stripe_connect_onboarded, co.stripe_connect_account_id
+        FROM contacts c
+        JOIN companies co ON co.id = c.company_id
+        WHERE c.billing_setup_token = ${token}
+        LIMIT 1
+      `);
+      const row = billingResult.rows?.[0];
+
+      if (!row) {
+        return res.json({ expired: true, alreadyUsed: false });
+      }
+
+      const expiresAt = row.billing_setup_token_expires_at as Date | null;
+      if (!expiresAt || new Date(expiresAt) < new Date()) {
+        return res.json({ expired: true, alreadyUsed: false });
+      }
+
+      if (!row.stripe_connect_onboarded) {
+        return res.json({ expired: true, alreadyUsed: false });
+      }
+
+      const connectAcct = row.stripe_connect_onboarded
+        ? (row.stripe_connect_account_id as string | null)
+        : null;
+      let cardOnFile = false;
+      if (row.stripe_customer_id) {
+        try {
+          const methods = await getCustomerPaymentMethods(
+            row.stripe_customer_id as string,
+            connectAcct
+          );
+          cardOnFile = methods.length > 0;
+        } catch {
+          // ignore — if we can't check, just show the form
+        }
+      }
+
+      return res.json({
+        expired: false,
+        alreadyUsed: false,
+        contactFirstName: row.first_name as string,
+        companyName: row.company_name as string,
+        cardOnFile,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
+   * POST /api/public/billing-setup/:token/checkout
+   * Creates a Stripe Checkout (setup mode) session for the contact.
+   */
+  app.post("/api/public/billing-setup/:token/checkout", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ error: "Token is required" });
+      }
+
+      if (!isStripeConfigured()) {
+        return res.status(400).json({ error: "Stripe is not configured" });
+      }
+
+      const checkoutResult = await db.execute(sql`
+        SELECT c.id, c.company_id, c.first_name, c.last_name, c.email,
+               c.billing_setup_token, c.billing_setup_token_expires_at, c.stripe_customer_id,
+               co.name AS company_name, co.stripe_connect_onboarded, co.stripe_connect_account_id
+        FROM contacts c
+        JOIN companies co ON co.id = c.company_id
+        WHERE c.billing_setup_token = ${token}
+        LIMIT 1
+      `);
+      const row = checkoutResult.rows?.[0];
+
+      if (!row) {
+        return res.status(404).json({ error: "Invalid or expired link" });
+      }
+
+      const expiresAt = row.billing_setup_token_expires_at as Date | null;
+      if (!expiresAt || new Date(expiresAt) < new Date()) {
+        return res.status(410).json({ error: "This link has expired" });
+      }
+
+      if (!row.stripe_connect_onboarded) {
+        return res.status(400).json({ error: "Billing is not configured for this business" });
+      }
+
+      const connectAcct = row.stripe_connect_onboarded
+        ? (row.stripe_connect_account_id as string | null)
+        : null;
+      const contactId = row.id as string;
+      const companyId = row.company_id as string;
+      const contactName = `${row.first_name} ${row.last_name}`.trim();
+
+      const { customerId, wasRecreated } = await ensureConnectedCustomer({
+        currentCustomerId: row.stripe_customer_id as string | null,
+        stripeAccount: connectAcct,
+        email: row.email as string | undefined,
+        name: contactName,
+        metadata: { contactId, companyId },
+      });
+
+      if (wasRecreated || !row.stripe_customer_id) {
+        await storage.updateContact(contactId, companyId, { stripeCustomerId: customerId });
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const successUrl = `${baseUrl}/billing-setup/${token}?success=1`;
+      const cancelUrl = `${baseUrl}/billing-setup/${token}`;
+
+      const { url } = await createBillingSetupCheckoutSession({
+        customerId,
+        successUrl,
+        cancelUrl,
+        stripeConnectAccountId: connectAcct,
+      });
+
+      return res.json({ url });
     } catch (err) {
       handleError(res, err);
     }
