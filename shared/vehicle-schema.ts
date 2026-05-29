@@ -31,6 +31,8 @@ export const vehicles = pgTable("vehicles", {
   pendingAlertCount: integer("pending_alert_count").notNull().default(0),
   estimatedCostPerMile: decimal("estimated_cost_per_mile", { precision: 8, scale: 4 }),
   notes: text("notes"),
+  statusChangedAt1: timestamp("status_changed_at_1"),
+  statusChangedAt2: timestamp("status_changed_at_2"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),

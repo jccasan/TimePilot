@@ -20,7 +20,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
-import { ChevronLeft, Fuel, FileText, Plus, Trash2, Gauge } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ChevronLeft, Fuel, FileText, Plus, Trash2, Gauge, ArrowUp } from "lucide-react";
 import { format } from "date-fns";
 
 type Vehicle = {
@@ -178,6 +185,39 @@ export default function FleetDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [downgradeOpen, setDowngradeOpen] = useState(false);
   const [selectedDowngradePlan, setSelectedDowngradePlan] = useState<string | null>(null);
+  const [statusLimitOpen, setStatusLimitOpen] = useState(false);
+
+  const setStatusMutation = useMutation({
+    mutationFn: async (newStatus: string) => {
+      const res = await apiRequest("PATCH", `/api/vehicles/${id}`, { status: newStatus });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        throw { status: res.status, ...body };
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/vehicles/${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles/access"] });
+      toast({ title: "Vehicle status updated" });
+    },
+    onError: (err: unknown) => {
+      const e = err as { status?: number; limitReached?: boolean; rateLimited?: boolean; retryAfter?: string };
+      if (e?.limitReached) {
+        setStatusLimitOpen(true);
+      } else if (e?.rateLimited && e.retryAfter) {
+        const retryDate = new Date(e.retryAfter);
+        toast({
+          title: "Status change limit reached",
+          description: `Status can only be changed twice per 7 days. Next change available ${format(retryDate, "MMM d, yyyy")}.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Failed to update status", variant: "destructive" });
+      }
+    },
+  });
 
   const deleteOdom = useMutation({
     mutationFn: (logId: string) => apiRequest("DELETE", `/api/vehicles/${id}/odometer/${logId}`),
@@ -361,13 +401,33 @@ export default function FleetDetailPage() {
               {vehicle.pendingAlertCount} alerts
             </Badge>
           )}
-          <Badge
-            variant="secondary"
-            className={`capitalize ${vehicle.status === "active" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : ""}`}
-            data-testid="vehicle-status"
-          >
-            {vehicle.status}
-          </Badge>
+          {isAdmin ? (
+            <Select
+              value={vehicle.status}
+              onValueChange={(v) => setStatusMutation.mutate(v)}
+              disabled={setStatusMutation.isPending}
+            >
+              <SelectTrigger
+                className={`h-7 w-32 text-xs font-medium capitalize border rounded-full px-2 ${vehicle.status === "active" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300 dark:border-green-700" : "bg-muted text-muted-foreground border-border"}`}
+                data-testid="select-vehicle-status"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="sold">Sold</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            <Badge
+              variant="secondary"
+              className={`capitalize ${vehicle.status === "active" ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : ""}`}
+              data-testid="vehicle-status"
+            >
+              {vehicle.status}
+            </Badge>
+          )}
           {isAdmin && (
             <Button
               size="icon"
@@ -1387,6 +1447,37 @@ export default function FleetDetailPage() {
           </Dialog>
         );
       })()}
+
+      {/* Status-change limit: vehicle plan cap reached on reactivation */}
+      <Dialog open={statusLimitOpen} onOpenChange={setStatusLimitOpen}>
+        <DialogContent data-testid="dialog-status-limit">
+          <DialogHeader>
+            <DialogTitle>Vehicle limit reached</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Your current FleetPilot plan allows{" "}
+            {access?.vehicleLimit ?? 0} active{" "}
+            {(access?.vehicleLimit ?? 0) === 1 ? "vehicle" : "vehicles"}. Upgrade your plan to
+            reactivate this vehicle.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStatusLimitOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => {
+                setStatusLimitOpen(false);
+                window.location.href = "/fleet";
+              }}
+              data-testid="button-status-limit-upgrade"
+            >
+              <ArrowUp className="h-4 w-4 mr-1" />
+              View upgrade options
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

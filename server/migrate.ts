@@ -1725,6 +1725,14 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] FleetPilot vehicle limit column and demo access ensured");
 
+    // Status-change rate-limit columns for FleetPilot (Task #1203)
+    await client.query(`
+      ALTER TABLE vehicles
+        ADD COLUMN IF NOT EXISTS status_changed_at_1 TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS status_changed_at_2 TIMESTAMP
+    `);
+    console.log("[Migration] FleetPilot vehicle status_changed_at_1/2 columns ensured");
+
     // Billing setup token columns for public card-setup links (Task #1200)
     await client.query(`
       ALTER TABLE contacts

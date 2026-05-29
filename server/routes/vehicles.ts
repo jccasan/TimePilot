@@ -91,7 +91,7 @@ export async function registerVehicleRoutes(app: Express): Promise<void> {
       let vehicleCount = 0;
       if (hasAccess) {
         const vlist = await repo.listVehicles(companyId);
-        vehicleCount = vlist.filter((v) => v.status !== "sold").length;
+        vehicleCount = vlist.filter((v) => v.status === "active").length;
       }
       res.json({
         enabled: company.vehicleTrackerEnabled || isDemo,
@@ -125,7 +125,7 @@ export async function registerVehicleRoutes(app: Express): Promise<void> {
       requireRole(ctx.role, ["owner", "admin"]);
       if (!ctx.isDemo && ctx.vehicleLimit !== null) {
         const existing = await repo.listVehicles(ctx.companyId);
-        const activeCount = existing.filter((v) => v.status !== "sold").length;
+        const activeCount = existing.filter((v) => v.status === "active").length;
         if (activeCount >= ctx.vehicleLimit) {
           return res.status(403).json({
             error: "Vehicle limit reached",
@@ -250,7 +250,51 @@ export async function registerVehicleRoutes(app: Express): Promise<void> {
       const id = p(req.params.id);
       const existing = await repo.getVehicle(id, ctx.companyId);
       if (!existing) return res.status(404).json({ error: "Vehicle not found" });
-      const updated = await repo.updateVehicle(id, ctx.companyId, req.body);
+
+      const newStatus: string | undefined = req.body.status;
+      const statusIsChanging = newStatus !== undefined && newStatus !== existing.status;
+
+      if (statusIsChanging && !ctx.isDemo) {
+        // ── Rate-limit: max 2 status changes per vehicle in any rolling 7-day window ──
+        const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+        const cutoff = new Date(Date.now() - SEVEN_DAYS_MS);
+        const recent = [existing.statusChangedAt1, existing.statusChangedAt2].filter(
+          (t): t is Date => t instanceof Date && t > cutoff
+        );
+        if (recent.length >= 2) {
+          // retryAfter = oldest of the two recent timestamps + 7 days
+          const oldest = recent.reduce((a, b) => (a < b ? a : b));
+          const retryAfter = new Date(oldest.getTime() + SEVEN_DAYS_MS);
+          return res.status(429).json({
+            error: "Status change rate limit exceeded",
+            rateLimited: true,
+            retryAfter: retryAfter.toISOString(),
+          });
+        }
+
+        // ── Limit enforcement: reactivating a vehicle must not exceed the plan cap ──
+        if (newStatus === "active" && existing.status !== "active" && ctx.vehicleLimit !== null) {
+          const all = await repo.listVehicles(ctx.companyId);
+          const activeCount = all.filter((v) => v.status === "active").length;
+          if (activeCount >= ctx.vehicleLimit) {
+            return res.status(403).json({
+              error: "Vehicle limit reached",
+              limitReached: true,
+              vehicleLimit: ctx.vehicleLimit,
+              vehicleCount: activeCount,
+            });
+          }
+        }
+      }
+
+      // Build the update payload; slide the status-change window if status is changing
+      const updatePayload: Record<string, unknown> = { ...req.body };
+      if (statusIsChanging && !ctx.isDemo) {
+        updatePayload.statusChangedAt2 = existing.statusChangedAt1 ?? null;
+        updatePayload.statusChangedAt1 = new Date();
+      }
+
+      const updated = await repo.updateVehicle(id, ctx.companyId, updatePayload);
       res.json(updated);
     } catch (err) {
       handleError(res, err);
