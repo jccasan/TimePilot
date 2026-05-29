@@ -1996,40 +1996,46 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
     try {
       const { companyId } = await getCompanyContext(req);
       const today = new Date().toISOString().split("T")[0];
+      // Subtract partial payments from each invoice to get true outstanding balance
       const rows = await db.execute(sql`
         SELECT
           c.id                     AS "contactId",
           c.first_name || ' ' || c.last_name AS "contactName",
           COALESCE(SUM(CASE
-            WHEN i.due_date IS NULL OR i.due_date::date >= ${today}::date THEN i.total::numeric
-            ELSE 0
+            WHEN i.due_date IS NULL OR i.due_date::date >= ${today}::date
+            THEN (i.total::numeric - COALESCE(paid.paid_amount,0)) ELSE 0
           END), 0) AS "current",
           COALESCE(SUM(CASE
             WHEN i.due_date IS NOT NULL
               AND i.due_date::date < ${today}::date
-              AND ${today}::date - i.due_date::date <= 30 THEN i.total::numeric
-            ELSE 0
+              AND ${today}::date - i.due_date::date <= 30
+            THEN (i.total::numeric - COALESCE(paid.paid_amount,0)) ELSE 0
           END), 0) AS "days30",
           COALESCE(SUM(CASE
             WHEN i.due_date IS NOT NULL
               AND ${today}::date - i.due_date::date > 30
-              AND ${today}::date - i.due_date::date <= 60 THEN i.total::numeric
-            ELSE 0
+              AND ${today}::date - i.due_date::date <= 60
+            THEN (i.total::numeric - COALESCE(paid.paid_amount,0)) ELSE 0
           END), 0) AS "days60",
           COALESCE(SUM(CASE
             WHEN i.due_date IS NOT NULL
-              AND ${today}::date - i.due_date::date > 60 THEN i.total::numeric
-            ELSE 0
+              AND ${today}::date - i.due_date::date > 60
+            THEN (i.total::numeric - COALESCE(paid.paid_amount,0)) ELSE 0
           END), 0) AS "days90plus",
-          COALESCE(SUM(i.total::numeric), 0) AS "total",
+          COALESCE(SUM(i.total::numeric - COALESCE(paid.paid_amount,0)), 0) AS "total",
           MIN(i.due_date)          AS "oldestInvoiceDate"
         FROM contacts c
         JOIN invoices i ON i.contact_id = c.id AND i.company_id = ${companyId}
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(amount::numeric), 0) AS paid_amount
+          FROM invoice_payments
+          WHERE invoice_id = i.id
+        ) paid ON true
         WHERE c.company_id = ${companyId}
           AND i.status IN ('sent','pending','draft')
         GROUP BY c.id, c.first_name, c.last_name
-        HAVING SUM(i.total::numeric) > 0
-        ORDER BY SUM(i.total::numeric) DESC
+        HAVING SUM(i.total::numeric - COALESCE(paid.paid_amount,0)) > 0
+        ORDER BY SUM(i.total::numeric - COALESCE(paid.paid_amount,0)) DESC
       `);
       res.json(rows.rows);
     } catch (err) {
@@ -2042,7 +2048,9 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
     try {
       const { companyId } = await getCompanyContext(req);
       const today = new Date().toISOString().split("T")[0];
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().split("T")[0];
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000)
+        .toISOString()
+        .split("T")[0];
       const startDate = (req.query.startDate as string) || thirtyDaysAgo;
       const endDate = (req.query.endDate as string) || today;
       const rows = await db.execute(sql`
@@ -2075,6 +2083,127 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
+
+  // ─── Reports: Route Summary ───────────────────────────────────────────────
+  app.get("/api/reports/route-summary", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const today = new Date().toISOString().split("T")[0];
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000)
+        .toISOString()
+        .split("T")[0];
+      const startDate = (req.query.startDate as string) || thirtyDaysAgo;
+      const endDate = (req.query.endDate as string) || today;
+
+      const rows = await db.execute(sql`
+        SELECT
+          r.id                          AS "routeId",
+          r.name                        AS "routeName",
+          u.first_name || ' ' || u.last_name AS "techName",
+          COUNT(DISTINCT v.id)          AS "totalVisits",
+          COUNT(DISTINCT CASE WHEN v.status = 'completed' THEN v.id END) AS "completed",
+          COUNT(DISTINCT CASE WHEN v.status = 'skipped' THEN v.id END) AS "skipped",
+          ROUND(100.0 * COUNT(DISTINCT CASE WHEN v.status = 'completed' THEN v.id END)
+            / NULLIF(COUNT(DISTINCT v.id),0), 1) AS "completionRate",
+          COALESCE(AVG(CASE
+            WHEN v.started_at IS NOT NULL AND v.completed_at IS NOT NULL
+            THEN EXTRACT(EPOCH FROM (v.completed_at - v.started_at)) / 60
+          END), 0)                      AS "avgVisitMinutes",
+          COUNT(DISTINCT j.id)          AS "activeStops"
+        FROM routes r
+        LEFT JOIN users u ON r.technician_id = u.id
+        LEFT JOIN visits v ON v.route_id = r.id
+          AND v.company_id = ${companyId}
+          AND v.scheduled_date >= ${startDate}
+          AND v.scheduled_date <= ${endDate}
+        LEFT JOIN jobs j ON j.route_id = r.id
+          AND j.company_id = ${companyId}
+          AND j.job_status = 'active'
+        WHERE r.company_id = ${companyId}
+        GROUP BY r.id, r.name, u.first_name, u.last_name
+        ORDER BY r.name ASC
+      `);
+      res.json(rows.rows);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // ─── Reports: Technician Performance ─────────────────────────────────────
+  app.get("/api/reports/tech-performance", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const today = new Date().toISOString().split("T")[0];
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000)
+        .toISOString()
+        .split("T")[0];
+      const startDate = (req.query.startDate as string) || thirtyDaysAgo;
+      const endDate = (req.query.endDate as string) || today;
+
+      const rows = await db.execute(sql`
+          SELECT
+            u.id                          AS "userId",
+            u.first_name || ' ' || u.last_name AS "techName",
+            COUNT(DISTINCT v.id)          AS "totalVisits",
+            COUNT(DISTINCT CASE WHEN v.status = 'completed' THEN v.id END) AS "completed",
+            ROUND(100.0 * COUNT(DISTINCT CASE WHEN v.status = 'completed' THEN v.id END)
+              / NULLIF(COUNT(DISTINCT v.id),0), 1) AS "completionRate",
+            ROUND(COALESCE(AVG(CASE
+              WHEN v.started_at IS NOT NULL AND v.completed_at IS NOT NULL
+                AND EXTRACT(EPOCH FROM (v.completed_at - v.started_at)) / 60 < 240
+              THEN EXTRACT(EPOCH FROM (v.completed_at - v.started_at)) / 60
+            END), 0), 1) AS "avgMinutesPerStop",
+            COUNT(DISTINCT r.id)          AS "routeCount"
+          FROM company_users cu
+          JOIN users u ON cu.user_id = u.id
+          LEFT JOIN routes r ON r.technician_id = u.id AND r.company_id = ${companyId}
+          LEFT JOIN visits v ON v.route_id = r.id
+            AND v.company_id = ${companyId}
+            AND v.scheduled_date >= ${startDate}
+            AND v.scheduled_date <= ${endDate}
+          WHERE cu.company_id = ${companyId}
+            AND cu.role = 'tech'
+            AND cu.is_active = true
+          GROUP BY u.id, u.first_name, u.last_name
+          ORDER BY COUNT(DISTINCT CASE WHEN v.status = 'completed' THEN v.id END) DESC
+        `);
+      res.json(rows.rows);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // ─── Reports: Revenue by Service Frequency ────────────────────────────────
+  app.get(
+    "/api/reports/revenue-by-frequency",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const rows = await db.execute(sql`
+          SELECT
+            sp.frequency,
+            COUNT(sp.id) AS "planCount",
+            ROUND(SUM(sp.price_per_visit::numeric), 2) AS "totalPricePerVisit",
+            ROUND(SUM(CASE
+              WHEN sp.frequency = 'weekly'   THEN sp.price_per_visit::numeric * 4.33
+              WHEN sp.frequency = 'biweekly' THEN sp.price_per_visit::numeric * 2.17
+              WHEN sp.frequency = 'monthly'  THEN sp.price_per_visit::numeric
+              ELSE sp.price_per_visit::numeric
+            END), 2) AS "estimatedMonthlyRevenue"
+          FROM service_plans sp
+          WHERE sp.company_id = ${companyId}
+            AND sp.is_active = true
+            AND sp.job_status = 'active'
+          GROUP BY sp.frequency
+          ORDER BY "estimatedMonthlyRevenue" DESC
+        `);
+        res.json(rows.rows);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   // ─── Reports: Client Metrics ──────────────────────────────────────────────
   app.get("/api/reports/client-metrics", isAuthenticated, async (req: Request, res: Response) => {
@@ -2123,6 +2252,19 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         ORDER BY COUNT(*) DESC
       `);
 
+      // Cancellation reasons breakdown
+      const cancelReasonRows = await db.execute(sql`
+        SELECT
+          COALESCE(NULLIF(cancellation_reason,''), 'Not specified') AS "reason",
+          COUNT(*) AS "count"
+        FROM contacts
+        WHERE company_id = ${companyId}
+          AND status = 'cancelled'
+          AND updated_at >= ${cutoffStr}
+        GROUP BY COALESCE(NULLIF(cancellation_reason,''), 'Not specified')
+        ORDER BY COUNT(*) DESC
+      `);
+
       // Average client value (avg monthly revenue per active client)
       const activeClients = await db.execute(sql`
         SELECT COUNT(*) AS "activeCount"
@@ -2146,7 +2288,8 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         else if (plan.frequency === "biweekly") totalMonthlyEstimate += ppv * 2.17;
         else if (plan.frequency === "monthly") totalMonthlyEstimate += ppv;
       }
-      const activeCount = parseInt(String((activeClients.rows[0] as { activeCount: string }).activeCount)) || 1;
+      const activeCount =
+        parseInt(String((activeClients.rows[0] as { activeCount: string }).activeCount)) || 1;
       const avgClientValue = Math.round((totalMonthlyEstimate / activeCount) * 100) / 100;
 
       // Build monthly series merging new + cancelled
@@ -2171,6 +2314,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       res.json({
         monthly,
         leadSources: leadSourceRows.rows,
+        cancellationReasons: cancelReasonRows.rows,
         avgClientValue,
         activeCount,
       });
@@ -2220,10 +2364,15 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         LIMIT 50
       `);
 
-      const multiPlan = (multiPlanRows.rows as {
-        contactId: string; contactName: string; planCount: string;
-        frequencies: string; totalPricePerVisit: number;
-      }[]).map((r) => ({
+      const multiPlan = (
+        multiPlanRows.rows as {
+          contactId: string;
+          contactName: string;
+          planCount: string;
+          frequencies: string;
+          totalPricePerVisit: number;
+        }[]
+      ).map((r) => ({
         contactId: r.contactId,
         contactName: r.contactName,
         upgradeType: "Multi-service",
@@ -2231,9 +2380,14 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         monthlyValue: Math.round(parseFloat(String(r.totalPricePerVisit)) * 4.33 * 100) / 100,
       }));
 
-      const weekly = (weeklyRows.rows as {
-        contactId: string; contactName: string; pricePerVisit: number; dogs: number;
-      }[]).map((r) => ({
+      const weekly = (
+        weeklyRows.rows as {
+          contactId: string;
+          contactName: string;
+          pricePerVisit: number;
+          dogs: number;
+        }[]
+      ).map((r) => ({
         contactId: r.contactId,
         contactName: r.contactName,
         upgradeType: "Weekly service",
@@ -2266,7 +2420,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         `),
         db.execute(sql`
           SELECT COUNT(*) AS "count" FROM company_users
-          WHERE company_id = ${companyId} AND role = 'technician' AND status = 'active'
+          WHERE company_id = ${companyId} AND role = 'tech' AND is_active = true
         `),
         db.execute(sql`
           SELECT
@@ -2305,7 +2459,10 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         techCount: parseInt(String((techRow.rows[0] as { count: string }).count)) || 0,
         routeCount: parseInt(String(routeData?.routeCount ?? "0")) || 0,
         avgStopsPerRoute: Math.round(parseFloat(String(routeData?.avgStops ?? "0")) * 10) / 10,
-        avgVisitMinutes: Math.round(parseFloat(String((durationRow.rows[0] as { avgMinutes: string }).avgMinutes)) * 10) / 10,
+        avgVisitMinutes:
+          Math.round(
+            parseFloat(String((durationRow.rows[0] as { avgMinutes: string }).avgMinutes)) * 10
+          ) / 10,
         residentialCount: parseInt(String(typeData?.residential ?? "0")) || 0,
         commercialCount: parseInt(String(typeData?.commercial ?? "0")) || 0,
       });
@@ -2353,20 +2510,16 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.delete(
-    "/api/scheduled-reports/:id",
-    isAuthenticated,
-    async (req: Request, res: Response) => {
-      try {
-        const { companyId } = await getCompanyContext(req);
-        const id = String(req.params.id);
-        await storage.deleteScheduledReport(id, companyId);
-        res.json({ ok: true });
-      } catch (err) {
-        handleError(res, err);
-      }
+  app.delete("/api/scheduled-reports/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const id = String(req.params.id);
+      await storage.deleteScheduledReport(id, companyId);
+      res.json({ ok: true });
+    } catch (err) {
+      handleError(res, err);
     }
-  );
+  });
 
   app.post(
     "/api/scheduled-reports/:id/run",
@@ -2377,10 +2530,48 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         const id = String(req.params.id);
         const report = await storage.getScheduledReport(id, companyId);
         if (!report) return res.status(404).json({ message: "Scheduled report not found" });
-        await storage.updateScheduledReport(id, companyId, {
-          lastSentAt: new Date(),
-        });
-        res.json({ ok: true, message: "Report marked as run" });
+
+        // Respond immediately so the UI doesn't wait for PDF generation
+        res.json({ ok: true, message: "Report queued for delivery" });
+
+        // Generate and send in background
+        Promise.resolve()
+          .then(async () => {
+            const { generateReportData, generateReportPdf, buildReportEmailHtml } =
+              await import("../services/report-generator");
+            const { sendEmail } = await import("../services/email");
+
+            const reportData = await generateReportData(companyId, report.sections, report.name);
+            const pdfBuffer = await generateReportPdf(reportData);
+            const emailHtml = buildReportEmailHtml(reportData);
+
+            for (const recipient of report.recipients) {
+              await sendEmail({
+                to: recipient,
+                subject: `${reportData.companyName} — ${report.name}`,
+                text: `${report.name} generated on ${reportData.generatedAt.toLocaleDateString()}. See attached PDF.`,
+                html: emailHtml,
+                attachments: [
+                  {
+                    content: pdfBuffer.toString("base64"),
+                    filename: `${report.name.replace(/[^a-zA-Z0-9]/g, "-")}-${reportData.generatedAt.toISOString().split("T")[0]}.pdf`,
+                    type: "application/pdf",
+                    disposition: "attachment",
+                  },
+                ],
+              });
+            }
+
+            await storage.updateScheduledReport(id, companyId, {
+              lastSentAt: new Date(),
+            });
+            console.log(
+              `[ReportRun] Sent "${report.name}" to ${report.recipients.length} recipient(s)`
+            );
+          })
+          .catch((err) => {
+            console.error(`[ReportRun] Failed to deliver "${report.name}":`, err);
+          });
       } catch (err) {
         handleError(res, err);
       }

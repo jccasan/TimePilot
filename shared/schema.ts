@@ -3778,12 +3778,18 @@ export const scheduledReports = pgTable("scheduled_reports", {
     .notNull()
     .references(() => companies.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
-  sections: text("sections").array().notNull().default(sql`ARRAY[]::text[]`),
+  sections: text("sections")
+    .array()
+    .notNull()
+    .default(sql`ARRAY[]::text[]`),
   frequency: varchar("frequency", { length: 20 }).notNull().default("weekly"),
   dayOfWeek: integer("day_of_week"),
   dayOfMonth: integer("day_of_month"),
   sendHour: integer("send_hour").notNull().default(7),
-  recipients: text("recipients").array().notNull().default(sql`ARRAY[]::text[]`),
+  recipients: text("recipients")
+    .array()
+    .notNull()
+    .default(sql`ARRAY[]::text[]`),
   lastSentAt: timestamp("last_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

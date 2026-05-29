@@ -3421,6 +3421,14 @@ async function migrateYardSizeTiers() {
       );
 
       auditRetellWebhooks().catch((err) => console.error("[RetellAudit] Unexpected error:", err));
+
+      import("./jobs/scheduled-reports")
+        .then(({ startScheduledReportsJob }) => {
+          startScheduledReportsJob();
+        })
+        .catch((err) =>
+          console.error("[ScheduledReports] Failed to start scheduled reports job:", err)
+        );
     }
   );
 })();
