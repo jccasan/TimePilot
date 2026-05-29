@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAddressLabels } from "@/hooks/use-address-labels";
 import { formatDistance } from "@/lib/units";
@@ -293,8 +293,12 @@ type DepotRecord = {
 
 type RouteRecord = {
   id: string;
+  name?: string | null;
+  dayOfWeek?: string | null;
   depotId?: string | null;
   technicianId?: string | null;
+  stopCount?: number;
+  isOverCapacity?: boolean;
 };
 
 type TeamRecord = {
@@ -330,6 +334,17 @@ export function WeeklyOptimizerPanel({
   const [avgMinutesInput, setAvgMinutesInput] = useState<string>("");
   const [isTimeBased, setIsTimeBased] = useState(false);
   const [dismissedOverDuration, setDismissedOverDuration] = useState<Set<string>>(new Set());
+
+  type OversizedRouteEntry = {
+    id: string;
+    name: string;
+    dayOfWeek: string | null;
+    stopCount: number;
+    limit: number;
+  };
+  const [oversizedAfterSave, setOversizedAfterSave] = useState<OversizedRouteEntry[]>([]);
+  const [oversizedDismissed, setOversizedDismissed] = useState(false);
+  const savedMaxStopsRef = useRef<number | null>(null);
 
   const { data: company } = useQuery<{
     minStopsPerDay?: number | null;
@@ -405,9 +420,53 @@ export function WeeklyOptimizerPanel({
   const saveMinStopsMutation = useMutation(
     makeCompanyPatch("minStopsPerDay", "Minimum stops per day updated.")
   );
-  const saveMaxStopsMutation = useMutation(
-    makeCompanyPatch("maxStopsPerRoute", "Maximum stops per day updated.")
-  );
+
+  const saveMaxStopsMutation = useMutation({
+    mutationFn: async (value: number | null) => {
+      const res = await apiRequest("PATCH", "/api/company", { maxStopsPerRoute: value });
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      return res.json() as Promise<{ oversizedRoutes?: OversizedRouteEntry[] }>;
+    },
+    onSuccess: (data, value) => {
+      savedMaxStopsRef.current = value;
+      toast({ title: "Saved", description: "Maximum stops per day updated." });
+      const oversized = data?.oversizedRoutes ?? [];
+      setOversizedAfterSave(oversized);
+      setOversizedDismissed(oversized.length === 0);
+    },
+    onError: () =>
+      toast({ title: "Error", description: "Could not save setting.", variant: "destructive" }),
+  });
+
+  const applyMaxStopsMutation = useMutation({
+    mutationFn: async () => {
+      const maxStops = savedMaxStopsRef.current ?? company?.maxStopsPerRoute;
+      if (!maxStops) throw new Error("Max stops per route is not configured.");
+      const res = await apiRequest("POST", "/api/routes/apply-max-stops", { maxStops });
+      return res.json() as Promise<{
+        routesSplit: number;
+        subRoutesCreated: number;
+        skipped: number;
+        errors: string[];
+      }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      setOversizedAfterSave([]);
+      setOversizedDismissed(true);
+      if (data.routesSplit === 0) {
+        toast({ title: "No changes needed", description: "All routes are within the stop limit." });
+      } else {
+        toast({
+          title: "Routes split",
+          description: `${data.routesSplit} route${data.routesSplit === 1 ? "" : "s"} split into smaller routes.`,
+        });
+      }
+    },
+    onError: (err: Error) =>
+      toast({ title: "Split failed", description: err.message, variant: "destructive" }),
+  });
   const saveMinDurationMutation = useMutation(
     makeCompanyPatch("minRouteDurationHours", "Minimum route duration updated.")
   );
@@ -462,12 +521,19 @@ export function WeeklyOptimizerPanel({
     1,
     "Min stops per day"
   );
-  const handleSaveMaxStops = makeNumericSaveHandler(
-    maxStopsInput,
-    saveMaxStopsMutation,
-    1,
-    "Max stops per day"
-  );
+  const handleSaveMaxStops = () => {
+    const val = maxStopsInput.trim();
+    const num = val === "" ? null : parseFloat(val);
+    if (val !== "" && (isNaN(num!) || num! < 1)) {
+      toast({
+        title: "Invalid value",
+        description: "Max stops per day must be ≥ 1.",
+        variant: "destructive",
+      });
+      return;
+    }
+    saveMaxStopsMutation.mutate(num);
+  };
   const handleSaveMinDuration = makeNumericSaveHandler(
     minDurationInput,
     saveMinDurationMutation,
@@ -732,24 +798,120 @@ export function WeeklyOptimizerPanel({
                     testIdButton="button-save-min-stops"
                     muted={isTimeBased}
                   />
-                  <SettingRow
-                    label="Max stops per day"
-                    description={
-                      isTimeBased
-                        ? "Max stops override (time budget is used instead in time-based mode)"
-                        : "Split routes that exceed this many stops"
-                    }
-                    inputId="max-stops-input"
-                    placeholder="50"
-                    min={1}
-                    value={maxStopsInput}
-                    onChange={setMaxStopsInput}
-                    onSave={handleSaveMaxStops}
-                    isPending={saveMaxStopsMutation.isPending}
-                    testIdInput="input-max-stops-per-day"
-                    testIdButton="button-save-max-stops"
-                    muted={isTimeBased}
-                  />
+                  {(() => {
+                    const limit = company?.maxStopsPerRoute;
+                    const liveOversized =
+                      limit != null
+                        ? plannerRoutes.filter(
+                            (r) => r.isOverCapacity || (r.stopCount != null && r.stopCount > limit)
+                          )
+                        : [];
+                    const warningRoutes =
+                      !oversizedDismissed && oversizedAfterSave.length > 0
+                        ? oversizedAfterSave
+                        : liveOversized.map((r) => ({
+                            id: r.id,
+                            name: r.name ?? r.id,
+                            dayOfWeek: r.dayOfWeek ?? null,
+                            stopCount: r.stopCount ?? 0,
+                            limit: limit ?? 0,
+                          }));
+                    const showWarning =
+                      limit != null &&
+                      !oversizedDismissed &&
+                      (oversizedAfterSave.length > 0 || liveOversized.length > 0);
+
+                    return (
+                      <>
+                        <SettingRow
+                          label="Max stops per day"
+                          description={
+                            isTimeBased ? (
+                              "Max stops override (time budget is used instead in time-based mode)"
+                            ) : liveOversized.length > 0 ? (
+                              <span
+                                className="text-amber-600 dark:text-amber-400 font-medium"
+                                data-testid="text-oversized-live-count"
+                              >
+                                {liveOversized.length} route
+                                {liveOversized.length !== 1 ? "s are" : " is"} over this limit
+                              </span>
+                            ) : (
+                              "Split routes that exceed this many stops"
+                            )
+                          }
+                          inputId="max-stops-input"
+                          placeholder="50"
+                          min={1}
+                          value={maxStopsInput}
+                          onChange={setMaxStopsInput}
+                          onSave={handleSaveMaxStops}
+                          isPending={saveMaxStopsMutation.isPending}
+                          testIdInput="input-max-stops-per-day"
+                          testIdButton="button-save-max-stops"
+                          muted={isTimeBased}
+                        />
+                        {showWarning && (
+                          <div
+                            className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 px-3 py-3 text-sm space-y-2"
+                            data-testid="panel-oversized-warning"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-2">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                                <div>
+                                  <p className="font-medium text-amber-800 dark:text-amber-300">
+                                    {warningRoutes.length} route
+                                    {warningRoutes.length !== 1 ? "s exceed" : " exceeds"} the stop
+                                    limit
+                                  </p>
+                                  <ul className="mt-1 space-y-0.5 text-amber-700 dark:text-amber-400">
+                                    {warningRoutes.slice(0, 5).map((r) => (
+                                      <li key={r.id}>
+                                        {r.name}
+                                        {r.dayOfWeek ? ` (${r.dayOfWeek})` : ""} — {r.stopCount}/
+                                        {r.limit} stops
+                                      </li>
+                                    ))}
+                                    {warningRoutes.length > 5 && (
+                                      <li className="text-amber-600 dark:text-amber-500">
+                                        +{warningRoutes.length - 5} more
+                                      </li>
+                                    )}
+                                  </ul>
+                                </div>
+                              </div>
+                              <button
+                                className="text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 shrink-0"
+                                onClick={() => setOversizedDismissed(true)}
+                                aria-label="Dismiss"
+                                data-testid="button-dismiss-oversized-warning"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                            <div className="flex justify-end">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                                onClick={() => applyMaxStopsMutation.mutate()}
+                                disabled={applyMaxStopsMutation.isPending}
+                                data-testid="button-split-all-now"
+                              >
+                                {applyMaxStopsMutation.isPending ? (
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                ) : (
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                )}
+                                Split all now
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
 
                   {/* Time budget settings (active in time-based mode; stored for both) */}
                   <SettingRow

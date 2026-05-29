@@ -21,7 +21,11 @@ import { useAddressLabels } from "@/hooks/use-address-labels";
 import { formatDistance, formatDistanceShort } from "@/lib/units";
 import { useToast } from "@/hooks/use-toast";
 import type { Route, ServicePlan, Contact, Property, Visit } from "@shared/schema";
-type RouteWithOptStatus = Route & { isOptimizedCurrent?: boolean };
+type RouteWithOptStatus = Route & {
+  isOptimizedCurrent?: boolean;
+  stopCount?: number;
+  isOverCapacity?: boolean;
+};
 
 class MapErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -683,6 +687,7 @@ function RouteCard({
   updatingVisitStatus,
   metrics,
   metricsLoading,
+  maxStopsPerRoute,
   onStopClick,
   onOnMyWay,
   onMyWaySendingId,
@@ -719,6 +724,7 @@ function RouteCard({
   metricsLoading?: boolean;
   maxRouteDurationHours?: number | null;
   avgMinutesPerStop?: number | null;
+  maxStopsPerRoute?: number | null;
   onStopClick?: (stop: ServicePlan, visit: Visit) => void;
   onOnMyWay?: (visitId: string) => void;
   onMyWaySendingId?: string | null;
@@ -764,6 +770,11 @@ function RouteCard({
   const hasVisits = routeVisitCount > 0;
   const isOverLimit = stopCount > 30;
   const isOverMax = stopCount > 60;
+  // Over-capacity: use the server-enriched total service plan count when available,
+  // otherwise fall back to the current day's stop list length.
+  const capacityStopCount = route.stopCount ?? stopCount;
+  const isOverCapacity =
+    route.isOverCapacity ?? (maxStopsPerRoute != null && capacityStopCount > maxStopsPerRoute);
 
   // Use the server-returned overDuration flag (computed in the metrics endpoint,
   // gated to time-based planning mode so stop-based companies are unaffected).
@@ -916,6 +927,17 @@ function RouteCard({
           >
             {stopCount} stops
           </Badge>
+          {isOverCapacity && maxStopsPerRoute != null && (
+            <Badge
+              variant="outline"
+              className="text-[10px] font-medium text-amber-700 border-amber-400 bg-amber-50 dark:text-amber-300 dark:border-amber-600 dark:bg-amber-950/40"
+              data-testid={`badge-over-capacity-${route.id}`}
+              title={`This route has ${capacityStopCount} active service plans, exceeding the configured maximum of ${maxStopsPerRoute}.`}
+            >
+              <AlertTriangle className="h-2.5 w-2.5 mr-1 shrink-0" />
+              Over capacity ({capacityStopCount} / {maxStopsPerRoute} stops)
+            </Badge>
+          )}
           {isUsingCompanyDefault && resolvedDepot && (
             <Badge
               variant="outline"
@@ -2813,6 +2835,36 @@ export default function RoutesPage() {
     },
   });
 
+  type ApplyMaxStopsResult = {
+    routesSplit: number;
+    subRoutesCreated: number;
+    skipped: number;
+    errors: string[];
+    splitDetails?: { originalName: string; newRoutes: { name: string; stopCount: number }[] }[];
+  };
+  const [applyMaxStopsResult, setApplyMaxStopsResult] = useState<ApplyMaxStopsResult | null>(null);
+
+  const applyMaxStopsMutation = useMutation({
+    mutationFn: async () => {
+      const maxStops = company?.maxStopsPerRoute;
+      if (!maxStops) throw new Error("Max stops per route is not configured.");
+      const res = await apiRequest("POST", "/api/routes/apply-max-stops", { maxStops });
+      return res.json() as Promise<ApplyMaxStopsResult>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/service-plans?isActive=true"] });
+      setApplyMaxStopsResult(data);
+      if (data.routesSplit === 0) {
+        toast({ title: "No changes needed", description: "All routes are within the stop limit." });
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: "Split failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const resolveDropTarget = useCallback(
     (overId: string): string | null => {
       if (overId === UNASSIGNED_DROP) return UNASSIGNED_DROP;
@@ -2971,6 +3023,23 @@ export default function RoutesPage() {
             >
               <Sparkles className="h-4 w-4 mr-1" /> Optimize All Routes
             </Button>
+            {company?.maxStopsPerRoute != null && allRoutes.some((r) => r.isOverCapacity) && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-amber-400 text-amber-700 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                onClick={() => applyMaxStopsMutation.mutate()}
+                disabled={applyMaxStopsMutation.isPending}
+                data-testid="button-fix-oversized-routes"
+              >
+                {applyMaxStopsMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 mr-1" />
+                )}
+                Fix oversized routes
+              </Button>
+            )}
             {isLivePlaybackEnabled && (
               <Button
                 variant="outline"
@@ -3517,6 +3586,7 @@ export default function RoutesPage() {
                             setMoveToDayRouteId(id);
                             setMoveToDayDate("");
                           }}
+                          maxStopsPerRoute={company?.maxStopsPerRoute}
                           isOptimizing={optimizingRouteId === route.id}
                           isReversing={reversingRouteId === route.id}
                           isDispatching={dispatchingRouteId === route.id}
@@ -3709,6 +3779,97 @@ export default function RoutesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Apply max stops result dialog */}
+      <Dialog
+        open={!!applyMaxStopsResult && applyMaxStopsResult.routesSplit > 0}
+        onOpenChange={(open) => {
+          if (!open) setApplyMaxStopsResult(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md" data-testid="dialog-apply-max-stops-result">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Routes split successfully
+            </DialogTitle>
+            <DialogDescription>
+              {applyMaxStopsResult?.routesSplit} route
+              {applyMaxStopsResult?.routesSplit !== 1 ? "s were" : " was"} split into{" "}
+              {(applyMaxStopsResult?.routesSplit ?? 0) +
+                (applyMaxStopsResult?.subRoutesCreated ?? 0)}{" "}
+              routes.
+            </DialogDescription>
+          </DialogHeader>
+          {applyMaxStopsResult && (
+            <div className="space-y-2 py-1">
+              {applyMaxStopsResult.errors.length > 0 && (
+                <div
+                  className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                  data-testid="text-split-errors"
+                >
+                  <p className="font-medium mb-1">Could not split:</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {applyMaxStopsResult.errors.map((e) => (
+                      <li key={e}>{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(applyMaxStopsResult.splitDetails?.length ?? 0) > 0 && (
+                <div
+                  className="rounded-md border bg-muted/50 px-3 py-2 text-sm space-y-2"
+                  data-testid="list-split-details"
+                >
+                  {applyMaxStopsResult.splitDetails!.map((d) => (
+                    <div key={d.originalName}>
+                      <p className="font-medium text-xs text-muted-foreground mb-1">
+                        {d.originalName} split into:
+                      </p>
+                      <ul className="space-y-0.5">
+                        {d.newRoutes.map((r) => (
+                          <li
+                            key={r.name}
+                            className="flex justify-between"
+                            data-testid={`split-route-${r.name}`}
+                          >
+                            <span>{r.name}</span>
+                            <span className="text-muted-foreground">{r.stopCount} stops</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="rounded-md border bg-muted/50 px-3 py-2 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Routes split:</span>
+                  <span className="font-medium">{applyMaxStopsResult.routesSplit}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">New routes created:</span>
+                  <span className="font-medium">{applyMaxStopsResult.subRoutesCreated}</span>
+                </div>
+                {applyMaxStopsResult.skipped > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Routes already within limit:</span>
+                    <span className="font-medium">{applyMaxStopsResult.skipped}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              onClick={() => setApplyMaxStopsResult(null)}
+              data-testid="button-close-split-result"
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!moveToDayRouteId}

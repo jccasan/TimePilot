@@ -636,7 +636,38 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         },
         req.ip
       );
-      res.json(sanitizeCompany(company));
+
+      // When maxStopsPerRoute is being set (not cleared), compute which routes now
+      // exceed the new cap so the client can show an actionable warning.
+      let oversizedRoutes: {
+        id: string;
+        name: string;
+        dayOfWeek: string | null;
+        stopCount: number;
+        limit: number;
+      }[] = [];
+      const newMax = updates.maxStopsPerRoute;
+      if (newMax != null && typeof newMax === "number" && newMax >= 1) {
+        try {
+          const [allRoutes, stopCountMap] = await Promise.all([
+            storage.getRoutes(companyId),
+            storage.getRouteStopCounts(companyId),
+          ]);
+          oversizedRoutes = allRoutes
+            .filter((r) => (stopCountMap.get(r.id) ?? 0) > newMax)
+            .map((r) => ({
+              id: r.id,
+              name: r.name || r.id,
+              dayOfWeek: r.dayOfWeek ?? null,
+              stopCount: stopCountMap.get(r.id) ?? 0,
+              limit: newMax,
+            }));
+        } catch (err) {
+          console.error("[company PATCH] Failed to compute oversized routes:", err);
+        }
+      }
+
+      res.json({ ...sanitizeCompany(company), oversizedRoutes });
     } catch (err) {
       handleError(res, err);
     }

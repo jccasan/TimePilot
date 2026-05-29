@@ -4,7 +4,7 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
-import { getCompanyToday, getCompanyWeekStart } from "../utils/company-date";
+import { getCompanyToday } from "../utils/company-date";
 import { getRouteMetricsWithLegs } from "../services/route-optimizer";
 import { geocodeAddress } from "../services/geocode";
 import { insertRouteSchema, type InsertRoute, companyUsers } from "@shared/schema";
@@ -150,7 +150,22 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
     try {
       const { companyId } = await getCompanyContext(req);
       const dayOfWeek = req.query.dayOfWeek as string | undefined;
-      const routesList = await storage.getRoutes(companyId, dayOfWeek);
+      const [routesList, company, stopCountMap] = await Promise.all([
+        storage.getRoutes(companyId, dayOfWeek),
+        storage.getCompany(companyId),
+        storage.getRouteStopCounts(companyId),
+      ]);
+
+      const maxStops = company?.maxStopsPerRoute ?? null;
+
+      const enrichRoute = (route: (typeof routesList)[0]) => {
+        const stopCount = stopCountMap.get(route.id) ?? 0;
+        return {
+          ...route,
+          stopCount,
+          isOverCapacity: maxStops != null && stopCount > maxStops,
+        };
+      };
 
       const optimizedRoutes = routesList.filter((r) => r.optimizedStopHash !== null);
       if (optimizedRoutes.length > 0) {
@@ -164,7 +179,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
 
         const staleRouteIds: string[] = [];
         const result = routesList.map((route) => {
-          if (!route.optimizedStopHash) return { ...route, isOptimizedCurrent: false };
+          if (!route.optimizedStopHash) return { ...enrichRoute(route), isOptimizedCurrent: false };
           const currentIds = (plansByRoute.get(route.id) ?? []).sort();
           const currentHash = crypto
             .createHash("sha256")
@@ -172,7 +187,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
             .digest("hex");
           const isCurrent = currentHash === route.optimizedStopHash;
           if (!isCurrent) staleRouteIds.push(route.id);
-          return { ...route, isOptimizedCurrent: isCurrent };
+          return { ...enrichRoute(route), isOptimizedCurrent: isCurrent };
         });
 
         for (const rId of staleRouteIds) {
@@ -182,7 +197,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         return res.json(result);
       }
 
-      res.json(routesList.map((r) => ({ ...r, isOptimizedCurrent: false })));
+      res.json(routesList.map((r) => ({ ...enrichRoute(r), isOptimizedCurrent: false })));
     } catch (err) {
       handleError(res, err);
     }
@@ -726,26 +741,11 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         }
       }
 
-      // Determine effective stop count per route using this week's visit counts
-      const bulkTz = company.timezone || "America/New_York";
-      const bulkWeekStart = getCompanyWeekStart(bulkTz);
-      const bulkWeekStartObj = new Date(bulkWeekStart + "T12:00:00Z");
-      const bulkWeekEndObj = new Date(bulkWeekStartObj);
-      bulkWeekEndObj.setUTCDate(bulkWeekEndObj.getUTCDate() + 6);
-      const bulkWeekEnd = bulkWeekEndObj.toISOString().split("T")[0];
-      const bulkWeekVisits = await storage.getVisitsForDateRange(
-        companyId,
-        bulkWeekStart,
-        bulkWeekEnd
-      );
-      const visitCountByRoute = new Map<string, number>();
-      for (const v of bulkWeekVisits) {
-        if (v.routeId && v.status !== "cancelled") {
-          visitCountByRoute.set(v.routeId, (visitCountByRoute.get(v.routeId) || 0) + 1);
-        }
-      }
-
-      const oversized = routes.filter((r) => (visitCountByRoute.get(r.id) || 0) > maxStopsNum);
+      // Detect oversized routes using active service plan counts — the same
+      // metric used by GET /api/routes (isOverCapacity) and PATCH /api/company
+      // (oversizedRoutes), so the badge, the warning, and the fix action are
+      // always consistent.
+      const oversized = routes.filter((r) => (plansByRoute.get(r.id)?.length ?? 0) > maxStopsNum);
 
       if (oversized.length === 0) {
         return res.json({
@@ -753,6 +753,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
           subRoutesCreated: 0,
           skipped: routes.length,
           errors: [],
+          splitDetails: [],
         });
       }
 
@@ -781,6 +782,10 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       let subRoutesCreated = 0;
       const errors: string[] = [];
       const allAffectedPlanIds: string[] = [];
+      const splitDetails: {
+        originalName: string;
+        newRoutes: { name: string; stopCount: number }[];
+      }[] = [];
 
       for (const route of oversized) {
         try {
@@ -826,25 +831,33 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
             continue;
           }
 
-          const routeVisitCount = visitCountByRoute.get(route.id) || 0;
-          const k = Math.ceil(routeVisitCount / maxStopsNum);
+          const routePlanCount = plansByRoute.get(route.id)?.length ?? 0;
+          const k = Math.ceil(routePlanCount / maxStopsNum);
           const clusters = kMeansClustering(weeklyStops, k);
+
+          const routeSplitDetail: {
+            originalName: string;
+            newRoutes: { name: string; stopCount: number }[];
+          } = { originalName: route.name, newRoutes: [] };
 
           for (let ci = 0; ci < clusters.length; ci++) {
             const cluster = clusters[ci];
             let targetRouteId: string;
+            let targetRouteName: string;
 
             if (ci === 0) {
               targetRouteId = route.id;
+              targetRouteName = route.name;
             } else {
               const suffix = suffixLetters[ci - 1] || String(ci + 1);
               const bulkSourceDepotId = (route as Record<string, unknown>).depotId as
                 | string
                 | null
                 | undefined;
+              targetRouteName = `${route.name}-${suffix}`;
               const newRoute = await storage.createRoute({
                 companyId,
-                name: `${route.name}-${suffix}`,
+                name: targetRouteName,
                 dayOfWeek: route.dayOfWeek || undefined,
                 technicianId: route.technicianId || undefined,
                 color: splitColors[(ci - 1) % splitColors.length],
@@ -893,7 +906,13 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
               });
               allAffectedPlanIds.push(unordered[si].id);
             }
+
+            routeSplitDetail.newRoutes.push({
+              name: targetRouteName,
+              stopCount: orderedIds.length + unordered.length,
+            });
           }
+          splitDetails.push(routeSplitDetail);
           routesSplit++;
         } catch (splitErr: unknown) {
           console.error(`[apply-max-stops] Failed to split route ${route.name}:`, splitErr);
@@ -926,6 +945,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         subRoutesCreated,
         skipped: routes.length - oversized.length,
         errors,
+        splitDetails,
       });
     } catch (err) {
       handleError(res, err);
