@@ -1,0 +1,5 @@
+Price ID,Product ID,Product Name,Amount,Currency,Interval,Interval Count,Usage Type,Aggregate Usage,Billing Scheme,Trial Period Days,Tax Behavior
+price_1TcYXZGVMaTr43jXzdiwib6E,prod_Ubm5gfu8KMPVbc,ScooPilot - FleetPilot Vehicle Management and Tracking Unlimited Vehicles,29,usd,month,1,licensed,,per_unit,,unspecified
+price_1TcYX3GVMaTr43jXALdTVpP1,prod_Ubm5zGl9NrwjT0,ScooPilot - FleetPilot Vehicle Management and Tracking 3 Vehicles,27,usd,month,1,licensed,,per_unit,,unspecified
+price_1TcYVOGVMaTr43jXOVgaNvb0,prod_Ubm3n4BQi2j0an,ScooPilot - FleetPilot Vehicle Management and Tracking 2 Vehicles,18,usd,month,1,licensed,,per_unit,,unspecified
+price_1TcYUBGVMaTr43jXnkkXNEOo,prod_Ubm2wU7NqAflv4,ScooPilot - FleetPilot Vehicle Management and Tracking 1 Vehicle,9,usd,month,1,licensed,,per_unit,,unspecified

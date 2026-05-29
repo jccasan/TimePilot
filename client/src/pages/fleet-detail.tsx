@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
@@ -111,6 +111,25 @@ function DateDisplay({ date }: { date: string | null }) {
   }
 }
 
+const FLEET_PLANS = [
+  { priceId: "price_1TcYUBGVMaTr43jXnkkXNEOo", vehicleLimit: 1, label: "1 Vehicle", price: 9 },
+  { priceId: "price_1TcYVOGVMaTr43jXOVgaNvb0", vehicleLimit: 2, label: "2 Vehicles", price: 18 },
+  { priceId: "price_1TcYX3GVMaTr43jXALdTVpP1", vehicleLimit: 3, label: "3 Vehicles", price: 27 },
+  {
+    priceId: "price_1TcYXZGVMaTr43jXzdiwib6E",
+    vehicleLimit: null,
+    label: "Unlimited Vehicles",
+    price: 29,
+  },
+] as const;
+
+type FleetAccess = {
+  hasAccess: boolean;
+  vehicleLimit: number | null;
+  vehicleCount: number;
+  isDemo: boolean;
+};
+
 export default function FleetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -154,6 +173,12 @@ export default function FleetDetailPage() {
     enabled: tab === "documents",
   });
 
+  const { data: access } = useQuery<FleetAccess>({ queryKey: ["/api/vehicles/access"] });
+  const [, navigate] = useLocation();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [downgradeOpen, setDowngradeOpen] = useState(false);
+  const [selectedDowngradePlan, setSelectedDowngradePlan] = useState<string | null>(null);
+
   const deleteOdom = useMutation({
     mutationFn: (logId: string) => apiRequest("DELETE", `/api/vehicles/${id}/odometer/${logId}`),
     onSuccess: () => {
@@ -181,6 +206,27 @@ export default function FleetDetailPage() {
   const deleteDoc = useMutation({
     mutationFn: (docId: string) => apiRequest("DELETE", `/api/vehicles/${id}/documents/${docId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/vehicles/${id}/documents`] }),
+  });
+
+  const deleteVehicle = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/vehicles/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles/access"] });
+      navigate("/fleet");
+    },
+    onError: () => toast({ title: "Failed to remove vehicle", variant: "destructive" }),
+  });
+
+  const upgradePlan = useMutation({
+    mutationFn: (priceId: string) =>
+      apiRequest("POST", "/api/vehicles/fleet-upgrade", { priceId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles/access"] });
+      setDowngradeOpen(false);
+      deleteVehicle.mutate();
+    },
+    onError: () => toast({ title: "Could not update plan", variant: "destructive" }),
   });
 
   const [odomForm, setOdomForm] = useState({
@@ -323,6 +369,37 @@ export default function FleetDetailPage() {
           >
             {vehicle.status}
           </Badge>
+          {isAdmin && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              onClick={() => {
+                const vehicleCountAfter = (access?.vehicleCount ?? 1) - 1;
+                const currentPlan = FLEET_PLANS.find(
+                  (p) => p.vehicleLimit === (access?.vehicleLimit ?? null)
+                );
+                if (currentPlan) {
+                  const cheaper = FLEET_PLANS.slice()
+                    .sort((a, b) => a.price - b.price)
+                    .find(
+                      (p) =>
+                        p.price < currentPlan.price &&
+                        (p.vehicleLimit === null || p.vehicleLimit >= vehicleCountAfter)
+                    );
+                  if (cheaper) {
+                    setSelectedDowngradePlan(cheaper.priceId);
+                    setDowngradeOpen(true);
+                    return;
+                  }
+                }
+                setDeleteOpen(true);
+              }}
+              data-testid="button-delete-vehicle"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1232,6 +1309,85 @@ export default function FleetDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Vehicle Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent data-testid="dialog-delete-vehicle">
+          <DialogHeader>
+            <DialogTitle>Remove Vehicle</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Remove {vehicle.year} {vehicle.make} {vehicle.model} from your fleet? All logs and
+            documents will be preserved.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteVehicle.isPending}
+              onClick={() => deleteVehicle.mutate()}
+              data-testid="button-confirm-delete-vehicle"
+            >
+              {deleteVehicle.isPending ? "Removing..." : "Remove Vehicle"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Downgrade Plan Dialog */}
+      {(() => {
+        const suggestedPlan = FLEET_PLANS.find((p) => p.priceId === selectedDowngradePlan);
+        const currentPlan = FLEET_PLANS.find(
+          (p) => p.vehicleLimit === (access?.vehicleLimit ?? null)
+        );
+        if (!suggestedPlan || !currentPlan) return null;
+        const savings = currentPlan.price - suggestedPlan.price;
+        const vehicleCountAfter = (access?.vehicleCount ?? 1) - 1;
+        return (
+          <Dialog
+            open={downgradeOpen}
+            onOpenChange={(o) => {
+              setDowngradeOpen(o);
+              if (!o) setDeleteOpen(true);
+            }}
+          >
+            <DialogContent data-testid="dialog-downgrade-plan">
+              <DialogHeader>
+                <DialogTitle>Save ${savings}/month?</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                After removing this vehicle you'll have {vehicleCountAfter}{" "}
+                {vehicleCountAfter === 1 ? "vehicle" : "vehicles"}. You can downgrade to the{" "}
+                {suggestedPlan.label} plan and save ${savings}/month. The unused portion of your
+                current billing period will be credited to your account.
+              </p>
+              <DialogFooter className="flex-col gap-2 sm:flex-row">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDowngradeOpen(false);
+                    setDeleteOpen(true);
+                  }}
+                >
+                  Keep current plan
+                </Button>
+                <Button
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  disabled={upgradePlan.isPending}
+                  onClick={() => upgradePlan.mutate(selectedDowngradePlan!)}
+                  data-testid="button-confirm-downgrade"
+                >
+                  {upgradePlan.isPending
+                    ? "Updating..."
+                    : `Downgrade to ${suggestedPlan.label} ($${suggestedPlan.price}/mo)`}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }

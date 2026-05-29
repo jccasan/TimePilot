@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Truck, Plus, AlertTriangle, BarChart3, ChevronRight, Star } from "lucide-react";
+import { Truck, Plus, AlertTriangle, BarChart3, ChevronRight, Star, ArrowUp } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -37,12 +37,24 @@ import {
 import { insertVehicleSchema } from "@shared/vehicle-schema";
 import { z } from "zod";
 
+const FLEET_PLANS = [
+  { priceId: "price_1TcYUBGVMaTr43jXnkkXNEOo", vehicleLimit: 1, label: "1 Vehicle", price: 9 },
+  { priceId: "price_1TcYVOGVMaTr43jXOVgaNvb0", vehicleLimit: 2, label: "2 Vehicles", price: 18 },
+  { priceId: "price_1TcYX3GVMaTr43jXALdTVpP1", vehicleLimit: 3, label: "3 Vehicles", price: 27 },
+  {
+    priceId: "price_1TcYXZGVMaTr43jXzdiwib6E",
+    vehicleLimit: null,
+    label: "Unlimited Vehicles",
+    price: 29,
+  },
+] as const;
+
 type FleetAccess = {
   enabled: boolean;
-  trialActive: boolean;
-  trialEndsAt: string | null;
-  daysLeftInTrial: number | null;
   hasAccess: boolean;
+  vehicleLimit: number | null;
+  vehicleCount: number;
+  isDemo: boolean;
 };
 
 type FleetAlert = {
@@ -87,6 +99,8 @@ export default function FleetPage() {
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "sold">("all");
+  const [upsellOpen, setUpsellOpen] = useState(false);
+  const [selectedUpgradePlan, setSelectedUpgradePlan] = useState<string | null>(null);
   const isAdmin = user?.role === "owner" || user?.role === "admin";
 
   const { data: access, isLoading: accessLoading } = useQuery<FleetAccess>({
@@ -115,18 +129,36 @@ export default function FleetPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: AddVehicleForm) => apiRequest("POST", "/api/vehicles", data),
+    mutationFn: async (data: AddVehicleForm) => {
+      const res = await apiRequest("POST", "/api/vehicles", data);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        throw body;
+      }
+      return res;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles/access"] });
       setAddOpen(false);
       form.reset();
       toast({ title: "Vehicle added" });
     },
-    onError: () => toast({ title: "Failed to add vehicle", variant: "destructive" }),
+    onError: (err: unknown) => {
+      const e = err as { limitReached?: boolean };
+      if (e?.limitReached) {
+        setAddOpen(false);
+        setSelectedUpgradePlan(null);
+        setUpsellOpen(true);
+      } else {
+        toast({ title: "Failed to add vehicle", variant: "destructive" });
+      }
+    },
   });
 
   const checkoutMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/vehicles/fleet-checkout", {}),
+    mutationFn: (priceId: string) =>
+      apiRequest("POST", "/api/vehicles/fleet-checkout", { priceId }),
     onSuccess: async (res) => {
       const data = await res.json();
       window.location.href = data.url;
@@ -134,9 +166,27 @@ export default function FleetPage() {
     onError: () => toast({ title: "Could not start checkout", variant: "destructive" }),
   });
 
+  const upgradeMutation = useMutation({
+    mutationFn: (priceId: string) =>
+      apiRequest("POST", "/api/vehicles/fleet-upgrade", { priceId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles/access"] });
+      setUpsellOpen(false);
+      setSelectedUpgradePlan(null);
+      toast({ title: "Plan updated" });
+    },
+    onError: () => toast({ title: "Could not update plan", variant: "destructive" }),
+  });
+
   function onSubmit(data: AddVehicleForm) {
     createMutation.mutate(data);
   }
+
+  const upgradePlans = FLEET_PLANS.filter((p) => {
+    if (access?.vehicleLimit === null) return false;
+    if (p.vehicleLimit === null) return true;
+    return p.vehicleLimit > (access?.vehicleLimit ?? 0);
+  });
 
   if (accessLoading) {
     return (
@@ -150,7 +200,7 @@ export default function FleetPage() {
 
   if (!access?.hasAccess) {
     return (
-      <div className="p-6 max-w-2xl mx-auto" data-testid="fleet-upsell">
+      <div className="p-6 max-w-3xl mx-auto" data-testid="fleet-upsell">
         <div className="flex items-center gap-3 mb-6">
           <Truck className="h-8 w-8 text-green-600" />
           <div>
@@ -158,56 +208,69 @@ export default function FleetPage() {
             <p className="text-muted-foreground text-sm">Vehicle tracking and fleet management</p>
           </div>
         </div>
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            <div className="flex items-start gap-3">
-              <Star className="h-5 w-5 text-amber-500 mt-0.5" />
-              <div>
-                <h3 className="font-semibold">Track all your vehicles in one place</h3>
-                <p className="text-sm text-muted-foreground">
-                  Odometer, maintenance, fuel, repairs, and compliance documents — all organized by
-                  vehicle.
-                </p>
-              </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="flex items-start gap-3">
+            <Star className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+            <div>
+              <h3 className="font-semibold text-sm">Track all your vehicles</h3>
+              <p className="text-xs text-muted-foreground">
+                Odometer, maintenance, fuel, repairs, and compliance documents — all in one place.
+              </p>
             </div>
-            <div className="flex items-start gap-3">
-              <BarChart3 className="h-5 w-5 text-blue-500 mt-0.5" />
-              <div>
-                <h3 className="font-semibold">Fleet cost summaries</h3>
-                <p className="text-sm text-muted-foreground">
-                  Per-vehicle and fleet-wide cost breakdowns, cost-per-mile, and MPG calculations.
-                </p>
-              </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <BarChart3 className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
+            <div>
+              <h3 className="font-semibold text-sm">Fleet cost summaries</h3>
+              <p className="text-xs text-muted-foreground">
+                Per-vehicle and fleet-wide cost breakdowns, cost-per-mile, and MPG calculations.
+              </p>
             </div>
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
-              <div>
-                <h3 className="font-semibold">Expiry alerts</h3>
-                <p className="text-sm text-muted-foreground">
-                  Get notified before insurance, registration, maintenance, and documents expire.
-                </p>
-              </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
+            <div>
+              <h3 className="font-semibold text-sm">Expiry alerts</h3>
+              <p className="text-xs text-muted-foreground">
+                Get notified before insurance, registration, and maintenance expire.
+              </p>
             </div>
-            <div className="pt-4 border-t">
-              <p className="text-lg font-semibold mb-1">$19/month add-on</p>
-              <p className="text-sm text-muted-foreground mb-4">14-day free trial included</p>
-              {isAdmin ? (
-                <Button
-                  onClick={() => checkoutMutation.mutate()}
-                  disabled={checkoutMutation.isPending}
-                  data-testid="button-fleet-subscribe"
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                >
-                  {checkoutMutation.isPending ? "Redirecting..." : "Start Free Trial"}
-                </Button>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Ask your account owner to activate FleetPilot.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        {isAdmin ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="fleet-plan-picker">
+            {FLEET_PLANS.map((plan) => (
+              <Card
+                key={plan.priceId}
+                className={`border-2 transition-colors ${plan.vehicleLimit === null ? "border-green-500" : "border-border"}`}
+                data-testid={`plan-card-${plan.priceId}`}
+              >
+                <CardContent className="pt-4 pb-4 text-center">
+                  <p className="font-semibold text-sm mb-1">{plan.label}</p>
+                  <p className="text-2xl font-bold text-green-700 dark:text-green-400 mb-3">
+                    ${plan.price}
+                    <span className="text-xs font-normal text-muted-foreground">/mo</span>
+                  </p>
+                  <Button
+                    size="sm"
+                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    disabled={checkoutMutation.isPending}
+                    onClick={() => checkoutMutation.mutate(plan.priceId)}
+                    data-testid={`button-subscribe-${plan.priceId}`}
+                  >
+                    {checkoutMutation.isPending ? "..." : "Subscribe"}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Ask your account owner to activate FleetPilot.
+          </p>
+        )}
       </div>
     );
   }
@@ -218,12 +281,9 @@ export default function FleetPage() {
         <div className="flex items-center gap-3">
           <Truck className="h-6 w-6 text-green-600" />
           <h1 className="text-2xl font-bold">Fleet</h1>
-          {access.trialActive && access.daysLeftInTrial !== null && (
-            <Badge
-              variant="outline"
-              className="text-xs border-amber-400 text-amber-700 dark:text-amber-400"
-            >
-              Trial: {access.daysLeftInTrial}d left
+          {access.vehicleLimit !== null && (
+            <Badge variant="outline" className="text-xs" data-testid="vehicle-count-badge">
+              {access.vehicleCount} / {access.vehicleLimit} vehicles
             </Badge>
           )}
         </div>
@@ -546,6 +606,53 @@ export default function FleetPage() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upgrade plan dialog — shown when vehicle limit is reached */}
+      <Dialog open={upsellOpen} onOpenChange={setUpsellOpen}>
+        <DialogContent data-testid="dialog-upgrade-plan">
+          <DialogHeader>
+            <DialogTitle>Upgrade Your FleetPilot Plan</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            You've reached your {access.vehicleLimit}-vehicle limit. Choose a larger plan to add
+            more vehicles. The unused portion of your current billing period will be prorated.
+          </p>
+          <div className="space-y-2 py-2">
+            {upgradePlans.map((plan) => (
+              <button
+                key={plan.priceId}
+                type="button"
+                className={`w-full flex items-center justify-between p-3 rounded-lg border-2 text-left transition-colors ${
+                  selectedUpgradePlan === plan.priceId
+                    ? "border-green-500 bg-green-50 dark:bg-green-950"
+                    : "border-border hover:border-green-400"
+                }`}
+                onClick={() => setSelectedUpgradePlan(plan.priceId)}
+                data-testid={`upgrade-plan-${plan.priceId}`}
+              >
+                <span className="font-medium text-sm">{plan.label}</span>
+                <span className="text-green-700 dark:text-green-400 font-semibold">
+                  ${plan.price}/mo
+                </span>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUpsellOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!selectedUpgradePlan || upgradeMutation.isPending}
+              onClick={() => selectedUpgradePlan && upgradeMutation.mutate(selectedUpgradePlan)}
+              className="bg-green-600 hover:bg-green-700 text-white"
+              data-testid="button-confirm-upgrade"
+            >
+              <ArrowUp className="h-4 w-4 mr-1" />
+              {upgradeMutation.isPending ? "Upgrading..." : "Upgrade Plan"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

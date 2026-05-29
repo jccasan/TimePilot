@@ -1,6 +1,13 @@
 import type { Express, Request, Response } from "express";
 import multer from "multer";
-import { isAuthenticated, getCompanyContext, requireRole, handleError, p } from "./shared";
+import {
+  isAuthenticated,
+  getCompanyContext,
+  requireRole,
+  handleError,
+  p,
+  getDemoCompanyId,
+} from "./shared";
 import { ObjectStorageService } from "../replit_integrations/object_storage";
 import { VehicleRepository } from "../repositories/VehicleRepository";
 import { storage } from "../storage";
@@ -20,10 +27,32 @@ const ALLOWED_DOC_MIMES = new Set(["application/pdf", "image/jpeg", "image/png"]
 const objStorage = new ObjectStorageService();
 const repo = new VehicleRepository();
 
+export const FLEET_PLAN_MAP: Record<
+  string,
+  { vehicleLimit: number | null; label: string; pricePerMonth: number }
+> = {
+  price_1TcYUBGVMaTr43jXnkkXNEOo: { vehicleLimit: 1, label: "1 Vehicle", pricePerMonth: 9 },
+  price_1TcYVOGVMaTr43jXOVgaNvb0: { vehicleLimit: 2, label: "2 Vehicles", pricePerMonth: 18 },
+  price_1TcYX3GVMaTr43jXALdTVpP1: { vehicleLimit: 3, label: "3 Vehicles", pricePerMonth: 27 },
+  price_1TcYXZGVMaTr43jXzdiwib6E: {
+    vehicleLimit: null,
+    label: "Unlimited Vehicles",
+    pricePerMonth: 29,
+  },
+};
+
+type VehicleTrackerCtx = {
+  companyId: string;
+  role: string;
+  userId: string;
+  isDemo: boolean;
+  vehicleLimit: number | null;
+};
+
 async function requireVehicleTracker(
   req: Request,
   res: Response
-): Promise<{ companyId: string; role: string } | null> {
+): Promise<VehicleTrackerCtx | null> {
   try {
     const ctx = await getCompanyContext(req);
     const company = await storage.getCompany(ctx.companyId);
@@ -31,27 +60,15 @@ async function requireVehicleTracker(
       res.status(404).json({ error: "Company not found" });
       return null;
     }
-
-    const now = new Date();
-    const trialActive =
-      company.vehicleTrackerTrialEndsAt && company.vehicleTrackerTrialEndsAt > now;
-    const hasAccess = company.vehicleTrackerEnabled || trialActive;
-
+    const demoId = await getDemoCompanyId();
+    const isDemo = demoId === ctx.companyId;
+    const hasAccess = company.vehicleTrackerEnabled || isDemo;
     if (!hasAccess) {
-      if (!company.vehicleTrackerTrialEndsAt) {
-        const trialEndsAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-        await db
-          .update(companies)
-          .set({ vehicleTrackerTrialEndsAt: trialEndsAt, updatedAt: new Date() })
-          .where(eq(companies.id, ctx.companyId));
-        console.log(`[Fleet] Auto-started 14-day trial for company ${ctx.companyId}`);
-      } else {
-        res.status(403).json({ error: "FleetPilot subscription required", upgrade: true });
-        return null;
-      }
+      res.status(403).json({ error: "FleetPilot subscription required", upgrade: true });
+      return null;
     }
-
-    return ctx;
+    const vehicleLimit = isDemo ? null : (company.vehicleTrackerVehicleLimit ?? null);
+    return { companyId: ctx.companyId, role: ctx.role, userId: ctx.userId, isDemo, vehicleLimit };
   } catch (err) {
     console.error("[Fleet] requireVehicleTracker error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -65,32 +82,23 @@ export async function registerVehicleRoutes(app: Express): Promise<void> {
   app.get("/api/vehicles/access", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId } = await getCompanyContext(req);
-      let company = await storage.getCompany(companyId);
+      const company = await storage.getCompany(companyId);
       if (!company) return res.status(404).json({ error: "Company not found" });
-      const now = new Date();
-      // Auto-start 14-day trial on first access if never tried before
-      if (!company.vehicleTrackerEnabled && !company.vehicleTrackerTrialEndsAt) {
-        const trialEndsAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-        await db
-          .update(companies)
-          .set({ vehicleTrackerTrialEndsAt: trialEndsAt, updatedAt: new Date() })
-          .where(eq(companies.id, companyId));
-        company = { ...company, vehicleTrackerTrialEndsAt: trialEndsAt };
-        console.log(`[Fleet] Auto-started 14-day trial for company ${companyId}`);
+      const demoId = await getDemoCompanyId();
+      const isDemo = demoId === companyId;
+      const hasAccess = company.vehicleTrackerEnabled || isDemo;
+      const vehicleLimit = isDemo ? null : (company.vehicleTrackerVehicleLimit ?? null);
+      let vehicleCount = 0;
+      if (hasAccess) {
+        const vlist = await repo.listVehicles(companyId);
+        vehicleCount = vlist.filter((v) => v.status !== "sold").length;
       }
-      const trialActive =
-        company.vehicleTrackerTrialEndsAt && company.vehicleTrackerTrialEndsAt > now;
-      const hasAccess = company.vehicleTrackerEnabled || !!trialActive;
-      const daysLeftInTrial =
-        trialActive && company.vehicleTrackerTrialEndsAt
-          ? Math.ceil((company.vehicleTrackerTrialEndsAt.getTime() - now.getTime()) / 86400000)
-          : null;
       res.json({
-        enabled: company.vehicleTrackerEnabled,
-        trialEndsAt: company.vehicleTrackerTrialEndsAt,
-        trialActive: !!trialActive,
+        enabled: company.vehicleTrackerEnabled || isDemo,
         hasAccess,
-        daysLeftInTrial,
+        vehicleLimit,
+        vehicleCount,
+        isDemo,
       });
     } catch (err) {
       handleError(res, err);
@@ -115,6 +123,18 @@ export async function registerVehicleRoutes(app: Express): Promise<void> {
       const ctx = await requireVehicleTracker(req, res);
       if (!ctx) return;
       requireRole(ctx.role, ["owner", "admin"]);
+      if (!ctx.isDemo && ctx.vehicleLimit !== null) {
+        const existing = await repo.listVehicles(ctx.companyId);
+        const activeCount = existing.filter((v) => v.status !== "sold").length;
+        if (activeCount >= ctx.vehicleLimit) {
+          return res.status(403).json({
+            error: "Vehicle limit reached",
+            limitReached: true,
+            vehicleLimit: ctx.vehicleLimit,
+            vehicleCount: activeCount,
+          });
+        }
+      }
       const parsed = insertVehicleSchema.parse({ ...req.body, companyId: ctx.companyId });
       const vehicle = await repo.createVehicle(parsed);
       res.status(201).json(vehicle);
@@ -156,9 +176,10 @@ export async function registerVehicleRoutes(app: Express): Promise<void> {
       if (!company) return res.status(404).json({ error: "Company not found" });
       if (company.vehicleTrackerEnabled)
         return res.status(400).json({ error: "Fleet plan already active" });
-      const priceId = process.env.STRIPE_FLEET_PRICE_ID;
-      if (!priceId)
-        return res.status(400).json({ error: "Fleet pricing not configured. Contact support." });
+      const { priceId } = req.body as { priceId?: string };
+      if (!priceId || !FLEET_PLAN_MAP[priceId])
+        return res.status(400).json({ error: "Invalid plan selected" });
+      const plan = FLEET_PLAN_MAP[priceId];
       const { createFleetPlanCheckout, isStripeConfigured } = await import("../services/stripe");
       if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
       const { getBaseUrl } = await import("./shared");
@@ -166,6 +187,7 @@ export async function registerVehicleRoutes(app: Express): Promise<void> {
       const session = await createFleetPlanCheckout({
         tenantId: companyId,
         priceId,
+        vehicleLimit: plan.vehicleLimit,
         customerEmail: company.email || "",
         successUrl: `${baseUrl}/fleet?fleet_success=1`,
         cancelUrl: `${baseUrl}/fleet`,
@@ -179,6 +201,33 @@ export async function registerVehicleRoutes(app: Express): Promise<void> {
 
   app.post("/api/vehicles/fleet-checkout", isAuthenticated, handleFleetCheckout);
   app.post("/api/vehicles/subscribe", isAuthenticated, handleFleetCheckout);
+
+  app.post("/api/vehicles/fleet-upgrade", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId, role } = await getCompanyContext(req);
+      requireRole(role, ["owner", "admin"]);
+      const company = await storage.getCompany(companyId);
+      if (!company) return res.status(404).json({ error: "Company not found" });
+      if (!company.vehicleTrackerEnabled || !company.stripeVehicleSubscriptionId)
+        return res.status(400).json({ error: "No active Fleet subscription" });
+      const { priceId } = req.body as { priceId?: string };
+      if (!priceId || !FLEET_PLAN_MAP[priceId])
+        return res.status(400).json({ error: "Invalid plan selected" });
+      const plan = FLEET_PLAN_MAP[priceId];
+      const { updateFleetSubscriptionPrice, isStripeConfigured } = await import(
+        "../services/stripe"
+      );
+      if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
+      await updateFleetSubscriptionPrice(company.stripeVehicleSubscriptionId, priceId);
+      await db
+        .update(companies)
+        .set({ vehicleTrackerVehicleLimit: plan.vehicleLimit, updatedAt: new Date() })
+        .where(eq(companies.id, companyId));
+      res.json({ success: true, vehicleLimit: plan.vehicleLimit });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
 
   // ── Per-vehicle routes (dynamic /:id below this line) ──────────────────────
 

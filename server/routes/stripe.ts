@@ -644,17 +644,23 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           const company = await storage.getCompany(tenantId);
           if (company) {
             const stripeSubId = session.subscription as string | null;
+            const rawLimit = meta.vehicle_limit as string | undefined;
+            const vehicleLimit =
+              rawLimit === undefined || rawLimit === "unlimited"
+                ? null
+                : parseInt(rawLimit) || null;
             await db
               .update(companies)
               .set({
                 vehicleTrackerEnabled: true,
                 vehicleTrackerTrialEndsAt: null,
+                vehicleTrackerVehicleLimit: vehicleLimit,
                 stripeVehicleSubscriptionId: stripeSubId || null,
                 updatedAt: new Date(),
               })
               .where(eq(companies.id, company.id));
             console.log(
-              `[Stripe Fleet] checkout.session.completed: FleetPilot activated for company "${company.name}" (${company.id})`
+              `[Stripe Fleet] checkout.session.completed: FleetPilot activated for company "${company.name}" (${company.id}) — limit: ${vehicleLimit ?? "unlimited"}`
             );
           }
         }
@@ -1658,6 +1664,7 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
               .update(companies)
               .set({
                 vehicleTrackerEnabled: false,
+                vehicleTrackerVehicleLimit: null,
                 stripeVehicleSubscriptionId: null,
                 updatedAt: new Date(),
               })

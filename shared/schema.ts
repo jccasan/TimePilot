@@ -501,6 +501,7 @@ export const companies = pgTable("companies", {
   deletedAt: timestamp("deleted_at"),
   vehicleTrackerEnabled: boolean("vehicle_tracker_enabled").notNull().default(false),
   vehicleTrackerTrialEndsAt: timestamp("vehicle_tracker_trial_ends_at"),
+  vehicleTrackerVehicleLimit: integer("vehicle_tracker_vehicle_limit"),
   stripeVehicleSubscriptionId: varchar("stripe_vehicle_subscription_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

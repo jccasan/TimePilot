@@ -1709,6 +1709,22 @@ export async function runStartupMigrations(): Promise<void> {
 
     console.log("[Migration] FleetPilot tables and company columns ensured");
 
+    await client.query(
+      `ALTER TABLE companies ADD COLUMN IF NOT EXISTS vehicle_tracker_vehicle_limit INTEGER`
+    );
+    await client.query(`
+      UPDATE companies
+      SET vehicle_tracker_enabled = true
+      WHERE id IN (
+        SELECT c.id FROM users u
+        JOIN company_users cu ON cu.user_id = u.id
+        JOIN companies c ON c.id = cu.company_id
+        WHERE u.email = 'demo@scoopilot.com'
+        LIMIT 1
+      )
+    `);
+    console.log("[Migration] FleetPilot vehicle limit column and demo access ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

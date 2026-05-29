@@ -1007,12 +1007,15 @@ export async function createVoicePlanCheckout(params: {
 export async function createFleetPlanCheckout(params: {
   tenantId: string;
   priceId: string;
+  vehicleLimit: number | null;
   customerEmail: string;
   successUrl: string;
   cancelUrl: string;
   customerId?: string;
 }): Promise<{ url: string; sessionId: string }> {
   const stripe = getStripe();
+  const vehicleLimitMeta =
+    params.vehicleLimit === null ? "unlimited" : String(params.vehicleLimit);
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     mode: "subscription",
     line_items: [{ price: params.priceId, quantity: 1 }],
@@ -1022,12 +1025,14 @@ export async function createFleetPlanCheckout(params: {
       tenant_id: params.tenantId,
       checkout_type: "fleet_addon",
       add_on: "vehicle_tracker",
+      vehicle_limit: vehicleLimitMeta,
     },
     subscription_data: {
       metadata: {
         tenant_id: params.tenantId,
         checkout_type: "fleet_addon",
         add_on: "vehicle_tracker",
+        vehicle_limit: vehicleLimitMeta,
       },
     },
   };
@@ -1057,4 +1062,18 @@ export async function reportMeteredUsage(
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[Stripe Usage] Failed to report ${eventType}: ${message}`);
   }
+}
+
+export async function updateFleetSubscriptionPrice(
+  subscriptionId: string,
+  newPriceId: string
+): Promise<void> {
+  const stripe = getStripe();
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const itemId = subscription.items.data[0]?.id;
+  if (!itemId) throw new Error("No subscription item found on fleet subscription");
+  await stripe.subscriptions.update(subscriptionId, {
+    items: [{ id: itemId, price: newPriceId }],
+    proration_behavior: "create_prorations",
+  });
 }
