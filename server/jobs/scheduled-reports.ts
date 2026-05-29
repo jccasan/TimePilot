@@ -12,6 +12,7 @@ import {
   generateReportData,
   generateReportPdf,
   buildReportEmailHtml,
+  buildReportEmailText,
 } from "../services/report-generator";
 
 type ScheduledReportRow = {
@@ -77,7 +78,7 @@ async function sendScheduledReport(report: ScheduledReportRow): Promise<void> {
       const result = await sendEmail({
         to: recipient,
         subject: `${reportData.companyName} — ${report.name}`,
-        text: `${report.name} generated on ${reportData.generatedAt.toLocaleDateString()}.\n\nSections: ${report.sections.join(", ")}.\n\nPlease find the full report PDF attached.`,
+        text: buildReportEmailText(reportData),
         html: emailHtml,
         attachments: [
           {

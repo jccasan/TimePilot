@@ -2026,7 +2026,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
           END), 0) AS "days60",
           COALESCE(SUM(CASE
             WHEN i.due_date IS NOT NULL
-              AND ${today}::date - i.due_date::date > 90
+              AND ${today}::date - i.due_date::date > 60
             THEN (i.total::numeric - COALESCE(paid.paid_amount,0)) ELSE 0
           END), 0) AS "days90plus",
           COALESCE(SUM(i.total::numeric - COALESCE(paid.paid_amount,0)), 0) AS "total",
@@ -2577,20 +2577,25 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         // Generate and send in background
         Promise.resolve()
           .then(async () => {
-            const { generateReportData, generateReportPdf, buildReportEmailHtml } =
-              await import("../services/report-generator");
+            const {
+              generateReportData,
+              generateReportPdf,
+              buildReportEmailHtml,
+              buildReportEmailText,
+            } = await import("../services/report-generator");
             const { sendEmail } = await import("../services/email");
 
             const reportData = await generateReportData(companyId, report.sections, report.name);
             const pdfBuffer = await generateReportPdf(reportData);
             const emailHtml = buildReportEmailHtml(reportData);
+            const emailText = buildReportEmailText(reportData);
 
             const errors: string[] = [];
             for (const recipient of report.recipients) {
               const result = await sendEmail({
                 to: recipient,
                 subject: `${reportData.companyName} — ${report.name}`,
-                text: `${report.name} generated on ${reportData.generatedAt.toLocaleDateString()}. See attached PDF.`,
+                text: emailText,
                 html: emailHtml,
                 attachments: [
                   {
