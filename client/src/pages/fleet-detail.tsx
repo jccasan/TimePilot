@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, Fuel, FileText, Plus, Trash2, Gauge, ArrowUp } from "lucide-react";
+import { ChevronLeft, Fuel, FileText, Plus, Trash2, Gauge, ArrowUp, Pencil } from "lucide-react";
 import { format } from "date-fns";
 
 type Vehicle = {
@@ -186,6 +186,70 @@ export default function FleetDetailPage() {
   const [downgradeOpen, setDowngradeOpen] = useState(false);
   const [selectedDowngradePlan, setSelectedDowngradePlan] = useState<string | null>(null);
   const [statusLimitOpen, setStatusLimitOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    make: "",
+    model: "",
+    year: "",
+    vin: "",
+    licensePlate: "",
+    color: "",
+    insuranceExpiresAt: "",
+    registrationExpiresAt: "",
+    estimatedCostPerMile: "",
+    notes: "",
+  });
+
+  const editMutation = useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      apiRequest("PATCH", `/api/vehicles/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/vehicles/${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      setEditOpen(false);
+      toast({ title: "Vehicle updated" });
+    },
+    onError: () => toast({ title: "Failed to update vehicle", variant: "destructive" }),
+  });
+
+  function openEdit() {
+    if (!vehicle) return;
+    setEditForm({
+      make: vehicle.make,
+      model: vehicle.model,
+      year: String(vehicle.year),
+      vin: vehicle.vin ?? "",
+      licensePlate: vehicle.licensePlate ?? "",
+      color: vehicle.color ?? "",
+      insuranceExpiresAt: vehicle.insuranceExpiresAt
+        ? vehicle.insuranceExpiresAt.split("T")[0]
+        : "",
+      registrationExpiresAt: vehicle.registrationExpiresAt
+        ? vehicle.registrationExpiresAt.split("T")[0]
+        : "",
+      estimatedCostPerMile: "",
+      notes: vehicle.notes ?? "",
+    });
+    setEditOpen(true);
+  }
+
+  function submitEdit() {
+    const payload: Record<string, unknown> = {
+      make: editForm.make.trim(),
+      model: editForm.model.trim(),
+      year: parseInt(editForm.year, 10),
+      vin: editForm.vin.trim() || null,
+      licensePlate: editForm.licensePlate.trim() || null,
+      color: editForm.color.trim() || null,
+      insuranceExpiresAt: editForm.insuranceExpiresAt || null,
+      registrationExpiresAt: editForm.registrationExpiresAt || null,
+      notes: editForm.notes.trim() || null,
+    };
+    if (editForm.estimatedCostPerMile.trim()) {
+      payload.estimatedCostPerMile = editForm.estimatedCostPerMile.trim();
+    }
+    editMutation.mutate(payload);
+  }
 
   const setStatusMutation = useMutation({
     mutationFn: async (newStatus: string) => {
@@ -432,6 +496,17 @@ export default function FleetDetailPage() {
             >
               {vehicle.status}
             </Badge>
+          )}
+          {isAdmin && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={openEdit}
+              data-testid="button-edit-vehicle"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
           )}
           {isAdmin && (
             <Button
@@ -1452,6 +1527,145 @@ export default function FleetDetailPage() {
           </Dialog>
         );
       })()}
+
+      {/* Edit Vehicle dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-lg" data-testid="dialog-edit-vehicle">
+          <DialogHeader>
+            <DialogTitle>Edit Vehicle</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="edit-make">Make</Label>
+                <Input
+                  id="edit-make"
+                  value={editForm.make}
+                  onChange={(e) => setEditForm((f) => ({ ...f, make: e.target.value }))}
+                  data-testid="input-edit-make"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-model">Model</Label>
+                <Input
+                  id="edit-model"
+                  value={editForm.model}
+                  onChange={(e) => setEditForm((f) => ({ ...f, model: e.target.value }))}
+                  data-testid="input-edit-model"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="edit-year">Year</Label>
+                <Input
+                  id="edit-year"
+                  type="number"
+                  value={editForm.year}
+                  onChange={(e) => setEditForm((f) => ({ ...f, year: e.target.value }))}
+                  data-testid="input-edit-year"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-color">Color</Label>
+                <Input
+                  id="edit-color"
+                  value={editForm.color}
+                  onChange={(e) => setEditForm((f) => ({ ...f, color: e.target.value }))}
+                  placeholder="Optional"
+                  data-testid="input-edit-color"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="edit-plate">License Plate</Label>
+                <Input
+                  id="edit-plate"
+                  value={editForm.licensePlate}
+                  onChange={(e) => setEditForm((f) => ({ ...f, licensePlate: e.target.value }))}
+                  placeholder="Optional"
+                  data-testid="input-edit-plate"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-vin">VIN</Label>
+                <Input
+                  id="edit-vin"
+                  value={editForm.vin}
+                  onChange={(e) => setEditForm((f) => ({ ...f, vin: e.target.value }))}
+                  placeholder="Optional"
+                  data-testid="input-edit-vin"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="edit-insurance">Insurance Expires</Label>
+                <Input
+                  id="edit-insurance"
+                  type="date"
+                  value={editForm.insuranceExpiresAt}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, insuranceExpiresAt: e.target.value }))
+                  }
+                  data-testid="input-edit-insurance"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-registration">Registration Expires</Label>
+                <Input
+                  id="edit-registration"
+                  type="date"
+                  value={editForm.registrationExpiresAt}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, registrationExpiresAt: e.target.value }))
+                  }
+                  data-testid="input-edit-registration"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="edit-cpm">Est. Cost per Mile ($)</Label>
+              <Input
+                id="edit-cpm"
+                type="number"
+                step="0.01"
+                value={editForm.estimatedCostPerMile}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, estimatedCostPerMile: e.target.value }))
+                }
+                placeholder="Optional"
+                data-testid="input-edit-cpm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="edit-notes">Notes</Label>
+              <Textarea
+                id="edit-notes"
+                value={editForm.notes}
+                onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                rows={3}
+                placeholder="Optional"
+                data-testid="input-edit-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              disabled={editMutation.isPending || !editForm.make.trim() || !editForm.model.trim()}
+              onClick={submitEdit}
+              data-testid="button-save-vehicle"
+            >
+              {editMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Status-change limit: vehicle plan cap reached on reactivation */}
       <Dialog open={statusLimitOpen} onOpenChange={setStatusLimitOpen}>
