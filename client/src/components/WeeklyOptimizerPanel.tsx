@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useAddressLabels } from "@/hooks/use-address-labels";
+import { formatDistance } from "@/lib/units";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -307,6 +309,7 @@ export function WeeklyOptimizerPanel({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { country: weekOptimizerCountry } = useAddressLabels();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [planResult, setPlanResult] = useState<PlannerResult | null>(null);
@@ -1141,8 +1144,11 @@ export function WeeklyOptimizerPanel({
                                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                                   <Car className="h-3 w-3" />
                                   <span>
-                                    {route.estimatedMiles.toFixed(1)} mi ·{" "}
-                                    {formatMinutes(route.totalRouteMinutes)} total ·{" "}
+                                    {
+                                      formatDistance(route.estimatedMiles, weekOptimizerCountry)
+                                        .formatted
+                                    }{" "}
+                                    · {formatMinutes(route.totalRouteMinutes)} total ·{" "}
                                     {route.stopCount} stops
                                   </span>
                                 </div>

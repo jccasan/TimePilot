@@ -69,6 +69,8 @@ import Analytics from "@/pages/analytics";
 import { useToast } from "@/hooks/use-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { useAddressLabels } from "@/hooks/use-address-labels";
+import { formatDistance } from "@/lib/units";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -941,6 +943,8 @@ function FinanceTab({
 // ─── Operations Tab ───────────────────────────────────────────────────────────
 
 function OperationsTab({ companyName }: { companyName?: string }) {
+  const { country } = useAddressLabels();
+  const distLabel = country === "ca" ? "km" : "mi";
   const today = new Date().toISOString().split("T")[0];
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(thirtyDaysAgo);
@@ -1011,7 +1015,7 @@ function OperationsTab({ companyName }: { companyName?: string }) {
         "Completed",
         "Completion %",
         "Avg Duration (min)",
-        "Avg Distance (mi)",
+        `Avg Distance (${distLabel})`,
         "Revenue/Stop",
       ],
       routeSummary.map((r) => [
@@ -1022,7 +1026,7 @@ function OperationsTab({ companyName }: { companyName?: string }) {
         r.completed,
         `${r.completionRate}%`,
         Math.round(Number(r.avgVisitMinutes)),
-        Number(r.avgDistanceMiles).toFixed(1),
+        formatDistance(Number(r.avgDistanceMiles), country).value.toFixed(1),
         fmt(Number(r.revenuePerStop)),
       ])
     );
@@ -1032,7 +1036,17 @@ function OperationsTab({ companyName }: { companyName?: string }) {
     if (!routeSummary) return;
     exportPdf(
       "Route Summary",
-      ["Route", "Tech", "Stops", "Visits", "Completed", "%", "Avg Min", "Dist (mi)", "Rev/Stop"],
+      [
+        "Route",
+        "Tech",
+        "Stops",
+        "Visits",
+        "Completed",
+        "%",
+        "Avg Min",
+        `Dist (${distLabel})`,
+        "Rev/Stop",
+      ],
       routeSummary.map((r) => [
         r.routeName,
         r.techName ?? "—",
@@ -1041,7 +1055,7 @@ function OperationsTab({ companyName }: { companyName?: string }) {
         r.completed,
         `${r.completionRate}%`,
         Math.round(Number(r.avgVisitMinutes)),
-        Number(r.avgDistanceMiles).toFixed(1),
+        formatDistance(Number(r.avgDistanceMiles), country).value.toFixed(1),
         fmt(Number(r.revenuePerStop)),
       ]),
       `${appliedStart} to ${appliedEnd}`,
@@ -1312,7 +1326,7 @@ function OperationsTab({ companyName }: { companyName?: string }) {
                     <TableHead className="text-right">Visits</TableHead>
                     <TableHead className="text-right">Completed</TableHead>
                     <TableHead className="text-right">Completion %</TableHead>
-                    <TableHead className="text-right">Avg Dist (mi)</TableHead>
+                    <TableHead className="text-right">Avg Dist ({distLabel})</TableHead>
                     <TableHead className="text-right">Rev/Stop</TableHead>
                     <TableHead className="text-right">Avg Min</TableHead>
                   </TableRow>
@@ -1340,7 +1354,7 @@ function OperationsTab({ companyName }: { companyName?: string }) {
                       </TableCell>
                       <TableCell className="text-right">
                         {Number(r.avgDistanceMiles) > 0
-                          ? Number(r.avgDistanceMiles).toFixed(1)
+                          ? formatDistance(Number(r.avgDistanceMiles), country).value.toFixed(1)
                           : "—"}
                       </TableCell>
                       <TableCell className="text-right">

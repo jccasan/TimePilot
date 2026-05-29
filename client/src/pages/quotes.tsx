@@ -7,6 +7,8 @@ import { toLocalDateString } from "@/lib/utils";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
+import { useAddressLabels } from "@/hooks/use-address-labels";
+import { distanceUnit } from "@/lib/units";
 import type { Quote, Contact, Property } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1247,6 +1249,8 @@ function CreateEditQuoteDialog({
   const tz = useCompanyTimezone();
   const { toast } = useToast();
   const { formatMoney } = useCurrency();
+  const { country: quoteCountry } = useAddressLabels();
+  const distUnit = distanceUnit(quoteCountry);
   const isEdit = !!quote;
 
   const { data: pricingConfig } = useQuery<{
@@ -2416,8 +2420,11 @@ function CreateEditQuoteDialog({
                   {Number(mileageDistance) > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">
-                        Mileage ({mileageDistance} mi x $
-                        {livePricing.breakdown.mileageRate?.toFixed(3)})
+                        Mileage (
+                        {distUnit === "km"
+                          ? `${(Number(mileageDistance) * 1.60934).toFixed(1)} km`
+                          : `${mileageDistance} mi`}{" "}
+                        x ${livePricing.breakdown.mileageRate?.toFixed(3)})
                       </span>
                       <span className="font-medium">
                         {formatMoney(livePricing.breakdown.mileageCost ?? 0)}

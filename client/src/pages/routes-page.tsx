@@ -17,6 +17,8 @@ import { toLocalDateString } from "@/lib/utils";
 import { compressImage } from "@/lib/compress-image";
 import { useCompanyTimezone } from "@/hooks/use-company-timezone";
 import { useCurrency } from "@/hooks/use-currency";
+import { useAddressLabels } from "@/hooks/use-address-labels";
+import { formatDistance, formatDistanceShort } from "@/lib/units";
 import { useToast } from "@/hooks/use-toast";
 import type { Route, ServicePlan, Contact, Property, Visit } from "@shared/schema";
 type RouteWithOptStatus = Route & { isOptimizedCurrent?: boolean };
@@ -276,6 +278,7 @@ type RouteMetrics = {
 };
 
 function LegSeparator({ distance, duration }: { distance: number; duration: number }) {
+  const { country } = useAddressLabels();
   return (
     <div
       className="flex items-center gap-1.5 py-0.5 px-2 text-[10px] text-muted-foreground"
@@ -283,7 +286,7 @@ function LegSeparator({ distance, duration }: { distance: number; duration: numb
     >
       <div className="flex-1 border-t border-dashed border-muted-foreground/30" />
       <Car className="h-2.5 w-2.5" />
-      <span>{distance < 0.1 ? "<0.1" : distance.toFixed(1)} mi</span>
+      <span>{formatDistanceShort(distance, country)}</span>
       <span className="text-muted-foreground/50">|</span>
       <span>{duration < 1 ? "<1" : Math.round(duration)} min</span>
       <div className="flex-1 border-t border-dashed border-muted-foreground/30" />
@@ -724,6 +727,7 @@ function RouteCard({
   highlightedStopIds?: Set<string>;
 }) {
   const { formatMoney } = useCurrency();
+  const { country } = useAddressLabels();
   const [overDurationDismissed, setOverDurationDismissed] = useState(false);
   const tech = team.find((t) => t.id === route.technicianId);
   const sortedStops = [...stops].sort((a, b) => a.stopOrder - b.stopOrder);
@@ -891,7 +895,7 @@ function RouteCard({
               data-testid={`text-route-metrics-${route.id}`}
             >
               <Car className="h-3 w-3" />
-              {metrics.totalDistance} mi
+              {formatDistance(metrics.totalDistance, country).formatted}
               <span className="text-muted-foreground/50">|</span>
               {metrics.totalDuration >= 60
                 ? `${Math.floor(metrics.totalDuration / 60)}h ${metrics.totalDuration % 60}m`
@@ -1621,6 +1625,7 @@ function SavingsSummaryDialog({
   stopsBefore: RouteStop[] | null;
   stopsAfter: RouteStop[] | null;
 }) {
+  const { country } = useAddressLabels();
   if (!result) return null;
   const hasMaps = (stopsBefore?.length ?? 0) >= 2 && (stopsAfter?.length ?? 0) >= 2;
   return (
@@ -1675,9 +1680,11 @@ function SavingsSummaryDialog({
                 <Card>
                   <CardContent className="p-4 text-center">
                     <p className="text-2xl font-bold text-primary" data-testid="text-miles-saved">
-                      {result.milesSaved}
+                      {formatDistance(result.milesSaved, country).value.toFixed(1)}
                     </p>
-                    <p className="text-xs text-muted-foreground">Miles Saved</p>
+                    <p className="text-xs text-muted-foreground">
+                      {country === "ca" ? "Distance Saved" : "Miles Saved"}
+                    </p>
                   </CardContent>
                 </Card>
                 <Card>
@@ -1693,13 +1700,13 @@ function SavingsSummaryDialog({
                 <div className="flex justify-between">
                   <span>Original distance:</span>
                   <span className="font-medium text-foreground">
-                    {result.originalDistance.toFixed(1)} mi
+                    {formatDistance(result.originalDistance, country).formatted}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Optimized distance:</span>
                   <span className="font-medium text-foreground">
-                    {result.totalDistance.toFixed(1)} mi
+                    {formatDistance(result.totalDistance, country).formatted}
                   </span>
                 </div>
                 <div className="flex justify-between">

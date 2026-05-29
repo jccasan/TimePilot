@@ -59,6 +59,8 @@ import {
 import { isNetworkError } from "@/lib/offline-sync";
 import { compressImage } from "@/lib/compress-image";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { useAddressLabels } from "@/hooks/use-address-labels";
+import { formatDistanceShort } from "@/lib/units";
 
 type TodayVisit = {
   id: string;
@@ -214,6 +216,7 @@ type RouteGroup = {
 
 export default function TechMobile() {
   const { toast } = useToast();
+  const { country: techCountry } = useAddressLabels();
   const offline = useOffline();
   const [viewMode, setViewMode] = useState<"start-day" | "route">("start-day");
   const [showMapOverlay, setShowMapOverlay] = useState(false);
@@ -1534,9 +1537,7 @@ export default function TechMobile() {
                                       data-testid={`drive-time-stop-${primaryVisit.id}`}
                                     >
                                       <Clock className="h-4 w-4 shrink-0" />
-                                      <span>
-                                        {miles < 0.1 ? "<0.1 mi" : `${miles.toFixed(1)} mi`} away
-                                      </span>
+                                      <span>{formatDistanceShort(miles, techCountry)} away</span>
                                     </div>
                                   );
                                 }
@@ -2231,7 +2232,7 @@ export default function TechMobile() {
                                 className="text-xs text-muted-foreground"
                                 data-testid={`distance-stop-${visit.id}`}
                               >
-                                {distanceMiles < 0.1 ? "<0.1 mi" : `${distanceMiles.toFixed(1)} mi`}
+                                {formatDistanceShort(distanceMiles, techCountry)}
                               </span>
                             );
                           }

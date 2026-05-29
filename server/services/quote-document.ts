@@ -52,6 +52,16 @@ interface QuoteDocData {
   images?: QuoteImage[];
   baseUrl?: string;
   lineItems?: LineItem[];
+  country?: string;
+}
+
+const MI_TO_KM = 1.60934;
+function fmtTravelDist(miles: number, country?: string): string {
+  if (country?.toLowerCase() === "ca") {
+    const km = Math.round(miles * MI_TO_KM * 10) / 10;
+    return `${km} km round-trip`;
+  }
+  return `${miles} mi round-trip`;
 }
 
 const GREEN = "#1a7a4c";
@@ -267,7 +277,10 @@ export async function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
         ]);
       }
       if (bd.mileageCost && bd.mileageCost > 0) {
-        scopeItems.push(["Travel", `Included (${bd.mileageDistance || 0} mi round-trip)`]);
+        scopeItems.push([
+          "Travel",
+          `Included (${fmtTravelDist(bd.mileageDistance || 0, data.country)})`,
+        ]);
       }
       if (bd.dumpFee && bd.dumpFee > 0) {
         scopeItems.push(["Waste Disposal", `Included`]);
@@ -788,7 +801,7 @@ export async function generateQuoteDocx(data: QuoteDocData): Promise<Buffer> {
       items.push(`On-Site Labor: ${bd.totalLaborHours} hrs with ${bd.crewSize || 1}-person crew`);
     }
     if (bd.mileageCost > 0) {
-      items.push(`Travel: Included (${bd.mileageDistance || 0} mi round-trip)`);
+      items.push(`Travel: Included (${fmtTravelDist(bd.mileageDistance || 0, data.country)})`);
     }
     if (bd.dumpFee > 0) {
       items.push(`Waste Disposal: Included`);

@@ -16,6 +16,7 @@ import {
 import { YardSizeTierEditor } from "@/components/yard-size-tier-editor";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { ZipMapSelector, RadiusMapSelector } from "@/components/zip-map-selector";
+import { formatRadius } from "@/lib/units";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -710,7 +711,15 @@ function BusinessIntelligenceStep({
                     className="flex-1"
                     data-testid="input-radius-slider"
                   />
-                  <span className="text-sm font-medium w-16 shrink-0">{radiusMiles} mi</span>
+                  <span className="text-sm font-medium w-16 shrink-0">
+                    {
+                      formatRadius(
+                        radiusMiles,
+                        (companyData as { country?: string }).country ?? "us"
+                      ).value
+                    }{" "}
+                    {(companyData as { country?: string }).country === "ca" ? "km" : "mi"}
+                  </span>
                 </div>
                 <RadiusMapSelector
                   radiusMiles={radiusMiles}

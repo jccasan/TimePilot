@@ -1154,6 +1154,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           premiumFeatures: pricing.premiumFeatures,
           deluxeFeatures: pricing.deluxeFeatures,
           breakdown: pricing.breakdown,
+          country: (company.country as string | null | undefined) ?? undefined,
           images: (quote.images as { url: string; caption: string; sqft?: number }[]) || undefined,
           baseUrl: getBaseUrl(req),
           lineItems:

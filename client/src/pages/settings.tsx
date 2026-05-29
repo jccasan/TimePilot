@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { getDismissedKey } from "@/components/rover-chatbot";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest, authFetch } from "@/lib/queryClient";
+import { formatRadius } from "@/lib/units";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -6275,7 +6276,8 @@ function ServiceAreaSettingsBlock({ company }: { company: Company | null }) {
                 className="text-sm font-medium w-24 text-right"
                 data-testid="text-sa-radius-value"
               >
-                {radiusMiles} miles
+                {formatRadius(radiusMiles, company?.country ?? "us").value}{" "}
+                {formatRadius(radiusMiles, company?.country ?? "us").label}
               </span>
             </div>
             <RadiusMapSelector radiusMiles={radiusMiles} addressHint={addressHint} />
