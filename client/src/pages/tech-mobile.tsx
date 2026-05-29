@@ -39,6 +39,8 @@ import {
   BarChart2,
   Home,
   ChevronRight,
+  LocateFixed,
+  LocateOff,
 } from "lucide-react";
 import { StreetViewImage } from "@/components/street-view-image";
 const RouteMapView = lazy(() => import("@/components/route-map-view"));
@@ -251,6 +253,10 @@ export default function TechMobile() {
   const gateCaptureInputRef = useRef<HTMLInputElement>(null);
   const extraFileInputRef = useRef<HTMLInputElement>(null);
   const extraCaptureInputRef = useRef<HTMLInputElement>(null);
+
+  const [gpsPermission, setGpsPermission] = useState<
+    "unknown" | "granted" | "denied" | "unavailable"
+  >("unknown");
 
   const [onMyWaySending, setOnMyWaySending] = useState<string | null>(null);
   const [onMyWayCooldowns, setOnMyWayCooldowns] = useState<Record<string, number>>({});
@@ -503,43 +509,41 @@ export default function TechMobile() {
   }, [allVisitsFlat]);
 
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      setGpsPermission("unavailable");
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        console.log(
-          "[GPS] Permission granted on mount:",
-          pos.coords.latitude,
-          pos.coords.longitude
-        );
+        console.log("[GPS] Permission granted on mount:", pos.coords.latitude, pos.coords.longitude);
+        setGpsPermission("granted");
       },
       (err) => {
-        console.error(
-          "[GPS] Permission prompt error on mount — code:",
-          err.code,
-          "message:",
-          err.message
-        );
+        console.error("[GPS] Permission prompt error on mount — code:", err.code, "message:", err.message);
+        setGpsPermission("denied");
       },
       { timeout: 10000, enableHighAccuracy: true }
     );
   }, []);
 
   useEffect(() => {
-    if (!showMapOverlay && viewMode !== "route") return;
+    if (viewMode !== "route") return;
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setTechPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGpsPermission("granted");
       },
       (err) => {
         console.error("[GPS] watchPosition error — code:", err.code, "message:", err.message);
+        if (err.code === err.PERMISSION_DENIED) setGpsPermission("denied");
       },
       { timeout: 8000, maximumAge: 30000, enableHighAccuracy: true }
     );
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [showMapOverlay, viewMode]);
+  }, [viewMode]);
 
   const fetchDriveTimes = useCallback((position: { lat: number; lng: number }) => {
     const upcomingVisits = allVisitsFlatRef.current.filter(
@@ -1145,6 +1149,73 @@ export default function TechMobile() {
             <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
           </button>
 
+          {/* GPS status row */}
+          <div
+            className={`w-full flex items-center gap-3 p-3 rounded-lg border text-left ${
+              gpsPermission === "denied"
+                ? "border-destructive/50 bg-destructive/5"
+                : gpsPermission === "granted"
+                  ? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30"
+                  : "bg-card"
+            }`}
+            data-testid="gps-status-row"
+          >
+            {gpsPermission === "granted" ? (
+              <LocateFixed className="h-4 w-4 text-green-600 shrink-0" />
+            ) : gpsPermission === "denied" ? (
+              <LocateOff className="h-4 w-4 text-destructive shrink-0" />
+            ) : gpsPermission === "unavailable" ? (
+              <LocateOff className="h-4 w-4 text-muted-foreground shrink-0" />
+            ) : (
+              <Loader2 className="h-4 w-4 text-muted-foreground shrink-0 animate-spin" />
+            )}
+            <div className="flex-1 min-w-0">
+              {gpsPermission === "granted" && (
+                <>
+                  <p className="text-xs text-muted-foreground">Location</p>
+                  <p className="text-sm font-medium text-green-700 dark:text-green-400" data-testid="text-gps-status">
+                    GPS active
+                  </p>
+                </>
+              )}
+              {gpsPermission === "denied" && (
+                <>
+                  <p className="text-xs text-destructive font-medium" data-testid="text-gps-status">
+                    Location access blocked
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Open browser site settings and allow location, then reload
+                  </p>
+                </>
+              )}
+              {gpsPermission === "unavailable" && (
+                <p className="text-sm text-muted-foreground" data-testid="text-gps-status">
+                  GPS not supported on this device
+                </p>
+              )}
+              {gpsPermission === "unknown" && (
+                <p className="text-sm text-muted-foreground" data-testid="text-gps-status">
+                  Checking GPS...
+                </p>
+              )}
+            </div>
+            {gpsPermission === "denied" && (
+              <button
+                className="text-xs text-destructive underline shrink-0"
+                data-testid="button-gps-retry"
+                onClick={() => {
+                  navigator.geolocation?.getCurrentPosition(
+                    () => setGpsPermission("granted"),
+                    () => setGpsPermission("denied"),
+                    { timeout: 10000, enableHighAccuracy: true }
+                  );
+                }}
+              >
+                Retry
+              </button>
+            )}
+          </div>
+
           {/* Route stats */}
           <div className="grid grid-cols-2 gap-3">
             <Card className="p-3">
@@ -1292,6 +1363,21 @@ export default function TechMobile() {
             lastSyncResult={offline.lastSyncResult}
             onRetrySync={offline.performSync}
           />
+          {gpsPermission === "denied" && (
+            <div
+              className="flex items-start gap-2 p-3 rounded-lg border border-destructive/50 bg-destructive/5 text-sm"
+              data-testid="gps-denied-banner"
+            >
+              <LocateOff className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium text-destructive">Location access blocked</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  GPS is required for drive times and on-my-way messages. Open your browser site
+                  settings, allow location for this site, then reload.
+                </p>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold" data-testid="text-tech-heading">
