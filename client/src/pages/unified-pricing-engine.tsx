@@ -2891,6 +2891,29 @@ function PricingEngineTab() {
         </AccordionItem>
       </Accordion>
 
+      <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800">
+        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+        <AlertDescription className="text-blue-700 dark:text-blue-400 text-xs space-y-1">
+          <p>
+            <strong>Two complementary pricing models:</strong> The &quot;Suggested&quot; prices
+            above are computed from a time-based labor model — technician wage, yard size (minutes
+            per tenth-acre), and monthly overhead. The <strong>Breakeven Calculator</strong>{" "}
+            (Profitability tab) uses your saved overhead cost table split into fixed and variable
+            costs. The two tools should agree once your overhead table reflects actual fixed and
+            variable costs accurately.
+          </p>
+          <p className="opacity-80">
+            Current Engine parameters: {config.baseTimePerTenthAcreMinutes} min/10th-acre &middot;{" "}
+            {config.extraDogMinutesAfterFirst} extra min/dog. Pricing tab surcharges:{" "}
+            {pricingRules.yardSizeTiers
+              .slice(1)
+              .map((t) => `+$${t.surcharge.toFixed(2)} (${t.name ?? "tier"})`)
+              .join(", ") || "none set"}{" "}
+            &middot; per-dog +${pricingRules.perDogRule.surchargeAmount.toFixed(2)}.
+          </p>
+        </AlertDescription>
+      </Alert>
+
       <p className="text-xs text-muted-foreground">
         Saving updates your pricing rules (base prices, yard-size surcharges, and per-dog rule).
         These flow into the Quotes tool.

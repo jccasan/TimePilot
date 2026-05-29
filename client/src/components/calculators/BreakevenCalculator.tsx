@@ -107,6 +107,8 @@ export default function BreakevenCalculator({
 
     return {
       effectivePrice,
+      varCost,
+      overhead,
       revenuePerClient,
       contributionMargin,
       breakevenClients,
@@ -350,8 +352,27 @@ export default function BreakevenCalculator({
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Your current pricing doesn't cover variable costs — breakeven is unreachable at this
-                price.
+                <p className="font-medium mb-1">
+                  Breakeven is unreachable — price does not cover variable cost per visit.
+                </p>
+                <ul className="text-sm space-y-0.5 mt-2">
+                  <li>
+                    Price / visit:{" "}
+                    <span className="font-semibold">{fmtCurrency(calc.effectivePrice)}</span>
+                  </li>
+                  <li>
+                    Variable cost / visit:{" "}
+                    <span className="font-semibold">{fmtCurrency(calc.varCost)}</span>
+                  </li>
+                  <li>
+                    Fixed monthly overhead:{" "}
+                    <span className="font-semibold">{fmtCurrency(calc.overhead)}</span>
+                  </li>
+                </ul>
+                <p className="text-xs mt-2 opacity-80">
+                  Raise your price above {fmtCurrency(calc.varCost)} per visit, or reduce variable
+                  costs, to make breakeven achievable.
+                </p>
               </AlertDescription>
             </Alert>
           ) : (

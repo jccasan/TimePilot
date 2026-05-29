@@ -1476,8 +1476,18 @@ export default function Profitability() {
 
       {viewMode === "breakeven" && (
         <BreakevenCalculator
-          weeklyBasePriceCents={pricingConfig?.pricingRules?.basePrices?.weekly}
-          fixedOverheadCents={overheadData?.totalMonthlyOverheadCents}
+          weeklyBasePriceCents={
+            pricingConfig?.pricingRules?.basePrices?.weekly != null
+              ? Math.round(pricingConfig.pricingRules.basePrices.weekly * 100)
+              : undefined
+          }
+          fixedOverheadCents={
+            overheadData?.items != null
+              ? overheadData.items
+                  .filter((i) => i.type === "fixed")
+                  .reduce((s, i) => s + i.monthlyCostCents, 0)
+              : overheadData?.totalMonthlyOverheadCents
+          }
           variableCostPerVisitCents={variableCostPerVisitCents}
           activeClients={(customers ?? []).length}
         />

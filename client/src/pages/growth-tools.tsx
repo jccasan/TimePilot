@@ -16,6 +16,7 @@ type ProfitabilitySummaryEntry = {
 
 type OverheadData = {
   totalMonthlyOverheadCents: number;
+  items?: Array<{ type: "fixed" | "variable"; monthlyCostCents: number }>;
 };
 
 type PricingConfigData = {
@@ -53,7 +54,12 @@ export default function GrowthTools() {
         )
       : undefined;
 
-  const fixedOverheadCents = overheadData?.totalMonthlyOverheadCents;
+  const fixedOverheadCents =
+    overheadData?.items != null
+      ? overheadData.items
+          .filter((i) => i.type === "fixed")
+          .reduce((s, i) => s + i.monthlyCostCents, 0)
+      : overheadData?.totalMonthlyOverheadCents;
   const weeklyBasePriceCents =
     pricingConfig?.pricingRules?.basePrices?.weekly != null
       ? Math.round(pricingConfig.pricingRules.basePrices.weekly * 100)
