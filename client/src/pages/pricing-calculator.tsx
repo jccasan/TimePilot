@@ -157,11 +157,17 @@ function configToFormValues(config: PricingConfig) {
   };
 }
 
-function formValuesToConfig(values: z.infer<typeof pricingConfigSchema>): PricingConfig {
+function formValuesToConfig(
+  values: z.infer<typeof pricingConfigSchema>,
+  isCanada = false
+): PricingConfig {
+  const gasCentsPerGallon = isCanada
+    ? Math.round(values.averageGasPricePerGallon * 3.785411784 * 100)
+    : dollarsToCents(values.averageGasPricePerGallon);
   return {
     techHourlyWageCents: dollarsToCents(values.techHourlyWageDollars),
     burdenMultiplier: values.burdenMultiplier,
-    averageGasPriceCentsPerGallon: dollarsToCents(values.averageGasPricePerGallon),
+    averageGasPriceCentsPerGallon: gasCentsPerGallon,
     vehicleCostPerMileCents: dollarsToCents(values.vehicleCostPerMile),
     vehicleMPG: null,
     baseTimePerTenthAcreMinutes: values.baseTimePerTenthAcreMinutes,
@@ -292,7 +298,7 @@ function TenantSettingsPanel({ config, onSaved }: { config: PricingConfig; onSav
 
   const saveMutation = useMutation({
     mutationFn: async (data: z.infer<typeof pricingConfigSchema>) => {
-      const apiConfig = formValuesToConfig(data);
+      const apiConfig = formValuesToConfig(data, isCanada);
       await apiRequest("PUT", "/api/pricing-config", apiConfig);
     },
     onSuccess: () => {

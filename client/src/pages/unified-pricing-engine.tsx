@@ -235,7 +235,11 @@ function driverTypeLabel(dt: CostDriverType): string {
   }
 }
 
-function formatDriverBadge(item: OverheadCostItem, allItems?: OverheadCostItem[]): string {
+function formatDriverBadge(
+  item: OverheadCostItem,
+  allItems?: OverheadCostItem[],
+  isCanada?: boolean
+): string {
   if (!item.costDriverType) return "";
   const rate = Number(item.driverRate ?? 0);
   const p = (item.driverParams ?? {}) as Record<string, unknown>;
@@ -249,6 +253,11 @@ function formatDriverBadge(item: OverheadCostItem, allItems?: OverheadCostItem[]
     case "fuel": {
       const mpg = Number(p.mpg ?? 18);
       const gas = Number(p.gasPricePerGallon ?? 4.0);
+      if (isCanada) {
+        const l100km = mpg > 0 ? (235.215 / mpg).toFixed(1) : "?";
+        const gasPricePerL = (gas / 3.785).toFixed(2);
+        return `${l100km}L/100km·CA$${gasPricePerL}/L`;
+      }
       return `${mpg}mpg·$${gas.toFixed(2)}/gal`;
     }
     case "payment_processing": {
@@ -353,6 +362,8 @@ function DriverInputPanel({
   allItems?: OverheadCostItem[];
   currentItemId?: string;
 }) {
+  const { country } = useAddressLabels();
+  const isCanada = country === "ca";
   switch (driverType) {
     case "pct_revenue":
       return (
@@ -418,37 +429,65 @@ function DriverInputPanel({
           </span>
         </div>
       );
-    case "fuel":
+    case "fuel": {
+      const mpgNum = Number(params.mpg ?? 18);
+      const gasNum = Number(params.gasPricePerGallon ?? 4.0);
+      const displayMpg =
+        isCanada && mpgNum > 0 ? (235.215 / mpgNum).toFixed(1) : String(params.mpg ?? "");
+      const displayGas = isCanada
+        ? (gasNum / 3.785411784).toFixed(2)
+        : String(params.gasPricePerGallon ?? "");
       return (
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] text-muted-foreground mb-1 block">MPG</label>
+              <label className="text-[10px] text-muted-foreground mb-1 block">
+                {isCanada ? "L/100km" : "MPG"}
+              </label>
               <Input
                 type="number"
                 min="1"
-                step="1"
-                placeholder="18"
-                value={params.mpg}
-                onChange={(e) => onParamChange("mpg", e.target.value)}
+                step={isCanada ? "0.1" : "1"}
+                placeholder={isCanada ? "11.0" : "18"}
+                value={displayMpg}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  if (isCanada) {
+                    onParamChange("mpg", v > 0 ? String(235.215 / v) : e.target.value);
+                  } else {
+                    onParamChange("mpg", e.target.value);
+                  }
+                }}
                 className="h-8 text-sm"
                 data-testid="input-driver-mpg"
               />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground mb-1 block">Gas ($/gal)</label>
+              <label className="text-[10px] text-muted-foreground mb-1 block">
+                {isCanada ? "Gas (CA$/L)" : "Gas ($/gal)"}
+              </label>
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  $
+                  {isCanada ? "CA$" : "$"}
                 </span>
                 <Input
                   type="number"
                   min="0"
                   step="0.01"
-                  placeholder="4.00"
-                  value={params.gasPricePerGallon}
-                  onChange={(e) => onParamChange("gasPricePerGallon", e.target.value)}
-                  className="h-8 text-sm pl-5"
+                  placeholder={isCanada ? "1.75" : "4.00"}
+                  value={displayGas}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (isCanada) {
+                      onParamChange(
+                        "gasPricePerGallon",
+                        !isNaN(v) ? String(v * 3.785411784) : e.target.value
+                      );
+                    } else {
+                      onParamChange("gasPricePerGallon", e.target.value);
+                    }
+                  }}
+                  className="h-8 text-sm pl-8"
                   data-testid="input-driver-gas-price"
                 />
               </div>
@@ -457,6 +496,7 @@ function DriverInputPanel({
           <p className="text-[10px] text-muted-foreground">Computed from monthly route miles</p>
         </div>
       );
+    }
     case "payment_processing":
       return (
         <div className="space-y-2">
@@ -638,6 +678,8 @@ function CostItemRow({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const lastSavedCents = useRef(item.monthlyCostCents);
+  const { country } = useAddressLabels();
+  const isCanada = country === "ca";
 
   const isFormulaMode =
     item.type === "variable" && item.costDriverType !== null && item.costDriverType !== undefined;
@@ -704,7 +746,7 @@ function CostItemRow({
               className="text-[10px] px-1 py-0 shrink-0 border-violet-200 text-violet-600 dark:border-violet-800 dark:text-violet-400 font-mono"
               data-testid={`badge-formula-${item.id}`}
             >
-              {formatDriverBadge(item, allItems)}
+              {formatDriverBadge(item, allItems, isCanada)}
             </Badge>
           )}
         </div>

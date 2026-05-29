@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useCurrency } from "@/hooks/use-currency";
+import { useAddressLabels } from "@/hooks/use-address-labels";
+import { galToCentsPerLitre, mpgToL100km } from "@/lib/fuel-units";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -229,6 +231,8 @@ function buildOptimizedMapRoutes(optResult: OptResult, view: "current" | "propos
 export default function RouteProfitMaps() {
   const { toast } = useToast();
   const { formatMoney } = useCurrency();
+  const { country } = useAddressLabels();
+  const isCanada = country === "ca";
   const formatDollars = (cents: number) => {
     const sign = cents < 0 ? "-" : "";
     return sign + formatMoney(Math.abs(cents) / 100);
@@ -657,7 +661,9 @@ export default function RouteProfitMaps() {
                 >
                   <span>
                     {optResult.fuelCost.source === "gas_mpg"
-                      ? `${formatDollars(optResult.fuelCost.gasPriceCentsPerGallon)}/gal, ${optResult.fuelCost.vehicleMPG} MPG`
+                      ? isCanada
+                        ? `CA$${(galToCentsPerLitre(optResult.fuelCost.gasPriceCentsPerGallon) / 100).toFixed(2)}/L, ${optResult.fuelCost.vehicleMPG ? mpgToL100km(optResult.fuelCost.vehicleMPG).toFixed(1) : "?"} L/100km`
+                        : `${formatDollars(optResult.fuelCost.gasPriceCentsPerGallon)}/gal, ${optResult.fuelCost.vehicleMPG} MPG`
                       : `${formatDollars(optResult.fuelCost.centsPerMile)}/mi`}
                     {optResult.laborCost
                       ? ` | ${formatDollars(optResult.laborCost.burdenedHourlyRateCents)}/hr`

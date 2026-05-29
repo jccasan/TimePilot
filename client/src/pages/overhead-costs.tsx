@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useFuelUnits, galToCentsPerLitre, mpgToL100km } from "@/lib/fuel-units";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -296,6 +297,19 @@ function FuelVehicleCard({
   companyData: any;
   onSave: (updates: Record<string, unknown>) => void;
 }) {
+  const {
+    isCanada,
+    gasLabel,
+    efficiencyLabel,
+    costPerDistanceLabel,
+    distanceUnit,
+    currencyPrefix,
+    displayGasPrice,
+    displayEfficiency,
+    parseGasPriceToCentsPerGallon,
+    parseEfficiencyToMpg,
+  } = useFuelUnits();
+
   const config = companyData?.pricingConfig || {};
   const gasPriceCents = config.averageGasPriceCentsPerGallon ?? 350;
   const mpg = config.vehicleMPG ?? null;
@@ -303,30 +317,38 @@ function FuelVehicleCard({
   const wageCents = config.techHourlyWageCents ?? 1500;
   const burden = config.burdenMultiplier ?? 1.4;
 
-  const [gasPrice, setGasPrice] = useState((gasPriceCents / 100).toFixed(2));
-  const [vehicleMpg, setVehicleMpg] = useState(mpg ? String(mpg) : "");
+  const [gasPrice, setGasPrice] = useState(displayGasPrice(gasPriceCents));
+  const [vehicleMpg, setVehicleMpg] = useState(mpg ? displayEfficiency(mpg) : "");
   const [hourlyWage, setHourlyWage] = useState((wageCents / 100).toFixed(2));
   const [burdenMult, setBurdenMult] = useState(burden.toFixed(1));
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    setGasPrice((gasPriceCents / 100).toFixed(2));
-    setVehicleMpg(mpg ? String(mpg) : "");
+    setGasPrice(displayGasPrice(gasPriceCents));
+    setVehicleMpg(mpg ? displayEfficiency(mpg) : "");
     setHourlyWage((wageCents / 100).toFixed(2));
     setBurdenMult(burden.toFixed(1));
     setDirty(false);
-  }, [gasPriceCents, mpg, wageCents, burden]);
+  }, [gasPriceCents, mpg, wageCents, burden, isCanada]);
 
   const { data: fuelData, isLoading: fuelLoading } = useQuery<MonthlyFuelData>({
     queryKey: ["/api/overhead-costs/monthly-fuel"],
   });
 
   const gasParsed = parseFloat(gasPrice);
-  const mpgParsed = parseFloat(vehicleMpg);
+  const efficiencyParsed = parseFloat(vehicleMpg);
   const validGas = !isNaN(gasParsed) && gasParsed > 0;
-  const validMpg = !isNaN(mpgParsed) && mpgParsed > 0;
+  const validEfficiency = !isNaN(efficiencyParsed) && efficiencyParsed > 0;
 
-  const computedCostPerMile = validGas && validMpg ? gasParsed / mpgParsed : costPerMileCents / 100;
+  const gasCentsPerGallon = validGas ? parseGasPriceToCentsPerGallon(gasPrice) : gasPriceCents;
+  const mpgValue = validEfficiency ? parseEfficiencyToMpg(vehicleMpg) : mpg;
+
+  const computedCostPerDistance =
+    validGas && validEfficiency && mpgValue && mpgValue > 0
+      ? isCanada
+        ? (galToCentsPerLitre(gasCentsPerGallon) / 100) * (mpgToL100km(mpgValue) / 100)
+        : gasCentsPerGallon / 100 / mpgValue
+      : costPerMileCents / 100;
 
   const wageParsed = parseFloat(hourlyWage);
   const burdenParsed = parseFloat(burdenMult);
@@ -338,11 +360,11 @@ function FuelVehicleCard({
 
   const handleSave = () => {
     const updates: Record<string, unknown> = {};
-    if (validGas) updates.averageGasPriceCentsPerGallon = Math.round(gasParsed * 100);
-    if (validMpg) {
-      updates.vehicleMPG = mpgParsed;
+    if (validGas) updates.averageGasPriceCentsPerGallon = gasCentsPerGallon;
+    if (validEfficiency && mpgValue != null) {
+      updates.vehicleMPG = mpgValue;
       if (validGas) {
-        updates.vehicleCostPerMileCents = Math.round((gasParsed / mpgParsed) * 100);
+        updates.vehicleCostPerMileCents = Math.round(gasCentsPerGallon / mpgValue);
       }
     } else {
       updates.vehicleMPG = null;
@@ -367,10 +389,10 @@ function FuelVehicleCard({
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">Gas Price ($/gal)</label>
+            <label className="text-xs text-muted-foreground block mb-1">{gasLabel}</label>
             <div className="relative">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                $
+                {currencyPrefix}
               </span>
               <Input
                 type="number"
@@ -387,14 +409,14 @@ function FuelVehicleCard({
             </div>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">Vehicle MPG</label>
+            <label className="text-xs text-muted-foreground block mb-1">{efficiencyLabel}</label>
             <div className="relative">
               <Car className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 type="number"
                 step="0.1"
                 min="0"
-                placeholder="e.g. 18"
+                placeholder={isCanada ? "e.g. 11.0" : "e.g. 18"}
                 className="h-9 pl-8 text-sm tabular-nums"
                 value={vehicleMpg}
                 onChange={(e) => {
@@ -406,16 +428,21 @@ function FuelVehicleCard({
             </div>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">Cost Per Mile</label>
+            <label className="text-xs text-muted-foreground block mb-1">
+              {costPerDistanceLabel}
+            </label>
             <div className="flex items-center gap-1.5">
               <Route className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-lg font-bold tabular-nums" data-testid="text-cost-per-mile">
-                ${computedCostPerMile.toFixed(2)}
+                {currencyPrefix}
+                {computedCostPerDistance.toFixed(2)}
               </span>
-              <span className="text-xs text-muted-foreground">/mi</span>
+              <span className="text-xs text-muted-foreground">/{distanceUnit}</span>
             </div>
-            {validGas && validMpg && (
-              <p className="text-[10px] text-muted-foreground mt-0.5">Computed from gas & MPG</p>
+            {validGas && validEfficiency && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {isCanada ? "Computed from gas & L/100km" : "Computed from gas & MPG"}
+              </p>
             )}
           </div>
           <div className="flex justify-end">
