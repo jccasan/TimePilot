@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -41,6 +41,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Line,
+  LineChart,
   PieChart,
   Pie,
   Cell,
@@ -112,6 +113,8 @@ type RouteSummaryRow = {
   completionRate: number;
   avgVisitMinutes: number;
   activeStops: number;
+  avgDistanceMiles: number;
+  revenuePerStop: number;
 };
 
 type TechPerformanceRow = {
@@ -388,16 +391,20 @@ function KpiStrip() {
       testId: "kpi-clients-per-tech",
     },
     {
-      label: "Routes / Stops",
-      value: isLoading ? null : `${data?.routeCount ?? 0} / ${data?.avgStopsPerRoute ?? 0} avg`,
+      label: "Avg Jobs per Route",
+      value: isLoading ? null : (data?.avgStopsPerRoute ?? 0),
       icon: <Route className="h-4 w-4 text-muted-foreground" />,
-      testId: "kpi-routes",
+      testId: "kpi-avg-jobs-per-route",
     },
     {
-      label: "Avg Visit",
-      value: isLoading ? null : data?.avgVisitMinutes ? `${data.avgVisitMinutes} min` : "—",
+      label: "Avg Jobs per Hour",
+      value: isLoading
+        ? null
+        : data?.avgVisitMinutes && data.avgVisitMinutes > 0
+          ? Math.round((60 / data.avgVisitMinutes) * 10) / 10
+          : "—",
       icon: <Clock className="h-4 w-4 text-muted-foreground" />,
-      testId: "kpi-avg-visit",
+      testId: "kpi-avg-jobs-per-hour",
     },
     {
       label: "Res / Com",
@@ -986,6 +993,8 @@ function OperationsTab() {
         "Completed",
         "Completion %",
         "Avg Duration (min)",
+        "Avg Distance (mi)",
+        "Revenue/Stop",
       ],
       routeSummary.map((r) => [
         r.routeName,
@@ -994,7 +1003,9 @@ function OperationsTab() {
         r.totalVisits,
         r.completed,
         `${r.completionRate}%`,
-        Math.round(r.avgVisitMinutes),
+        Math.round(Number(r.avgVisitMinutes)),
+        Number(r.avgDistanceMiles).toFixed(1),
+        fmt(Number(r.revenuePerStop)),
       ])
     );
   }, [routeSummary]);
@@ -1003,7 +1014,7 @@ function OperationsTab() {
     if (!routeSummary) return;
     exportPdf(
       "Route Summary",
-      ["Route", "Tech", "Stops", "Visits", "Completed", "%", "Avg Min"],
+      ["Route", "Tech", "Stops", "Visits", "Completed", "%", "Avg Min", "Dist (mi)", "Rev/Stop"],
       routeSummary.map((r) => [
         r.routeName,
         r.techName ?? "—",
@@ -1011,7 +1022,9 @@ function OperationsTab() {
         r.totalVisits,
         r.completed,
         `${r.completionRate}%`,
-        Math.round(r.avgVisitMinutes),
+        Math.round(Number(r.avgVisitMinutes)),
+        Number(r.avgDistanceMiles).toFixed(1),
+        fmt(Number(r.revenuePerStop)),
       ]),
       `${appliedStart} to ${appliedEnd}`
     );
@@ -1275,10 +1288,12 @@ function OperationsTab() {
                   <TableRow>
                     <TableHead>Route</TableHead>
                     <TableHead>Technician</TableHead>
-                    <TableHead className="text-right">Active Stops</TableHead>
+                    <TableHead className="text-right">Stops</TableHead>
                     <TableHead className="text-right">Visits</TableHead>
                     <TableHead className="text-right">Completed</TableHead>
                     <TableHead className="text-right">Completion %</TableHead>
+                    <TableHead className="text-right">Avg Dist (mi)</TableHead>
+                    <TableHead className="text-right">Rev/Stop</TableHead>
                     <TableHead className="text-right">Avg Min</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1302,6 +1317,14 @@ function OperationsTab() {
                         >
                           {r.completionRate != null ? `${r.completionRate}%` : "—"}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {Number(r.avgDistanceMiles) > 0
+                          ? Number(r.avgDistanceMiles).toFixed(1)
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {Number(r.revenuePerStop) > 0 ? fmt(Number(r.revenuePerStop)) : "—"}
                       </TableCell>
                       <TableCell className="text-right">
                         {Number(r.avgVisitMinutes) > 0
@@ -1427,6 +1450,29 @@ function CustomersTab({
   });
 
   const newVsLostChartRef = useRef<HTMLDivElement>(null);
+  const activeClientsChartRef = useRef<HTMLDivElement>(null);
+
+  const activeClientsTrend = useMemo(() => {
+    if (!metrics?.monthly) return [];
+    const sorted = [...metrics.monthly].sort((a, b) => a.month.localeCompare(b.month));
+    let running = metrics.activeCount;
+    const result: { label: string; activeCount: number }[] = [];
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      result.unshift({ label: sorted[i].month.slice(0, 7), activeCount: Math.max(0, running) });
+      running = running - sorted[i].newClients + sorted[i].cancelledClients;
+    }
+    return result;
+  }, [metrics]);
+
+  const handleActiveClientsPdf = useCallback(async () => {
+    if (!activeClientsTrend.length) return;
+    await exportChartPdf(
+      "Active Clients Trend",
+      activeClientsChartRef,
+      ["Month", "Active Clients"],
+      activeClientsTrend.map((d) => [d.label, d.activeCount])
+    );
+  }, [activeClientsTrend]);
 
   const handleCsCsv = useCallback(() => {
     if (!crossSell) return;
@@ -1525,6 +1571,61 @@ function CustomersTab({
           </>
         )}
       </div>
+
+      {/* Active Clients trend */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-muted-foreground" />
+              <CardTitle className="text-lg">Active Clients Trend</CardTitle>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleActiveClientsPdf}
+              disabled={!activeClientsTrend.length}
+              data-testid="button-active-trend-pdf"
+            >
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              PDF
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {metricsLoading ? (
+            <Skeleton className="h-48 w-full" />
+          ) : !activeClientsTrend.length ? (
+            <p className="text-sm text-muted-foreground">No data available.</p>
+          ) : (
+            <div ref={activeClientsChartRef}>
+              <ResponsiveContainer
+                width="100%"
+                height={220}
+                data-testid="chart-active-clients-trend"
+              >
+                <LineChart
+                  data={activeClientsTrend}
+                  margin={{ top: 4, right: 8, left: 0, bottom: 4 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="activeCount"
+                    name="Active Clients"
+                    stroke="#2d8a5e"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* New vs Lost chart */}
       <Card>

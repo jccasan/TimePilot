@@ -2096,6 +2096,33 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       const endDate = (req.query.endDate as string) || today;
 
       const rows = await db.execute(sql`
+        WITH stop_pairs AS (
+          SELECT
+            j.route_id,
+            p.latitude::float  AS lat1,
+            p.longitude::float AS lon1,
+            LEAD(p.latitude::float)  OVER (PARTITION BY j.route_id ORDER BY j.sort_order NULLS LAST, j.id) AS lat2,
+            LEAD(p.longitude::float) OVER (PARTITION BY j.route_id ORDER BY j.sort_order NULLS LAST, j.id) AS lon2
+          FROM jobs j
+          JOIN properties p ON j.property_id = p.id
+          WHERE j.company_id = ${companyId}
+            AND j.job_status = 'active'
+            AND p.latitude IS NOT NULL
+            AND p.longitude IS NOT NULL
+        ),
+        route_dist AS (
+          SELECT route_id,
+            ROUND(COALESCE(SUM(
+              3959 * 2 * asin(sqrt(
+                power(sin(radians((lat2 - lat1) / 2)), 2) +
+                cos(radians(lat1)) * cos(radians(lat2)) *
+                power(sin(radians((lon2 - lon1) / 2)), 2)
+              ))
+            ), 0)::numeric, 1) AS total_distance_miles
+          FROM stop_pairs
+          WHERE lat2 IS NOT NULL
+          GROUP BY route_id
+        )
         SELECT
           r.id                          AS "routeId",
           r.name                        AS "routeName",
@@ -2105,11 +2132,13 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
           COUNT(DISTINCT CASE WHEN v.status = 'skipped' THEN v.id END) AS "skipped",
           ROUND(100.0 * COUNT(DISTINCT CASE WHEN v.status = 'completed' THEN v.id END)
             / NULLIF(COUNT(DISTINCT v.id),0), 1) AS "completionRate",
-          COALESCE(AVG(CASE
+          ROUND(COALESCE(AVG(CASE
             WHEN v.started_at IS NOT NULL AND v.completed_at IS NOT NULL
             THEN EXTRACT(EPOCH FROM (v.completed_at - v.started_at)) / 60
-          END), 0)                      AS "avgVisitMinutes",
-          COUNT(DISTINCT j.id)          AS "activeStops"
+          END), 0)::numeric, 1)        AS "avgVisitMinutes",
+          COUNT(DISTINCT j.id)          AS "activeStops",
+          COALESCE(rd.total_distance_miles, 0) AS "avgDistanceMiles",
+          ROUND(COALESCE(AVG(sp.price_per_visit::numeric), 0), 2) AS "revenuePerStop"
         FROM routes r
         LEFT JOIN users u ON r.technician_id = u.id
         LEFT JOIN visits v ON v.route_id = r.id
@@ -2119,8 +2148,12 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         LEFT JOIN jobs j ON j.route_id = r.id
           AND j.company_id = ${companyId}
           AND j.job_status = 'active'
+        LEFT JOIN service_plans sp ON sp.id = j.service_plan_id
+          AND sp.company_id = ${companyId}
+          AND sp.is_active = true
+        LEFT JOIN route_dist rd ON rd.route_id = r.id
         WHERE r.company_id = ${companyId}
-        GROUP BY r.id, r.name, u.first_name, u.last_name
+        GROUP BY r.id, r.name, u.first_name, u.last_name, rd.total_distance_miles
         ORDER BY r.name ASC
       `);
       res.json(rows.rows);
@@ -2545,8 +2578,9 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
             const pdfBuffer = await generateReportPdf(reportData);
             const emailHtml = buildReportEmailHtml(reportData);
 
+            const errors: string[] = [];
             for (const recipient of report.recipients) {
-              await sendEmail({
+              const result = await sendEmail({
                 to: recipient,
                 subject: `${reportData.companyName} — ${report.name}`,
                 text: `${report.name} generated on ${reportData.generatedAt.toLocaleDateString()}. See attached PDF.`,
@@ -2560,6 +2594,15 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
                   },
                 ],
               });
+              if (!result.success) {
+                errors.push(`${recipient}: ${result.error ?? "unknown error"}`);
+              }
+            }
+
+            if (errors.length > 0) {
+              throw new Error(
+                `[ReportRun] Send failures for "${report.name}": ${errors.join("; ")}`
+              );
             }
 
             await storage.updateScheduledReport(id, companyId, {
