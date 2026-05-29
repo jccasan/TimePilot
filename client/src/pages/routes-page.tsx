@@ -256,6 +256,7 @@ type OptimizeResult = {
   originalDistance: number;
   milesSaved: number;
   minutesSaved: number;
+  stopsReordered?: number;
   stopCount: number;
   message?: string;
   geocodeFailure?: boolean;
@@ -1633,63 +1634,81 @@ function SavingsSummaryDialog({
             <TrendingDown className="h-5 w-5 text-primary" />
             Optimization Results
           </DialogTitle>
-          <DialogDescription>Route has been optimized for minimum travel time.</DialogDescription>
+          <DialogDescription>
+            {result.stopsReordered === 0 && result.milesSaved === 0 && result.minutesSaved === 0
+              ? "No changes were needed."
+              : "Route has been optimized for minimum travel time."}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          {hasMaps && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="before-after-maps">
-              <div className="h-52" data-testid="map-before-container">
-                <MapErrorBoundary>
-                  <Suspense fallback={<Skeleton className="w-full h-full rounded" />}>
-                    <MiniRouteMap stops={stopsBefore!} label="Before" />
-                  </Suspense>
-                </MapErrorBoundary>
-              </div>
-              <div className="h-52" data-testid="map-after-container">
-                <MapErrorBoundary>
-                  <Suspense fallback={<Skeleton className="w-full h-full rounded" />}>
-                    <MiniRouteMap stops={stopsAfter!} label="After" />
-                  </Suspense>
-                </MapErrorBoundary>
-              </div>
+          {result.stopsReordered === 0 && result.milesSaved === 0 && result.minutesSaved === 0 ? (
+            <div
+              className="rounded-md border border-border bg-muted/50 px-4 py-5 text-center text-sm text-muted-foreground"
+              data-testid="text-already-optimal"
+            >
+              Route was already optimal — no changes made.
             </div>
+          ) : (
+            <>
+              {hasMaps && (
+                <div
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                  data-testid="before-after-maps"
+                >
+                  <div className="h-52" data-testid="map-before-container">
+                    <MapErrorBoundary>
+                      <Suspense fallback={<Skeleton className="w-full h-full rounded" />}>
+                        <MiniRouteMap stops={stopsBefore!} label="Before" />
+                      </Suspense>
+                    </MapErrorBoundary>
+                  </div>
+                  <div className="h-52" data-testid="map-after-container">
+                    <MapErrorBoundary>
+                      <Suspense fallback={<Skeleton className="w-full h-full rounded" />}>
+                        <MiniRouteMap stops={stopsAfter!} label="After" />
+                      </Suspense>
+                    </MapErrorBoundary>
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <p className="text-2xl font-bold text-primary" data-testid="text-miles-saved">
+                      {result.milesSaved}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Miles Saved</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4 text-center">
+                    <p className="text-2xl font-bold text-primary" data-testid="text-minutes-saved">
+                      {result.minutesSaved}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Minutes Saved</p>
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="text-sm space-y-1 text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Original distance:</span>
+                  <span className="font-medium text-foreground">
+                    {result.originalDistance.toFixed(1)} mi
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Optimized distance:</span>
+                  <span className="font-medium text-foreground">
+                    {result.totalDistance.toFixed(1)} mi
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Stops optimized:</span>
+                  <span className="font-medium text-foreground">{result.stopCount}</span>
+                </div>
+              </div>
+            </>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-primary" data-testid="text-miles-saved">
-                  {result.milesSaved}
-                </p>
-                <p className="text-xs text-muted-foreground">Miles Saved</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-primary" data-testid="text-minutes-saved">
-                  {result.minutesSaved}
-                </p>
-                <p className="text-xs text-muted-foreground">Minutes Saved</p>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="text-sm space-y-1 text-muted-foreground">
-            <div className="flex justify-between">
-              <span>Original distance:</span>
-              <span className="font-medium text-foreground">
-                {result.originalDistance.toFixed(1)} mi
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Optimized distance:</span>
-              <span className="font-medium text-foreground">
-                {result.totalDistance.toFixed(1)} mi
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span>Stops optimized:</span>
-              <span className="font-medium text-foreground">{result.stopCount}</span>
-            </div>
-          </div>
         </div>
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} data-testid="button-close-savings">

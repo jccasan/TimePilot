@@ -105,6 +105,14 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
     }
   }
 
+  // Sort by saved stopOrder so the "before" baseline reflects the actual user-visible
+  // route order, not the arbitrary DB fetch order.  Nulls sort last (unordered stops).
+  routePlans.sort((a, b) => {
+    const ao = a.stopOrder ?? Infinity;
+    const bo = b.stopOrder ?? Infinity;
+    return ao - bo;
+  });
+
   const stops = routePlans
     .map((sp) => {
       const prop = propertyMap.get(sp.propertyId);
@@ -293,16 +301,22 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
 
   const stopsReordered = stopsActuallyMoved;
 
-  const parts: string[] = [
-    `Optimized route "${route.name}" — reordered ${stopsReordered} stop${stopsReordered !== 1 ? "s" : ""}`,
-  ];
-  if (milesSaved > 0) parts.push(`saving ${milesSaved} mile${milesSaved !== 1 ? "s" : ""}`);
-  if (minutesSaved > 0)
-    parts.push(`and about ${minutesSaved} minute${minutesSaved !== 1 ? "s" : ""} of drive time`);
+  let message: string;
+  if (stopsReordered === 0 && milesSaved === 0 && minutesSaved === 0) {
+    message = `Route "${route.name}" was already optimal — no changes made.`;
+  } else {
+    const parts: string[] = [
+      `Optimized route "${route.name}" — reordered ${stopsReordered} stop${stopsReordered !== 1 ? "s" : ""}`,
+    ];
+    if (milesSaved > 0) parts.push(`saving ${milesSaved} mile${milesSaved !== 1 ? "s" : ""}`);
+    if (minutesSaved > 0)
+      parts.push(`and about ${minutesSaved} minute${minutesSaved !== 1 ? "s" : ""} of drive time`);
+    message = parts.join(", ") + ".";
+  }
 
   return {
     success: true,
-    message: parts.join(", ") + ".",
+    message,
     data: {
       routeId: route.id,
       routeName: route.name,
