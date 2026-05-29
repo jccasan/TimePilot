@@ -51,6 +51,7 @@ import {
   Area,
   BarChart,
   Bar,
+  ComposedChart,
   LineChart,
   Line,
   PieChart,
@@ -80,7 +81,12 @@ type BusinessOverviewData = {
     unprofitableCount: number;
   };
   monthlyRevenue: { month: string; revenue: number }[];
-  customerAcquisition: { month: string; newClients: number; total: number }[];
+  customerAcquisition: {
+    month: string;
+    newClients: number;
+    total: number;
+    sources: Record<string, number>;
+  }[];
   profitabilityMix: { name: string; value: number; color: string }[];
   invoiceCollection: { month: string; invoicedCents: number; collectedCents: number }[];
   revenueByFrequency: { name: string; mrrCents: number }[];
@@ -725,34 +731,56 @@ export default function BusinessOverview() {
         <Card data-testid="card-chart-customer-growth">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Customer Growth</CardTitle>
-            <CardDescription>New and total customers over 12 months</CardDescription>
+            <CardDescription>New customers by lead source and running total</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={customerAcquisition}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} width={36} />
-                <Tooltip content={<ChartTooltipContent />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  name="Total Customers"
-                  stroke="hsl(var(--chart-1))"
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="newClients"
-                  name="New This Month"
-                  stroke="hsl(var(--chart-2))"
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {(() => {
+              const boSources = Array.from(
+                new Set(customerAcquisition.flatMap((m) => Object.keys(m.sources)))
+              ).sort();
+              const boFlat = customerAcquisition.map((m) => ({ ...m, ...m.sources }));
+              const boColors = [
+                "hsl(var(--chart-2))",
+                "hsl(var(--chart-3))",
+                "hsl(var(--chart-4))",
+                "hsl(var(--chart-5))",
+                "#8b5cf6",
+                "#06b6d4",
+                "#f59e0b",
+              ];
+              return (
+                <ResponsiveContainer width="100%" height={220}>
+                  <ComposedChart data={boFlat}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                    <YAxis yAxisId="left" tick={{ fontSize: 11 }} width={36} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} width={36} />
+                    <Tooltip content={<ChartTooltipContent />} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {boSources.map((src, idx) => (
+                      <Bar
+                        key={src}
+                        yAxisId="left"
+                        dataKey={src}
+                        name={src}
+                        stackId="a"
+                        fill={boColors[idx % boColors.length]}
+                        radius={idx === boSources.length - 1 ? [4, 4, 0, 0] : undefined}
+                      />
+                    ))}
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="total"
+                      name="Total Customers"
+                      stroke="hsl(var(--chart-1))"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </CardContent>
         </Card>
 

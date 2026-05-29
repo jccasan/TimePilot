@@ -939,12 +939,21 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       }
 
       // Customer acquisition (12 months)
-      const customerAcquisition: { month: string; newClients: number; total: number }[] = [];
+      const customerAcquisition: {
+        month: string;
+        newClients: number;
+        total: number;
+        sources: Record<string, number>;
+      }[] = [];
       const contactsByCreatedMonth: Record<string, number> = {};
+      const sourcesByCreatedMonth: Record<string, Record<string, number>> = {};
       for (const c of allContactsRaw) {
         const created = new Date(c.createdAt);
         const key = `${created.getFullYear()}-${String(created.getMonth()).padStart(2, "0")}`;
         contactsByCreatedMonth[key] = (contactsByCreatedMonth[key] || 0) + 1;
+        const src = (c.leadSource as string | null)?.trim() || "Direct / Unknown";
+        if (!sourcesByCreatedMonth[key]) sourcesByCreatedMonth[key] = {};
+        sourcesByCreatedMonth[key][src] = (sourcesByCreatedMonth[key][src] || 0) + 1;
       }
       const windowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
       let runningTotal = allContactsRaw.filter((c) => new Date(c.createdAt) < windowStart).length;
@@ -957,6 +966,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
           newClients,
           total: runningTotal,
+          sources: sourcesByCreatedMonth[key] || {},
         });
       }
 

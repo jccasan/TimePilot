@@ -2693,13 +2693,22 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       }
 
       // --- Customer Acquisition (last 12 months) ---
-      const customerAcquisition: { month: string; newClients: number; total: number }[] = [];
+      const customerAcquisition: {
+        month: string;
+        newClients: number;
+        total: number;
+        sources: Record<string, number>;
+      }[] = [];
       let runningTotal = 0;
       const contactsByCreatedMonth: Record<string, number> = {};
+      const sourcesByCreatedMonth: Record<string, Record<string, number>> = {};
       for (const c of allContacts) {
         const created = new Date(c.createdAt);
         const key = `${created.getFullYear()}-${String(created.getMonth()).padStart(2, "0")}`;
         contactsByCreatedMonth[key] = (contactsByCreatedMonth[key] || 0) + 1;
+        const src = (c.leadSource as string | null)?.trim() || "Direct / Unknown";
+        if (!sourcesByCreatedMonth[key]) sourcesByCreatedMonth[key] = {};
+        sourcesByCreatedMonth[key][src] = (sourcesByCreatedMonth[key][src] || 0) + 1;
       }
       const contactsBeforeWindow = allContacts.filter((c) => {
         const created = new Date(c.createdAt);
@@ -2716,6 +2725,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
           month: d.toLocaleString("default", { month: "short", year: "2-digit" }),
           newClients,
           total: runningTotal,
+          sources: sourcesByCreatedMonth[key] || {},
         });
       }
 

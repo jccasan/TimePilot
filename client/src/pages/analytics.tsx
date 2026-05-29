@@ -21,6 +21,7 @@ import {
   Area,
   BarChart,
   Bar,
+  ComposedChart,
   LineChart,
   Line,
   PieChart,
@@ -44,7 +45,12 @@ type TimingMetrics = {
 type AnalyticsData = {
   monthlyRevenue: { month: string; revenue: number }[];
   yearlyRevenue: { year: string; revenue: number }[];
-  customerAcquisition: { month: string; newClients: number; total: number }[];
+  customerAcquisition: {
+    month: string;
+    newClients: number;
+    total: number;
+    sources: Record<string, number>;
+  }[];
   routePerformance: {
     day: string;
     completed: number;
@@ -314,48 +320,60 @@ export default function Analytics() {
               <Users className="h-4 w-4" />
               Customer Acquisition
             </CardTitle>
-            <CardDescription>New customers added and running total</CardDescription>
+            <CardDescription>New customers by lead source and running total</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data.customerAcquisition}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  stroke="hsl(var(--border))"
-                />
-                <YAxis
-                  yAxisId="left"
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  stroke="hsl(var(--border))"
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-                  stroke="hsl(var(--border))"
-                />
-                <Tooltip content={<ChartTooltipContent />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar
-                  yAxisId="left"
-                  dataKey="newClients"
-                  name="New Customers"
-                  fill="hsl(var(--chart-2))"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="total"
-                  name="Total Customers"
-                  stroke="hsl(var(--chart-1))"
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            {(() => {
+              const acqSources = Array.from(
+                new Set(data.customerAcquisition.flatMap((m) => Object.keys(m.sources)))
+              ).sort();
+              const acqFlat = data.customerAcquisition.map((m) => ({ ...m, ...m.sources }));
+              return (
+                <ResponsiveContainer width="100%" height={260}>
+                  <ComposedChart data={acqFlat}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      stroke="hsl(var(--border))"
+                    />
+                    <YAxis
+                      yAxisId="left"
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      stroke="hsl(var(--border))"
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                      stroke="hsl(var(--border))"
+                    />
+                    <Tooltip content={<ChartTooltipContent />} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {acqSources.map((src, idx) => (
+                      <Bar
+                        key={src}
+                        yAxisId="left"
+                        dataKey={src}
+                        name={src}
+                        stackId="a"
+                        fill={CHART_COLORS[idx % CHART_COLORS.length]}
+                        radius={idx === acqSources.length - 1 ? [4, 4, 0, 0] : undefined}
+                      />
+                    ))}
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="total"
+                      name="Total Customers"
+                      stroke="hsl(var(--chart-1))"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </CardContent>
         </Card>
 
