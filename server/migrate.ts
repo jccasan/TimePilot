@@ -633,9 +633,7 @@ export async function runStartupMigrations(): Promise<void> {
     await client.query(`ALTER TABLE crm_projects ADD COLUMN IF NOT EXISTS crm_company_id VARCHAR`);
 
     // crm_pipeline_stages: initial CREATE TABLE was missing slug, is_won, is_lost
-    await client.query(
-      `ALTER TABLE crm_pipeline_stages ADD COLUMN IF NOT EXISTS slug TEXT`
-    );
+    await client.query(`ALTER TABLE crm_pipeline_stages ADD COLUMN IF NOT EXISTS slug TEXT`);
     await client.query(
       `UPDATE crm_pipeline_stages SET slug = lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')) WHERE slug IS NULL`
     );
