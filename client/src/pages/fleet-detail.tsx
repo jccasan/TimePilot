@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -201,8 +201,7 @@ export default function FleetDetailPage() {
   });
 
   const editMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) =>
-      apiRequest("PATCH", `/api/vehicles/${id}`, data),
+    mutationFn: (data: Record<string, unknown>) => apiRequest("PATCH", `/api/vehicles/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/vehicles/${id}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
@@ -362,6 +361,56 @@ export default function FleetDetailPage() {
     stationName: "",
     notes: "",
   });
+  const fuelLastEditedRef = useRef<"gallons" | "pricePerGallon" | "totalCost" | null>(null);
+  const [fuelComputedField, setFuelComputedField] = useState<
+    "gallons" | "pricePerGallon" | "totalCost" | null
+  >(null);
+
+  function computeThird(
+    target: "gallons" | "pricePerGallon" | "totalCost",
+    form: typeof fuelForm
+  ): string | null {
+    const g = parseFloat(form.gallons);
+    const p = parseFloat(form.pricePerGallon);
+    const t = parseFloat(form.totalCost);
+    if (target === "totalCost" && !isNaN(g) && !isNaN(p)) return (g * p).toFixed(2);
+    if (target === "pricePerGallon" && !isNaN(t) && !isNaN(g) && g !== 0) return (t / g).toFixed(3);
+    if (target === "gallons" && !isNaN(t) && !isNaN(p) && p !== 0) return (t / p).toFixed(3);
+    return null;
+  }
+
+  function handleFuelFieldChange(field: "gallons" | "pricePerGallon" | "totalCost", value: string) {
+    const allFields = ["gallons", "pricePerGallon", "totalCost"] as const;
+    const updated = { ...fuelForm, [field]: value };
+    let nextComputed: (typeof allFields)[number] | null = null;
+
+    if (field === fuelComputedField) {
+      // User manually overrode the auto-filled field — leave the other two alone.
+      // Exception: if one of the others is blank, recompute it.
+      const others = allFields.filter((f) => f !== field);
+      nextComputed = others.find((f) => updated[f] === "") ?? null;
+    } else {
+      // User edited a manual field — keep recomputing whatever was auto-filled before,
+      // or find the first blank field to fill in.
+      nextComputed =
+        fuelComputedField ?? allFields.find((f) => f !== field && updated[f] === "") ?? null;
+    }
+
+    if (nextComputed && value !== "") {
+      const result = computeThird(nextComputed, updated);
+      if (result !== null) {
+        updated[nextComputed] = result;
+        setFuelComputedField(nextComputed);
+      } else {
+        setFuelComputedField(null);
+      }
+    } else {
+      setFuelComputedField(null);
+    }
+
+    fuelLastEditedRef.current = field;
+    setFuelForm(updated);
+  }
   const [repairForm, setRepairForm] = useState({
     description: "",
     performedDate: new Date().toISOString().split("T")[0],
@@ -397,12 +446,28 @@ export default function FleetDetailPage() {
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
 
+  function resetFuelForm() {
+    setFuelForm({
+      fuelDate: new Date().toISOString().split("T")[0],
+      gallons: "",
+      pricePerGallon: "",
+      totalCost: "",
+      odometer: "",
+      isFullFillup: "true",
+      stationName: "",
+      notes: "",
+    });
+    fuelLastEditedRef.current = null;
+    setFuelComputedField(null);
+  }
+
   const createFuel = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       apiRequest("POST", `/api/vehicles/${id}/fuel`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/vehicles/${id}/fuel`] });
       setFuelOpen(false);
+      resetFuelForm();
       toast({ title: "Fuel log saved" });
     },
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
@@ -1208,7 +1273,13 @@ export default function FleetDetailPage() {
       </Dialog>
 
       {/* Add Fuel Dialog */}
-      <Dialog open={fuelOpen} onOpenChange={setFuelOpen}>
+      <Dialog
+        open={fuelOpen}
+        onOpenChange={(open) => {
+          setFuelOpen(open);
+          if (!open) resetFuelForm();
+        }}
+      >
         <DialogContent data-testid="dialog-add-fuel">
           <DialogHeader>
             <DialogTitle>Add Fuel Log</DialogTitle>
@@ -1230,7 +1301,8 @@ export default function FleetDetailPage() {
                   type="number"
                   step="0.001"
                   value={fuelForm.gallons}
-                  onChange={(e) => setFuelForm({ ...fuelForm, gallons: e.target.value })}
+                  onChange={(e) => handleFuelFieldChange("gallons", e.target.value)}
+                  className={fuelComputedField === "gallons" ? "text-muted-foreground" : ""}
                   data-testid="input-fuel-gallons"
                 />
               </div>
@@ -1242,7 +1314,8 @@ export default function FleetDetailPage() {
                   type="number"
                   step="0.001"
                   value={fuelForm.pricePerGallon}
-                  onChange={(e) => setFuelForm({ ...fuelForm, pricePerGallon: e.target.value })}
+                  onChange={(e) => handleFuelFieldChange("pricePerGallon", e.target.value)}
+                  className={fuelComputedField === "pricePerGallon" ? "text-muted-foreground" : ""}
                   data-testid="input-fuel-price"
                 />
               </div>
@@ -1252,7 +1325,8 @@ export default function FleetDetailPage() {
                   type="number"
                   step="0.01"
                   value={fuelForm.totalCost}
-                  onChange={(e) => setFuelForm({ ...fuelForm, totalCost: e.target.value })}
+                  onChange={(e) => handleFuelFieldChange("totalCost", e.target.value)}
+                  className={fuelComputedField === "totalCost" ? "text-muted-foreground" : ""}
                   data-testid="input-fuel-total"
                 />
               </div>
