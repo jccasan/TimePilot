@@ -94,10 +94,15 @@ async function sendScheduledReport(report: ScheduledReportRow): Promise<void> {
     }
 
     if (errors.length) {
-      console.warn(`[ScheduledReports] Some emails failed for "${report.name}":`, errors);
+      console.warn(
+        `[ScheduledReports] ${errors.length} email(s) failed for "${report.name}":`,
+        errors
+      );
+      // Do NOT update last_sent_at when any recipient failed — allow retry next hour
+      throw new Error(`${errors.length} recipient(s) failed: ${errors.join("; ")}`);
     }
 
-    // Update last_sent_at regardless of partial failures
+    // Only update last_sent_at when all recipients succeeded
     await storage.updateScheduledReport(report.id, report.companyId, {
       lastSentAt: new Date(),
     });
@@ -107,6 +112,7 @@ async function sendScheduledReport(report: ScheduledReportRow): Promise<void> {
     );
   } catch (err) {
     console.error(`[ScheduledReports] Failed to send "${report.name}":`, err);
+    throw err;
   }
 }
 

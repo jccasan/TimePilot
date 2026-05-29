@@ -249,6 +249,190 @@ async function fetchLeadSources(companyId: string): Promise<ReportSection> {
   };
 }
 
+async function fetchRouteSummary(
+  companyId: string,
+  startDate: string,
+  endDate: string
+): Promise<ReportSection> {
+  const rows = await db.execute(sql`
+    SELECT
+      r.name AS route,
+      u.first_name || ' ' || u.last_name AS tech,
+      COUNT(DISTINCT CASE WHEN j.job_status = 'active' THEN j.id END) AS active_stops,
+      COUNT(DISTINCT v.id) AS total_visits,
+      COUNT(DISTINCT CASE WHEN v.status = 'completed' THEN v.id END) AS completed,
+      ROUND(100.0 * COUNT(DISTINCT CASE WHEN v.status = 'completed' THEN v.id END)
+        / NULLIF(COUNT(DISTINCT v.id), 0), 1) AS completion_pct,
+      ROUND(COALESCE(AVG(CASE
+        WHEN v.started_at IS NOT NULL AND v.completed_at IS NOT NULL
+        THEN EXTRACT(EPOCH FROM (v.completed_at - v.started_at)) / 60
+      END), 0), 1) AS avg_min
+    FROM routes r
+    LEFT JOIN users u ON r.technician_id = u.id
+    LEFT JOIN jobs j ON j.route_id = r.id AND j.company_id = ${companyId}
+    LEFT JOIN visits v ON v.route_id = r.id
+      AND v.company_id = ${companyId}
+      AND v.scheduled_date >= ${startDate}
+      AND v.scheduled_date <= ${endDate}
+    WHERE r.company_id = ${companyId}
+    GROUP BY r.id, r.name, u.first_name, u.last_name
+    ORDER BY r.name ASC
+    LIMIT 50
+  `);
+
+  const data = rows.rows as {
+    route: string;
+    tech: string | null;
+    active_stops: string;
+    total_visits: string;
+    completed: string;
+    completion_pct: string | null;
+    avg_min: string;
+  }[];
+
+  return {
+    key: "route_summary",
+    title: "Route Summary",
+    summary: `${data.length} route(s) for period ${startDate} to ${endDate}`,
+    headers: [
+      "Route",
+      "Technician",
+      "Active Stops",
+      "Visits",
+      "Completed",
+      "Completion %",
+      "Avg Min",
+    ],
+    rows: data.map((r) => [
+      r.route,
+      r.tech ?? "—",
+      parseInt(r.active_stops),
+      parseInt(r.total_visits),
+      parseInt(r.completed),
+      r.completion_pct != null ? `${r.completion_pct}%` : "—",
+      `${Math.round(parseFloat(r.avg_min))} min`,
+    ]),
+  };
+}
+
+async function fetchTechPerformance(
+  companyId: string,
+  startDate: string,
+  endDate: string
+): Promise<ReportSection> {
+  const rows = await db.execute(sql`
+    SELECT
+      u.first_name || ' ' || u.last_name AS tech,
+      COUNT(DISTINCT r.id) AS routes,
+      COUNT(DISTINCT v.id) AS total_visits,
+      COUNT(DISTINCT CASE WHEN v.status = 'completed' THEN v.id END) AS completed,
+      ROUND(100.0 * COUNT(DISTINCT CASE WHEN v.status = 'completed' THEN v.id END)
+        / NULLIF(COUNT(DISTINCT v.id), 0), 1) AS completion_pct,
+      ROUND(COALESCE(AVG(CASE
+        WHEN v.started_at IS NOT NULL AND v.completed_at IS NOT NULL
+          AND EXTRACT(EPOCH FROM (v.completed_at - v.started_at)) / 60 < 240
+        THEN EXTRACT(EPOCH FROM (v.completed_at - v.started_at)) / 60
+      END), 0), 1) AS avg_min_per_stop
+    FROM company_users cu
+    JOIN users u ON cu.user_id = u.id
+    LEFT JOIN routes r ON r.technician_id = u.id AND r.company_id = ${companyId}
+    LEFT JOIN visits v ON v.route_id = r.id
+      AND v.company_id = ${companyId}
+      AND v.scheduled_date >= ${startDate}
+      AND v.scheduled_date <= ${endDate}
+    WHERE cu.company_id = ${companyId}
+      AND cu.role = 'tech'
+      AND cu.is_active = true
+    GROUP BY u.id, u.first_name, u.last_name
+    ORDER BY completed DESC
+    LIMIT 50
+  `);
+
+  const data = rows.rows as {
+    tech: string;
+    routes: string;
+    total_visits: string;
+    completed: string;
+    completion_pct: string | null;
+    avg_min_per_stop: string;
+  }[];
+
+  return {
+    key: "tech_performance",
+    title: "Technician Performance",
+    summary: `${data.length} technician(s) for period ${startDate} to ${endDate}`,
+    headers: ["Technician", "Routes", "Visits", "Completed", "Completion %", "Avg Min/Stop"],
+    rows: data.map((r) => [
+      r.tech,
+      parseInt(r.routes),
+      parseInt(r.total_visits),
+      parseInt(r.completed),
+      r.completion_pct != null ? `${r.completion_pct}%` : "—",
+      `${r.avg_min_per_stop} min`,
+    ]),
+  };
+}
+
+async function fetchRevenueByFrequency(companyId: string): Promise<ReportSection> {
+  const rows = await db.execute(sql`
+    SELECT
+      sp.frequency,
+      COUNT(sp.id) AS plan_count,
+      ROUND(SUM(CASE
+        WHEN sp.frequency = 'weekly'   THEN sp.price_per_visit::numeric * 4.33
+        WHEN sp.frequency = 'biweekly' THEN sp.price_per_visit::numeric * 2.17
+        WHEN sp.frequency = 'monthly'  THEN sp.price_per_visit::numeric
+        ELSE sp.price_per_visit::numeric
+      END), 2) AS est_monthly
+    FROM service_plans sp
+    WHERE sp.company_id = ${companyId}
+      AND sp.is_active = true
+      AND sp.job_status = 'active'
+    GROUP BY sp.frequency
+    ORDER BY est_monthly DESC
+  `);
+
+  const data = rows.rows as { frequency: string; plan_count: string; est_monthly: number }[];
+  const total = data.reduce((s, r) => s + parseFloat(String(r.est_monthly)), 0);
+
+  return {
+    key: "revenue_by_frequency",
+    title: "Revenue by Service Frequency",
+    summary: `Total estimated monthly revenue: $${total.toFixed(2)} across ${data.length} frequency tier(s)`,
+    headers: ["Frequency", "Plans", "Est. Monthly Revenue"],
+    rows: data.map((r) => [
+      r.frequency,
+      parseInt(r.plan_count),
+      `$${parseFloat(String(r.est_monthly)).toFixed(2)}`,
+    ]),
+  };
+}
+
+async function fetchCancellationReasons(companyId: string): Promise<ReportSection> {
+  const rows = await db.execute(sql`
+    SELECT
+      COALESCE(NULLIF(cancellation_reason,''), 'Not specified') AS reason,
+      COUNT(*) AS count
+    FROM contacts
+    WHERE company_id = ${companyId}
+      AND status = 'cancelled'
+      AND updated_at >= NOW() - INTERVAL '12 months'
+    GROUP BY COALESCE(NULLIF(cancellation_reason,''), 'Not specified')
+    ORDER BY COUNT(*) DESC
+  `);
+
+  const data = rows.rows as { reason: string; count: string }[];
+  const total = data.reduce((s, r) => s + parseInt(r.count), 0);
+
+  return {
+    key: "cancellation_reasons",
+    title: "Cancellation Reasons",
+    summary: `${total} cancellation(s) in the last 12 months`,
+    headers: ["Reason", "Count"],
+    rows: data.map((r) => [r.reason, parseInt(r.count)]),
+  };
+}
+
 async function fetchCrossSell(companyId: string): Promise<ReportSection> {
   const rows = await db.execute(sql`
     SELECT c.first_name || ' ' || c.last_name AS contact,
@@ -291,10 +475,14 @@ export async function generateReportData(
   const sectionBuilders: Record<string, () => Promise<ReportSection>> = {
     open_balance: () => fetchOpenBalance(companyId),
     revenue_by_period: () => fetchRevenueSummary(companyId, thirtyDaysAgo, today),
+    revenue_by_frequency: () => fetchRevenueByFrequency(companyId),
     jobs: () => fetchJobs(companyId, thirtyDaysAgo, today),
+    route_summary: () => fetchRouteSummary(companyId, thirtyDaysAgo, today),
+    tech_performance: () => fetchTechPerformance(companyId, thirtyDaysAgo, today),
     active_clients: () => fetchActiveClients(companyId),
     new_vs_lost: () => fetchNewVsLost(companyId),
     lead_sources: () => fetchLeadSources(companyId),
+    cancellation_reasons: () => fetchCancellationReasons(companyId),
     cross_sell: () => fetchCrossSell(companyId),
   };
 

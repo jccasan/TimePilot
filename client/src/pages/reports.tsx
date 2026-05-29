@@ -198,6 +198,7 @@ const PERIOD_OPTIONS = [
   { value: "3m", label: "Last 3 Months" },
   { value: "6m", label: "Last 6 Months" },
   { value: "12m", label: "Last 12 Months" },
+  { value: "ytd", label: "Year to Date" },
   { value: "q1", label: "Q1 (Jan-Mar)" },
   { value: "q2", label: "Q2 (Apr-Jun)" },
   { value: "q3", label: "Q3 (Jul-Sep)" },
@@ -205,11 +206,13 @@ const PERIOD_OPTIONS = [
   { value: "annual", label: "Full Year" },
 ];
 
-const MONTHS_OPTIONS = [
-  { value: "3", label: "Last 3 Months" },
-  { value: "6", label: "Last 6 Months" },
-  { value: "12", label: "Last 12 Months" },
-];
+/** Map the shared period string to a months integer for the client-metrics backend. */
+function periodToMonths(period: string): string {
+  if (period === "3m" || period === "q1" || period === "q2" || period === "q3" || period === "q4")
+    return "3";
+  if (period === "12m" || period === "annual" || period === "ytd") return "12";
+  return "6"; // default: 6m
+}
 
 // ─── Export Utilities ─────────────────────────────────────────────────────────
 
@@ -1407,12 +1410,14 @@ function OperationsTab() {
 // ─── Customers Tab ────────────────────────────────────────────────────────────
 
 function CustomersTab({
-  months,
-  onMonthsChange,
+  period,
+  onPeriodChange,
 }: {
-  months: string;
-  onMonthsChange: (v: string) => void;
+  period: string;
+  onPeriodChange: (v: string) => void;
 }) {
+  const months = periodToMonths(period);
+
   const { data: metrics, isLoading: metricsLoading } = useQuery<ClientMetrics>({
     queryKey: [`/api/reports/client-metrics?months=${months}`],
   });
@@ -1484,18 +1489,7 @@ function CustomersTab({
               : "Client acquisition and retention trends"}
           </p>
         </div>
-        <Select value={months} onValueChange={onMonthsChange}>
-          <SelectTrigger className="w-[160px]" data-testid="select-customer-period">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MONTHS_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <PeriodSelector value={period} onChange={onPeriodChange} testId="select-customer-period" />
       </div>
 
       {/* KPI summary chips */}
@@ -2315,7 +2309,6 @@ export default function Reports() {
 
   // Global period selector — shared between Finance + Customers
   const [period, setPeriod] = useState("6m");
-  const months = period === "3m" ? "3" : period === "12m" || period === "annual" ? "12" : "6";
 
   return (
     <div className="p-4 md:p-6 overflow-auto h-full">
@@ -2367,14 +2360,7 @@ export default function Reports() {
         </TabsContent>
 
         <TabsContent value="customers">
-          <CustomersTab
-            months={months}
-            onMonthsChange={(v) => {
-              if (v === "3") setPeriod("3m");
-              else if (v === "12") setPeriod("12m");
-              else setPeriod("6m");
-            }}
-          />
+          <CustomersTab period={period} onPeriodChange={setPeriod} />
         </TabsContent>
 
         <TabsContent value="metrics">
