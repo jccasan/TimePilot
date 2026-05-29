@@ -9,6 +9,7 @@ import { Users } from "lucide-react";
 interface WhenToHireProps {
   weeklyBasePriceCents?: number;
   fixedOverheadCents?: number;
+  variableCostPerVisitCents?: number;
   activeClients?: number;
 }
 
@@ -25,14 +26,18 @@ function fmtCurrency(n: number): string {
 export default function WhenToHire({
   weeklyBasePriceCents = 0,
   fixedOverheadCents = 0,
+  variableCostPerVisitCents = 0,
   activeClients = 0,
 }: WhenToHireProps) {
   const defaultRevPerVisit =
     weeklyBasePriceCents > 0 ? (weeklyBasePriceCents / 100).toFixed(2) : "25.00";
   const defaultOverhead =
     fixedOverheadCents > 0 ? (fixedOverheadCents / 100).toFixed(2) : "2000.00";
+  const defaultVarCost =
+    variableCostPerVisitCents > 0 ? (variableCostPerVisitCents / 100).toFixed(2) : "0.00";
 
   const [avgRevenuePerVisit, setAvgRevenuePerVisit] = useState(defaultRevPerVisit);
+  const [variableCostPerVisit, setVariableCostPerVisit] = useState(defaultVarCost);
   const [currentClients, setCurrentClients] = useState(
     activeClients > 0 ? String(activeClients) : "30"
   );
@@ -52,6 +57,8 @@ export default function WhenToHire({
 
   const result = useMemo(() => {
     const rev = parseFloat(avgRevenuePerVisit) || 0;
+    const varCost = parseFloat(variableCostPerVisit) || 0;
+    const contribution = rev - varCost;
     const clients = parseFloat(currentClients) || 0;
     const overhead = parseFloat(fixedOverhead) || 0;
     const wage = parseFloat(hourlyWage) || 0;
@@ -72,43 +79,41 @@ export default function WhenToHire({
     const techMonthlyCost = burdenedWage * hoursPerDay * daysPerWeek * WEEKS_PER_MONTH + vehicle;
 
     // Step-off threshold = owner's physical capacity ceiling
-    // (hire when you're full, not at a distant financial crossover)
     const stepOffThreshold = ownerWeeklyCapacity > 0 ? ownerWeeklyCapacity : null;
 
-    // Financial break-even: minimum clients to cover tech cost alone
+    // Financial break-even: minimum clients to cover tech cost alone (using contribution margin)
     const financialBreakEven =
-      rev * WEEKS_PER_MONTH > 0 ? Math.ceil(techMonthlyCost / (rev * WEEKS_PER_MONTH)) : null;
+      contribution * WEEKS_PER_MONTH > 0
+        ? Math.ceil(techMonthlyCost / (contribution * WEEKS_PER_MONTH))
+        : null;
 
-    // Monthly revenue from the existing client book
-    const clientMonthlyRevenue = clients * rev * WEEKS_PER_MONTH;
+    // Monthly contribution from the existing client book
+    const clientMonthlyContribution = clients * contribution * WEEKS_PER_MONTH;
 
-    // Monthly revenue the tech generates from their capacity
-    const techMonthlyRevenue = techYards * rev * WEEKS_PER_MONTH;
+    // Monthly contribution the tech generates from their capacity
+    const techMonthlyContribution = techYards * contribution * WEEKS_PER_MONTH;
 
     // Scenario 1 — Solo: owner services all clients, no tech cost
-    const soloIncome = clientMonthlyRevenue - overhead;
+    const soloIncome = clientMonthlyContribution - overhead;
 
     // Scenario 2 — With Tech, owner still scoops:
     // Tech handles techYards/week of new/overflow clients, owner keeps existing book.
-    // Total revenue = (existing clients + tech's weekly yards) × rev × weeks
-    const withTechTotalRevenue = (clients + techYards) * rev * WEEKS_PER_MONTH;
-    const withTechOwnerScoop = withTechTotalRevenue - techMonthlyCost - overhead;
+    const withTechTotalContribution = (clients + techYards) * contribution * WEEKS_PER_MONTH;
+    const withTechOwnerScoop = withTechTotalContribution - techMonthlyCost - overhead;
 
     // Scenario 3 — Owner Manages (step off the truck):
     // Tech services the full existing client book. Owner earns the net after
     // paying the tech and overhead — no longer trading time for revenue.
-    const withTechOwnerManage = clientMonthlyRevenue - techMonthlyCost - overhead;
+    const withTechOwnerManage = clientMonthlyContribution - techMonthlyCost - overhead;
 
-    // Tech P&L: does the tech pay for themselves?
-    // In "owner manages" the tech generates clientMonthlyRevenue;
-    // in "with tech" they generate techMonthlyRevenue on top of owner's book.
-    const techPnl = techMonthlyRevenue - techMonthlyCost;
+    // Tech P&L: does the tech pay for themselves? (using contribution margin)
+    const techPnl = techMonthlyContribution - techMonthlyCost;
 
     const ownerCapacityPct = ownerWeeklyCapacity > 0 ? (clients / ownerWeeklyCapacity) * 100 : 0;
 
     return {
       techMonthlyCost,
-      techMonthlyRevenue,
+      techMonthlyRevenue: techMonthlyContribution,
       techPnl,
       stepOffThreshold,
       financialBreakEven,
@@ -120,6 +125,7 @@ export default function WhenToHire({
     };
   }, [
     avgRevenuePerVisit,
+    variableCostPerVisit,
     ownerYardsPerHour,
     ownerHoursPerDay,
     ownerDaysPerWeek,
@@ -235,6 +241,26 @@ export default function WhenToHire({
                   </div>
                 </div>
                 <div className="space-y-1.5">
+                  <Label htmlFor="hire-var-cost">Avg Variable Cost / Visit ($)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      $
+                    </span>
+                    <Input
+                      id="hire-var-cost"
+                      type="number"
+                      min="0"
+                      step="0.25"
+                      value={variableCostPerVisit}
+                      onChange={(e) => setVariableCostPerVisit(e.target.value)}
+                      className="pl-6"
+                      data-testid="input-hire-variable-cost-per-visit"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
                   <Label htmlFor="hire-clients">Current Customers</Label>
                   <Input
                     id="hire-clients"
@@ -246,23 +272,23 @@ export default function WhenToHire({
                     data-testid="input-hire-current-clients"
                   />
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="hire-overhead">Monthly Fixed Overhead ($)</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                    $
-                  </span>
-                  <Input
-                    id="hire-overhead"
-                    type="number"
-                    min="0"
-                    step="100"
-                    value={fixedOverhead}
-                    onChange={(e) => setFixedOverhead(e.target.value)}
-                    className="pl-6"
-                    data-testid="input-hire-overhead"
-                  />
+                <div className="space-y-1.5">
+                  <Label htmlFor="hire-overhead">Monthly Fixed Overhead ($)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      $
+                    </span>
+                    <Input
+                      id="hire-overhead"
+                      type="number"
+                      min="0"
+                      step="100"
+                      value={fixedOverhead}
+                      onChange={(e) => setFixedOverhead(e.target.value)}
+                      className="pl-6"
+                      data-testid="input-hire-overhead"
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -435,7 +461,7 @@ export default function WhenToHire({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">
-                    Tech revenue ({parseFloat(techYardsPerWeek) || 0} yds/wk)
+                    Tech contribution ({parseFloat(techYardsPerWeek) || 0} yds/wk)
                   </span>
                   <span className="font-semibold" data-testid="text-hire-tech-revenue">
                     {fmtCurrency(result.techMonthlyRevenue)}
@@ -518,8 +544,8 @@ export default function WhenToHire({
               />
             </div>
             <p className="text-xs text-muted-foreground mt-4">
-              All figures are monthly net after overhead. Tech cost deducted in the two hired
-              scenarios.
+              All figures are monthly net after variable costs, fixed overhead, and tech cost where
+              applicable.
             </p>
           </CardContent>
         </Card>

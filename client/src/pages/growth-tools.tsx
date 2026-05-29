@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import GrowthScorecard from "@/components/calculators/GrowthScorecard";
 import WhenToHire from "@/components/calculators/WhenToHire";
 
+const WEEKS_PER_MONTH = 4.33;
+
 type BusinessOverviewKpis = {
   kpis: {
     mrrCents: number;
@@ -60,6 +62,20 @@ export default function GrowthTools() {
           .filter((i) => i.type === "fixed")
           .reduce((s, i) => s + i.monthlyCostCents, 0)
       : overheadData?.totalMonthlyOverheadCents;
+
+  const variableMonthlyTotalCents =
+    overheadData?.items != null
+      ? overheadData.items
+          .filter((i) => i.type === "variable")
+          .reduce((s, i) => s + i.monthlyCostCents, 0)
+      : 0;
+
+  const monthlyVisits = activeClients * WEEKS_PER_MONTH;
+  const variableCostPerVisitCents =
+    variableMonthlyTotalCents > 0 && monthlyVisits > 0
+      ? Math.round(variableMonthlyTotalCents / monthlyVisits)
+      : 0;
+
   const weeklyBasePriceCents =
     pricingConfig?.pricingRules?.basePrices?.weekly != null
       ? Math.round(pricingConfig.pricingRules.basePrices.weekly * 100)
@@ -87,6 +103,7 @@ export default function GrowthTools() {
           netMarginPct={netMarginPct}
           weeklyBasePriceCents={weeklyBasePriceCents}
           fixedOverheadCents={fixedOverheadCents}
+          variableCostPerVisitCents={variableCostPerVisitCents}
           activeClients={activeClients}
           hasPricingConfig={hasPricingConfig}
           hasOverheadData={hasOverheadData}
@@ -103,6 +120,7 @@ export default function GrowthTools() {
         <WhenToHire
           weeklyBasePriceCents={weeklyBasePriceCents}
           fixedOverheadCents={fixedOverheadCents}
+          variableCostPerVisitCents={variableCostPerVisitCents}
           activeClients={activeClients}
         />
       </section>
