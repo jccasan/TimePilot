@@ -11,9 +11,7 @@ export type TechLocationEntry = {
 
 const store = new Map<string, TechLocationEntry>();
 
-export function upsertTechLocation(
-  entry: Omit<TechLocationEntry, "updatedAt">
-): void {
+export function upsertTechLocation(entry: Omit<TechLocationEntry, "updatedAt">): void {
   store.set(entry.userId, { ...entry, updatedAt: new Date().toISOString() });
 }
 

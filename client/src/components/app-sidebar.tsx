@@ -49,6 +49,7 @@ import {
   Sprout,
   Shield,
   Bug,
+  Truck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -142,6 +143,12 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
         title: "Quotes",
         url: "/quotes",
         icon: ClipboardList,
+        requiresSubscription: true,
+      },
+      {
+        title: "Fleet",
+        url: "/fleet",
+        icon: Truck,
         requiresSubscription: true,
       },
     ],

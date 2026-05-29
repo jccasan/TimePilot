@@ -1551,6 +1551,164 @@ export async function runStartupMigrations(): Promise<void> {
     // Route Health endpoint (GET /api/admin/route-health) surfaces any tenant
     // with routes exceeding their cap so similar situations can be caught early.
 
+    // ── FleetPilot V1 — vehicle tracker tables and company columns ────────────
+    await client.query(`
+      ALTER TABLE companies
+        ADD COLUMN IF NOT EXISTS vehicle_tracker_enabled BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS vehicle_tracker_trial_ends_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS stripe_vehicle_subscription_id VARCHAR(255)
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vehicles (
+        id                      VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id              VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        make                    VARCHAR(100) NOT NULL,
+        model                   VARCHAR(100) NOT NULL,
+        year                    INTEGER NOT NULL,
+        vin                     VARCHAR(17),
+        license_plate           VARCHAR(20),
+        color                   VARCHAR(50),
+        status                  VARCHAR(20) NOT NULL DEFAULT 'active',
+        assigned_tech_id        VARCHAR(255),
+        current_mileage         INTEGER NOT NULL DEFAULT 0,
+        insurance_expires_at    TIMESTAMP,
+        registration_expires_at TIMESTAMP,
+        pending_alert_count     INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_per_mile NUMERIC(8,4),
+        notes                   TEXT,
+        created_at              TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at              TIMESTAMP NOT NULL DEFAULT NOW(),
+        deleted_at              TIMESTAMP
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_vehicles_company ON vehicles (company_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vehicles_status ON vehicles (status) WHERE deleted_at IS NULL`
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vehicle_odometer_logs (
+        id           VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        vehicle_id   VARCHAR NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+        company_id   VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        odometer     INTEGER NOT NULL,
+        reading_date DATE NOT NULL,
+        source       VARCHAR(20) NOT NULL DEFAULT 'manual',
+        notes        TEXT,
+        created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vodo_vehicle ON vehicle_odometer_logs (vehicle_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vodo_company ON vehicle_odometer_logs (company_id)`
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vehicle_maintenance_logs (
+        id                  VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        vehicle_id          VARCHAR NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+        company_id          VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        maintenance_type    VARCHAR(100) NOT NULL,
+        performed_date      DATE NOT NULL,
+        mileage_at_service  INTEGER,
+        next_due_date       DATE,
+        next_due_miles      INTEGER,
+        cost                NUMERIC(10,2),
+        provider            VARCHAR(255),
+        notes               TEXT,
+        created_at          TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at          TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vmaint_vehicle ON vehicle_maintenance_logs (vehicle_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vmaint_company ON vehicle_maintenance_logs (company_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vmaint_next_due ON vehicle_maintenance_logs (next_due_date) WHERE next_due_date IS NOT NULL`
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vehicle_fuel_logs (
+        id              VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        vehicle_id      VARCHAR NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+        company_id      VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        fuel_date       DATE NOT NULL,
+        gallons         NUMERIC(8,3) NOT NULL,
+        price_per_gallon NUMERIC(8,3),
+        total_cost      NUMERIC(10,2),
+        odometer        INTEGER,
+        is_full_fillup  BOOLEAN NOT NULL DEFAULT true,
+        station_name    VARCHAR(255),
+        notes           TEXT,
+        created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vfuel_vehicle ON vehicle_fuel_logs (vehicle_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vfuel_company ON vehicle_fuel_logs (company_id)`
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vehicle_repair_logs (
+        id              VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        vehicle_id      VARCHAR NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+        company_id      VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        description     TEXT NOT NULL,
+        performed_date  DATE NOT NULL,
+        mileage_at_repair INTEGER,
+        labor_cost      NUMERIC(10,2),
+        parts_cost      NUMERIC(10,2),
+        total_cost      NUMERIC(10,2),
+        provider        VARCHAR(255),
+        is_downtime     BOOLEAN NOT NULL DEFAULT false,
+        downtime_days   INTEGER,
+        notes           TEXT,
+        created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vrepair_vehicle ON vehicle_repair_logs (vehicle_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vrepair_company ON vehicle_repair_logs (company_id)`
+    );
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS vehicle_documents (
+        id            VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+        vehicle_id    VARCHAR NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+        company_id    VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        name          VARCHAR(255) NOT NULL,
+        document_type VARCHAR(50) NOT NULL DEFAULT 'other',
+        file_path     TEXT NOT NULL,
+        file_size     INTEGER,
+        mime_type     VARCHAR(100),
+        expires_at    TIMESTAMP,
+        notes         TEXT,
+        created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vdoc_vehicle ON vehicle_documents (vehicle_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vdoc_company ON vehicle_documents (company_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_vdoc_expires ON vehicle_documents (expires_at) WHERE expires_at IS NOT NULL`
+    );
+
+    console.log("[Migration] FleetPilot tables and company columns ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

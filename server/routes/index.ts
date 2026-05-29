@@ -46,6 +46,7 @@ import { registerLeadResponseRoutes, blockLeadResponseOperator } from "./lead-re
 import { registerCalendarRoutes } from "./calendar";
 import { registerEmailInboundRoutes } from "./email-inbound";
 import { registerFacebookWebhookRoutes } from "./facebook-webhook";
+import { registerVehicleRoutes } from "./vehicles";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Object file download route — registered before registerObjectStorageRoutes so this
@@ -268,6 +269,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   await registerCalendarRoutes(app);
   await registerEmailInboundRoutes(app);
   await registerFacebookWebhookRoutes(app);
+  await registerVehicleRoutes(app);
 
   return httpServer;
 }

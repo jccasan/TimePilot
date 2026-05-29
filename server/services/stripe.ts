@@ -1004,6 +1004,42 @@ export async function createVoicePlanCheckout(params: {
   return { url: session.url!, sessionId: session.id };
 }
 
+export async function createFleetPlanCheckout(params: {
+  tenantId: string;
+  priceId: string;
+  customerEmail: string;
+  successUrl: string;
+  cancelUrl: string;
+  customerId?: string;
+}): Promise<{ url: string; sessionId: string }> {
+  const stripe = getStripe();
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    mode: "subscription",
+    line_items: [{ price: params.priceId, quantity: 1 }],
+    success_url: params.successUrl,
+    cancel_url: params.cancelUrl,
+    metadata: {
+      tenant_id: params.tenantId,
+      checkout_type: "fleet_addon",
+      add_on: "vehicle_tracker",
+    },
+    subscription_data: {
+      metadata: {
+        tenant_id: params.tenantId,
+        checkout_type: "fleet_addon",
+        add_on: "vehicle_tracker",
+      },
+    },
+  };
+  if (params.customerId) {
+    sessionParams.customer = params.customerId;
+  } else {
+    sessionParams.customer_email = params.customerEmail;
+  }
+  const session = await stripe.checkout.sessions.create(sessionParams);
+  return { url: session.url!, sessionId: session.id };
+}
+
 export async function reportMeteredUsage(
   stripeSubscriptionId: string,
   eventType: string,

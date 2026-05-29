@@ -140,6 +140,7 @@ import {
   Phone,
   Bot,
   Wifi,
+  Truck,
   WifiOff,
   Upload,
 } from "lucide-react";
@@ -697,6 +698,17 @@ const WIDGET_DEFS: {
     minH: 2,
     category: "stats",
     requiresVoicePlan: true,
+  },
+  {
+    id: "fleet",
+    label: "Fleet",
+    icon: Truck,
+    description: "Fleet alert count and vehicle summary",
+    defaultW: 4,
+    defaultH: 2,
+    minW: 3,
+    minH: 2,
+    category: "stats",
   },
 ];
 
@@ -2529,6 +2541,147 @@ function WeatherForecastWidget() {
   );
 }
 
+type FleetAccessData = {
+  hasAccess: boolean;
+  enabled: boolean;
+  trialActive: boolean;
+  daysLeftInTrial: number | null;
+};
+
+type FleetAlertData = {
+  type: string;
+  urgency: "high" | "medium" | "low";
+  vehicleName: string;
+};
+
+type FleetVehicle = {
+  id: string;
+  make: string;
+  model: string;
+  year: number;
+  status: string;
+  pendingAlertCount: number;
+};
+
+type FleetSummaryData = {
+  totalCost: number;
+  totalMiles: number;
+  costPerMile: number | null;
+};
+
+function FleetWidget() {
+  const { data: access, isLoading: accessLoading } = useQuery<FleetAccessData>({
+    queryKey: ["/api/vehicles/access"],
+  });
+
+  const { data: vehicles, isLoading: vehiclesLoading } = useQuery<FleetVehicle[]>({
+    queryKey: ["/api/vehicles"],
+    enabled: access?.hasAccess ?? false,
+  });
+
+  const { data: alerts } = useQuery<FleetAlertData[]>({
+    queryKey: ["/api/vehicles/fleet-alerts"],
+    enabled: access?.hasAccess ?? false,
+  });
+
+  const { data: fleetSummary } = useQuery<FleetSummaryData>({
+    queryKey: ["/api/vehicles/fleet-summary"],
+    enabled: access?.hasAccess ?? false,
+  });
+
+  if (accessLoading) {
+    return (
+      <div className="h-full flex flex-col" data-testid="widget-fleet-loading">
+        <div className="flex items-center gap-2 mb-3">
+          <Truck className="h-4 w-4 text-green-600" />
+          <span className="text-sm font-medium">Fleet</span>
+        </div>
+        <Skeleton className="h-12 w-full" />
+      </div>
+    );
+  }
+
+  // Widget only renders for active subscribers and trial users
+  if (!access?.hasAccess) return null;
+
+  const vehicleCount = vehicles?.length ?? 0;
+  const highAlerts = alerts?.filter((a) => a.urgency === "high") ?? [];
+  const totalAlerts = alerts?.length ?? 0;
+  const costPerMile = fleetSummary?.costPerMile;
+
+  return (
+    <div className="h-full flex flex-col" data-testid="widget-fleet">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Truck className="h-4 w-4 text-green-600" />
+          <span className="text-sm font-medium">Fleet</span>
+          {access.trialActive && access.daysLeftInTrial !== null && (
+            <Badge
+              variant="outline"
+              className="text-[10px] border-amber-400 text-amber-700 dark:text-amber-400"
+            >
+              Trial {access.daysLeftInTrial}d
+            </Badge>
+          )}
+        </div>
+        {totalAlerts > 0 && (
+          <Badge variant="destructive" className="text-[10px]" data-testid="fleet-alert-badge">
+            {totalAlerts} alerts
+          </Badge>
+        )}
+      </div>
+      {vehiclesLoading ? (
+        <Skeleton className="h-12 w-full" />
+      ) : vehicleCount === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <Link href="/fleet">
+            <p
+              className="text-xs text-muted-foreground cursor-pointer hover:underline"
+              data-testid="fleet-no-vehicles"
+            >
+              No vehicles — add one now
+            </p>
+          </Link>
+        </div>
+      ) : (
+        <div className="flex-1 flex flex-col justify-center gap-1">
+          <Link href="/fleet">
+            <div
+              className="flex items-center justify-between p-2 rounded-md bg-muted/40 hover:bg-muted/70 transition-colors cursor-pointer"
+              data-testid="fleet-summary-row"
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium">
+                  {vehicleCount} vehicle{vehicleCount !== 1 ? "s" : ""}
+                </span>
+                {highAlerts.length > 0 && (
+                  <span className="text-red-500 text-xs">{highAlerts.length} urgent</span>
+                )}
+              </div>
+              <AlertTriangle
+                className={`h-3.5 w-3.5 ${totalAlerts > 0 ? "text-red-500" : "text-muted-foreground"}`}
+              />
+            </div>
+          </Link>
+          {costPerMile != null && (
+            <p className="text-xs text-muted-foreground" data-testid="fleet-cost-per-mile">
+              Cost/mi: <span className="font-medium">${costPerMile.toFixed(2)}</span>
+            </p>
+          )}
+          <Link href="/fleet/summary">
+            <p
+              className="text-xs text-primary underline cursor-pointer mt-1"
+              data-testid="fleet-summary-link"
+            >
+              View cost summary
+            </p>
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type GrowthOpportunity = {
   key: string;
   label: string;
@@ -3718,6 +3871,14 @@ export default function Dashboard() {
       case "voice_agent":
         if (!hasVoicePlan) return null;
         return <VoiceAgentWidget />;
+      case "fleet":
+        return (
+          <Card className="h-full flex flex-col" data-testid="widget-fleet-card">
+            <CardContent className="flex-1 p-4">
+              <FleetWidget />
+            </CardContent>
+          </Card>
+        );
       default:
         return null;
     }

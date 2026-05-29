@@ -307,9 +307,7 @@ export default function RouteMapView({
       if (tech.lat == null || tech.lng == null) return;
       if (now - new Date(tech.updatedAt).getTime() > TECH_ACTIVE_MS) return;
       const minutesAgo = Math.floor((now - new Date(tech.updatedAt).getTime()) / 60000);
-      const initials = (
-        (tech.firstName[0] || "") + (tech.lastName[0] || "")
-      ).toUpperCase() || "?";
+      const initials = ((tech.firstName[0] || "") + (tech.lastName[0] || "")).toUpperCase() || "?";
 
       const el = document.createElement("div");
       el.setAttribute("data-testid", `marker-tech-${tech.userId}`);

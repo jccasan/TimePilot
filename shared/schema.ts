@@ -499,6 +499,9 @@ export const companies = pgTable("companies", {
   invoiceNumberNext: integer("invoice_number_next").notNull().default(1),
   crmGrandfathered: boolean("crm_grandfathered").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
+  vehicleTrackerEnabled: boolean("vehicle_tracker_enabled").notNull().default(false),
+  vehicleTrackerTrialEndsAt: timestamp("vehicle_tracker_trial_ends_at"),
+  stripeVehicleSubscriptionId: varchar("stripe_vehicle_subscription_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

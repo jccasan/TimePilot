@@ -1,6 +1,15 @@
 import { db } from "../db";
 import { eq, and, sql, gte, lte, count } from "drizzle-orm";
-import { visits, invoices, smsMessages, emailsSent, contacts, agreements } from "@shared/schema";
+import {
+  visits,
+  invoices,
+  smsMessages,
+  emailsSent,
+  contacts,
+  agreements,
+  companies,
+} from "@shared/schema";
+import { VehicleRepository } from "../repositories/VehicleRepository";
 import { storage } from "../storage";
 import { upsertHealthCheckResult } from "./system-health-check";
 
@@ -184,6 +193,12 @@ export async function runNightlyRollup() {
     "medium",
     msg
   ).catch(() => {});
+
+  try {
+    await runVehicleAlertRollup();
+  } catch (err) {
+    console.error("[nightly-rollup] vehicle alert rollup error:", err);
+  }
 }
 
 async function computeChurnRisk(
@@ -292,4 +307,44 @@ async function computeChurnRisk(
   }
 
   return Math.min(score, 13);
+}
+
+export async function runVehicleAlertRollup() {
+  const vehicleRepo = new VehicleRepository();
+  const allCompanies = await db
+    .select({
+      id: companies.id,
+      name: companies.name,
+      vehicleTrackerEnabled: companies.vehicleTrackerEnabled,
+      vehicleTrackerTrialEndsAt: companies.vehicleTrackerTrialEndsAt,
+    })
+    .from(companies);
+
+  let processed = 0;
+  let totalAlerts = 0;
+  for (const company of allCompanies) {
+    const now = new Date();
+    const trialActive =
+      company.vehicleTrackerTrialEndsAt && company.vehicleTrackerTrialEndsAt > now;
+    if (!company.vehicleTrackerEnabled && !trialActive) continue;
+
+    try {
+      // Fetch alerts once per company, then distribute counts to each vehicle
+      const alerts = await vehicleRepo.getFleetAlerts(company.id);
+      const alertsByVehicle = new Map<string, number>();
+      for (const alert of alerts) {
+        alertsByVehicle.set(alert.vehicleId, (alertsByVehicle.get(alert.vehicleId) ?? 0) + 1);
+      }
+      const vehicleList = await vehicleRepo.listVehicles(company.id);
+      for (const vehicle of vehicleList) {
+        const count = alertsByVehicle.get(vehicle.id) ?? 0;
+        await vehicleRepo.updatePendingAlertCount(vehicle.id, count);
+      }
+      totalAlerts += alerts.length;
+      processed++;
+    } catch (err) {
+      console.error(`[VehicleAlerts] Error processing company ${company.id}:`, err);
+    }
+  }
+  console.log(`[VehicleAlerts] Processed ${processed} companies, ${totalAlerts} alerts generated`);
 }

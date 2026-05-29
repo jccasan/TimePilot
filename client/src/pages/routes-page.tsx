@@ -1870,11 +1870,12 @@ export default function RoutesPage() {
 
   type TechLocEntry = {
     userId: string;
+    companyId: string;
     firstName: string;
     lastName: string;
     lat: number | null;
     lng: number | null;
-    gpsPermission: string;
+    gpsPermission: "granted" | "denied" | "unavailable";
     updatedAt: string;
   };
   const { data: rawTechLocations } = useQuery<TechLocEntry[]>({

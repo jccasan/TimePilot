@@ -102,6 +102,9 @@ const SpeedToLeadPage = lazy(() => import("@/pages/crm/speed-to-lead"));
 const SignDocumentsPage = lazy(() => import("@/pages/sign-documents-page"));
 const LeadResponseRegisterPage = lazy(() => import("@/pages/lead-response-register"));
 const UnmatchedEmails = lazy(() => import("@/pages/unmatched-emails"));
+const FleetPage = lazy(() => import("@/pages/fleet"));
+const FleetDetailPage = lazy(() => import("@/pages/fleet-detail"));
+const FleetSummaryPage = lazy(() => import("@/pages/fleet-summary"));
 
 function PageLoader() {
   return (
@@ -265,6 +268,9 @@ function Router() {
           <Redirect to="/crm/speed-to-lead" />
         </Route>
         <Route path="/unmatched-emails" component={UnmatchedEmails} />
+        <Route path="/fleet/summary" component={FleetSummaryPage} />
+        <Route path="/fleet/:id" component={FleetDetailPage} />
+        <Route path="/fleet" component={FleetPage} />
         {/* Platform admin pages — accessible to isPlatformAdmin regular users */}
         <Route path="/admin" component={AdminDashboard} />
         <Route path="/admin/tenants" component={AdminTenants} />

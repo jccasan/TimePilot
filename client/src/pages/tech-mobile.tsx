@@ -516,11 +516,20 @@ export default function TechMobile() {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        console.log("[GPS] Permission granted on mount:", pos.coords.latitude, pos.coords.longitude);
+        console.log(
+          "[GPS] Permission granted on mount:",
+          pos.coords.latitude,
+          pos.coords.longitude
+        );
         setGpsPermission("granted");
       },
       (err) => {
-        console.error("[GPS] Permission prompt error on mount — code:", err.code, "message:", err.message);
+        console.error(
+          "[GPS] Permission prompt error on mount — code:",
+          err.code,
+          "message:",
+          err.message
+        );
         setGpsPermission("denied");
       },
       { timeout: 10000, enableHighAccuracy: true }
@@ -1188,7 +1197,10 @@ export default function TechMobile() {
               {gpsPermission === "granted" && (
                 <>
                   <p className="text-xs text-muted-foreground">Location</p>
-                  <p className="text-sm font-medium text-green-700 dark:text-green-400" data-testid="text-gps-status">
+                  <p
+                    className="text-sm font-medium text-green-700 dark:text-green-400"
+                    data-testid="text-gps-status"
+                  >
                     GPS active
                   </p>
                 </>

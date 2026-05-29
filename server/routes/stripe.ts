@@ -640,6 +640,25 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         const meta = session.metadata || {};
         const tenantId = meta.tenant_id;
 
+        if (meta.checkout_type === "fleet_addon" && tenantId && meta.add_on === "vehicle_tracker") {
+          const company = await storage.getCompany(tenantId);
+          if (company) {
+            const stripeSubId = session.subscription as string | null;
+            await db
+              .update(companies)
+              .set({
+                vehicleTrackerEnabled: true,
+                vehicleTrackerTrialEndsAt: null,
+                stripeVehicleSubscriptionId: stripeSubId || null,
+                updatedAt: new Date(),
+              })
+              .where(eq(companies.id, company.id));
+            console.log(
+              `[Stripe Fleet] checkout.session.completed: FleetPilot activated for company "${company.name}" (${company.id})`
+            );
+          }
+        }
+
         if (meta.checkout_type === "voice_addon" && tenantId) {
           const voicePlan = meta.voice_plan as "voice_bootstrap" | "voice_starter" | "voice_pro";
           if (voicePlan && VOICE_PLAN_CONFIG[voicePlan]) {
@@ -1634,17 +1653,36 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
         const allCompanies = await storage.listCompanies();
         let handled = false;
         for (const company of allCompanies) {
-          if (company.stripeVoiceSubscriptionId === stripeSubId) {
-            await storage.updateCompany(company.id, {
-              voicePlanTier: null,
-              voicePlanStatus: null,
-              voicePlanIncludedMinutes: null,
-              voicePlanOverageRate: null,
-              stripeVoiceSubscriptionId: null,
-            } as Partial<typeof companies.$inferInsert>);
-            console.log(`[Stripe Voice] Company "${company.name}" voice plan cancelled`);
+          if ((company as Record<string, unknown>).stripeVehicleSubscriptionId === stripeSubId) {
+            await db
+              .update(companies)
+              .set({
+                vehicleTrackerEnabled: false,
+                stripeVehicleSubscriptionId: null,
+                updatedAt: new Date(),
+              })
+              .where(eq(companies.id, company.id));
+            console.log(
+              `[Stripe Fleet] Company "${company.name}" FleetPilot subscription cancelled`
+            );
             handled = true;
             break;
+          }
+        }
+        if (!handled) {
+          for (const company of allCompanies) {
+            if (company.stripeVoiceSubscriptionId === stripeSubId) {
+              await storage.updateCompany(company.id, {
+                voicePlanTier: null,
+                voicePlanStatus: null,
+                voicePlanIncludedMinutes: null,
+                voicePlanOverageRate: null,
+                stripeVoiceSubscriptionId: null,
+              } as Partial<typeof companies.$inferInsert>);
+              console.log(`[Stripe Voice] Company "${company.name}" voice plan cancelled`);
+              handled = true;
+              break;
+            }
           }
         }
         // ── Check if this is a Lead Response standalone subscription deletion ──
