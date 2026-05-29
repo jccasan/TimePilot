@@ -574,7 +574,7 @@ export default function Profitability() {
       pricingConfig?.pricingRules?.basePrices?.weekly ? (
         <BreakevenStatusIndicator
           activeClients={(customers ?? []).length}
-          avgPricePerVisit={pricingConfig.pricingRules.basePrices.weekly / 100}
+          avgPricePerVisit={pricingConfig.pricingRules.basePrices.weekly}
           variableCostPerVisit={variableCostPerVisit}
           fixedMonthlyOverhead={overheadData.totalMonthlyOverheadCents / 100}
         />

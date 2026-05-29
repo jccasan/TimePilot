@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,6 +57,32 @@ export default function BreakevenCalculator({
   const [variableCostPerVisit, setVariableCostPerVisit] = useState(defaultVarCost);
   const [fixedOverhead, setFixedOverhead] = useState(defaultOverhead);
   const [visitsPerWeek, setVisitsPerWeek] = useState(String(VISITS_PER_WEEK_DEFAULT));
+
+  const priceSeeded = useRef(weeklyBasePriceCents > 0);
+  const varCostSeeded = useRef(variableCostPerVisitCents > 0);
+  const overheadSeeded = useRef(fixedOverheadCents > 0);
+
+  useEffect(() => {
+    if (weeklyBasePriceCents > 0 && !priceSeeded.current) {
+      priceSeeded.current = true;
+      setPricePerVisit((weeklyBasePriceCents / 100).toFixed(2));
+    }
+  }, [weeklyBasePriceCents]);
+
+  useEffect(() => {
+    if (variableCostPerVisitCents > 0 && !varCostSeeded.current) {
+      varCostSeeded.current = true;
+      setVariableCostPerVisit((variableCostPerVisitCents / 100).toFixed(2));
+    }
+  }, [variableCostPerVisitCents]);
+
+  useEffect(() => {
+    if (fixedOverheadCents > 0 && !overheadSeeded.current) {
+      overheadSeeded.current = true;
+      setFixedOverhead((fixedOverheadCents / 100).toFixed(2));
+    }
+  }, [fixedOverheadCents]);
+
   const [currentMilesPerStop, setCurrentMilesPerStop] = useState("2.5");
   const [targetMilesPerStop, setTargetMilesPerStop] = useState("1.5");
   const [mileageCostPerMile, setMileageCostPerMile] = useState("0.20");

@@ -681,7 +681,7 @@ export default function BusinessOverview() {
       pricingConfig?.pricingRules?.basePrices?.weekly ? (
         <BreakevenStatusIndicator
           activeClients={kpis.activeCustomers}
-          avgPricePerVisit={pricingConfig.pricingRules.basePrices.weekly / 100}
+          avgPricePerVisit={pricingConfig.pricingRules.basePrices.weekly}
           variableCostPerVisit={variableCostPerVisit}
           fixedMonthlyOverhead={overheadData.totalMonthlyOverheadCents / 100}
         />
