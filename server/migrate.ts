@@ -1541,6 +1541,16 @@ export async function runStartupMigrations(): Promise<void> {
     // ── contacts — cancellation_reason for churn reporting ────────────────────
     await client.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS cancellation_reason TEXT`);
 
+    // ── Demo account route repair (2026-05-29) ───────────────────────────────
+    // The demo company ("poop-scoop-demo") was seeded via a path that bypassed
+    // the maxStopsPerRoute cap, resulting in routes with 60+ stops.  The fix is
+    // applied via the admin Route Health panel using the "Split now" action on
+    // the demo company, or by calling:
+    //   POST /api/admin/route-health/<demoCompanyId>/fix
+    // This uses the same k-means split logic as apply-max-stops. The admin
+    // Route Health endpoint (GET /api/admin/route-health) surfaces any tenant
+    // with routes exceeding their cap so similar situations can be caught early.
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

@@ -39,6 +39,8 @@ import {
   Info,
   RotateCcw,
   PhoneIncoming,
+  Scissors,
+  Gauge,
 } from "lucide-react";
 import { BarChart, Bar, Tooltip, ResponsiveContainer, XAxis } from "recharts";
 import { TIER_CONFIG } from "@shared/schema";
@@ -580,6 +582,63 @@ export default function AdminDashboard() {
     queryKey: ["/api/admin/system-health"],
     queryFn: adminFetchFn("/api/admin/system-health"),
     refetchInterval: 300000,
+  });
+
+  const {
+    data: routeHealth,
+    isLoading: routeHealthLoading,
+    refetch: refetchRouteHealth,
+  } = useQuery<{
+    violations: {
+      companyId: string;
+      companyName: string;
+      routeId: string;
+      routeName: string;
+      dayOfWeek: string | null;
+      stopCount: number;
+      cap: number;
+    }[];
+    permissiveCaps: {
+      companyId: string;
+      companyName: string;
+      cap: number | null;
+    }[];
+  }>({
+    queryKey: ["/api/admin/route-health"],
+    queryFn: adminFetchFn("/api/admin/route-health"),
+    staleTime: 120000,
+  });
+
+  const [fixingCompanyId, setFixingCompanyId] = useState<string | null>(null);
+
+  const fixRouteMutation = useMutation({
+    mutationFn: async (companyId: string) => {
+      setFixingCompanyId(companyId);
+      const res = await adminRequest("POST", `/api/admin/route-health/${companyId}/fix`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${res.status})`);
+      }
+      return res.json() as Promise<{
+        routesSplit: number;
+        subRoutesCreated: number;
+        skipped: number;
+        errors: string[];
+        splitDetails: { originalName: string; newRoutes: { name: string; stopCount: number }[] }[];
+      }>;
+    },
+    onSuccess: (data) => {
+      setFixingCompanyId(null);
+      toast({
+        title: "Routes split successfully",
+        description: `${data.routesSplit} route${data.routesSplit !== 1 ? "s" : ""} split into ${data.routesSplit + data.subRoutesCreated} total.`,
+      });
+      refetchRouteHealth();
+    },
+    onError: (err: Error) => {
+      setFixingCompanyId(null);
+      toast({ title: "Split failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const syncWebhookMutation = useMutation({
@@ -1260,6 +1319,162 @@ export default function AdminDashboard() {
                   </div>
                 );
               })}
+          </div>
+        )}
+      </div>
+
+      <div data-testid="section-route-health">
+        <div className="flex items-center gap-2 mb-3">
+          <Gauge className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-lg font-semibold">Route Health</h2>
+          {!routeHealthLoading &&
+            routeHealth &&
+            (routeHealth.violations.length === 0 ? (
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                All routes within limits
+              </Badge>
+            ) : (
+              <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                {routeHealth.violations.length} violation
+                {routeHealth.violations.length !== 1 ? "s" : ""}
+              </Badge>
+            ))}
+        </div>
+
+        {routeHealthLoading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-12 bg-muted rounded animate-pulse" />
+            ))}
+          </div>
+        ) : !routeHealth ? (
+          <Card>
+            <CardContent className="py-6 text-center text-muted-foreground">
+              <Route className="h-6 w-6 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">Could not load route health data</p>
+            </CardContent>
+          </Card>
+        ) : routeHealth.violations.length === 0 ? (
+          <Card>
+            <CardContent className="py-5 px-5">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 shrink-0" />
+                <p className="text-sm text-muted-foreground">
+                  No routes are currently over their configured stop cap.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm" data-testid="table-route-health-violations">
+                  <thead>
+                    <tr className="border-b text-left bg-muted/30">
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">Tenant</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">Route</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">Day</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">
+                        Stops
+                      </th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">
+                        Cap
+                      </th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">
+                        Over
+                      </th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {routeHealth.violations.map((v, i) => (
+                      <tr
+                        key={`${v.routeId}-${i}`}
+                        className="border-b last:border-0 hover:bg-muted/40 transition-colors"
+                        data-testid={`row-route-violation-${v.routeId}`}
+                      >
+                        <td className="px-4 py-3">
+                          <Link href={`/admin/companies/${v.companyId}`}>
+                            <span className="font-medium hover:underline cursor-pointer text-xs">
+                              {v.companyName}
+                            </span>
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3 font-medium">{v.routeName}</td>
+                        <td className="px-4 py-3 text-muted-foreground capitalize">
+                          {v.dayOfWeek || "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums font-semibold text-red-600 dark:text-red-400">
+                          {v.stopCount}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                          {v.cap}
+                        </td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-xs">
+                            +{v.stopCount - v.cap}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={fixingCompanyId === v.companyId || fixRouteMutation.isPending}
+                            onClick={() => fixRouteMutation.mutate(v.companyId)}
+                            data-testid={`button-fix-route-${v.routeId}`}
+                          >
+                            <Scissors className="h-3 w-3 mr-1" />
+                            {fixingCompanyId === v.companyId ? "Splitting…" : "Split"}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {routeHealth && routeHealth.permissiveCaps.length > 0 && (
+          <div className="mt-3 p-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-300 mb-1">
+                  {routeHealth.permissiveCaps.length} tenant
+                  {routeHealth.permissiveCaps.length !== 1 ? "s" : ""} with permissive cap (null or
+                  &ge; 50)
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">
+                  These accounts may have inherited a high cap from the 25&rarr;50 migration. Review
+                  and tighten as needed.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {routeHealth.permissiveCaps.slice(0, 10).map((pc) => (
+                    <Link key={pc.companyId} href={`/admin/companies/${pc.companyId}`}>
+                      <Badge
+                        variant="outline"
+                        className="text-xs cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/40 border-amber-300 dark:border-amber-700"
+                        data-testid={`badge-permissive-cap-${pc.companyId}`}
+                      >
+                        {pc.companyName}
+                        <span className="ml-1 opacity-60">
+                          {pc.cap === null ? "no cap" : `cap=${pc.cap}`}
+                        </span>
+                      </Badge>
+                    </Link>
+                  ))}
+                  {routeHealth.permissiveCaps.length > 10 && (
+                    <span className="text-xs text-amber-700 dark:text-amber-400 self-center">
+                      +{routeHealth.permissiveCaps.length - 10} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

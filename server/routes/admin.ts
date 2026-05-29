@@ -3129,6 +3129,117 @@ Respond with exactly one category from the list above and nothing else.`;
     }
   );
 
+  // ================ Route Health ================
+
+  /**
+   * GET /api/admin/route-health
+   * Returns per-tenant routes that exceed their configured maxStopsPerRoute cap,
+   * plus companies where the cap is null or permissively high (>= 50).
+   */
+  app.get("/api/admin/route-health", isAdmin, async (_req: Request, res: Response) => {
+    try {
+      const allCompanies = await storage.listCompanies();
+
+      const violations: {
+        companyId: string;
+        companyName: string;
+        routeId: string;
+        routeName: string;
+        dayOfWeek: string | null;
+        stopCount: number;
+        cap: number;
+      }[] = [];
+
+      const permissiveCaps: {
+        companyId: string;
+        companyName: string;
+        cap: number | null;
+      }[] = [];
+
+      await Promise.all(
+        allCompanies.map(async (company) => {
+          const cap = company.maxStopsPerRoute ?? null;
+
+          if (cap === null || cap >= 50) {
+            permissiveCaps.push({
+              companyId: company.id,
+              companyName: company.name,
+              cap,
+            });
+          }
+
+          if (cap === null) return;
+
+          const [companyRoutes, companyPlans] = await Promise.all([
+            storage.getRoutes(company.id),
+            storage.getServicePlans(company.id, { isActive: true }),
+          ]);
+
+          const stopsByRoute = new Map<string, number>();
+          for (const plan of companyPlans) {
+            if (!plan.routeId) continue;
+            stopsByRoute.set(plan.routeId, (stopsByRoute.get(plan.routeId) ?? 0) + 1);
+          }
+
+          for (const route of companyRoutes) {
+            const stopCount = stopsByRoute.get(route.id) ?? 0;
+            if (stopCount > cap) {
+              violations.push({
+                companyId: company.id,
+                companyName: company.name,
+                routeId: route.id,
+                routeName: route.name,
+                dayOfWeek: route.dayOfWeek ?? null,
+                stopCount,
+                cap,
+              });
+            }
+          }
+        })
+      );
+
+      violations.sort((a, b) => b.stopCount - b.cap - (a.stopCount - a.cap));
+
+      res.json({ violations, permissiveCaps });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  /**
+   * POST /api/admin/route-health/:companyId/fix
+   * Splits all oversized routes for the given company using their configured
+   * maxStopsPerRoute cap. Returns the split summary.
+   */
+  app.post(
+    "/api/admin/route-health/:companyId/fix",
+    isAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const companyId = p(req.params.companyId);
+        const company = await storage.getCompany(companyId);
+        if (!company) return res.status(404).json({ error: "Company not found" });
+
+        const cap = company.maxStopsPerRoute;
+        if (cap === null || cap === undefined) {
+          return res
+            .status(400)
+            .json({ error: "Company has no maxStopsPerRoute configured — set it first" });
+        }
+        if (cap < 2) {
+          return res.status(400).json({ error: "maxStopsPerRoute must be 2 or greater" });
+        }
+
+        const { splitOversizedRoutes } = await import("../services/route-cap-fixer");
+        const summary = await splitOversizedRoutes(companyId, cap);
+
+        res.json(summary);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
   // ================ CRM Backfill ================
   app.post("/api/admin/crm/backfill-customers", isAdmin, async (_req: Request, res: Response) => {
     try {
