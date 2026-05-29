@@ -964,7 +964,7 @@ export default function SignupWidget() {
           }
         }
       }
-      const pricingItemId = currentTier?.pricingItemId || undefined;
+      const pricingItemId = currentTier?.pricingItemId ? currentTier.pricingItemId : undefined;
       const lotAddonId = currentLot?.pricingItemId || undefined;
 
       const noteParts: string[] = [];
