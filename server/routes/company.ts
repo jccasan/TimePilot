@@ -25,6 +25,10 @@ import {
 } from "../utils/company-date";
 import { reportMeteredUsageSet } from "../services/stripe";
 import { TIER_CONFIG, DEFAULT_PRICING_RULES } from "@shared/schema";
+import {
+  upsertTechLocation,
+  getTechLocationsForCompany,
+} from "../services/tech-location-store";
 
 import {
   isAuthenticated,
@@ -948,6 +952,46 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
+
+  app.post(
+    "/api/technician/location",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, userId } = await getCompanyContext(req);
+        const { lat, lng, gpsPermission } = req.body;
+        if (!["granted", "denied", "unavailable"].includes(gpsPermission)) {
+          return res.status(400).json({ error: "Invalid gpsPermission value" });
+        }
+        const user = await getUserById(userId);
+        upsertTechLocation({
+          userId,
+          companyId,
+          firstName: user?.firstName || "",
+          lastName: user?.lastName || "",
+          lat: typeof lat === "number" && Number.isFinite(lat) ? lat : null,
+          lng: typeof lng === "number" && Number.isFinite(lng) ? lng : null,
+          gpsPermission,
+        });
+        res.json({ ok: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.get(
+    "/api/technician/locations",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        res.json(getTechLocationsForCompany(companyId));
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.delete("/api/company/team/:userId", isAuthenticated, async (req: Request, res: Response) => {
     try {

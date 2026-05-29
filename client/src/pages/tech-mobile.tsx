@@ -238,6 +238,7 @@ export default function TechMobile() {
   const pendingUploadTypeRef = useRef<PhotoUploadType | null>(null);
   const techPositionRef = useRef<{ lat: number; lng: number } | null>(null);
   const lastDriveFetchPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastLocationPingRef = useRef<number>(0);
   const allVisitsFlatRef = useRef<TodayVisit[]>([]);
   const [pendingAdvanceAfter, setPendingAdvanceAfter] = useState<string | null>(null);
   const [cachedVisits, setCachedVisits] = useState<TodayVisit[] | null>(null);
@@ -531,8 +532,17 @@ export default function TechMobile() {
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        setTechPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        const techPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setTechPosition(techPos);
         setGpsPermission("granted");
+        if (Date.now() - lastLocationPingRef.current > 30000) {
+          lastLocationPingRef.current = Date.now();
+          apiRequest("POST", "/api/technician/location", {
+            lat: techPos.lat,
+            lng: techPos.lng,
+            gpsPermission: "granted",
+          }).catch(() => {});
+        }
       },
       (err) => {
         console.error("[GPS] watchPosition error — code:", err.code, "message:", err.message);
@@ -544,6 +554,11 @@ export default function TechMobile() {
       navigator.geolocation.clearWatch(watchId);
     };
   }, [viewMode]);
+
+  useEffect(() => {
+    if (gpsPermission !== "denied" && gpsPermission !== "unavailable") return;
+    apiRequest("POST", "/api/technician/location", { gpsPermission }).catch(() => {});
+  }, [gpsPermission]);
 
   const fetchDriveTimes = useCallback((position: { lat: number; lng: number }) => {
     const upcomingVisits = allVisitsFlatRef.current.filter(

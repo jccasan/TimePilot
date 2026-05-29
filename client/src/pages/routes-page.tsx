@@ -1868,6 +1868,26 @@ export default function RoutesPage() {
     staleTime: Infinity,
   });
 
+  type TechLocEntry = {
+    userId: string;
+    firstName: string;
+    lastName: string;
+    lat: number | null;
+    lng: number | null;
+    gpsPermission: string;
+    updatedAt: string;
+  };
+  const { data: rawTechLocations } = useQuery<TechLocEntry[]>({
+    queryKey: ["/api/technician/locations"],
+    refetchInterval: 15000,
+  });
+  const activeTechLocations = (rawTechLocations || []).filter(
+    (t) =>
+      t.lat != null &&
+      t.lng != null &&
+      Date.now() - new Date(t.updatedAt).getTime() < 30 * 60 * 1000
+  );
+
   useEffect(() => {
     const latNum = parseFloat(fixLat);
     const lngNum = parseFloat(fixLng);
@@ -3688,6 +3708,7 @@ export default function RoutesPage() {
                     company?.startLongitude != null ? parseFloat(company.startLongitude) : null
                   }
                   depots={routeDayDepots}
+                  techLocations={activeTechLocations}
                 />
               </Suspense>
             </div>

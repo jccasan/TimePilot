@@ -21,6 +21,20 @@ export type DepotPin = {
   name: string;
 };
 
+export type TechLocationEntry = {
+  userId: string;
+  companyId: string;
+  firstName: string;
+  lastName: string;
+  lat: number | null;
+  lng: number | null;
+  gpsPermission: "granted" | "denied" | "unavailable";
+  updatedAt: string;
+};
+
+const TECH_ACTIVE_MS = 30 * 60 * 1000;
+const TECH_MARKER_COLOR = "#2563eb";
+
 type RouteMapViewProps = {
   stops: RouteStop[];
   routeName: string;
@@ -29,6 +43,7 @@ type RouteMapViewProps = {
   companyLatitude?: number | null;
   companyLongitude?: number | null;
   depots?: DepotPin[];
+  techLocations?: TechLocationEntry[];
   /** @deprecated use depots[] instead */
   depotLatitude?: number | null;
   /** @deprecated use depots[] instead */
@@ -49,6 +64,7 @@ export default function RouteMapView({
   companyLatitude,
   companyLongitude,
   depots,
+  techLocations,
   depotLatitude,
   depotLongitude,
   depotName,
@@ -56,6 +72,7 @@ export default function RouteMapView({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const markerMapRef = useRef<Map<string, { marker: any; color: string }>>(new Map());
+  const techMarkerMapRef = useRef<Map<string, any>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
 
   const { data: tokenData, isLoading: tokenLoading } = useQuery<{ token: string }>({
@@ -280,6 +297,56 @@ export default function RouteMapView({
       }
     }
   }, [selectedStopId, stops]);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    techMarkerMapRef.current.forEach((marker) => marker.remove());
+    techMarkerMapRef.current.clear();
+    const now = Date.now();
+    (techLocations || []).forEach((tech) => {
+      if (tech.lat == null || tech.lng == null) return;
+      if (now - new Date(tech.updatedAt).getTime() > TECH_ACTIVE_MS) return;
+      const minutesAgo = Math.floor((now - new Date(tech.updatedAt).getTime()) / 60000);
+      const initials = (
+        (tech.firstName[0] || "") + (tech.lastName[0] || "")
+      ).toUpperCase() || "?";
+
+      const el = document.createElement("div");
+      el.setAttribute("data-testid", `marker-tech-${tech.userId}`);
+      el.style.width = "32px";
+      el.style.height = "32px";
+      el.style.borderRadius = "50%";
+      el.style.backgroundColor = TECH_MARKER_COLOR;
+      el.style.color = "white";
+      el.style.display = "flex";
+      el.style.alignItems = "center";
+      el.style.justifyContent = "center";
+      el.style.fontSize = "11px";
+      el.style.fontWeight = "bold";
+      el.style.border = "2px solid white";
+      el.style.boxShadow = "0 2px 6px rgba(0,0,0,0.5)";
+      el.textContent = initials;
+
+      const popupEl = document.createElement("div");
+      popupEl.style.padding = "4px 6px";
+      const nameEl = document.createElement("strong");
+      nameEl.textContent = `${tech.firstName} ${tech.lastName}`;
+      const br = document.createElement("br");
+      const timeEl = document.createElement("span");
+      timeEl.style.color = "#666";
+      timeEl.style.fontSize = "12px";
+      timeEl.textContent = minutesAgo === 0 ? "Just now" : `${minutesAgo} min ago`;
+      popupEl.append(nameEl, br, timeEl);
+      const popup = new mapboxgl.Popup({ offset: 20 }).setDOMContent(popupEl);
+
+      const marker = new mapboxgl.Marker({ element: el })
+        .setLngLat([tech.lng, tech.lat])
+        .setPopup(popup)
+        .addTo(mapRef.current);
+
+      techMarkerMapRef.current.set(tech.userId, marker);
+    });
+  }, [techLocations, mapLoaded]);
 
   if (tokenLoading) {
     return (

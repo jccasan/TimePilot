@@ -115,6 +115,8 @@ import {
   Database,
   ChevronRight as ChevronRightIcon,
   CalendarDays,
+  LocateFixed,
+  LocateOff,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Link } from "wouter";
@@ -6704,6 +6706,16 @@ export default function Settings() {
     queryKey: ["/api/company/team"],
   });
 
+  type SettingsTechLoc = {
+    userId: string;
+    gpsPermission: "granted" | "denied" | "unavailable";
+    updatedAt: string;
+  };
+  const { data: techLocations } = useQuery<SettingsTechLoc[]>({
+    queryKey: ["/api/technician/locations"],
+    refetchInterval: 30000,
+  });
+
   const { data: settingsDepots = [] } = useQuery<
     { id: string; name: string; isPrimary: boolean }[]
   >({ queryKey: ["/api/depots"] });
@@ -7668,6 +7680,48 @@ export default function Settings() {
                                   )}
                                 </p>
                               )}
+                            {member.role === "tech" &&
+                              (currentUser?.role === "owner" || currentUser?.role === "admin") &&
+                              (() => {
+                                const loc = techLocations?.find((l) => l.userId === member.id);
+                                if (!loc) return null;
+                                const hoursAgo =
+                                  (Date.now() - new Date(loc.updatedAt).getTime()) / 3600000;
+                                if (loc.gpsPermission === "granted" && hoursAgo < 4) {
+                                  return (
+                                    <span
+                                      className="flex items-center gap-1 text-green-600 dark:text-green-400"
+                                      data-testid={`text-gps-status-${member.id}`}
+                                    >
+                                      <LocateFixed className="h-3 w-3 shrink-0" />
+                                      GPS active
+                                    </span>
+                                  );
+                                }
+                                if (loc.gpsPermission === "denied") {
+                                  return (
+                                    <span
+                                      className="flex items-center gap-1 text-destructive"
+                                      data-testid={`text-gps-status-${member.id}`}
+                                    >
+                                      <LocateOff className="h-3 w-3 shrink-0" />
+                                      Location blocked
+                                    </span>
+                                  );
+                                }
+                                if (loc.gpsPermission === "unavailable") {
+                                  return (
+                                    <span
+                                      className="flex items-center gap-1 text-muted-foreground/60"
+                                      data-testid={`text-gps-status-${member.id}`}
+                                    >
+                                      <LocateOff className="h-3 w-3 shrink-0" />
+                                      GPS unavailable
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                           </div>
                           <Badge
                             variant="secondary"
