@@ -287,8 +287,10 @@ export async function registerVehicleRoutes(app: Express): Promise<void> {
         }
       }
 
-      // Build the update payload; slide the status-change window if status is changing
+      // Build the update payload; strip rate-limit timestamps from client input — server-owned only
       const updatePayload: Record<string, unknown> = { ...req.body };
+      delete updatePayload.statusChangedAt1;
+      delete updatePayload.statusChangedAt2;
       if (statusIsChanging && !ctx.isDemo) {
         updatePayload.statusChangedAt2 = existing.statusChangedAt1 ?? null;
         updatePayload.statusChangedAt1 = new Date();

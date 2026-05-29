@@ -203,7 +203,12 @@ export default function FleetDetailPage() {
       toast({ title: "Vehicle status updated" });
     },
     onError: (err: unknown) => {
-      const e = err as { status?: number; limitReached?: boolean; rateLimited?: boolean; retryAfter?: string };
+      const e = err as {
+        status?: number;
+        limitReached?: boolean;
+        rateLimited?: boolean;
+        retryAfter?: string;
+      };
       if (e?.limitReached) {
         setStatusLimitOpen(true);
       } else if (e?.rateLimited && e.retryAfter) {
@@ -1455,8 +1460,7 @@ export default function FleetDetailPage() {
             <DialogTitle>Vehicle limit reached</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Your current FleetPilot plan allows{" "}
-            {access?.vehicleLimit ?? 0} active{" "}
+            Your current FleetPilot plan allows {access?.vehicleLimit ?? 0} active{" "}
             {(access?.vehicleLimit ?? 0) === 1 ? "vehicle" : "vehicles"}. Upgrade your plan to
             reactivate this vehicle.
           </p>
