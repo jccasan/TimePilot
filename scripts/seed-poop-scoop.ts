@@ -1,4 +1,5 @@
 import { pool } from "../server/db";
+import { assignNewStopsToRoutes } from "../server/services/weekly-optimizer";
 
 const COMPANY_NAME = "Poop Scoop Pet Waste Solutions LTD";
 const TIMEZONE = "America/Los_Angeles";
@@ -500,17 +501,78 @@ async function main() {
   console.log(`\nDone! Inserted ${inserted} contacts with properties and service plans.`);
   console.log(`Company: ${COMPANY_NAME} (id: ${companyId})`);
 
+  // Read company maxStopsPerRoute setting (default 30 for demo purposes).
+  const companySettingsRes = await pool.query(
+    `SELECT max_stops_per_route FROM companies WHERE id = $1`,
+    [companyId]
+  );
+  const MAX_STOPS: number = companySettingsRes.rows[0]?.max_stops_per_route ?? 30;
+
+  // Assign service plans to routes using the cap-aware helper.
+  console.log(`\nAssigning service plans to routes (maxStopsPerRoute = ${MAX_STOPS})...`);
+
+  const planRows = await pool.query(
+    `SELECT sp.id AS plan_id, sp.property_id, sp.day_of_week, p.latitude, p.longitude
+     FROM service_plans sp
+     LEFT JOIN properties p ON p.id = sp.property_id
+     WHERE sp.company_id = $1 AND sp.is_active = true AND sp.day_of_week IS NOT NULL`,
+    [companyId]
+  );
+
+  const newStops = planRows.rows
+    .filter((r: { day_of_week: string | null }) => r.day_of_week && r.day_of_week !== "tbd")
+    .map(
+      (r: {
+        plan_id: string;
+        property_id: string;
+        day_of_week: string;
+        latitude: string | null;
+        longitude: string | null;
+      }) => ({
+        planId: r.plan_id,
+        propertyId: r.property_id,
+        dayOfWeek: r.day_of_week,
+        lat: r.latitude ? Number(r.latitude) : null,
+        lng: r.longitude ? Number(r.longitude) : null,
+      })
+    );
+
+  const { assignments, newRoutes } = await assignNewStopsToRoutes(
+    newStops,
+    [],
+    async (name: string, day: string) => {
+      const res = await pool.query(
+        `INSERT INTO routes (company_id, name, day_of_week)
+         VALUES ($1, $2, $3)
+         RETURNING id, name`,
+        [companyId, name, day]
+      );
+      return { id: res.rows[0].id, name: res.rows[0].name };
+    },
+    MAX_STOPS
+  );
+
+  for (const assignment of assignments) {
+    await pool.query(`UPDATE service_plans SET route_id = $1 WHERE id = $2`, [
+      assignment.routeId,
+      assignment.planId,
+    ]);
+  }
+
+  console.log(`Routes created: ${newRoutes.length}, stops assigned: ${assignments.length}`);
+
   // Verify counts
   const finalCounts = await pool.query(
     `SELECT
        (SELECT COUNT(*) FROM contacts WHERE company_id = $1) AS contacts,
        (SELECT COUNT(*) FROM properties WHERE company_id = $1) AS properties,
-       (SELECT COUNT(*) FROM service_plans WHERE company_id = $1) AS service_plans`,
+       (SELECT COUNT(*) FROM service_plans WHERE company_id = $1) AS service_plans,
+       (SELECT COUNT(*) FROM routes WHERE company_id = $1) AS routes`,
     [companyId]
   );
   const counts = finalCounts.rows[0];
   console.log(
-    `Verification — contacts: ${counts.contacts}, properties: ${counts.properties}, service_plans: ${counts.service_plans}`
+    `Verification — contacts: ${counts.contacts}, properties: ${counts.properties}, service_plans: ${counts.service_plans}, routes: ${counts.routes}`
   );
 
   await pool.end();

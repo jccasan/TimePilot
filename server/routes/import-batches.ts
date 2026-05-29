@@ -4,6 +4,7 @@ import { db } from "../db";
 import { contacts, properties, servicePlans, importRows } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import { geocodeAddress } from "../services/geocode";
+import type { InsertRoute } from "@shared/schema";
 
 import { isAuthenticated, getCompanyContext, requireRole, handleError, p } from "./shared";
 
@@ -540,6 +541,15 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
         let createdServicePlans = 0;
         let needsSetup = 0;
 
+        type NewPlanEntry = {
+          planId: string;
+          propertyId: string;
+          dayOfWeek: DayOfWeek;
+          lat: number | null;
+          lng: number | null;
+        };
+        const newPlanEntries: NewPlanEntry[] = [];
+
         // All-or-nothing transaction: any row failure rolls back all inserts
         await db.transaction(async (tx) => {
           for (const row of committableRows) {
@@ -602,6 +612,8 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
 
             // Create property (geocode failure is non-fatal; the insert itself must succeed)
             let propertyId: string | null = null;
+            let propLat: number | null = null;
+            let propLng: number | null = null;
             if (streetAddress && city && state && zipCode) {
               let coords: { latitude: string; longitude: string } | null = null;
               try {
@@ -609,6 +621,9 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
               } catch {
                 // geocode is best-effort; missing coords do not block the commit
               }
+
+              if (coords?.latitude) propLat = Number(coords.latitude);
+              if (coords?.longitude) propLng = Number(coords.longitude);
 
               const [insertedProperty] = await tx
                 .insert(properties)
@@ -637,18 +652,30 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
 
             if (!rowNeedsServiceSetup && propertyId && validFrequency) {
               const today = new Date().toISOString().slice(0, 10);
-              await tx.insert(servicePlans).values({
-                companyId,
-                contactId: insertedContact.id,
-                propertyId,
-                frequency: validFrequency,
-                dayOfWeek: serviceDay,
-                pricePerVisit: (priceCents / 100).toFixed(2),
-                isActive: true,
-                startDate: today,
-                ...(billingTermsRaw ? { billingTerms: billingTermsRaw } : {}),
-              });
+              const [insertedPlan] = await tx
+                .insert(servicePlans)
+                .values({
+                  companyId,
+                  contactId: insertedContact.id,
+                  propertyId,
+                  frequency: validFrequency,
+                  dayOfWeek: serviceDay,
+                  pricePerVisit: (priceCents / 100).toFixed(2),
+                  isActive: true,
+                  startDate: today,
+                  ...(billingTermsRaw ? { billingTerms: billingTermsRaw } : {}),
+                })
+                .returning();
               createdServicePlans++;
+              if (serviceDay && serviceDay !== "tbd") {
+                newPlanEntries.push({
+                  planId: insertedPlan.id,
+                  propertyId,
+                  dayOfWeek: serviceDay,
+                  lat: propLat,
+                  lng: propLng,
+                });
+              }
             } else {
               needsSetup++;
             }
@@ -676,6 +703,124 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
           readyRows: 0,
         });
 
+        // Run route assignment for newly created service plans (outside transaction, non-blocking on failure)
+        type RouteAssignmentSummary = {
+          stopsPlaced: number;
+          routesCreated: number;
+          routesReused: number;
+          routes: Array<{
+            routeId: string;
+            day: string;
+            routeName: string;
+            stopsPlaced: number;
+            isNew: boolean;
+            atCapacity: boolean;
+          }>;
+        };
+        let routeAssignment: RouteAssignmentSummary | null = null;
+
+        if (newPlanEntries.length > 0) {
+          try {
+            const { assignNewStopsToRoutes } = await import("../services/weekly-optimizer");
+            const company = await storage.getCompany(companyId);
+            const routeStopCounts = await storage.getRouteStopCounts(companyId);
+
+            const daysNeeded = [...new Set(newPlanEntries.map((p) => p.dayOfWeek))];
+            const existingRouteInfos: Array<{
+              id: string;
+              name: string;
+              dayOfWeek: string;
+              stopCount: number;
+              stopCoords: { lat: number; lng: number }[];
+            }> = [];
+
+            for (const day of daysNeeded) {
+              const dayRoutes = (await storage.getRoutes(companyId, day)).filter((r) => !r.date);
+              for (const r of dayRoutes) {
+                existingRouteInfos.push({
+                  id: r.id,
+                  name: r.name,
+                  dayOfWeek: day,
+                  stopCount: routeStopCounts.get(r.id) || 0,
+                  stopCoords: [],
+                });
+              }
+            }
+
+            const newStops = newPlanEntries.map((p) => ({
+              planId: p.planId,
+              propertyId: p.propertyId,
+              dayOfWeek: p.dayOfWeek,
+              lat: p.lat,
+              lng: p.lng,
+            }));
+
+            const { assignments, newRoutes } = await assignNewStopsToRoutes(
+              newStops,
+              existingRouteInfos,
+              async (name, day) => {
+                const created = await storage.createRoute({
+                  companyId,
+                  name,
+                  dayOfWeek: day as InsertRoute["dayOfWeek"],
+                });
+                return { id: created.id, name: created.name };
+              },
+              company?.maxStopsPerRoute ?? undefined
+            );
+
+            for (const assignment of assignments) {
+              await storage.updateServicePlan(assignment.planId, companyId, {
+                routeId: assignment.routeId,
+              });
+            }
+
+            const maxCap = company?.maxStopsPerRoute ?? 50;
+            const routeSummaryMap = new Map<
+              string,
+              {
+                routeId: string;
+                day: string;
+                routeName: string;
+                stopsPlaced: number;
+                isNew: boolean;
+                preExistingCount: number;
+              }
+            >();
+            for (const a of assignments) {
+              const existing = routeSummaryMap.get(a.routeId);
+              if (existing) {
+                existing.stopsPlaced++;
+              } else {
+                routeSummaryMap.set(a.routeId, {
+                  routeId: a.routeId,
+                  day: a.day,
+                  routeName: a.routeName,
+                  stopsPlaced: 1,
+                  isNew: a.isNewRoute,
+                  preExistingCount: a.isNewRoute ? 0 : routeStopCounts.get(a.routeId) || 0,
+                });
+              }
+            }
+
+            routeAssignment = {
+              stopsPlaced: assignments.length,
+              routesCreated: newRoutes.length,
+              routesReused: routeSummaryMap.size - newRoutes.length,
+              routes: [...routeSummaryMap.values()].map((r) => ({
+                routeId: r.routeId,
+                day: r.day,
+                routeName: r.routeName,
+                stopsPlaced: r.stopsPlaced,
+                isNew: r.isNew,
+                atCapacity: r.preExistingCount + r.stopsPlaced >= maxCap,
+              })),
+            };
+          } catch (routeErr) {
+            console.error("[import-commit] Route assignment failed:", routeErr);
+          }
+        }
+
         // Sync all committed active contacts to CRM (non-blocking, outside transaction)
         (async () => {
           try {
@@ -700,6 +845,7 @@ export async function registerImportBatchesRoutes(app: Express): Promise<void> {
           createdServicePlans,
           needsSetup,
           ignored: ignoredRows.length,
+          routeAssignment,
         });
       } catch (err) {
         handleError(res, err);

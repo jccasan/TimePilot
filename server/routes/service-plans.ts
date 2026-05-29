@@ -500,21 +500,19 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         const { assignNewStopsToRoutes } = await import("../services/weekly-optimizer");
         const company = await storage.getCompany(companyId);
 
-        const allExistingPlans = await storage.getServicePlans(companyId);
-        const existingPlansByRoute = new Map<string, number>();
+        const routeStopCounts = await storage.getRouteStopCounts(companyId);
+
         const existingPlanCoordsByRoute = new Map<string, { lat: number; lng: number }[]>();
+        const allExistingPlans = await storage.getServicePlans(companyId, { isActive: true });
         for (const ep of allExistingPlans) {
-          if (!ep.routeId) continue;
-          existingPlansByRoute.set(ep.routeId, (existingPlansByRoute.get(ep.routeId) || 0) + 1);
-          if (ep.propertyId) {
-            const prop = propertyById.get(ep.propertyId);
-            if (prop?.latitude && prop?.longitude) {
-              if (!existingPlanCoordsByRoute.has(ep.routeId))
-                existingPlanCoordsByRoute.set(ep.routeId, []);
-              existingPlanCoordsByRoute
-                .get(ep.routeId)!
-                .push({ lat: Number(prop.latitude), lng: Number(prop.longitude) });
-            }
+          if (!ep.routeId || !ep.propertyId) continue;
+          const prop = propertyById.get(ep.propertyId);
+          if (prop?.latitude && prop?.longitude) {
+            if (!existingPlanCoordsByRoute.has(ep.routeId))
+              existingPlanCoordsByRoute.set(ep.routeId, []);
+            existingPlanCoordsByRoute
+              .get(ep.routeId)!
+              .push({ lat: Number(prop.latitude), lng: Number(prop.longitude) });
           }
         }
 
@@ -529,7 +527,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
               id: r.id,
               name: r.name,
               dayOfWeek: day,
-              stopCount: existingPlansByRoute.get(r.id) || 0,
+              stopCount: routeStopCounts.get(r.id) || 0,
               stopCoords: existingPlanCoordsByRoute.get(r.id) || [],
             });
           }

@@ -357,18 +357,45 @@ export default function ImportResolverPage() {
     },
   });
 
+  type RouteAssignmentSummary = {
+    stopsPlaced: number;
+    routesCreated: number;
+    routesReused: number;
+    routes: Array<{
+      routeId: string;
+      day: string;
+      routeName: string;
+      stopsPlaced: number;
+      isNew: boolean;
+      atCapacity: boolean;
+    }>;
+  };
+
+  const [commitResult, setCommitResult] = useState<RouteAssignmentSummary | null>(null);
+
   const commitMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/import-batches/${batchId}/commit`, {});
       return res.json();
     },
     onSuccess: (data) => {
-      toast({
-        title: "Import Committed",
-        description: `Created ${data.createdContacts} contacts. ${data.needsSetup} need service setup.`,
-      });
+      const ra = data.routeAssignment as RouteAssignmentSummary | null;
+
+      let description = `Created ${data.createdContacts} contacts.`;
+      if (data.needsSetup > 0) description += ` ${data.needsSetup} need service setup.`;
+      if (ra && ra.stopsPlaced > 0) {
+        description += ` ${ra.stopsPlaced} stop${ra.stopsPlaced !== 1 ? "s" : ""} assigned to routes`;
+        if (ra.routesCreated > 0) {
+          description += ` (${ra.routesCreated} new route${ra.routesCreated !== 1 ? "s" : ""} created)`;
+        }
+        description += ".";
+      }
+
+      toast({ title: "Import Committed", description });
+      if (ra && ra.stopsPlaced > 0) setCommitResult(ra);
       queryClient.invalidateQueries({ queryKey: ["/api/import-batches"] });
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/routes"] });
     },
     onError: () => {
       toast({ title: "Commit failed", variant: "destructive" });
@@ -664,6 +691,68 @@ export default function ImportResolverPage() {
           </Button>
         </div>
       </div>
+
+      {/* Routes-assigned confirmation panel (shown after a successful commit) */}
+      {commitResult && commitResult.stopsPlaced > 0 && (
+        <Card
+          className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30"
+          data-testid="card-route-assignment-summary"
+        >
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+              Routes Assigned
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <p className="text-xs text-muted-foreground mb-3">
+              {commitResult.stopsPlaced} stop{commitResult.stopsPlaced !== 1 ? "s" : ""} assigned
+              &mdash; {commitResult.routesCreated} route
+              {commitResult.routesCreated !== 1 ? "s" : ""} created, {commitResult.routesReused}{" "}
+              reused.
+            </p>
+            <div className="space-y-1.5">
+              {commitResult.routes.map((r) => (
+                <div
+                  key={r.routeId}
+                  className="flex items-center justify-between text-xs py-1 px-2 rounded-md bg-background border"
+                  data-testid={`route-assignment-row-${r.routeId}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="capitalize font-medium">{r.day}</span>
+                    <span className="text-muted-foreground">{r.routeName}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">
+                      +{r.stopsPlaced} stop{r.stopsPlaced !== 1 ? "s" : ""}
+                    </span>
+                    {r.isNew ? (
+                      <Badge
+                        variant="secondary"
+                        className="text-xs h-5 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300"
+                      >
+                        New
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs h-5">
+                        Expanded
+                      </Badge>
+                    )}
+                    {r.atCapacity && (
+                      <Badge
+                        variant="secondary"
+                        className="text-xs h-5 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300"
+                      >
+                        At Capacity
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Health Score + Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

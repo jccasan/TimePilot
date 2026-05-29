@@ -360,6 +360,7 @@ export interface IStorage {
   ): Promise<{ movedCount: number; targetRouteId: string }>;
   renumberRouteStops(routeId: string, companyId: string): Promise<void>;
   reorderRouteStops(routeId: string, companyId: string, orderedIds: string[]): Promise<void>;
+  getRouteStopCounts(companyId: string): Promise<Map<string, number>>;
 
   // Depots
   getDepots(companyId: string): Promise<Depot[]>;
@@ -1679,6 +1680,25 @@ export class DatabaseStorage implements IStorage {
   async createRoute(data: InsertRoute): Promise<Route> {
     const [route] = await db.insert(routes).values(data).returning();
     return route;
+  }
+
+  async getRouteStopCounts(companyId: string): Promise<Map<string, number>> {
+    const rows = await db
+      .select({ routeId: servicePlans.routeId, cnt: count() })
+      .from(servicePlans)
+      .where(
+        and(
+          eq(servicePlans.companyId, companyId),
+          eq(servicePlans.isActive, true),
+          isNotNull(servicePlans.routeId)
+        )
+      )
+      .groupBy(servicePlans.routeId);
+    const result = new Map<string, number>();
+    for (const row of rows) {
+      if (row.routeId) result.set(row.routeId, Number(row.cnt));
+    }
+    return result;
   }
 
   async updateRoute(id: string, companyId: string, data: Partial<InsertRoute>): Promise<Route> {

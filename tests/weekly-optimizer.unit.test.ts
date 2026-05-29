@@ -16,7 +16,11 @@ vi.mock("../server/services/route-optimizer", async (importOriginal) => {
   };
 });
 
-import { analyzeWeeklySchedule, mergeSmallClusters } from "../server/services/weekly-optimizer";
+import {
+  analyzeWeeklySchedule,
+  mergeSmallClusters,
+  assignNewStopsToRoutes,
+} from "../server/services/weekly-optimizer";
 import type { WeeklyStop } from "../server/services/weekly-optimizer";
 import * as routificModule from "../server/services/routific";
 import * as routeOptimizerModule from "../server/services/route-optimizer";
@@ -247,5 +251,88 @@ describe("optimizeStopOrder fallback behavior", () => {
     const result = await analyzeWeeklySchedule(stops, undefined, { maxStopsPerDay: 5 });
     // 10 stops split across 2 days (5 per day); all must be present in output
     expect(result.proposed.totalStops).toBe(10);
+  });
+});
+
+describe("assignNewStopsToRoutes route cap enforcement", () => {
+  it("creates a second route when new stops exceed maxStopsPerRoute on a single day", async () => {
+    const MAX_STOPS = 5;
+    const createdRoutes: { id: string; name: string }[] = [];
+
+    const newStops = Array.from({ length: 8 }, (_, i) => ({
+      planId: `plan-${i}`,
+      propertyId: `prop-${i}`,
+      dayOfWeek: "monday",
+      lat: 40.0 + i * 0.01,
+      lng: -80.0 + i * 0.01,
+    }));
+
+    const { assignments, newRoutes } = await assignNewStopsToRoutes(
+      newStops,
+      [],
+      async (name, _day) => {
+        const route = { id: `route-${createdRoutes.length}`, name };
+        createdRoutes.push(route);
+        return route;
+      },
+      MAX_STOPS
+    );
+
+    expect(assignments.length).toBe(8);
+    expect(newRoutes.length).toBe(2);
+
+    const routeLoadMap = new Map<string, number>();
+    for (const a of assignments) {
+      routeLoadMap.set(a.routeId, (routeLoadMap.get(a.routeId) || 0) + 1);
+    }
+
+    for (const [, count] of routeLoadMap) {
+      expect(count).toBeLessThanOrEqual(MAX_STOPS);
+    }
+  });
+
+  it("places overflow onto an existing under-capacity route before creating a new one", async () => {
+    const MAX_STOPS = 5;
+    const createdRoutes: { id: string; name: string }[] = [];
+
+    const existingRoutes = [
+      {
+        id: "existing-monday",
+        name: "Monday Route",
+        dayOfWeek: "monday",
+        stopCount: 3,
+        stopCoords: [] as { lat: number; lng: number }[],
+      },
+    ];
+
+    const newStops = Array.from({ length: 4 }, (_, i) => ({
+      planId: `plan-${i}`,
+      propertyId: `prop-${i}`,
+      dayOfWeek: "monday",
+      lat: null,
+      lng: null,
+    }));
+
+    const { assignments, newRoutes } = await assignNewStopsToRoutes(
+      newStops,
+      existingRoutes,
+      async (name, _day) => {
+        const route = { id: `new-route-${createdRoutes.length}`, name };
+        createdRoutes.push(route);
+        return route;
+      },
+      MAX_STOPS
+    );
+
+    expect(assignments.length).toBe(4);
+
+    const existingRouteAssignments = assignments.filter(
+      (a) => a.routeId === "existing-monday"
+    ).length;
+    const newRouteAssignments = assignments.filter((a) => a.routeId !== "existing-monday").length;
+
+    expect(existingRouteAssignments).toBe(2);
+    expect(newRouteAssignments).toBe(2);
+    expect(newRoutes.length).toBe(1);
   });
 });

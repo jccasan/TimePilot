@@ -483,26 +483,15 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const plans = await storage.getServicePlans(companyId, { isActive: true });
       const routePlans = plans.filter((sp) => sp.routeId === route.id);
 
-      // Use this week's visit count to determine oversized status and split factor
-      const splitTz = company.timezone || "America/New_York";
-      const splitWeekStart = getCompanyWeekStart(splitTz);
-      const splitWeekStartObj = new Date(splitWeekStart + "T12:00:00Z");
-      const splitWeekEndObj = new Date(splitWeekStartObj);
-      splitWeekEndObj.setUTCDate(splitWeekEndObj.getUTCDate() + 6);
-      const splitWeekEnd = splitWeekEndObj.toISOString().split("T")[0];
-      const routeWeekVisits = await storage.getVisitsForDateRange(
-        companyId,
-        splitWeekStart,
-        splitWeekEnd
-      );
-      const visitCountForRoute = routeWeekVisits.filter(
-        (v) => v.routeId === route.id && v.status !== "cancelled"
-      ).length;
+      // Use active service-plan count (same metric as assignNewStopsToRoutes) to
+      // determine whether the route is oversized and how many sub-routes to create.
+      const routeStopCounts = await storage.getRouteStopCounts(companyId);
+      const planCountForRoute = routeStopCounts.get(route.id) ?? routePlans.length;
 
-      if (visitCountForRoute <= maxStops) {
+      if (planCountForRoute <= maxStops) {
         return res.json({
           noOp: true,
-          message: `Route has ${visitCountForRoute} scheduled appointments this week, at or under the limit of ${maxStops}`,
+          message: `Route has ${planCountForRoute} active service plans, at or under the limit of ${maxStops}`,
         });
       }
 
@@ -539,7 +528,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
         return res.status(400).json({ error: "Not enough geocoded stops to split" });
       }
 
-      const k = Math.ceil(visitCountForRoute / maxStops);
+      const k = Math.ceil(planCountForRoute / maxStops);
       let clusters = kMeansClustering(weeklyStops, k);
 
       // Guard against under-minimum sub-clusters created by the split.
@@ -549,7 +538,7 @@ export async function registerRoutePlanningRoutes(app: Express): Promise<void> {
       const minSplitSize =
         company.minStopsPerDay != null && company.minStopsPerDay > 0
           ? company.minStopsPerDay
-          : Math.ceil(visitCountForRoute / k / 3);
+          : Math.ceil(planCountForRoute / k / 3);
       clusters = mergeSmallClusters(clusters, minSplitSize);
 
       const suffixLetters = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
