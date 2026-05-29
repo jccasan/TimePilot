@@ -1433,6 +1433,54 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] companies.invoice_number_prefix/next columns ensured");
 
+    // ── profitability_status enum + profitability_snapshots table ─────────────
+    // Defined in shared/schema.ts but never pushed to the live DB, causing
+    // POST /api/profitability/recalculate to 500 with "relation does not exist".
+    await client.query(`
+      DO $$ BEGIN
+        CREATE TYPE profitability_status AS ENUM ('profitable', 'marginal', 'unprofitable');
+      EXCEPTION WHEN duplicate_object THEN null;
+      END $$
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS profitability_snapshots (
+        id                        VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        company_id                VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        contact_id                VARCHAR NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+        property_id               VARCHAR REFERENCES properties(id) ON DELETE SET NULL,
+        snapshot_date             DATE NOT NULL,
+        revenue_cents             INTEGER NOT NULL DEFAULT 0,
+        total_cost_cents          INTEGER NOT NULL DEFAULT 0,
+        profit_cents              INTEGER NOT NULL DEFAULT 0,
+        profit_margin_pct         NUMERIC(8,2) NOT NULL DEFAULT 0,
+        visit_count               INTEGER NOT NULL DEFAULT 0,
+        avg_revenue_per_visit_cents INTEGER NOT NULL DEFAULT 0,
+        avg_cost_per_visit_cents  INTEGER NOT NULL DEFAULT 0,
+        status                    profitability_status NOT NULL DEFAULT 'profitable',
+        breakdown_json            JSONB,
+        created_at                TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_profsnap_company_contact ON profitability_snapshots (company_id, contact_id)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_profsnap_company_date ON profitability_snapshots (company_id, snapshot_date)`
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_profsnap_company_status ON profitability_snapshots (company_id, status)`
+    );
+    console.log("[Migration] profitability_snapshots table and indexes ensured");
+
+    // ── crm_tasks.last_reminder_sent_at — missing from initial CREATE TABLE ───
+    // The Drizzle schema (shared/crm-schema.ts) defines this column but it was
+    // never added via migration, causing the nightly reminders job to error with
+    // "column last_reminder_sent_at does not exist" on every run.
+    await client.query(
+      `ALTER TABLE crm_tasks ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMP`
+    );
+    console.log("[Migration] crm_tasks.last_reminder_sent_at column ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);
