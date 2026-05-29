@@ -214,9 +214,8 @@ export async function registerVehicleRoutes(app: Express): Promise<void> {
       if (!priceId || !FLEET_PLAN_MAP[priceId])
         return res.status(400).json({ error: "Invalid plan selected" });
       const plan = FLEET_PLAN_MAP[priceId];
-      const { updateFleetSubscriptionPrice, isStripeConfigured } = await import(
-        "../services/stripe"
-      );
+      const { updateFleetSubscriptionPrice, isStripeConfigured } =
+        await import("../services/stripe");
       if (!isStripeConfigured()) return res.status(400).json({ error: "Stripe not configured" });
       await updateFleetSubscriptionPrice(company.stripeVehicleSubscriptionId, priceId);
       await db

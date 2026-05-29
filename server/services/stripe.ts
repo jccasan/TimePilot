@@ -1014,8 +1014,7 @@ export async function createFleetPlanCheckout(params: {
   customerId?: string;
 }): Promise<{ url: string; sessionId: string }> {
   const stripe = getStripe();
-  const vehicleLimitMeta =
-    params.vehicleLimit === null ? "unlimited" : String(params.vehicleLimit);
+  const vehicleLimitMeta = params.vehicleLimit === null ? "unlimited" : String(params.vehicleLimit);
   const sessionParams: Stripe.Checkout.SessionCreateParams = {
     mode: "subscription",
     line_items: [{ price: params.priceId, quantity: 1 }],

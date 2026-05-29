@@ -219,8 +219,7 @@ export default function FleetDetailPage() {
   });
 
   const upgradePlan = useMutation({
-    mutationFn: (priceId: string) =>
-      apiRequest("POST", "/api/vehicles/fleet-upgrade", { priceId }),
+    mutationFn: (priceId: string) => apiRequest("POST", "/api/vehicles/fleet-upgrade", { priceId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/vehicles/access"] });
       setDowngradeOpen(false);
