@@ -67,7 +67,10 @@ import {
   estimates,
   serviceChangeRequests,
   customFieldDefinitions,
+  scheduledReports,
   DEFAULT_PRICING_RULES,
+  type ScheduledReport,
+  type InsertScheduledReport,
   type Company,
   type InsertCompany,
   type CompanyUser,
@@ -1090,6 +1093,17 @@ export interface IStorage {
   // Document Signatures
   createDocumentSignature(data: InsertDocumentSignature): Promise<DocumentSignature>;
   getDocumentSignatures(requestId: string): Promise<DocumentSignature[]>;
+
+  // Scheduled Reports
+  listScheduledReports(companyId: string): Promise<ScheduledReport[]>;
+  getScheduledReport(id: string, companyId: string): Promise<ScheduledReport | undefined>;
+  createScheduledReport(data: InsertScheduledReport): Promise<ScheduledReport>;
+  updateScheduledReport(
+    id: string,
+    companyId: string,
+    data: Partial<InsertScheduledReport>
+  ): Promise<ScheduledReport>;
+  deleteScheduledReport(id: string, companyId: string): Promise<void>;
 }
 
 export type GroupedErrorReport = {
@@ -5722,6 +5736,49 @@ export class DatabaseStorage implements IStorage {
       return created;
     }
   }
+  // ================ Scheduled Reports ================
+  async listScheduledReports(companyId: string): Promise<ScheduledReport[]> {
+    return db
+      .select()
+      .from(scheduledReports)
+      .where(eq(scheduledReports.companyId, companyId))
+      .orderBy(desc(scheduledReports.createdAt));
+  }
+
+  async getScheduledReport(id: string, companyId: string): Promise<ScheduledReport | undefined> {
+    const [row] = await db
+      .select()
+      .from(scheduledReports)
+      .where(and(eq(scheduledReports.id, id), eq(scheduledReports.companyId, companyId)))
+      .limit(1);
+    return row;
+  }
+
+  async createScheduledReport(data: InsertScheduledReport): Promise<ScheduledReport> {
+    const [row] = await db.insert(scheduledReports).values(data).returning();
+    return row;
+  }
+
+  async updateScheduledReport(
+    id: string,
+    companyId: string,
+    data: Partial<InsertScheduledReport>
+  ): Promise<ScheduledReport> {
+    const [row] = await db
+      .update(scheduledReports)
+      .set(data)
+      .where(and(eq(scheduledReports.id, id), eq(scheduledReports.companyId, companyId)))
+      .returning();
+    if (!row) throw { status: 404, message: "Scheduled report not found" };
+    return row;
+  }
+
+  async deleteScheduledReport(id: string, companyId: string): Promise<void> {
+    await db
+      .delete(scheduledReports)
+      .where(and(eq(scheduledReports.id, id), eq(scheduledReports.companyId, companyId)));
+  }
+
   async createInboundEmail(data: InsertInboundEmail): Promise<InboundEmail> {
     const [row] = await db.insert(inboundEmails).values(data).returning();
     return row;

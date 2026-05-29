@@ -1517,6 +1517,27 @@ export async function runStartupMigrations(): Promise<void> {
       "[Migration] Main-schema missing columns ensured (dedicated_phone_number, billing_onboarding_stage, proof photos, reminder_count)"
     );
 
+    // ── scheduled_reports — saved report configurations with email delivery ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS scheduled_reports (
+        id           VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        company_id   VARCHAR NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        name         VARCHAR(255) NOT NULL,
+        sections     TEXT[] NOT NULL DEFAULT '{}',
+        frequency    VARCHAR(20) NOT NULL DEFAULT 'weekly',
+        day_of_week  INTEGER,
+        day_of_month INTEGER,
+        send_hour    INTEGER NOT NULL DEFAULT 7,
+        recipients   TEXT[] NOT NULL DEFAULT '{}',
+        last_sent_at TIMESTAMP,
+        created_at   TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS idx_scheduled_reports_company ON scheduled_reports (company_id)`
+    );
+    console.log("[Migration] scheduled_reports table ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

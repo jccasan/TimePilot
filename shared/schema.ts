@@ -3766,3 +3766,31 @@ export const jobLocks = pgTable("job_locks", {
 });
 
 export type JobLock = typeof jobLocks.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// scheduled_reports — saved report configurations with delivery schedule
+// ---------------------------------------------------------------------------
+export const scheduledReports = pgTable("scheduled_reports", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  sections: text("sections").array().notNull().default(sql`ARRAY[]::text[]`),
+  frequency: varchar("frequency", { length: 20 }).notNull().default("weekly"),
+  dayOfWeek: integer("day_of_week"),
+  dayOfMonth: integer("day_of_month"),
+  sendHour: integer("send_hour").notNull().default(7),
+  recipients: text("recipients").array().notNull().default(sql`ARRAY[]::text[]`),
+  lastSentAt: timestamp("last_sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertScheduledReportSchema = createInsertSchema(scheduledReports).omit({
+  id: true,
+  createdAt: true,
+});
+export type ScheduledReport = typeof scheduledReports.$inferSelect;
+export type InsertScheduledReport = z.infer<typeof insertScheduledReportSchema>;

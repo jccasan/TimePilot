@@ -12,6 +12,7 @@ import {
   type Message,
   type InsertCompany,
   type InsertCompanyUser,
+  type InsertScheduledReport,
 } from "@shared/schema";
 import { ObjectStorageService } from "../replit_integrations/object_storage";
 import { getUserById, changePassword } from "../services/app-auth";
@@ -1989,6 +1990,402 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
       handleError(res, err);
     }
   });
+
+  // ─── Reports: Open Balance ────────────────────────────────────────────────
+  app.get("/api/reports/open-balance", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const today = new Date().toISOString().split("T")[0];
+      const rows = await db.execute(sql`
+        SELECT
+          c.id                     AS "contactId",
+          c.first_name || ' ' || c.last_name AS "contactName",
+          COALESCE(SUM(CASE
+            WHEN i.due_date IS NULL OR i.due_date::date >= ${today}::date THEN i.total::numeric
+            ELSE 0
+          END), 0) AS "current",
+          COALESCE(SUM(CASE
+            WHEN i.due_date IS NOT NULL
+              AND i.due_date::date < ${today}::date
+              AND ${today}::date - i.due_date::date <= 30 THEN i.total::numeric
+            ELSE 0
+          END), 0) AS "days30",
+          COALESCE(SUM(CASE
+            WHEN i.due_date IS NOT NULL
+              AND ${today}::date - i.due_date::date > 30
+              AND ${today}::date - i.due_date::date <= 60 THEN i.total::numeric
+            ELSE 0
+          END), 0) AS "days60",
+          COALESCE(SUM(CASE
+            WHEN i.due_date IS NOT NULL
+              AND ${today}::date - i.due_date::date > 60 THEN i.total::numeric
+            ELSE 0
+          END), 0) AS "days90plus",
+          COALESCE(SUM(i.total::numeric), 0) AS "total",
+          MIN(i.due_date)          AS "oldestInvoiceDate"
+        FROM contacts c
+        JOIN invoices i ON i.contact_id = c.id AND i.company_id = ${companyId}
+        WHERE c.company_id = ${companyId}
+          AND i.status IN ('sent','pending','draft')
+        GROUP BY c.id, c.first_name, c.last_name
+        HAVING SUM(i.total::numeric) > 0
+        ORDER BY SUM(i.total::numeric) DESC
+      `);
+      res.json(rows.rows);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // ─── Reports: Jobs (Completed/Scheduled visits for date range) ────────────
+  app.get("/api/reports/jobs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const today = new Date().toISOString().split("T")[0];
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().split("T")[0];
+      const startDate = (req.query.startDate as string) || thirtyDaysAgo;
+      const endDate = (req.query.endDate as string) || today;
+      const rows = await db.execute(sql`
+        SELECT
+          v.id                     AS "visitId",
+          v.scheduled_date         AS "date",
+          v.status                 AS "status",
+          c.first_name || ' ' || c.last_name AS "contactName",
+          r.name                   AS "routeName",
+          u.first_name || ' ' || u.last_name AS "techName",
+          CASE
+            WHEN v.started_at IS NOT NULL AND v.completed_at IS NOT NULL
+            THEN EXTRACT(EPOCH FROM (v.completed_at - v.started_at)) / 60
+            ELSE NULL
+          END                      AS "durationMinutes"
+        FROM visits v
+        JOIN jobs j ON v.job_id = j.id
+        JOIN agreements a ON j.agreement_id = a.id
+        JOIN contacts c ON a.contact_id = c.id AND c.company_id = ${companyId}
+        LEFT JOIN routes r ON v.route_id = r.id
+        LEFT JOIN users u ON r.technician_id = u.id
+        WHERE v.company_id = ${companyId}
+          AND v.scheduled_date >= ${startDate}
+          AND v.scheduled_date <= ${endDate}
+        ORDER BY v.scheduled_date DESC, c.last_name ASC
+        LIMIT 1000
+      `);
+      res.json(rows.rows);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // ─── Reports: Client Metrics ──────────────────────────────────────────────
+  app.get("/api/reports/client-metrics", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const months = parseInt((req.query.months as string) || "12");
+      const cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - months);
+      const cutoffStr = cutoff.toISOString().split("T")[0];
+
+      // Monthly new clients (created_at by month)
+      const newRows = await db.execute(sql`
+        SELECT
+          TO_CHAR(created_at, 'YYYY-MM') AS "month",
+          COUNT(*) AS "newClients"
+        FROM contacts
+        WHERE company_id = ${companyId}
+          AND created_at >= ${cutoffStr}
+        GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+        ORDER BY "month" ASC
+      `);
+
+      // Monthly cancellations (status changed to cancelled — we approximate by
+      // looking at contacts with status=cancelled and updated_at in period)
+      const cancelRows = await db.execute(sql`
+        SELECT
+          TO_CHAR(updated_at, 'YYYY-MM') AS "month",
+          COUNT(*) AS "cancelledClients"
+        FROM contacts
+        WHERE company_id = ${companyId}
+          AND status = 'cancelled'
+          AND updated_at >= ${cutoffStr}
+        GROUP BY TO_CHAR(updated_at, 'YYYY-MM')
+        ORDER BY "month" ASC
+      `);
+
+      // Lead source breakdown
+      const leadSourceRows = await db.execute(sql`
+        SELECT
+          COALESCE(NULLIF(lead_source,''), 'Unknown') AS "source",
+          COUNT(*) AS "count"
+        FROM contacts
+        WHERE company_id = ${companyId}
+          AND status = 'active'
+        GROUP BY COALESCE(NULLIF(lead_source,''), 'Unknown')
+        ORDER BY COUNT(*) DESC
+      `);
+
+      // Average client value (avg monthly revenue per active client)
+      const activeClients = await db.execute(sql`
+        SELECT COUNT(*) AS "activeCount"
+        FROM contacts
+        WHERE company_id = ${companyId} AND status = 'active'
+      `);
+      const activePlans = await db.execute(sql`
+        SELECT
+          sp.frequency,
+          sp.price_per_visit::numeric AS "pricePerVisit"
+        FROM service_plans sp
+        WHERE sp.company_id = ${companyId}
+          AND sp.is_active = true
+          AND sp.job_status = 'active'
+      `);
+
+      let totalMonthlyEstimate = 0;
+      for (const plan of activePlans.rows as { frequency: string; pricePerVisit: number }[]) {
+        const ppv = parseFloat(String(plan.pricePerVisit));
+        if (plan.frequency === "weekly") totalMonthlyEstimate += ppv * 4.33;
+        else if (plan.frequency === "biweekly") totalMonthlyEstimate += ppv * 2.17;
+        else if (plan.frequency === "monthly") totalMonthlyEstimate += ppv;
+      }
+      const activeCount = parseInt(String((activeClients.rows[0] as { activeCount: string }).activeCount)) || 1;
+      const avgClientValue = Math.round((totalMonthlyEstimate / activeCount) * 100) / 100;
+
+      // Build monthly series merging new + cancelled
+      const monthMap = new Map<string, { newClients: number; cancelledClients: number }>();
+      for (const r of newRows.rows as { month: string; newClients: string }[]) {
+        monthMap.set(r.month, { newClients: parseInt(r.newClients), cancelledClients: 0 });
+      }
+      for (const r of cancelRows.rows as { month: string; cancelledClients: string }[]) {
+        const existing = monthMap.get(r.month) ?? { newClients: 0, cancelledClients: 0 };
+        existing.cancelledClients = parseInt(r.cancelledClients);
+        monthMap.set(r.month, existing);
+      }
+      const monthly = Array.from(monthMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([month, data]) => ({
+          month,
+          newClients: data.newClients,
+          cancelledClients: data.cancelledClients,
+          netClients: data.newClients - data.cancelledClients,
+        }));
+
+      res.json({
+        monthly,
+        leadSources: leadSourceRows.rows,
+        avgClientValue,
+        activeCount,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // ─── Reports: Cross-sell (fulfilled upgrades) ─────────────────────────────
+  app.get("/api/reports/cross-sell", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      // Contacts with multiple active plans (upgraded to multi-service)
+      const multiPlanRows = await db.execute(sql`
+        SELECT
+          c.id AS "contactId",
+          c.first_name || ' ' || c.last_name AS "contactName",
+          COUNT(sp.id) AS "planCount",
+          STRING_AGG(DISTINCT sp.frequency, ', ' ORDER BY sp.frequency) AS "frequencies",
+          SUM(sp.price_per_visit::numeric) AS "totalPricePerVisit"
+        FROM contacts c
+        JOIN service_plans sp ON sp.contact_id = c.id AND sp.company_id = ${companyId}
+          AND sp.is_active = true AND sp.job_status = 'active'
+        WHERE c.company_id = ${companyId} AND c.status = 'active'
+        GROUP BY c.id, c.first_name, c.last_name
+        HAVING COUNT(sp.id) > 1
+        ORDER BY SUM(sp.price_per_visit::numeric) DESC
+        LIMIT 100
+      `);
+
+      // Contacts on weekly (highest frequency tier achieved)
+      const weeklyRows = await db.execute(sql`
+        SELECT
+          c.id AS "contactId",
+          c.first_name || ' ' || c.last_name AS "contactName",
+          sp.frequency,
+          sp.price_per_visit::numeric AS "pricePerVisit",
+          p.number_of_dogs AS "dogs"
+        FROM contacts c
+        JOIN service_plans sp ON sp.contact_id = c.id AND sp.company_id = ${companyId}
+          AND sp.is_active = true AND sp.job_status = 'active' AND sp.frequency = 'weekly'
+        LEFT JOIN LATERAL (
+          SELECT number_of_dogs FROM properties WHERE contact_id = c.id LIMIT 1
+        ) p ON true
+        WHERE c.company_id = ${companyId} AND c.status = 'active'
+        ORDER BY sp.price_per_visit::numeric DESC
+        LIMIT 50
+      `);
+
+      const multiPlan = (multiPlanRows.rows as {
+        contactId: string; contactName: string; planCount: string;
+        frequencies: string; totalPricePerVisit: number;
+      }[]).map((r) => ({
+        contactId: r.contactId,
+        contactName: r.contactName,
+        upgradeType: "Multi-service",
+        detail: `${r.planCount} active plans (${r.frequencies})`,
+        monthlyValue: Math.round(parseFloat(String(r.totalPricePerVisit)) * 4.33 * 100) / 100,
+      }));
+
+      const weekly = (weeklyRows.rows as {
+        contactId: string; contactName: string; pricePerVisit: number; dogs: number;
+      }[]).map((r) => ({
+        contactId: r.contactId,
+        contactName: r.contactName,
+        upgradeType: "Weekly service",
+        detail: `Weekly plan${r.dogs ? ` — ${r.dogs} dog${r.dogs > 1 ? "s" : ""}` : ""}`,
+        monthlyValue: Math.round(parseFloat(String(r.pricePerVisit)) * 4.33 * 100) / 100,
+      }));
+
+      // Deduplicate by contactId (prefer multi-plan entry)
+      const seen = new Set<string>();
+      const combined = [...multiPlan, ...weekly].filter((r) => {
+        if (seen.has(r.contactId)) return false;
+        seen.add(r.contactId);
+        return true;
+      });
+
+      res.json(combined);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // ─── Reports: KPI Strip ───────────────────────────────────────────────────
+  app.get("/api/reports/kpi-strip", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const [activeRow, techRow, routeRow, durationRow, typeRow] = await Promise.all([
+        db.execute(sql`
+          SELECT COUNT(*) AS "count" FROM contacts
+          WHERE company_id = ${companyId} AND status = 'active'
+        `),
+        db.execute(sql`
+          SELECT COUNT(*) AS "count" FROM company_users
+          WHERE company_id = ${companyId} AND role = 'technician' AND status = 'active'
+        `),
+        db.execute(sql`
+          SELECT
+            COUNT(*) AS "routeCount",
+            COALESCE(AVG(stop_count), 0) AS "avgStops"
+          FROM (
+            SELECT r.id, COUNT(j.id) AS stop_count
+            FROM routes r
+            LEFT JOIN jobs j ON j.route_id = r.id AND j.company_id = ${companyId} AND j.job_status = 'active'
+            WHERE r.company_id = ${companyId}
+            GROUP BY r.id
+          ) sub
+        `),
+        db.execute(sql`
+          SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (completed_at - started_at))/60), 0) AS "avgMinutes"
+          FROM visits
+          WHERE company_id = ${companyId}
+            AND status = 'completed'
+            AND started_at IS NOT NULL
+            AND completed_at IS NOT NULL
+            AND completed_at > started_at
+            AND EXTRACT(EPOCH FROM (completed_at - started_at))/60 < 240
+        `),
+        db.execute(sql`
+          SELECT
+            SUM(CASE WHEN contact_type = 'commercial' THEN 1 ELSE 0 END) AS "commercial",
+            SUM(CASE WHEN contact_type = 'residential' OR contact_type IS NULL THEN 1 ELSE 0 END) AS "residential"
+          FROM contacts
+          WHERE company_id = ${companyId} AND status = 'active'
+        `),
+      ]);
+      const typeData = typeRow.rows[0] as { commercial: string; residential: string } | undefined;
+      const routeData = routeRow.rows[0] as { routeCount: string; avgStops: string } | undefined;
+      res.json({
+        activeClients: parseInt(String((activeRow.rows[0] as { count: string }).count)) || 0,
+        techCount: parseInt(String((techRow.rows[0] as { count: string }).count)) || 0,
+        routeCount: parseInt(String(routeData?.routeCount ?? "0")) || 0,
+        avgStopsPerRoute: Math.round(parseFloat(String(routeData?.avgStops ?? "0")) * 10) / 10,
+        avgVisitMinutes: Math.round(parseFloat(String((durationRow.rows[0] as { avgMinutes: string }).avgMinutes)) * 10) / 10,
+        residentialCount: parseInt(String(typeData?.residential ?? "0")) || 0,
+        commercialCount: parseInt(String(typeData?.commercial ?? "0")) || 0,
+      });
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  // ─── Scheduled Reports CRUD ───────────────────────────────────────────────
+  app.get("/api/scheduled-reports", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const reports = await storage.listScheduledReports(companyId);
+      res.json(reports);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.post("/api/scheduled-reports", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const data: InsertScheduledReport = {
+        ...req.body,
+        companyId,
+      };
+      if (!data.name?.trim()) {
+        return res.status(400).json({ message: "Report name is required" });
+      }
+      const report = await storage.createScheduledReport(data);
+      res.json(report);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.put("/api/scheduled-reports/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { companyId } = await getCompanyContext(req);
+      const id = String(req.params.id);
+      const report = await storage.updateScheduledReport(id, companyId, req.body);
+      res.json(report);
+    } catch (err) {
+      handleError(res, err);
+    }
+  });
+
+  app.delete(
+    "/api/scheduled-reports/:id",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const id = String(req.params.id);
+        await storage.deleteScheduledReport(id, companyId);
+        res.json({ ok: true });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
+  app.post(
+    "/api/scheduled-reports/:id/run",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId } = await getCompanyContext(req);
+        const id = String(req.params.id);
+        const report = await storage.getScheduledReport(id, companyId);
+        if (!report) return res.status(404).json({ message: "Scheduled report not found" });
+        await storage.updateScheduledReport(id, companyId, {
+          lastSentAt: new Date(),
+        });
+        res.json({ ok: true, message: "Report marked as run" });
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
 
   app.get("/api/analytics/dashboard", isAuthenticated, async (req: Request, res: Response) => {
     try {
