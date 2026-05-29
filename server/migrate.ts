@@ -712,6 +712,28 @@ export async function runStartupMigrations(): Promise<void> {
       `UPDATE crm_audit_logs SET details = changes WHERE details = '{}'::jsonb AND changes IS NOT NULL`
     );
 
+    // crm_activities: call-tracking and next-action columns missing from CREATE TABLE
+    await client.query(
+      `ALTER TABLE crm_activities ADD COLUMN IF NOT EXISTS call_direction TEXT`
+    );
+    await client.query(
+      `ALTER TABLE crm_activities ADD COLUMN IF NOT EXISTS call_outcome TEXT`
+    );
+    await client.query(
+      `ALTER TABLE crm_activities ADD COLUMN IF NOT EXISTS call_duration_minutes INTEGER`
+    );
+    await client.query(
+      `ALTER TABLE crm_activities ADD COLUMN IF NOT EXISTS next_action_date TIMESTAMP`
+    );
+
+    // crm_email_campaigns: from_email and from_name missing from initial CREATE TABLE
+    await client.query(
+      `ALTER TABLE crm_email_campaigns ADD COLUMN IF NOT EXISTS from_email TEXT`
+    );
+    await client.query(
+      `ALTER TABLE crm_email_campaigns ADD COLUMN IF NOT EXISTS from_name TEXT`
+    );
+
     // crm_campaign_recipients table (missing from initial migration)
     await client.query(`
       CREATE TABLE IF NOT EXISTS crm_campaign_recipients (
@@ -1480,6 +1502,28 @@ export async function runStartupMigrations(): Promise<void> {
       `ALTER TABLE crm_tasks ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMP`
     );
     console.log("[Migration] crm_tasks.last_reminder_sent_at column ensured");
+
+    // ── Main-schema columns added to Drizzle but never migrated to prod ──────
+    // companies: dedicated_phone_number (voice agent outbound calling)
+    await client.query(
+      `ALTER TABLE companies ADD COLUMN IF NOT EXISTS dedicated_phone_number VARCHAR(20)`
+    );
+    // contacts: billing_onboarding_stage (billing onboarding flow)
+    await client.query(
+      `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS billing_onboarding_stage VARCHAR(30) DEFAULT 'none'`
+    );
+    // visits: proof-of-service before photo and gate-closed photo (tech mobile app)
+    await client.query(
+      `ALTER TABLE visits ADD COLUMN IF NOT EXISTS proof_of_service_photo_before TEXT`
+    );
+    await client.query(
+      `ALTER TABLE visits ADD COLUMN IF NOT EXISTS gate_closed_photo TEXT`
+    );
+    // invoices: reminder_count (automated invoice follow-up tracking)
+    await client.query(
+      `ALTER TABLE invoices ADD COLUMN IF NOT EXISTS reminder_count INTEGER NOT NULL DEFAULT 0`
+    );
+    console.log("[Migration] Main-schema missing columns ensured (dedicated_phone_number, billing_onboarding_stage, proof photos, reminder_count)");
 
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
