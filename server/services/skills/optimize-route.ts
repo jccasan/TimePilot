@@ -113,7 +113,46 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
     return ao - bo;
   });
 
-  const stops = routePlans
+  // --- Mid-day re-optimization: lock completed/skipped stops ---
+  // Fetch today's visits for this route and identify which stops are already done.
+  // Locked stops are frozen at the top of the stop order in their current sequence;
+  // only the remaining eligible stops are passed through the optimizer.
+  const routeTz = company?.timezone ?? "America/New_York";
+  const routeToday = getCompanyToday(routeTz);
+  const todayVisits = await storage.getVisitsForDateRange(companyId, routeToday, routeToday);
+  const todayRouteVisits = todayVisits.filter((v) => v.routeId === route.id && v.servicePlanId);
+  const lockedPlanIds = new Set(
+    todayRouteVisits
+      .filter((v) => v.status === "completed" || v.status === "skipped")
+      .map((v) => v.servicePlanId as string)
+  );
+
+  const lockedPlans = routePlans.filter((sp) => lockedPlanIds.has(sp.id));
+  const eligiblePlans = routePlans.filter((sp) => !lockedPlanIds.has(sp.id));
+  const hasMidDayLocks = lockedPlans.length > 0;
+
+  // No-op guard: all stops are already completed/skipped today.
+  if (hasMidDayLocks && eligiblePlans.length === 0) {
+    return {
+      success: true,
+      message: `All stops on route "${route.name}" are already completed — nothing left to optimize.`,
+      data: {
+        routeId: route.id,
+        routeName: route.name,
+        stopsReordered: 0,
+        milesSaved: 0,
+        minutesSaved: 0,
+        stopCount: routePlans.length,
+        lockedCount: lockedPlans.length,
+        allComplete: true,
+      },
+    };
+  }
+
+  // Only geocode-check and optimize the eligible (non-completed) stops.
+  const plansToOptimize = hasMidDayLocks ? eligiblePlans : routePlans;
+
+  const stops = plansToOptimize
     .map((sp) => {
       const prop = propertyMap.get(sp.propertyId);
       if (!prop || !prop.latitude || !prop.longitude) return null;
@@ -125,12 +164,44 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
     })
     .filter((s): s is NonNullable<typeof s> => s !== null);
 
-  const ungeocoded = routePlans.length - stops.length;
+  const ungeocoded = plansToOptimize.length - stops.length;
   if (stops.length < 2) {
+    // Mid-day case: all eligible stops are geocoded but there is only 0 or 1 left —
+    // no reordering is possible. Write orders for locked stops and the single eligible
+    // stop (if present), then return success instead of a geocode failure.
+    if (hasMidDayLocks && ungeocoded === 0) {
+      for (let i = 0; i < lockedPlans.length; i++) {
+        await storage.updateServicePlan(lockedPlans[i].id, companyId, { stopOrder: i + 1 });
+      }
+      if (stops.length === 1) {
+        await storage.updateServicePlan(stops[0].id, companyId, {
+          stopOrder: lockedPlans.length + 1,
+        });
+      }
+      return {
+        success: true,
+        message:
+          stops.length === 0
+            ? `All stops on route "${route.name}" are already completed — nothing left to optimize.`
+            : `Route "${route.name}" has only one remaining stop — nothing left to re-optimize (${lockedPlans.length} completed stop${lockedPlans.length !== 1 ? "s" : ""} preserved).`,
+        data: {
+          routeId: route.id,
+          routeName: route.name,
+          stopsReordered: 0,
+          milesSaved: 0,
+          minutesSaved: 0,
+          stopCount: routePlans.length,
+          lockedCount: lockedPlans.length,
+          order: [...lockedPlans.map((sp) => sp.id), ...stops.map((s) => s.id)],
+        },
+      };
+    }
+
+    // Otherwise (non-mid-day, or geocoding truly failed): report the failure.
     const geocodedIds = new Set(stops.map((s) => s.id));
     const allContacts = await storage.getContacts(companyId);
     const contactMap = new Map(allContacts.map((c) => [c.id, c]));
-    const failedStops = routePlans
+    const failedStops = plansToOptimize
       .filter((sp) => !geocodedIds.has(sp.id))
       .map((sp) => {
         const prop = propertyMap.get(sp.propertyId);
@@ -149,60 +220,91 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
       });
     return {
       success: false,
-      message: `${ungeocoded} of ${routePlans.length} stops could not be geocoded. Ensure addresses are complete.`,
+      message: `${ungeocoded} of ${plansToOptimize.length} eligible stops could not be geocoded. Ensure addresses are complete.`,
       error: "GEOCODE_FAILURE",
-      data: { stopCount: routePlans.length, geocodedCount: stops.length, failedStops },
+      data: { stopCount: plansToOptimize.length, geocodedCount: stops.length, failedStops },
     };
   }
 
-  // Collect ALL valid candidate start locations (multi-start optimization):
-  // 1. Route's assigned depot
-  // 2. Assigned technician's default depot
-  // 3. Company's primary depot
-  // 4. Legacy company start coordinates
-  // Near-duplicate candidates are deduplicated inside optimizeRouteAsyncMultiStart.
+  // --- Determine start point(s) for the optimizer ---
+  //
+  // Mid-day mode: use only the last completed/skipped stop's coordinates as the
+  // forced start point. This ensures the remaining stops are ordered from where the
+  // technician actually is, not from the depot. Fall through to the normal multi-
+  // candidate logic only if no locked stop has valid coordinates.
+  //
+  // Normal mode: collect all valid depot/tech/company candidates (multi-start).
   const candidateStarts: { latitude: number; longitude: number }[] = [];
 
-  if (route.depotId) {
-    const depot = await storage.getDepotById(route.depotId, companyId);
-    if (depot) {
-      candidateStarts.push({
-        latitude: parseFloat(String(depot.latitude)),
-        longitude: parseFloat(String(depot.longitude)),
-      });
-    }
-  }
-  if (route.technicianId) {
-    const techUser = await getUserById(route.technicianId);
-    if (techUser?.defaultDepotId) {
-      const techDepot = await storage.getDepotById(techUser.defaultDepotId, companyId);
-      if (techDepot) {
+  if (hasMidDayLocks) {
+    // Build a lookup from servicePlanId → today's visit status for locked stops.
+    // Skipped stops are excluded: the technician never physically visited them,
+    // so their location is not a meaningful "current position" anchor.
+    const lockedVisitStatus = new Map(
+      todayRouteVisits
+        .filter((v) => lockedPlanIds.has(v.servicePlanId as string))
+        .map((v) => [v.servicePlanId as string, v.status])
+    );
+
+    // Walk locked plans in reverse stopOrder (most recent first) and find the
+    // last stop whose visit is specifically "completed" and has valid coordinates.
+    for (let i = lockedPlans.length - 1; i >= 0; i--) {
+      if (lockedVisitStatus.get(lockedPlans[i].id) !== "completed") continue;
+      const prop = propertyMap.get(lockedPlans[i].propertyId);
+      if (prop?.latitude && prop?.longitude) {
+        // Single forced start — do NOT add depot/company candidates alongside it.
         candidateStarts.push({
-          latitude: parseFloat(String(techDepot.latitude)),
-          longitude: parseFloat(String(techDepot.longitude)),
+          latitude: parseFloat(String(prop.latitude)),
+          longitude: parseFloat(String(prop.longitude)),
+        });
+        break;
+      }
+    }
+    // If no completed stop had valid coordinates, fall through to normal candidates below.
+  }
+
+  if (candidateStarts.length === 0) {
+    // Normal / fallback path: collect depot, technician, and company start candidates.
+    if (route.depotId) {
+      const depot = await storage.getDepotById(route.depotId, companyId);
+      if (depot) {
+        candidateStarts.push({
+          latitude: parseFloat(String(depot.latitude)),
+          longitude: parseFloat(String(depot.longitude)),
         });
       }
     }
-    // 5. Technician's saved home address
-    if (techUser?.homeLatitude != null && techUser?.homeLongitude != null) {
+    if (route.technicianId) {
+      const techUser = await getUserById(route.technicianId);
+      if (techUser?.defaultDepotId) {
+        const techDepot = await storage.getDepotById(techUser.defaultDepotId, companyId);
+        if (techDepot) {
+          candidateStarts.push({
+            latitude: parseFloat(String(techDepot.latitude)),
+            longitude: parseFloat(String(techDepot.longitude)),
+          });
+        }
+      }
+      if (techUser?.homeLatitude != null && techUser?.homeLongitude != null) {
+        candidateStarts.push({
+          latitude: techUser.homeLatitude,
+          longitude: techUser.homeLongitude,
+        });
+      }
+    }
+    const primaryDepot = await storage.getPrimaryDepot(companyId);
+    if (primaryDepot) {
       candidateStarts.push({
-        latitude: techUser.homeLatitude,
-        longitude: techUser.homeLongitude,
+        latitude: parseFloat(String(primaryDepot.latitude)),
+        longitude: parseFloat(String(primaryDepot.longitude)),
       });
     }
-  }
-  const primaryDepot = await storage.getPrimaryDepot(companyId);
-  if (primaryDepot) {
-    candidateStarts.push({
-      latitude: parseFloat(String(primaryDepot.latitude)),
-      longitude: parseFloat(String(primaryDepot.longitude)),
-    });
-  }
-  if (company?.startLatitude && company?.startLongitude) {
-    candidateStarts.push({
-      latitude: parseFloat(String(company.startLatitude)),
-      longitude: parseFloat(String(company.startLongitude)),
-    });
+    if (company?.startLatitude && company?.startLongitude) {
+      candidateStarts.push({
+        latitude: parseFloat(String(company.startLatitude)),
+        longitude: parseFloat(String(company.startLongitude)),
+      });
+    }
   }
 
   // The winning start point is determined by the multi-start optimizer.
@@ -248,17 +350,25 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
   const originalOrderIds = stops.map((s) => s.id);
   const stopsActuallyMoved = orderedIds.filter((id, i) => originalOrderIds[i] !== id).length;
 
+  // Locked stops keep their positions (1..lockedPlans.length); eligible stops follow.
+  const lockedOffset = lockedPlans.length;
+  if (hasMidDayLocks) {
+    for (let i = 0; i < lockedPlans.length; i++) {
+      await storage.updateServicePlan(lockedPlans[i].id, companyId, { stopOrder: i + 1 });
+    }
+  }
   for (let i = 0; i < orderedIds.length; i++) {
-    await storage.updateServicePlan(orderedIds[i], companyId, { stopOrder: i + 1 });
+    await storage.updateServicePlan(orderedIds[i], companyId, { stopOrder: lockedOffset + i + 1 });
   }
 
-  const plansWithoutCoords = routePlans.filter((sp) => {
+  // Plans without coordinates go after all optimized stops.
+  const plansWithoutCoords = plansToOptimize.filter((sp) => {
     const prop = propertyMap.get(sp.propertyId);
     return !prop || !prop.latitude || !prop.longitude;
   });
   for (const plan of plansWithoutCoords) {
     await storage.updateServicePlan(plan.id, companyId, {
-      stopOrder: orderedIds.length + 1,
+      stopOrder: lockedOffset + orderedIds.length + 1,
     });
   }
 
@@ -301,13 +411,22 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
 
   const stopsReordered = stopsActuallyMoved;
 
+  const fullOrderIds = [...lockedPlans.map((sp) => sp.id), ...orderedIds];
+
   let message: string;
   if (stopsReordered === 0 && milesSaved === 0 && minutesSaved === 0) {
-    message = `Route "${route.name}" was already optimal — no changes made.`;
+    if (hasMidDayLocks) {
+      message = `Route "${route.name}" was already optimal for remaining stops — ${lockedPlans.length} completed stop${lockedPlans.length !== 1 ? "s" : ""} preserved in place.`;
+    } else {
+      message = `Route "${route.name}" was already optimal — no changes made.`;
+    }
   } else {
     const parts: string[] = [
       `Optimized route "${route.name}" — reordered ${stopsReordered} stop${stopsReordered !== 1 ? "s" : ""}`,
     ];
+    if (hasMidDayLocks) {
+      parts[0] += ` (${lockedPlans.length} completed stop${lockedPlans.length !== 1 ? "s" : ""} preserved)`;
+    }
     if (milesSaved > 0) parts.push(`saving ${milesSaved} mile${milesSaved !== 1 ? "s" : ""}`);
     if (minutesSaved > 0)
       parts.push(`and about ${minutesSaved} minute${minutesSaved !== 1 ? "s" : ""} of drive time`);
@@ -327,11 +446,12 @@ async function optimizeSingleRoute(routeId: string, companyId: string): Promise<
       originalDistance: Math.round(originalDistance * 10) / 10,
       stopCount: routePlans.length,
       geocodedCount: stops.length,
+      lockedCount: lockedPlans.length,
       hasStartPoint: !!startPoint,
       routingEngine,
       lastOptimizedAt: new Date().toISOString(),
       optimizedStopHash: stopHash,
-      order: orderedIds,
+      order: fullOrderIds,
       degraded: isDegraded,
       degradedReason: isDegraded
         ? "Optimization used estimated distances — live drive times were temporarily unavailable."
