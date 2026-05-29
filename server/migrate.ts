@@ -1538,6 +1538,9 @@ export async function runStartupMigrations(): Promise<void> {
     );
     console.log("[Migration] scheduled_reports table ensured");
 
+    // ── contacts — cancellation_reason for churn reporting ────────────────────
+    await client.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS cancellation_reason TEXT`);
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

@@ -164,15 +164,41 @@ export async function runScheduledReportsJob(): Promise<void> {
 }
 
 export function startScheduledReportsJob(): NodeJS.Timeout {
-  console.log("[ScheduledReports] Scheduler started (hourly)");
-  // Run at :00 each hour
-  const interval = setInterval(
-    () => {
-      runScheduledReportsJob().catch((err) =>
-        console.error("[ScheduledReports] Uncaught error:", err)
-      );
+  console.log("[ScheduledReports] Scheduler started (hourly, clock-aligned)");
+  // Align to the next top-of-hour before starting the regular 1-hour interval
+  const msUntilNextHour = (() => {
+    const now = new Date();
+    const next = new Date(now);
+    next.setMinutes(0, 0, 0);
+    next.setHours(now.getHours() + 1);
+    return next.getTime() - now.getTime();
+  })();
+
+  let interval: NodeJS.Timeout;
+  const initialTimeout = setTimeout(() => {
+    runScheduledReportsJob().catch((err) =>
+      console.error("[ScheduledReports] Uncaught error:", err)
+    );
+    interval = setInterval(
+      () => {
+        runScheduledReportsJob().catch((err) =>
+          console.error("[ScheduledReports] Uncaught error:", err)
+        );
+      },
+      60 * 60 * 1000
+    );
+  }, msUntilNextHour);
+
+  // Return a fake NodeJS.Timeout that clears both handles
+  return {
+    ...initialTimeout,
+    [Symbol.toPrimitive]() {
+      return initialTimeout[Symbol.toPrimitive]?.() ?? 0;
     },
-    60 * 60 * 1000
-  );
-  return interval;
+    unref() {
+      initialTimeout.unref?.();
+      interval?.unref?.();
+      return this;
+    },
+  } as unknown as NodeJS.Timeout;
 }

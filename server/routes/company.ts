@@ -1800,6 +1800,9 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         lookbackMonths = 12;
         projectionMonths = 12;
         periodLabel = "12-Month Projection";
+      } else if (period === "ytd") {
+        lookbackMonths = 0;
+        periodLabel = `${now.getFullYear()} YTD`;
       }
 
       let months: { year: number; month: number }[] = [];
@@ -1813,6 +1816,10 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         }
       } else if (period === "annual") {
         for (let m = 0; m < 12; m++) {
+          months.push({ year: now.getFullYear(), month: m });
+        }
+      } else if (period === "ytd") {
+        for (let m = 0; m <= now.getMonth(); m++) {
           months.push({ year: now.getFullYear(), month: m });
         }
       } else {
@@ -2019,7 +2026,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
           END), 0) AS "days60",
           COALESCE(SUM(CASE
             WHEN i.due_date IS NOT NULL
-              AND ${today}::date - i.due_date::date > 60
+              AND ${today}::date - i.due_date::date > 90
             THEN (i.total::numeric - COALESCE(paid.paid_amount,0)) ELSE 0
           END), 0) AS "days90plus",
           COALESCE(SUM(i.total::numeric - COALESCE(paid.paid_amount,0)), 0) AS "total",

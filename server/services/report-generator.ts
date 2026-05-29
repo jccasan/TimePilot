@@ -36,7 +36,7 @@ async function fetchOpenBalance(companyId: string): Promise<ReportSection> {
       COALESCE(SUM(CASE WHEN i.due_date IS NULL OR i.due_date::date >= ${today}::date THEN (i.total::numeric - COALESCE(paid.paid,0)) ELSE 0 END), 0) AS current,
       COALESCE(SUM(CASE WHEN i.due_date IS NOT NULL AND ${today}::date - i.due_date::date BETWEEN 1 AND 30 THEN (i.total::numeric - COALESCE(paid.paid,0)) ELSE 0 END), 0) AS days30,
       COALESCE(SUM(CASE WHEN i.due_date IS NOT NULL AND ${today}::date - i.due_date::date BETWEEN 31 AND 60 THEN (i.total::numeric - COALESCE(paid.paid,0)) ELSE 0 END), 0) AS days60,
-      COALESCE(SUM(CASE WHEN i.due_date IS NOT NULL AND ${today}::date - i.due_date::date > 60 THEN (i.total::numeric - COALESCE(paid.paid,0)) ELSE 0 END), 0) AS days90plus,
+      COALESCE(SUM(CASE WHEN i.due_date IS NOT NULL AND ${today}::date - i.due_date::date > 90 THEN (i.total::numeric - COALESCE(paid.paid,0)) ELSE 0 END), 0) AS days90plus,
       COALESCE(SUM(i.total::numeric - COALESCE(paid.paid,0)), 0) AS total
     FROM contacts c
     JOIN invoices i ON i.contact_id = c.id AND i.company_id = ${companyId}
