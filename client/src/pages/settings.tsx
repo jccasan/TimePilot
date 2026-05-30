@@ -763,6 +763,14 @@ const SETTINGS_BLOCK_DEFS: {
     minW: 4,
     minH: 8,
   },
+  {
+    id: "timecards",
+    label: "Timecards",
+    defaultW: 6,
+    defaultH: 12,
+    minW: 4,
+    minH: 8,
+  },
 ];
 
 const DEFAULT_SETTINGS_BLOCK_IDS = [
@@ -6641,6 +6649,385 @@ function DepotsSettingsBlock() {
   );
 }
 
+// ─── Timecard Settings Section ────────────────────────────────────────────────
+
+function TimecardSettingsSection() {
+  const { toast } = useToast();
+  const [templateName, setTemplateName] = useState("");
+  const [templateFields, setTemplateFields] = useState<
+    Array<{ field: string; columnName: string }>
+  >([{ field: "", columnName: "" }]);
+  const [showNewTemplate, setShowNewTemplate] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+
+  const { data: settings, refetch: refetchSettings } = useQuery<{
+    payPeriodType: string;
+    payPeriodAnchorDate: string;
+    overtimeWeeklyHours: string;
+    overtimeDailyHours: string | null;
+  }>({ queryKey: ["/api/timecards/settings"] });
+
+  const { data: preview = [] } = useQuery<Array<{ periodStart: string; periodEnd: string }>>({
+    queryKey: ["/api/timecards/settings/preview", settings?.payPeriodType, settings?.payPeriodAnchorDate],
+    enabled: !!settings,
+    queryFn: () => fetch("/api/timecards/settings/preview", { credentials: "include" }).then((r) => r.json()),
+  });
+
+  const { data: templates = [], refetch: refetchTemplates } = useQuery<
+    Array<{ id: string; name: string; fields: Array<{ field: string; columnName: string }> }>
+  >({ queryKey: ["/api/timecards/settings/templates"] });
+
+  const [payPeriodType, setPayPeriodType] = useState("");
+  const [anchorDate, setAnchorDate] = useState("");
+  const [weeklyOt, setWeeklyOt] = useState("");
+  const [dailyOt, setDailyOt] = useState("");
+
+  // Sync loaded settings into form
+  const settingsLoaded = !!settings;
+  if (settingsLoaded && payPeriodType === "" && settings.payPeriodType) {
+    setPayPeriodType(settings.payPeriodType);
+    setAnchorDate(settings.payPeriodAnchorDate ?? "");
+    setWeeklyOt(settings.overtimeWeeklyHours ?? "40");
+    setDailyOt(settings.overtimeDailyHours ?? "");
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      fetch("/api/timecards/settings", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          payPeriodType,
+          payPeriodAnchorDate: anchorDate,
+          overtimeWeeklyHours: weeklyOt,
+          overtimeDailyHours: dailyOt || null,
+        }),
+      }).then((r) => r.json()),
+    onSuccess: () => { refetchSettings(); toast({ title: "Settings saved" }); },
+    onError: () => toast({ title: "Save failed", variant: "destructive" }),
+  });
+
+  const saveTemplateMutation = useMutation({
+    mutationFn: (payload: { id?: string; name: string; fields: typeof templateFields }) => {
+      const method = payload.id ? "PATCH" : "POST";
+      const url = payload.id
+        ? `/api/timecards/settings/templates/${payload.id}`
+        : "/api/timecards/settings/templates";
+      return fetch(url, {
+        method,
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: payload.name, fields: payload.fields }),
+      }).then((r) => r.json());
+    },
+    onSuccess: () => {
+      refetchTemplates();
+      setShowNewTemplate(false);
+      setEditingTemplateId(null);
+      setTemplateName("");
+      setTemplateFields([{ field: "", columnName: "" }]);
+      toast({ title: "Template saved" });
+    },
+    onError: () => toast({ title: "Save failed", variant: "destructive" }),
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: (id: string) =>
+      fetch(`/api/timecards/settings/templates/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      }),
+    onSuccess: () => { refetchTemplates(); toast({ title: "Template deleted" }); },
+    onError: () => toast({ title: "Delete failed", variant: "destructive" }),
+  });
+
+  const AVAILABLE_FIELDS = [
+    { value: "employee_first_name", label: "Employee First Name" },
+    { value: "employee_last_name", label: "Employee Last Name" },
+    { value: "employee_full_name", label: "Employee Full Name" },
+    { value: "employee_id", label: "Employee ID" },
+    { value: "period_start", label: "Period Start" },
+    { value: "period_end", label: "Period End" },
+    { value: "date", label: "Date" },
+    { value: "clock_in", label: "Clock In" },
+    { value: "clock_out", label: "Clock Out" },
+    { value: "regular_hours", label: "Regular Hours" },
+    { value: "overtime_hours", label: "Overtime Hours" },
+    { value: "break_minutes", label: "Break Minutes" },
+    { value: "total_hours_worked", label: "Total Hours Worked" },
+    { value: "notes", label: "Notes" },
+  ];
+
+  function fmtPreviewDate(s: string) {
+    return new Date(s + "T00:00:00").toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
+  function startEditTemplate(t: { id: string; name: string; fields: Array<{ field: string; columnName: string }> }) {
+    setEditingTemplateId(t.id);
+    setTemplateName(t.name);
+    setTemplateFields(t.fields.length > 0 ? t.fields : [{ field: "", columnName: "" }]);
+    setShowNewTemplate(true);
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Pay Period Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Pay Period Configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Pay Period Type</Label>
+              <Select value={payPeriodType} onValueChange={setPayPeriodType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="bi-weekly">Bi-Weekly</SelectItem>
+                  <SelectItem value="semi-monthly">Semi-Monthly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Anchor Date</Label>
+              <Input
+                type="date"
+                value={anchorDate}
+                onChange={(e) => setAnchorDate(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Reference date for period boundary calculation
+              </p>
+            </div>
+          </div>
+
+          {/* Period Preview */}
+          {preview.length > 0 && (
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Upcoming periods (preview)
+              </p>
+              {preview.map((p, i) => (
+                <div key={i} className="text-sm flex items-center gap-2">
+                  <span className="text-muted-foreground">{i + 1}.</span>
+                  <span>
+                    {fmtPreviewDate(p.periodStart)} – {fmtPreviewDate(p.periodEnd)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Weekly OT Threshold (hours)</Label>
+              <Input
+                type="number"
+                value={weeklyOt}
+                onChange={(e) => setWeeklyOt(e.target.value)}
+                min={1}
+                step={0.5}
+              />
+            </div>
+            <div>
+              <Label>Daily OT Threshold (hours, optional)</Label>
+              <Input
+                type="number"
+                value={dailyOt}
+                onChange={(e) => setDailyOt(e.target.value)}
+                placeholder="Leave blank to disable"
+                min={1}
+                step={0.5}
+              />
+            </div>
+          </div>
+
+          <Button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+          >
+            {saveMutation.isPending && (
+              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+            )}
+            Save Settings
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Export Templates */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Export Templates</CardTitle>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setEditingTemplateId(null);
+              setTemplateName("");
+              setTemplateFields([{ field: "", columnName: "" }]);
+              setShowNewTemplate(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            New Template
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {templates.length === 0 && !showNewTemplate && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No templates yet. Create one to enable CSV export.
+            </p>
+          )}
+          {templates.map((t) => (
+            <div
+              key={t.id}
+              className="flex items-center justify-between p-3 rounded-lg border"
+            >
+              <div>
+                <div className="font-medium text-sm">{t.name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {t.fields.length} field{t.fields.length !== 1 ? "s" : ""}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => startEditTemplate(t)}
+                >
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => deleteTemplateMutation.mutate(t.id)}
+                  disabled={deleteTemplateMutation.isPending}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+
+          {showNewTemplate && (
+            <div className="rounded-lg border p-4 space-y-3">
+              <h4 className="font-medium text-sm">
+                {editingTemplateId ? "Edit Template" : "New Template"}
+              </h4>
+              <div>
+                <Label>Template Name</Label>
+                <Input
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="e.g. ADP Export"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Fields</Label>
+                {templateFields.map((f, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Select
+                      value={f.field}
+                      onValueChange={(val) => {
+                        const next = [...templateFields];
+                        next[idx] = { ...next[idx], field: val };
+                        setTemplateFields(next);
+                      }}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="Select field..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AVAILABLE_FIELDS.map((af) => (
+                          <SelectItem key={af.value} value={af.value}>
+                            {af.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      className="flex-1"
+                      placeholder="Column name"
+                      value={f.columnName}
+                      onChange={(e) => {
+                        const next = [...templateFields];
+                        next[idx] = { ...next[idx], columnName: e.target.value };
+                        setTemplateFields(next);
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() =>
+                        setTemplateFields(templateFields.filter((_, i) => i !== idx))
+                      }
+                    >
+                      ×
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setTemplateFields([...templateFields, { field: "", columnName: "" }])
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add Field
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    saveTemplateMutation.mutate({
+                      id: editingTemplateId ?? undefined,
+                      name: templateName,
+                      fields: templateFields.filter((f) => f.field && f.columnName),
+                    })
+                  }
+                  disabled={
+                    !templateName ||
+                    templateFields.filter((f) => f.field && f.columnName).length === 0 ||
+                    saveTemplateMutation.isPending
+                  }
+                >
+                  {saveTemplateMutation.isPending && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                  )}
+                  Save Template
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setShowNewTemplate(false);
+                    setEditingTemplateId(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { stateLabel, zipLabel } = useAddressLabels();
   const contactFields = CONTACT_FIELDS.map((f) => {
@@ -8648,6 +9035,8 @@ export default function Settings() {
         return <DepotsSettingsBlock />;
       case "service_area":
         return <ServiceAreaSettingsBlock company={company ?? null} />;
+      case "timecards":
+        return <TimecardSettingsSection />;
       default:
         return null;
     }
