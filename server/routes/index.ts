@@ -47,6 +47,7 @@ import { registerCalendarRoutes } from "./calendar";
 import { registerEmailInboundRoutes } from "./email-inbound";
 import { registerFacebookWebhookRoutes } from "./facebook-webhook";
 import { registerVehicleRoutes } from "./vehicles";
+import { registerTimecardRoutes } from "./timecards";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // Object file download route — registered before registerObjectStorageRoutes so this
@@ -270,6 +271,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   await registerEmailInboundRoutes(app);
   await registerFacebookWebhookRoutes(app);
   await registerVehicleRoutes(app);
+  await registerTimecardRoutes(app);
 
   return httpServer;
 }

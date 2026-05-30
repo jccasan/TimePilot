@@ -1,6 +1,10 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { z } from "zod";
+import { db } from "../db";
+import { eq } from "drizzle-orm";
+import { timeEntries } from "@shared/schema";
+import { timecardRepo } from "../repositories";
 
 import { isAuthenticated, getCompanyContext, handleError, p } from "./shared";
 
@@ -30,6 +34,18 @@ export async function registerMiscRoutes(app: Express): Promise<void> {
         routeId: req.body.routeId || null,
         clockIn: new Date(),
       });
+
+      // Link to current pay period
+      try {
+        const period = await timecardRepo.getOrCreatePeriod(companyId, userId, new Date());
+        await db
+          .update(timeEntries)
+          .set({ periodId: period.id })
+          .where(eq(timeEntries.id, entry.id));
+      } catch {
+        // Non-fatal: timecard period linking is best-effort
+      }
+
       res.json(entry);
     } catch (err) {
       handleError(res, err);
@@ -43,10 +59,21 @@ export async function registerMiscRoutes(app: Express): Promise<void> {
       if (!active) {
         return res.status(400).json({ error: "Not clocked in" });
       }
+
+      // Block clock-out if active break exists
+      const activeBreak = await timecardRepo.getActiveBreak(companyId, active.id);
+      if (activeBreak) {
+        return res.status(400).json({ error: "End your break before clocking out" });
+      }
+
       const clockOut = new Date();
-      const durationMinutes = Math.round(
+      const breaks = await timecardRepo.getBreaks(companyId, active.id);
+      const breakMinutes = breaks.reduce((sum, b) => sum + (b.durationMinutes ?? 0), 0);
+      const grossMinutes = Math.round(
         (clockOut.getTime() - new Date(active.clockIn).getTime()) / 60000
       );
+      const durationMinutes = Math.max(0, grossMinutes - breakMinutes);
+
       const entry = await storage.updateTimeEntry(active.id, companyId, {
         clockOut,
         durationMinutes,
