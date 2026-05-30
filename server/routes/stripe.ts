@@ -665,6 +665,21 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
           }
         }
 
+        if (meta.checkout_type === "timecard_addon" && tenantId && meta.add_on === "timecards") {
+          const company = await storage.getCompany(tenantId);
+          if (company) {
+            const stripeSubId = session.subscription as string | null;
+            await storage.updateCompany(tenantId, {
+              timecardEnabled: true,
+              timecardTrialEndsAt: null,
+              stripeTimecardSubscriptionId: stripeSubId || null,
+            } as Partial<typeof companies.$inferInsert>);
+            console.log(
+              `[Stripe Timecard] checkout.session.completed: Timecards activated for company "${company.name}" (${company.id})`
+            );
+          }
+        }
+
         if (meta.checkout_type === "voice_addon" && tenantId) {
           const voicePlan = meta.voice_plan as "voice_bootstrap" | "voice_starter" | "voice_pro";
           if (voicePlan && VOICE_PLAN_CONFIG[voicePlan]) {
@@ -1635,6 +1650,22 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 updates.cancelAtPeriodEnd = false;
                 updates.cancelAt = null;
               }
+              // ── Timecard tier-based auto-enable/disable ──────────────────
+              const TIMECARD_ELIGIBLE_PRODUCTS = [
+                "prod_UQx7ys3uxkPE1W", // Crew
+                "prod_UQyL8P28F1RgPC", // Team
+                "prod_UQyP66Ygt4daN3", // Agency
+              ];
+              const subProductId = (subscription as any).items?.data?.[0]?.price?.product;
+              if (subProductId && TIMECARD_ELIGIBLE_PRODUCTS.includes(subProductId)) {
+                updates.timecardEnabled = true;
+              } else if (subProductId) {
+                // Downgraded below Crew — disable only if not on the add-on
+                if (!(company as any).stripeTimecardSubscriptionId) {
+                  updates.timecardEnabled = false;
+                }
+              }
+
               await storage.updateCompany(
                 company.id,
                 updates as Partial<typeof companies.$inferInsert>
@@ -1687,6 +1718,22 @@ export async function registerStripeRoutes(app: Express): Promise<void> {
                 stripeVoiceSubscriptionId: null,
               } as Partial<typeof companies.$inferInsert>);
               console.log(`[Stripe Voice] Company "${company.name}" voice plan cancelled`);
+              handled = true;
+              break;
+            }
+          }
+        }
+
+        if (!handled) {
+          for (const company of allCompanies) {
+            if ((company as any).stripeTimecardSubscriptionId === stripeSubId) {
+              await storage.updateCompany(company.id, {
+                timecardEnabled: false,
+                stripeTimecardSubscriptionId: null,
+              } as Partial<typeof companies.$inferInsert>);
+              console.log(
+                `[Stripe Timecard] Company "${company.name}" timecard add-on cancelled`
+              );
               handled = true;
               break;
             }
