@@ -105,6 +105,7 @@ const UnmatchedEmails = lazy(() => import("@/pages/unmatched-emails"));
 const FleetPage = lazy(() => import("@/pages/fleet"));
 const FleetDetailPage = lazy(() => import("@/pages/fleet-detail"));
 const FleetSummaryPage = lazy(() => import("@/pages/fleet-summary"));
+const TimecardsOfficePage = lazy(() => import("@/pages/timecards-office"));
 const BillingSetupPage = lazy(() => import("@/pages/billing-setup-page"));
 
 function PageLoader() {
@@ -272,6 +273,7 @@ function Router() {
         <Route path="/fleet/summary" component={FleetSummaryPage} />
         <Route path="/fleet/:id" component={FleetDetailPage} />
         <Route path="/fleet" component={FleetPage} />
+        <Route path="/timecards" component={TimecardsOfficePage} />
         {/* Platform admin pages — accessible to isPlatformAdmin regular users */}
         <Route path="/admin" component={AdminDashboard} />
         <Route path="/admin/tenants" component={AdminTenants} />
