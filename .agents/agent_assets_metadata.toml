@@ -30,3 +30,9 @@ id = "3SHbPPjUY4AxSCsEdDile"
 uri = "file://scoopilot-review.tar.gz"
 type = "unspecified"
 title = "Scoopilot — Full Codebase (for code review)"
+
+[[outputs]]
+id = "vxKgIszudFwunL9xymqkU"
+uri = "file://scoopilot-codebase.zip"
+type = "unspecified"
+title = "Scoopilot Codebase (source only, no node_modules)"

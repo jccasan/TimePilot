@@ -256,7 +256,11 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
     };
     createMutation.mutate(
       { ...values, suppressNotifications },
-      { onSettled: () => { submitGuardRef.current = false; } }
+      {
+        onSettled: () => {
+          submitGuardRef.current = false;
+        },
+      }
     );
   };
 
