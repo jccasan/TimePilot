@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScooPilot Pre-Launch Test Plan</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0f1117;
+    --surface: #181c27;
+    --surface2: #1e2333;
+    --border: #2a2f42;
+    --accent: #e8a020;
+    --accent2: #3b8beb;
+    --danger: #e84040;
+    --warn: #e8a020;
+    --ok: #34c47c;
+    --text: #d4daf0;
+    --text-dim: #7a8099;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 40px 24px 80px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 36px;
+  }
+
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .logo-badge {
+    background: var(--accent);
+    color: #000;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 11px;
+    padding: 3px 8px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.02em;
+  }
+
+  .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  .risk-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 36px;
+  }
+
+  .risk-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .risk-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+
+  .risk-card.critical::before { background: var(--danger); }
+  .risk-card.high::before { background: var(--warn); }
+  .risk-card.medium::before { background: var(--accent2); }
+  .risk-card.low::before { background: var(--ok); }
+
+  .risk-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .risk-card.critical .risk-label { color: var(--danger); }
+  .risk-card.high .risk-label { color: var(--warn); }
+  .risk-card.medium .risk-label { color: var(--accent2); }
+  .risk-card.low .risk-label { color: var(--ok); }
+
+  .risk-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.3;
+  }
+
+  .section {
+    margin-bottom: 40px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-number {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--surface2);
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+  }
+
+  .section-title {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.01em;
+  }
+
+  .priority-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 7px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-left: auto;
+  }
+
+  .priority-tag.p0 { background: rgba(232,64,64,0.15); color: var(--danger); border: 1px solid rgba(232,64,64,0.3); }
+  .priority-tag.p1 { background: rgba(232,160,32,0.15); color: var(--warn); border: 1px solid rgba(232,160,32,0.3); }
+  .priority-tag.p2 { background: rgba(59,139,235,0.15); color: var(--accent2); border: 1px solid rgba(59,139,235,0.3); }
+  .priority-tag.p3 { background: rgba(52,196,124,0.15); color: var(--ok); border: 1px solid rgba(52,196,124,0.3); }
+
+  .test-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+
+  .test-block-header {
+    padding: 12px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .test-block-header:hover {
+    background: var(--surface2);
+  }
+
+  .test-index {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 28px;
+    margin-top: 2px;
+  }
+
+  .test-name {
+    font-weight: 600;
+    color: #fff;
+    font-size: 13px;
+    flex: 1;
+  }
+
+  .test-goal {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  .severity {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 7px;
+    white-space: nowrap;
+  }
+
+  .severity.blocker { background: rgba(232,64,64,0.2); color: var(--danger); }
+  .severity.high { background: rgba(232,160,32,0.2); color: var(--warn); }
+  .severity.medium { background: rgba(59,139,235,0.2); color: var(--accent2); }
+  .severity.low { background: rgba(52,196,124,0.2); color: var(--ok); }
+
+  .test-body {
+    padding: 0 16px 16px 56px;
+    border-top: 1px solid var(--border);
+  }
+
+  .steps-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 12px 0 8px;
+  }
+
+  .step-list {
+    list-style: none;
+    counter-reset: steps;
+  }
+
+  .step-list li {
+    counter-increment: steps;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text);
+    align-items: flex-start;
+  }
+
+  .step-list li::before {
+    content: counter(steps);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    min-width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+    flex-shrink: 0;
+  }
+
+  .pass-fail {
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border-left: 3px solid var(--accent);
+    color: var(--text-dim);
+  }
+
+  .pass-fail strong {
+    color: var(--accent);
+    display: block;
+    margin-bottom: 3px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .watch-note {
+    font-family: var(--mono);
+    font-size: 11px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(232,64,64,0.08);
+    border-left: 3px solid var(--danger);
+    color: #e88080;
+  }
+
+  .watch-note strong {
+    color: var(--danger);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .scenario-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+  }
+
+  .scenario-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--accent2);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .timeline {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    margin-bottom: 36px;
+  }
+
+  .day-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 10px 8px;
+    text-align: center;
+  }
+
+  .day-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .day-focus {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  .day-block.active {
+    border-color: var(--accent);
+  }
+
+  .day-block.active .day-label {
+    color: var(--accent);
+  }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    font-size: 12px;
+  }
+
+  .cb {
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    flex-shrink: 0;
+    display: inline-block;
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 32px 0;
+  }
+
+  @media (max-width: 640px) {
+    .risk-summary { grid-template-columns: repeat(2, 1fr); }
+    .timeline { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-row">
+    <span class="logo-badge">ScooPilot</span>
+    <span class="logo-badge" style="background:var(--surface2);color:var(--text-dim);border:1px solid var(--border);">Internal QA</span>
+  </div>
+  <h1>Pre-Launch Test Plan</h1>
+  <div class="meta">VERSION 1.0 &nbsp;|&nbsp; 3–7 DAY WINDOW &nbsp;|&nbsp; 29 INCOMING ACCOUNTS &nbsp;|&nbsp; MANUAL EXECUTION</div>
+</header>
+
+<!-- RISK SUMMARY -->
+<div class="risk-summary">
+  <div class="risk-card critical">
+    <div class="risk-label">P0 — Critical</div>
+    <div class="risk-title">500 Errors Under Edge Cases</div>
+  </div>
+  <div class="risk-card high">
+    <div class="risk-label">P1 — High</div>
+    <div class="risk-title">Multi-Depot at Scale (8 loc / 10+ techs)</div>
+  </div>
+  <div class="risk-card high">
+    <div class="risk-label">P1 — High</div>
+    <div class="risk-title">FleetPilot & Timecards (Shipped Today)</div>
+  </div>
+  <div class="risk-card medium">
+    <div class="risk-label">P2 — Medium</div>
+    <div class="risk-title">Core Advertised Features End-to-End</div>
+  </div>
+</div>
+
+<!-- EXECUTION TIMELINE -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">00</span>
+    <span class="section-title">Recommended Execution Timeline</span>
+  </div>
+  <div class="timeline">
+    <div class="day-block active">
+      <div class="day-label">Day 1</div>
+      <div class="day-focus">500 Error Hunt + Onboarding Flow</div>
+    </div>
+    <div class="day-block active">
+      <div class="day-label">Day 2</div>
+      <div class="day-focus">Quoting + Satellite Measurement</div>
+    </div>
+    <div class="day-block active">
+      <div class="day-label">Day 3</div>
+      <div class="day-focus">Route Optimization + Multi-Depot Stress</div>
+    </div>
+    <div class="day-block active">
+      <div class="day-label">Day 4</div>
+      <div class="day-focus">FleetPilot + Timecards Edge Cases</div>
+    </div>
+    <div class="day-block active">
+      <div class="day-label">Day 5</div>
+      <div class="day-focus">Billing + Invoicing + Payments</div>
+    </div>
+    <div class="day-block">
+      <div class="day-label">Day 6</div>
+      <div class="day-focus">Import Wizard + CRM Bulk Ops</div>
+    </div>
+    <div class="day-block">
+      <div class="day-label">Day 7</div>
+      <div class="day-focus">Regression Pass + Sign-off</div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- SECTION 1: 500 ERRORS -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">01</span>
+    <span class="section-title">500 Error Surface Testing</span>
+    <span class="priority-tag p0">P0 — Blocker Risk</span>
+  </div>
+
+  <div class="scenario-box">
+    <div class="scenario-label">Context</div>
+    Errors are intermittent and solo-triggered. Goal is to hit boundary conditions that historically correlate with 500s: empty states, large data sets, rapid sequential actions, and navigation edge cases.
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">1.1</span>
+      <div>
+        <div class="test-name">Empty State Boundary Conditions</div>
+        <div class="test-goal">Trigger actions with zero underlying data to expose unhandled nulls</div>
+      </div>
+      <span class="severity blocker">Blocker</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Create a brand new account with no clients, no routes, no visits.</li>
+        <li>Attempt to run route optimization with zero stops assigned.</li>
+        <li>Attempt to generate batch invoices with no completed visits.</li>
+        <li>Attempt to load the analytics dashboard before any visits exist.</li>
+        <li>Attempt to run AI Business Assessment on a zero-data account.</li>
+        <li>Open Rover and ask it to "show today's route progress" on an empty account.</li>
+        <li>Attempt to export contacts with zero contacts in the database.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Empty states return graceful UI messages, not 500 errors or blank white screens.</div>
+      <div class="watch-note"><strong>Watch For</strong>Any action that spins indefinitely, returns a raw error, or crashes the page. Log the exact action and URL.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">1.2</span>
+      <div>
+        <div class="test-name">Rapid Sequential Action Testing</div>
+        <div class="test-goal">Simulate impatient users double-clicking or rapidly submitting forms</div>
+      </div>
+      <span class="severity blocker">Blocker</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Double-click "Save" on a new client record rapidly.</li>
+        <li>Double-click "Generate Invoices" in batch invoicing.</li>
+        <li>Click "Optimize Route" twice in fast succession.</li>
+        <li>Rapidly save and re-open a quote being edited.</li>
+        <li>Quickly navigate away from a form mid-save and return.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>No duplicate records created. No 500 errors. Buttons disable after first click or show a loading state.</div>
+      <div class="watch-note"><strong>Watch For</strong>Duplicate invoice generation, duplicate client records, or a hung loading state with no recovery.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">1.3</span>
+      <div>
+        <div class="test-name">Large Data Set Page Loads</div>
+        <div class="test-goal">Simulate accounts with significant data volume</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Import 100+ client records via CSV into a test account.</li>
+        <li>Generate 6 months of recurring visits for all clients (bulk generation).</li>
+        <li>Load the full schedule view in month mode.</li>
+        <li>Load the analytics dashboard and all chart widgets.</li>
+        <li>Load the route builder with all stops visible.</li>
+        <li>Run a global search for a common term (e.g., "John") and observe response time.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>All pages load under 5 seconds. No 500s. Charts render correctly.</div>
+      <div class="watch-note"><strong>Watch For</strong>Timeout errors on visit generation, chart rendering failures, or map rendering breakdown with many pins.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 2: ONBOARDING -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">02</span>
+    <span class="section-title">Onboarding Flow</span>
+    <span class="priority-tag p1">P1 — High</span>
+  </div>
+
+  <div class="scenario-box">
+    <div class="scenario-label">Context</div>
+    First impression for every new signup. A broken or confusing onboarding loses the account before they ever see the product. Test both the happy path and the "I'll skip this" path.
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">2.1</span>
+      <div>
+        <div class="test-name">Full Onboarding Happy Path</div>
+        <div class="test-goal">Confirm wizard completes cleanly end-to-end</div>
+      </div>
+      <span class="severity blocker">Blocker</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Create a fresh test account and begin onboarding wizard.</li>
+        <li>Complete Step 1: Company profile with full valid data.</li>
+        <li>Step 2: Enter a real business website URL and confirm AI extraction populates fields correctly.</li>
+        <li>Step 3: Configure pricing with at least 2 service tiers.</li>
+        <li>Step 4: Complete Stripe Connect with a test account.</li>
+        <li>Step 5: Launch and confirm dashboard loads with correct company data.</li>
+        <li>Verify company logo, name, and branding appear on a test quote/invoice.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>All 5 steps complete without errors. Dashboard loads. Branding is applied correctly throughout.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">2.2</span>
+      <div>
+        <div class="test-name">Onboarding Skip / Partial Completion</div>
+        <div class="test-goal">Confirm system doesn't break if user skips steps or exits mid-flow</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Start onboarding, complete Step 1, then close the browser and return.</li>
+        <li>Confirm wizard resumes at the correct step (not restarted).</li>
+        <li>Skip the AI website extraction step entirely and proceed.</li>
+        <li>Skip Stripe Connect and attempt to launch.</li>
+        <li>Confirm the dashboard loads and is functional without Stripe connected.</li>
+        <li>Confirm payment-dependent features show appropriate prompts (not 500 errors).</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Partial completion doesn't break the account. User can always reach the dashboard. Missing setup shows prompts, not crashes.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">2.3</span>
+      <div>
+        <div class="test-name">AI Website Extraction Edge Cases</div>
+        <div class="test-goal">Test extraction with bad/edge-case URLs</div>
+      </div>
+      <span class="severity medium">Medium</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Enter a URL that returns a 404.</li>
+        <li>Enter a URL for a site with no relevant business content (e.g., google.com).</li>
+        <li>Enter a URL for a site that blocks scrapers.</li>
+        <li>Enter a malformed URL (no https, typo domain).</li>
+        <li>Leave the URL field blank and attempt to proceed.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>All cases return graceful error messages. Wizard remains functional. No 500 errors.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 3: QUOTING -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">03</span>
+    <span class="section-title">Quoting & Satellite Yard Measurement</span>
+    <span class="priority-tag p1">P1 — High</span>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">3.1</span>
+      <div>
+        <div class="test-name">Residential Quote Full Flow</div>
+        <div class="test-goal">Quote → satellite measure → proposal → client acceptance</div>
+      </div>
+      <span class="severity blocker">Blocker</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Create a new lead. Open quoting from their record.</li>
+        <li>Open satellite yard measurement tool. Confirm satellite imagery loads.</li>
+        <li>Draw a polygon around a test property. Confirm square footage calculates.</li>
+        <li>Save measurement. Confirm image captures with green polygon overlay.</li>
+        <li>Enter: 2 dogs, standard yard, weekly frequency, first-time cleanup = yes.</li>
+        <li>Confirm 3-tier pricing (Essential / Premium / Deluxe) auto-generates with correct fees.</li>
+        <li>Send proposal via both email and SMS.</li>
+        <li>Open the client portal link. Confirm branding, measurement image, and tiers all display correctly.</li>
+        <li>Accept a tier from the client portal.</li>
+        <li>Confirm quote status updates to "Accepted" in the dashboard.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Full flow completes. Measurement image appears on proposal. Client acceptance reflects in dashboard immediately.</div>
+      <div class="watch-note"><strong>Watch For</strong>Satellite imagery failing to load (Mapbox key issue). Polygon area calculating as 0. Proposal link not generating. Client portal not reflecting accepted status.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">3.2</span>
+      <div>
+        <div class="test-name">Commercial Quote Flow</div>
+        <div class="test-goal">Station-based pricing with margin visibility</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Create a new commercial client (HOA or apartment complex).</li>
+        <li>Enter: 5 waste stations, 10 min/station, 20 min common area, 2-person crew, 3x/week.</li>
+        <li>Confirm mileage calculates at IRS rate and dump fees are included.</li>
+        <li>Confirm frequency discount applies for 3x/week.</li>
+        <li>Adjust markup percentage and confirm final price updates in real time.</li>
+        <li>Generate and send proposal.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>All cost components calculate correctly. Margin math is accurate. Proposal generates cleanly.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">3.3</span>
+      <div>
+        <div class="test-name">Quote Edge Cases</div>
+        <div class="test-goal">Break the pricing calculator with boundary inputs</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Create a quote with 0 dogs. Confirm behavior (error or $0 pricing?).</li>
+        <li>Create a quote with an extremely large yard (10,000+ sq ft).</li>
+        <li>Set expiration date to today and attempt to send. Confirm client portal shows expired state.</li>
+        <li>Decline a proposal from the client portal. Confirm status updates.</li>
+        <li>Create two proposals for the same property. Confirm no conflicts.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>All edge cases handled gracefully. No calculation errors or crashes.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 4: ROUTE OPTIMIZATION -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">04</span>
+    <span class="section-title">Route Optimization & Multi-Depot Stress Test</span>
+    <span class="priority-tag p0">P0 — Critical</span>
+  </div>
+
+  <div class="scenario-box">
+    <div class="scenario-label">Multi-Depot Simulation Setup</div>
+    Since you don't have the real account's data, use this synthetic scenario: 8 depots across a metro area, 2 techs per depot (16 total), 15–20 stops per tech per day. This approximates a realistic load for that account type.
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">4.1</span>
+      <div>
+        <div class="test-name">Single Route Optimization (Baseline)</div>
+        <div class="test-goal">Confirm optimization works correctly before adding scale</div>
+      </div>
+      <span class="severity blocker">Blocker</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Build a route with 20 stops across a realistic geographic area.</li>
+        <li>Run one-click optimization. Record time to complete.</li>
+        <li>Confirm stop order changes reflect actual shortest path (spot-check 3 stops on map).</li>
+        <li>Lock the route. Attempt to run optimization again. Confirm lock is respected.</li>
+        <li>Manually reorder 3 stops. Confirm drag-and-drop saves correctly.</li>
+        <li>Run optimization on a route with only 1 stop. Confirm graceful handling.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Optimization completes under 10 seconds for 20 stops. Route lock prevents re-optimization. Single-stop route doesn't error.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">4.2</span>
+      <div>
+        <div class="test-name">Multi-Depot Stress Test — 8 Locations</div>
+        <div class="test-goal">Simulate the large incoming account before they go live</div>
+      </div>
+      <span class="severity blocker">Blocker</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Create a test company with 8 depot locations spread across a metro area.</li>
+        <li>Add 16 technician user accounts (2 per depot).</li>
+        <li>Import or manually create ~200 client stops distributed across all 8 depot zones.</li>
+        <li>Assign stops to techs by depot zone (roughly 12–15 stops per tech).</li>
+        <li>Run route optimization for all routes simultaneously (or sequentially — note which).</li>
+        <li>Confirm each depot's routes optimize independently without cross-contamination.</li>
+        <li>Switch to map view. Confirm all 200 stops render without performance breakdown.</li>
+        <li>Have two "techs" work routes simultaneously in separate browser sessions.</li>
+        <li>Confirm real-time progress updates reflect across both sessions.</li>
+        <li>Generate bulk invoices for all 200 clients after marking visits complete.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>All 8 depots optimize cleanly. No cross-depot stop contamination. Map renders without crashing. Concurrent sessions don't interfere. Bulk invoice generation completes.</div>
+      <div class="watch-note"><strong>Watch For</strong>Optimization timing out on larger route sets. Mapbox rate limits with 200 stops. WebSocket conflicts between concurrent tech sessions. Invoice batch hanging or partial generation.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">4.3</span>
+      <div>
+        <div class="test-name">Route Performance Under Concurrent Users</div>
+        <div class="test-goal">Multiple techs updating visit status simultaneously</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Open 5 separate browser sessions (incognito windows), each logged in as a different tech.</li>
+        <li>Have all 5 simultaneously mark a visit complete at the same time.</li>
+        <li>Confirm all completions are recorded and none are lost.</li>
+        <li>Have one admin session open on the dashboard watching progress in real-time.</li>
+        <li>Confirm admin dashboard updates reflect all 5 completions within a few seconds.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>No lost completions. Admin view updates without manual refresh. No 500 errors under concurrent load.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 5: FLEETPILOT & TIMECARDS -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">05</span>
+    <span class="section-title">FleetPilot & Timecards</span>
+    <span class="priority-tag p1">P1 — High (Shipped Today)</span>
+  </div>
+
+  <div class="scenario-box">
+    <div class="scenario-label">Context</div>
+    Shipped today. Core functionality appears solid. Focus on edge cases that weren't in the spec: vehicle editing after creation, boundary conditions, and the interaction between timecards and visit completion.
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">5.1</span>
+      <div>
+        <div class="test-name">Vehicle Management Full Flow</div>
+        <div class="test-goal">Create, assign, edit, and delete vehicles</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Create a new vehicle with all fields populated.</li>
+        <li>Assign the vehicle to a technician.</li>
+        <li>Edit the vehicle after creation (the known edge case) — change make, model, plate.</li>
+        <li>Confirm edits save and persist after page refresh.</li>
+        <li>Assign the same vehicle to a second technician. Confirm expected behavior (conflict? or allowed?).</li>
+        <li>Delete a vehicle that is actively assigned. Confirm graceful handling.</li>
+        <li>Create a vehicle with missing optional fields. Confirm no validation errors on required-only submission.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Vehicle edits persist. Delete of active vehicle either warns or cleanly unassigns. No 500 errors.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">5.2</span>
+      <div>
+        <div class="test-name">Timecard Tracking Edge Cases</div>
+        <div class="test-goal">Clock in/out scenarios that weren't in the happy path</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Clock in as a tech. Complete a visit. Confirm time tracking attaches to visit correctly.</li>
+        <li>Clock in, then close the browser without clocking out. Reopen. Confirm clock-in state persists.</li>
+        <li>Clock in and out multiple times in the same day. Confirm total time aggregates correctly.</li>
+        <li>Clock in, then have an admin manually edit the timecard entry. Confirm save works.</li>
+        <li>Attempt to clock in on two devices simultaneously with the same account.</li>
+        <li>View timecard report for a week with missing entries (days with no clock-in). Confirm no errors.</li>
+        <li>Generate a timecard report for a tech with zero activity. Confirm graceful empty state.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>All scenarios handled without errors. Time totals calculate correctly. Concurrent device behavior is defined (not undefined).</div>
+      <div class="watch-note"><strong>Watch For</strong>Overlapping timecard entries causing calculation errors. Admin edits not saving. Empty reports crashing.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">5.3</span>
+      <div>
+        <div class="test-name">FleetPilot + Route Integration</div>
+        <div class="test-goal">Confirm vehicle assignment flows into route/tech assignment correctly</div>
+      </div>
+      <span class="severity medium">Medium</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Assign a vehicle to a tech. Assign that tech to a route.</li>
+        <li>Confirm vehicle information appears in tech's route view.</li>
+        <li>Change vehicle assignment mid-route (while visits are in progress). Confirm data integrity.</li>
+        <li>Remove vehicle assignment entirely. Confirm route is not affected.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Vehicle changes don't break active route data. No orphaned assignments.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 6: BILLING & INVOICING -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">06</span>
+    <span class="section-title">Billing, Invoicing & Payments</span>
+    <span class="priority-tag p1">P1 — High</span>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">6.1</span>
+      <div>
+        <div class="test-name">Auto-Invoice Generation</div>
+        <div class="test-goal">Visit completion triggers correct invoice</div>
+      </div>
+      <span class="severity blocker">Blocker</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Set up a client with per-service billing. Complete a visit. Confirm invoice auto-generates.</li>
+        <li>Set up a client with weekly billing. Complete 3 visits in a week. Confirm single consolidated invoice.</li>
+        <li>Set up a client with monthly billing. Confirm invoice doesn't generate until month-end trigger.</li>
+        <li>Complete a visit for a client with card-on-file auto-pay. Confirm payment processes automatically.</li>
+        <li>Trigger a batch invoice run. Confirm all unbilled completed visits across all clients are captured.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Billing frequency rules are respected. Batch invoicing captures all eligible visits. Auto-pay fires correctly.</div>
+      <div class="watch-note"><strong>Watch For</strong>Duplicate invoices from batch run. Auto-pay firing on clients without cards on file. Monthly billing triggering prematurely.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">6.2</span>
+      <div>
+        <div class="test-name">Payment Processing & Client Portal</div>
+        <div class="test-goal">Client pays invoice through portal</div>
+      </div>
+      <span class="severity blocker">Blocker</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Send an invoice to a test client via email and SMS.</li>
+        <li>Open the payment link from the client side.</li>
+        <li>Pay with a Stripe test card. Confirm payment confirmation is instant.</li>
+        <li>Confirm invoice status updates to "Paid" in the operator dashboard immediately.</li>
+        <li>Add a tip during payment. Confirm tip is tracked separately in financial records.</li>
+        <li>Attempt a partial payment. Confirm remaining balance displays correctly.</li>
+        <li>Confirm QuickBooks sync records the payment if QBO is connected.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Payment flow completes. Status updates in real-time. Tip tracking works. QBO sync fires.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">6.3</span>
+      <div>
+        <div class="test-name">Overdue & Failed Payment Handling</div>
+        <div class="test-goal">System behavior when payments fail or are overdue</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Use Stripe test card that triggers payment failure. Confirm failure is logged.</li>
+        <li>Confirm automated payment failure notification fires to operator.</li>
+        <li>Set an invoice due date to yesterday. Confirm overdue flag appears.</li>
+        <li>Trigger the overdue payment reminder. Confirm it sends via correct channel.</li>
+        <li>Void an invoice and confirm it's removed from all balance calculations.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Failures surface cleanly. Overdue logic is accurate. Void removes from totals. No 500 errors in any failure path.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 7: IMPORT WIZARD -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">07</span>
+    <span class="section-title">Data Import & Migration</span>
+    <span class="priority-tag p2">P2 — Medium</span>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">7.1</span>
+      <div>
+        <div class="test-name">CSV Import Happy Path</div>
+        <div class="test-goal">50-100 row import completes cleanly</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Prepare a 100-row CSV with realistic scooping client data (names, addresses, dogs, frequency).</li>
+        <li>Upload via import wizard. Confirm platform detection works.</li>
+        <li>Review AI field mapping. Confirm all columns map correctly with no manual correction needed.</li>
+        <li>Complete row review. Flag any rows with errors and confirm skip works.</li>
+        <li>Select "Preserve" route assignment mode. Confirm day distribution table is accurate.</li>
+        <li>Commit import. Confirm all records appear in contacts without duplicates.</li>
+        <li>Confirm import mode suppresses all outbound emails during the process.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>All clean rows import. Duplicates are detected. No emails fire during import. Production data is clean.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">7.2</span>
+      <div>
+        <div class="test-name">Sweep & Go Import</div>
+        <div class="test-goal">Competitor-specific parser works on a real export</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Obtain or generate a Sweep & Go format export file.</li>
+        <li>Upload and confirm platform auto-detects as Sweep & Go.</li>
+        <li>Verify field mapping handles S&G-specific column names correctly.</li>
+        <li>Check that invoice history imports alongside contact records.</li>
+        <li>Confirm no data loss on service frequency or pricing fields.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Auto-detection works. All S&G-specific fields map correctly. Invoice history preserved.</div>
+      <div class="watch-note"><strong>Watch For</strong>This is your primary competitor migration path. If this breaks for a switcher, it's a visible failure in the community.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 8: CRM -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">08</span>
+    <span class="section-title">CRM & Client Management</span>
+    <span class="priority-tag p2">P2 — Medium</span>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">8.1</span>
+      <div>
+        <div class="test-name">Lead Pipeline Flow</div>
+        <div class="test-goal">Lead to active client without data loss</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Create a new lead manually.</li>
+        <li>Move through pipeline stages: lead → estimate → active.</li>
+        <li>Confirm activity log records each stage change with timestamp.</li>
+        <li>Attach a dog profile, gate code, and special instructions.</li>
+        <li>Convert to active client and assign a service plan.</li>
+        <li>Confirm all data (dogs, gate codes, notes) persists after conversion.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>No data loss through pipeline stages. Activity log is complete. Service plan attaches cleanly.</div>
+    </div>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">8.2</span>
+      <div>
+        <div class="test-name">Bulk Operations</div>
+        <div class="test-goal">Bulk actions work on large selections without errors</div>
+      </div>
+      <span class="severity medium">Medium</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Select 50+ contacts. Apply a tag in bulk. Confirm all receive the tag.</li>
+        <li>Bulk send portal invites to 20 clients. Confirm no duplicate sends.</li>
+        <li>Bulk update status on 30 clients. Confirm all update correctly.</li>
+        <li>Attempt a bulk action with zero clients selected. Confirm graceful handling.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>All bulk operations complete. No partial failures without notification. Zero-selection handled gracefully.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 9: MOBILE / FIELD TECH -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">09</span>
+    <span class="section-title">Mobile Field Tech Interface</span>
+    <span class="priority-tag p2">P2 — Medium</span>
+  </div>
+
+  <div class="test-block">
+    <div class="test-block-header">
+      <span class="test-index">9.1</span>
+      <div>
+        <div class="test-name">Full Tech Day Simulation</div>
+        <div class="test-goal">Complete a full day's route on a mobile device</div>
+      </div>
+      <span class="severity high">High</span>
+    </div>
+    <div class="test-body">
+      <div class="steps-label">Steps</div>
+      <ol class="step-list">
+        <li>Log in as a tech on a real mobile device (not just a browser resize).</li>
+        <li>View assigned route. Confirm stops appear in correct order with all details.</li>
+        <li>Tap "On My Way" for the first stop. Confirm GPS-stamped SMS fires to client.</li>
+        <li>Mark visit complete. Capture a proof-of-service photo.</li>
+        <li>Confirm photo uploads and attaches to the visit record (check from admin view).</li>
+        <li>Add a field note to a visit. Confirm it syncs to office view.</li>
+        <li>Turn off mobile data. Mark a visit complete while offline.</li>
+        <li>Re-enable data. Confirm offline completion syncs automatically.</li>
+        <li>Skip a visit with a reason. Confirm it shows correctly in admin dashboard.</li>
+      </ol>
+      <div class="pass-fail"><strong>Pass Criteria</strong>Full day flow works on mobile. Offline sync works. Photos attach. Real-time updates visible from admin side.</div>
+      <div class="watch-note"><strong>Watch For</strong>Photo upload failures on mobile networks. Offline sync not triggering on reconnect. GPS SMS not firing.</div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION 10: REGRESSION -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-number">10</span>
+    <span class="section-title">Day 7 Regression & Sign-Off Checklist</span>
+    <span class="priority-tag p2">P2 — Final Gate</span>
+  </div>
+
+  <div class="scenario-box">
+    <div class="scenario-label">Purpose</div>
+    After all fixes from Days 1–6, run this quick-fire checklist to confirm nothing was broken by the fixes themselves.
+  </div>
+
+  <div class="test-body" style="padding: 16px;">
+    <div class="steps-label">Core Flow Smoke Test — Each Should Complete in Under 5 Minutes</div>
+    <br>
+    <div class="checkbox-row"><span class="cb"></span> New account onboarding completes end-to-end</div>
+    <div class="checkbox-row"><span class="cb"></span> Residential quote → satellite measure → proposal sent → client accepts</div>
+    <div class="checkbox-row"><span class="cb"></span> Route optimization runs on 20-stop route without error</div>
+    <div class="checkbox-row"><span class="cb"></span> Multi-depot: 3 depots, 6 techs, 30 stops — optimize all routes</div>
+    <div class="checkbox-row"><span class="cb"></span> Tech marks visit complete on mobile — photo attached, admin sees it</div>
+    <div class="checkbox-row"><span class="cb"></span> Invoice auto-generates, client pays through portal, status updates</div>
+    <div class="checkbox-row"><span class="cb"></span> CSV import of 20 rows completes cleanly with no duplicate records</div>
+    <div class="checkbox-row"><span class="cb"></span> FleetPilot: create vehicle, assign to tech, edit vehicle, confirm persists</div>
+    <div class="checkbox-row"><span class="cb"></span> Timecard: clock in, complete visit, clock out, view report</div>
+    <div class="checkbox-row"><span class="cb"></span> Rover AI: ask "how many active clients do I have?" — returns correct answer</div>
+    <div class="checkbox-row"><span class="cb"></span> Empty state: new account with zero data — no 500 errors on any page load</div>
+    <div class="checkbox-row"><span class="cb"></span> QuickBooks sync: mark invoice paid, confirm QBO reflects it</div>
+    <br>
+    <div class="pass-fail"><strong>Sign-Off Threshold</strong>All 12 items pass with no errors before first wave of signups goes live. Any blocker-severity failure stops the launch clock until resolved.</div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<div style="font-family: var(--mono); font-size: 11px; color: var(--text-dim); text-align: center; padding-top: 16px;">
+  SCOOPILOT PRE-LAUNCH TEST PLAN &nbsp;|&nbsp; INTERNAL USE ONLY &nbsp;|&nbsp; scoopilot.com
+</div>
+
+</body>
+</html>

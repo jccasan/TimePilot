@@ -237,7 +237,9 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
     }
   };
 
+  const submitGuardRef = useRef(false);
   const submit = async (scheduleNow: boolean) => {
+    if (submitGuardRef.current || createMutation.isPending) return;
     const fieldsToValidate: (keyof ContactFormValues)[] = ["firstName", "email"];
     if (form.getValues("contactType") === "commercial") fieldsToValidate.push("companyName");
     const valid = await form.trigger(fieldsToValidate);
@@ -245,13 +247,17 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
       setStep(1);
       return;
     }
+    submitGuardRef.current = true;
     scheduleNowRef.current = scheduleNow;
     const values = form.getValues();
     servicePrefRef.current = {
       frequency: values.serviceFrequency || "",
       serviceDay: values.serviceDay || "",
     };
-    createMutation.mutate({ ...values, suppressNotifications });
+    createMutation.mutate(
+      { ...values, suppressNotifications },
+      { onSettled: () => { submitGuardRef.current = false; } }
+    );
   };
 
   const frequency = form.watch("serviceFrequency") || "";

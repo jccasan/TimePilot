@@ -2098,7 +2098,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         FROM contacts c
         JOIN invoices i ON i.contact_id = c.id AND i.company_id = ${companyId}
         LEFT JOIN LATERAL (
-          SELECT COALESCE(SUM(amount::numeric), 0) AS paid_amount
+          SELECT COALESCE(SUM(amount_cents::numeric / 100), 0) AS paid_amount
           FROM invoice_payments
           WHERE invoice_id = i.id
         ) paid ON true
