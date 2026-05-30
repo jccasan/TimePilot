@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useRef, useMemo, useEffect, useCallback, lazy, Suspense } from "react";
+import { ClockWidget, TechTimecardTab } from "@/components/tech-timecard-tab";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -1096,8 +1097,39 @@ export default function TechMobile() {
       : `Hi ${completeDialogVisit.contact.firstName}. ${company?.name || "Our team"} just finished your poop scoop service. Here is your gate closed image. Let us know if there is anything we can do.`
     : "";
 
+  const [mainTab, setMainTab] = useState<"today" | "timecard">("today");
+
   return (
     <div className="flex flex-col h-full">
+      {/* Top tab bar */}
+      <div className="flex border-b bg-background shrink-0">
+        <button
+          className={`flex-1 py-3 text-sm font-medium transition-colors ${mainTab === "today" ? "border-b-2 border-primary text-primary" : "text-muted-foreground"}`}
+          onClick={() => setMainTab("today")}
+        >
+          Today
+        </button>
+        <button
+          className={`flex-1 py-3 text-sm font-medium transition-colors ${mainTab === "timecard" ? "border-b-2 border-primary text-primary" : "text-muted-foreground"}`}
+          onClick={() => setMainTab("timecard")}
+        >
+          Timecard
+        </button>
+      </div>
+
+      {/* Timecard Tab */}
+      {mainTab === "timecard" && (
+        <div className="flex-1 overflow-auto">
+          <div className="p-4 max-w-lg mx-auto w-full">
+            <ClockWidget />
+          </div>
+          <TechTimecardTab />
+        </div>
+      )}
+
+      {/* Today Tab content */}
+      {mainTab === "today" && <>
+
       {/* Start Day Overview Screen */}
       {viewMode === "start-day" && !isLoading && visits && visits.length > 0 && (
         <div
@@ -2526,6 +2558,7 @@ export default function TechMobile() {
           </div>
         </DialogContent>
       </Dialog>
+      </> /* end Today tab */}
     </div>
   );
 }
