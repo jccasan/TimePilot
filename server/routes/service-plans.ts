@@ -909,7 +909,10 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         try {
           if (scheduleChanged && !reactivated) {
             const todayStr = new Date().toISOString().split("T")[0];
-            await storage.cancelFutureVisitsForPlans([p(req.params.id)], todayStr);
+            // Delete (not cancel) future scheduled visits so rescheduling doesn't
+            // leave a ghost series of "cancelled" visits alongside the new schedule.
+            // Real cancellations (customer/operator) use cancelFutureVisitsForPlans.
+            await storage.deleteFutureScheduledVisitsForPlans([p(req.params.id)], todayStr);
           }
           const { generateVisitsForPlans } = await import("../jobs/auto-visits");
           const today = new Date();

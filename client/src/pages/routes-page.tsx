@@ -134,6 +134,8 @@ import {
   ChevronRight,
   Info,
   AlertTriangle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { WeeklyOptimizerPanel } from "@/components/WeeklyOptimizerPanel";
@@ -1798,6 +1800,9 @@ export default function RoutesPage() {
   const [showWeeklyOptimizer, setShowWeeklyOptimizer] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [showLivePlayback, setShowLivePlayback] = useState(false);
+  const [showHiddenStatuses, setShowHiddenStatuses] = useState(
+    () => localStorage.getItem("scoopilot_sched_show_hidden") === "true"
+  );
 
   const { data: demoStatus } = useQuery<{
     isDemo: boolean;
@@ -2331,6 +2336,30 @@ export default function RoutesPage() {
     }
     return map;
   }, [allRoutes, visiblePlans, dayVisits, routesForDay]);
+
+  const hiddenStopStatuses = new Set(["cancelled", "skipped"]);
+  const hiddenStopCount = useMemo(() => {
+    if (showHiddenStatuses) return 0;
+    let count = 0;
+    for (const stops of Object.values(stopsByRoute)) {
+      for (const s of stops) {
+        if (hiddenStopStatuses.has(visitsByPlan[s.id]?.status)) count++;
+      }
+    }
+    return count;
+  }, [stopsByRoute, visitsByPlan, showHiddenStatuses]);
+
+  const visibleStopsByRoute = useMemo(() => {
+    if (showHiddenStatuses) return stopsByRoute;
+    const out: Record<string, ServicePlan[]> = {};
+    for (const [routeId, stops] of Object.entries(stopsByRoute)) {
+      out[routeId] = stops.filter(
+        (s) => !hiddenStopStatuses.has(visitsByPlan[s.id]?.status)
+      );
+    }
+    return out;
+  }, [stopsByRoute, visitsByPlan, showHiddenStatuses]);
+
 
   const totalStopsForDay = useMemo(
     () => routesForDay.reduce((acc, r) => acc + (stopsByRoute[r.id]?.length ?? 0), 0),
@@ -3180,9 +3209,33 @@ export default function RoutesPage() {
                       <RouteIcon className="h-5 w-5" />
                       {DAY_LABELS[selectedDay]} Routes
                     </h2>
-                    <span className="text-sm text-muted-foreground">
-                      {routesForDay.length} {routesForDay.length === 1 ? "route" : "routes"}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      {hiddenStopCount > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {hiddenStopCount} hidden
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        data-testid="button-routes-show-hidden"
+                        title={showHiddenStatuses ? "Hide cancelled/skipped" : "Show cancelled/skipped"}
+                        onClick={() => {
+                          const next = !showHiddenStatuses;
+                          setShowHiddenStatuses(next);
+                          localStorage.setItem("scoopilot_sched_show_hidden", String(next));
+                        }}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showHiddenStatuses ? (
+                          <Eye className="h-3.5 w-3.5" />
+                        ) : (
+                          <EyeOff className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <span className="text-sm text-muted-foreground">
+                        {routesForDay.length} {routesForDay.length === 1 ? "route" : "routes"}
+                      </span>
+                    </div>
                   </div>
 
                   {weekOffset > 0 && dayVisits.length === 0 && routesForDay.length > 0 && (
@@ -3565,7 +3618,7 @@ export default function RoutesPage() {
                         <RouteCard
                           key={route.id}
                           route={route}
-                          stops={stopsByRoute[route.id] || []}
+                          stops={visibleStopsByRoute[route.id] || []}
                           contacts={contacts}
                           properties={properties}
                           team={team}
