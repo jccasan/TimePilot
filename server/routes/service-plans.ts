@@ -642,6 +642,16 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
           .status(400)
           .json({ error: `Invalid dayOfWeek. Must be one of: ${validDays.join(", ")}` });
       }
+      const validOrdinals = ["first", "second", "third", "fourth", "last"];
+      if (
+        req.body.monthlyWeekOrdinal !== undefined &&
+        req.body.monthlyWeekOrdinal !== null &&
+        !validOrdinals.includes(req.body.monthlyWeekOrdinal)
+      ) {
+        return res
+          .status(400)
+          .json({ error: `Invalid monthlyWeekOrdinal. Must be one of: ${validOrdinals.join(", ")}` });
+      }
 
       const allowedFields = [
         "frequency",
@@ -665,6 +675,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         "isStopOnly",
         "pausedAt",
         "discount",
+        "monthlyWeekOrdinal",
       ];
       const body: Record<string, unknown> = {};
       for (const key of allowedFields) {
@@ -1065,6 +1076,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         routeId: body.routeId || null,
         stopOrder: body.stopOrder || 0,
         dayOfWeek: body.dayOfWeek || null,
+        monthlyWeekOrdinal: body.monthlyWeekOrdinal || null,
         serviceName: body.serviceName || null,
         jobType: body.jobType,
         jobStatus: body.jobStatus,

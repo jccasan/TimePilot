@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import { getCompanyToday } from "../utils/company-date";
+import { nthWeekdayOfMonth } from "../utils/monthly-schedule";
 import type { VacationHold, ServicePlan } from "@shared/schema";
 import { acquireJobLock, releaseJobLock } from "../lib/job-lock";
 
@@ -177,6 +178,48 @@ async function generateVisitsFromPlans(
       const anchorDate = new Date(plan.startDate + "T00:00:00Z");
       const anchorYear = anchorDate.getUTCFullYear();
       const anchorMonth = anchorDate.getUTCMonth();
+
+      // Ordinal-weekday mode: "first Monday", "last Friday", etc.
+      if (plan.monthlyWeekOrdinal && plan.dayOfWeek && dayMap[plan.dayOfWeek] !== undefined) {
+        const targetWeekday = dayMap[plan.dayOfWeek];
+        let monthOffset = 0;
+        while (true) {
+          const targetYear = anchorYear + Math.floor((anchorMonth + monthOffset) / 12);
+          const targetMonth = (anchorMonth + monthOffset) % 12;
+          const candidate = nthWeekdayOfMonth(
+            targetYear,
+            targetMonth,
+            targetWeekday,
+            plan.monthlyWeekOrdinal
+          );
+          if (!candidate || candidate > effectiveEnd) {
+            if (!candidate) { monthOffset++; if (monthOffset > 1200) break; continue; }
+            break;
+          }
+          if (candidate >= effectiveStart) {
+            const dateStr = candidate.toISOString().split("T")[0];
+            const key = `${plan.id}_${dateStr}`;
+            if (!existingKeys.has(key) && !isDateInVacationHold(dateStr, plan.id, holdsByPlan)) {
+              const routeId = await getRouteIdForDate(dateStr);
+              const newVisit = await storage.createVisit({
+                companyId,
+                servicePlanId: plan.id,
+                propertyId: plan.propertyId,
+                routeId,
+                scheduledDate: dateStr,
+                status: "scheduled",
+              });
+              if (newVisit) created++;
+              existingKeys.add(key);
+            }
+          }
+          monthOffset++;
+          if (monthOffset > 1200) break;
+        }
+        continue;
+      }
+
+      // Legacy mode: same calendar day each month (day clamped to month-end)
       const anchorDay = anchorDate.getUTCDate();
       let monthOffset = 0;
       while (true) {

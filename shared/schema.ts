@@ -823,6 +823,7 @@ export const servicePlans = pgTable(
       onDelete: "set null",
     }),
     estimateId: varchar("estimate_id").references(() => estimates.id, { onDelete: "set null" }),
+    monthlyWeekOrdinal: varchar("monthly_week_ordinal", { length: 10 }),
     isStopOnly: boolean("is_stop_only").notNull().default(false),
     proratedThrough: date("prorated_through"),
     billingTerms: varchar("billing_terms", { length: 20 }),

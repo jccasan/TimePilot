@@ -369,6 +369,7 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
                   suggestedDay={suggestedDay}
                   isFetchingSuggestion={isFetchingSuggestion}
                   suppressNotifications={suppressNotifications}
+                  workingDays={workingDays}
                   onSuppressChange={setSuppressNotifications}
                   onBack={() => setStep(1)}
                   onCreateAndSchedule={() => submit(true)}
@@ -673,6 +674,7 @@ function Step2({
   suggestedDay,
   isFetchingSuggestion,
   suppressNotifications,
+  workingDays,
   onSuppressChange,
   onBack,
   onCreateAndSchedule,
@@ -686,6 +688,7 @@ function Step2({
   suggestedDay: string | null;
   isFetchingSuggestion: boolean;
   suppressNotifications: boolean;
+  workingDays: string[];
   onSuppressChange: (val: boolean) => void;
   onBack: () => void;
   onCreateAndSchedule: () => void;

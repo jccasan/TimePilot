@@ -177,6 +177,7 @@ interface JobFormPayload {
   serviceName: string | null;
   jobType: string;
   frequency: string;
+  monthlyWeekOrdinal: string | null;
   dayOfWeek: string | null;
   pricePerVisit: string;
   startDate: string;
@@ -256,9 +257,17 @@ function ScheduleJobForm({
   >([]);
   const [serviceComboOpen, setServiceComboOpen] = useState(false);
   const [frequency, setFrequency] = useState(initialFrequency || "weekly");
+  const [monthlyWeekOrdinal, setMonthlyWeekOrdinal] = useState("first");
   const [dayOfWeek, setDayOfWeek] = useState(
     () => initialDayOfWeek || getDayOfWeekFromDate(toLocalDateString(new Date(), tz))
   );
+  const { data: companySettings } = useQuery<{ workingDays?: string[] | null }>({
+    queryKey: ["/api/company"],
+  });
+  const workingDays: string[] =
+    companySettings?.workingDays && companySettings.workingDays.length > 0
+      ? companySettings.workingDays
+      : ["monday", "tuesday", "wednesday", "thursday", "friday"];
   const [pricePerVisit, setPricePerVisit] = useState("");
   const [manualServiceName, setManualServiceName] = useState("");
   const [startDate, setStartDate] = useState(toLocalDateString(new Date(), tz));
@@ -370,6 +379,7 @@ function ScheduleJobForm({
       serviceName: combinedServiceName,
       jobType,
       frequency: jobType === "one_off" ? "onetime" : frequency,
+      monthlyWeekOrdinal: frequency === "monthly" ? monthlyWeekOrdinal : null,
       dayOfWeek: dayOfWeek || null,
       pricePerVisit: totalPrice || "0",
       startDate,
@@ -689,23 +699,40 @@ function ScheduleJobForm({
                     </SelectContent>
                   </Select>
                 </div>
-                {frequency !== "monthly" && (
+                {frequency === "monthly" ? (
                   <div className="space-y-1.5">
-                    <Label>Day of Week</Label>
-                    <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-                      <SelectTrigger data-testid="select-job-day">
-                        <SelectValue placeholder="Select day" />
+                    <Label>Week of Month</Label>
+                    <Select value={monthlyWeekOrdinal} onValueChange={setMonthlyWeekOrdinal}>
+                      <SelectTrigger data-testid="select-job-month-ordinal">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(dayOfWeekLabels).map(([val, label]) => (
-                          <SelectItem key={val} value={val}>
-                            {label}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="first">First</SelectItem>
+                        <SelectItem value="second">Second</SelectItem>
+                        <SelectItem value="third">Third</SelectItem>
+                        <SelectItem value="fourth">Fourth</SelectItem>
+                        <SelectItem value="last">Last</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                )}
+                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Day of Week</Label>
+                <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
+                  <SelectTrigger data-testid="select-job-day">
+                    <SelectValue placeholder="Select day" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(dayOfWeekLabels)
+                      .filter(([val]) => workingDays.includes(val))
+                      .map(([val, label]) => (
+                        <SelectItem key={val} value={val}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>

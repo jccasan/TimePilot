@@ -66,7 +66,16 @@ export function EditJobPanel({
 
   const [serviceName, setServiceName] = useState("");
   const [frequency, setFrequency] = useState("weekly");
+  const [monthlyWeekOrdinal, setMonthlyWeekOrdinal] = useState("first");
   const [dayOfWeek, setDayOfWeek] = useState("unassigned");
+
+  const { data: companySettings } = useQuery<{ workingDays?: string[] | null }>({
+    queryKey: ["/api/company"],
+  });
+  const workingDays: string[] =
+    companySettings?.workingDays && companySettings.workingDays.length > 0
+      ? companySettings.workingDays
+      : ["monday", "tuesday", "wednesday", "thursday", "friday"];
   const [pricePerVisit, setPricePerVisit] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -104,6 +113,7 @@ export function EditJobPanel({
     if (servicePlan && open) {
       setServiceName(servicePlan.serviceName || "");
       setFrequency(servicePlan.frequency || "weekly");
+      setMonthlyWeekOrdinal((servicePlan as any).monthlyWeekOrdinal || "first");
       setDayOfWeek(servicePlan.dayOfWeek || "unassigned");
       setPricePerVisit(servicePlan.pricePerVisit || "");
       setStartDate(servicePlan.startDate || "");
@@ -188,6 +198,7 @@ export function EditJobPanel({
       await apiRequest("PATCH", `/api/service-plans/${servicePlan.id}`, {
         serviceName: serviceName || null,
         frequency,
+        monthlyWeekOrdinal: frequency === "monthly" ? monthlyWeekOrdinal : null,
         dayOfWeek: dayOfWeek === "unassigned" ? null : dayOfWeek,
         pricePerVisit,
         startDate: startDate || null,
@@ -272,22 +283,41 @@ export function EditJobPanel({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Day of Week</Label>
-                <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-                  <SelectTrigger data-testid="select-edit-job-day">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {DAYS.map((d) => (
+              {frequency === "monthly" && (
+                <div className="space-y-1.5">
+                  <Label>Week of Month</Label>
+                  <Select value={monthlyWeekOrdinal} onValueChange={setMonthlyWeekOrdinal}>
+                    <SelectTrigger data-testid="select-edit-job-month-ordinal">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="first">First</SelectItem>
+                      <SelectItem value="second">Second</SelectItem>
+                      <SelectItem value="third">Third</SelectItem>
+                      <SelectItem value="fourth">Fourth</SelectItem>
+                      <SelectItem value="last">Last</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Day of Week</Label>
+              <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
+                <SelectTrigger data-testid="select-edit-job-day">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {DAYS.filter((d) => frequency !== "monthly" || workingDays.includes(d)).map(
+                    (d) => (
                       <SelectItem key={d} value={d} className="capitalize">
                         {d}
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    )
+                  )}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">
