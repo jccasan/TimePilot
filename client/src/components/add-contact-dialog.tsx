@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -115,6 +115,14 @@ export function AddContactDialog({ open, onOpenChange }: AddContactDialogProps) 
   const [suggestedDay, setSuggestedDay] = useState<string | null>(null);
   const [isFetchingSuggestion, setIsFetchingSuggestion] = useState(false);
   const [suppressNotifications, setSuppressNotifications] = useState(false);
+  const { data: company } = useQuery<{ workingDays?: string[] | null }>({
+    queryKey: ["/api/company"],
+  });
+  const workingDays: string[] =
+    company?.workingDays && company.workingDays.length > 0
+      ? company.workingDays
+      : ["monday", "tuesday", "wednesday", "thursday", "friday"];
+
   const scheduleNowRef = useRef(false);
   const servicePrefRef = useRef<{ frequency: string; serviceDay: string }>({
     frequency: "",
@@ -723,23 +731,33 @@ function Step2({
           )}
         </div>
         <div className="flex gap-1.5 flex-wrap">
-          {DAYS.map((d) => (
-            <button
-              key={d.value}
-              type="button"
-              data-testid={`pill-day-${d.value}`}
-              onClick={() => form.setValue("serviceDay", serviceDay === d.value ? "" : d.value)}
-              className={cn(
-                "w-9 h-9 rounded-full border text-sm font-medium transition-colors",
-                serviceDay === d.value
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-background text-foreground hover:bg-muted",
-                suggestedDay === d.value && serviceDay !== d.value && "ring-2 ring-primary/30"
-              )}
-            >
-              {d.label}
-            </button>
-          ))}
+          {DAYS.map((d) => {
+            const isWorking = workingDays.includes(d.value);
+            return (
+              <button
+                key={d.value}
+                type="button"
+                data-testid={`pill-day-${d.value}`}
+                title={
+                  isWorking
+                    ? d.value.charAt(0).toUpperCase() + d.value.slice(1)
+                    : `${d.value.charAt(0).toUpperCase() + d.value.slice(1)} (non-working day)`
+                }
+                onClick={() => form.setValue("serviceDay", serviceDay === d.value ? "" : d.value)}
+                className={cn(
+                  "w-9 h-9 rounded-full border text-sm font-medium transition-colors",
+                  serviceDay === d.value
+                    ? "border-primary bg-primary/10 text-primary"
+                    : isWorking
+                      ? "border-border bg-background text-foreground hover:bg-muted"
+                      : "border-border bg-background text-muted-foreground/40 hover:bg-muted",
+                  suggestedDay === d.value && serviceDay !== d.value && "ring-2 ring-primary/30"
+                )}
+              >
+                {d.label}
+              </button>
+            );
+          })}
           <button
             type="button"
             data-testid="pill-day-tbd"

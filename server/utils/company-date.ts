@@ -67,6 +67,34 @@ export function getCompanyWeekStart(timezone: string): string {
   return d.toISOString().split("T")[0];
 }
 
+const DEFAULT_WORKING_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+
+const DOW_TO_NAME: Record<number, string> = {
+  0: "sunday",
+  1: "monday",
+  2: "tuesday",
+  3: "wednesday",
+  4: "thursday",
+  5: "friday",
+  6: "saturday",
+};
+
+/**
+ * Returns true if the given weekday name (e.g. "monday") is in the company's
+ * working_days list. Accepts either a day name string or a JS Date object.
+ */
+export function isWorkingDay(
+  dayOrDate: string | Date,
+  workingDays: string[] | null | undefined
+): boolean {
+  const days = workingDays && workingDays.length > 0 ? workingDays : DEFAULT_WORKING_DAYS;
+  if (dayOrDate instanceof Date) {
+    const name = DOW_TO_NAME[dayOrDate.getDay()];
+    return days.includes(name);
+  }
+  return days.includes(dayOrDate.toLowerCase());
+}
+
 export function getCompanyWeekEnd(timezone: string): string {
   const today = getCompanyToday(timezone);
   const dow = getCompanyDayOfWeek(timezone);

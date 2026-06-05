@@ -486,6 +486,9 @@ export const companies = pgTable("companies", {
   websiteUrl: text("website_url"),
   businessDescription: text("business_description"),
   serviceAreaDescription: text("service_area_description"),
+  workingDays: jsonb("working_days")
+    .$type<string[]>()
+    .default(sql`'["monday","tuesday","wednesday","thursday","friday"]'::jsonb`),
   calendarToken: text("calendar_token")
     .unique()
     .default(sql`gen_random_uuid()`),

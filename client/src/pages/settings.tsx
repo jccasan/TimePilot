@@ -6,6 +6,7 @@ import { getDismissedKey } from "@/components/rover-chatbot";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest, authFetch } from "@/lib/queryClient";
 import { formatRadius } from "@/lib/units";
+import { cn } from "@/lib/utils";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -642,6 +643,7 @@ type Company = {
   invoiceNumberNext?: number;
   country?: string | null;
   serviceAreaDescription?: string | null;
+  workingDays?: string[] | null;
 };
 
 type SettingsLayoutItem = {
@@ -5162,6 +5164,65 @@ function ReminderSettingsSection({
                 <option value="America/Anchorage">Alaska (AKT)</option>
                 <option value="Pacific/Honolulu">Hawaii (HT)</option>
               </select>
+            </div>
+
+            <div className="flex items-start justify-between gap-2 border-t pt-3">
+              <div>
+                <p className="text-sm font-medium">Working Days</p>
+                <p className="text-xs text-muted-foreground">
+                  Days your business operates (used for scheduling)
+                </p>
+              </div>
+              <div className="flex gap-1 flex-wrap justify-end">
+                {(
+                  [
+                    { value: "monday", label: "M" },
+                    { value: "tuesday", label: "T" },
+                    { value: "wednesday", label: "W" },
+                    { value: "thursday", label: "T" },
+                    { value: "friday", label: "F" },
+                    { value: "saturday", label: "S" },
+                    { value: "sunday", label: "S" },
+                  ] as const
+                ).map((d) => {
+                  const workingDays: string[] =
+                    (company?.workingDays as string[] | null | undefined) ??
+                    ["monday", "tuesday", "wednesday", "thursday", "friday"];
+                  const active = workingDays.includes(d.value);
+                  return (
+                    <button
+                      key={d.value}
+                      type="button"
+                      data-testid={`toggle-working-day-${d.value}`}
+                      title={d.value.charAt(0).toUpperCase() + d.value.slice(1)}
+                      onClick={() => {
+                        const next = active
+                          ? workingDays.filter((x) => x !== d.value)
+                          : [...workingDays, d.value];
+                        apiRequest("PATCH", "/api/company", { workingDays: next })
+                          .then(() => {
+                            queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+                          })
+                          .catch(() => {
+                            toast({
+                              title: "Error",
+                              description: "Failed to update working days.",
+                              variant: "destructive",
+                            });
+                          });
+                      }}
+                      className={cn(
+                        "w-8 h-8 rounded-full border text-xs font-medium transition-colors",
+                        active
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-background text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="border-t pt-4">

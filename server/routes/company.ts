@@ -391,6 +391,7 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
         "serviceAreaDescription",
         "invoiceNumberPrefix",
         "invoiceNumberNext",
+        "workingDays",
       ];
       const updates: Partial<Record<keyof InsertCompany, unknown>> = {};
       for (const key of allowed as (keyof InsertCompany)[]) {
@@ -489,6 +490,17 @@ export async function registerCompanyRoutes(app: Express): Promise<void> {
             return res
               .status(400)
               .json({ error: "Custom timing requires customHours between 0.5 and 72" });
+          }
+        }
+      }
+      if (updates.workingDays !== undefined) {
+        const validDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+        if (!Array.isArray(updates.workingDays)) {
+          return res.status(400).json({ error: "workingDays must be an array" });
+        }
+        for (const day of updates.workingDays as string[]) {
+          if (!validDays.includes(day)) {
+            return res.status(400).json({ error: `Invalid day: ${day}` });
           }
         }
       }
