@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Save, CheckCircle2 } from "lucide-react";
-import { type PricingConfig } from "@shared/schema";
+import { DEFAULT_PRICING_RULES, type PricingConfig, type PricingRulesConfig } from "@shared/schema";
 
 /**
  * Standalone "which recurring frequencies do you offer" toggles, extracted from
@@ -41,10 +41,24 @@ export function FrequencyTogglesCard() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("PATCH", "/api/pricing-config/enabled-frequencies", {
-        twiceWeekly,
-        monthly,
-      });
+      // Use the long-standing /api/pricing-config endpoint (present in every
+      // server build) rather than a newer dedicated route. Read the freshest
+      // config from the cache and deep-merge so required fields are always
+      // present (can't fail validation) and only enabledFrequencies changes.
+      const current = queryClient.getQueryData<PricingConfig>(["/api/pricing-config"]);
+      const rules = current?.pricingRules ?? config?.pricingRules ?? DEFAULT_PRICING_RULES;
+      const mergedRules: PricingRulesConfig = {
+        ...DEFAULT_PRICING_RULES,
+        ...rules,
+        basePrices: { ...DEFAULT_PRICING_RULES.basePrices, ...(rules?.basePrices ?? {}) },
+        perDogRule: { ...DEFAULT_PRICING_RULES.perDogRule, ...(rules?.perDogRule ?? {}) },
+        yardSizeTiers:
+          rules?.yardSizeTiers && rules.yardSizeTiers.length > 0
+            ? rules.yardSizeTiers
+            : DEFAULT_PRICING_RULES.yardSizeTiers,
+        enabledFrequencies: { twiceWeekly, monthly },
+      };
+      const res = await apiRequest("PATCH", "/api/pricing-config", { pricingRules: mergedRules });
       return res.json();
     },
     onSuccess: () => {
