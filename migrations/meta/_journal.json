@@ -50,6 +50,13 @@
       "when": 1780000000000,
       "tag": "0005_semi_monthly",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780000100000,
+      "tag": "0006_beginning_of_month_billing",
+      "breakpoints": true
     }
   ]
 }

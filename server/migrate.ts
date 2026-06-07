@@ -1758,6 +1758,23 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] service_plans semi_monthly columns and enum value ensured");
 
+    // ── Beginning-of-month prepay billing ────────────────────────────────────
+    // Add the new charge_timing value and make it the default for NEW companies.
+    // Existing rows are intentionally left untouched (no UPDATE) so operators
+    // keep whatever timing they already had.
+    await client.query(`
+      ALTER TYPE charge_timing ADD VALUE IF NOT EXISTS 'beginning_of_month'
+    `);
+    await client.query(`
+      ALTER TABLE companies
+        ALTER COLUMN charge_timing SET DEFAULT 'beginning_of_month'
+    `);
+    await client.query(`
+      ALTER TABLE companies
+        ADD COLUMN IF NOT EXISTS last_prepay_billing_month VARCHAR(7)
+    `);
+    console.log("[Migration] charge_timing beginning_of_month default + guard column ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

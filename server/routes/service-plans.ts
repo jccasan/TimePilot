@@ -278,6 +278,18 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         storage.renumberRouteStops(plan.routeId, companyId).catch(console.error);
       }
 
+      // Beginning-of-month prepay: a client added mid-month gets a prorated
+      // first-month invoice immediately for the remaining days. No-op unless the
+      // company uses beginning_of_month timing; idempotent via proratedThrough.
+      // (The daily prepay job is the safety net if this side-effect fails.)
+      import("../jobs/prepay-billing")
+        .then(({ generatePrepayProrationForPlan }) =>
+          generatePrepayProrationForPlan(companyId, plan.id)
+        )
+        .catch((err) =>
+          console.error("[prepay-billing] Signup proration failed on plan creation:", err)
+        );
+
       const { userId } = await getCompanyContext(req);
       auditLog(
         companyId,

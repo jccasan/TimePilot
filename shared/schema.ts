@@ -78,7 +78,11 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
   "refunded",
   "voided",
 ]);
-export const chargeTimingEnum = pgEnum("charge_timing", ["day_before", "weekly_batch"]);
+export const chargeTimingEnum = pgEnum("charge_timing", [
+  "day_before",
+  "weekly_batch",
+  "beginning_of_month",
+]);
 export const invoiceTimingEnum = pgEnum("invoice_timing", ["before_service", "after_service"]);
 export const invoiceFrequencyEnum = pgEnum("invoice_frequency", [
   "per_service",
@@ -407,7 +411,10 @@ export const companies = pgTable("companies", {
   stripeConnectOnboarded: boolean("stripe_connect_onboarded").notNull().default(false),
   subscriptionTier: subscriptionTierEnum("subscription_tier").notNull().default("tier_1"),
   subscriptionStatus: subscriptionStatusEnum("subscription_status").notNull().default("trialing"),
-  chargeTiming: chargeTimingEnum("charge_timing").notNull().default("day_before"),
+  // New companies default to beginning-of-month prepay billing. Existing rows
+  // keep whatever value they were created with (migration only changes the
+  // column default, not existing data).
+  chargeTiming: chargeTimingEnum("charge_timing").notNull().default("beginning_of_month"),
   invoiceTheme: text("invoice_theme"),
   mrrCents: integer("mrr_cents").notNull().default(0),
   remindersEnabled: boolean("reminders_enabled").notNull().default(false),
@@ -443,6 +450,10 @@ export const companies = pgTable("companies", {
   qboFeeAccountRef: varchar("qbo_fee_account_ref", { length: 50 }),
   timezone: varchar("timezone", { length: 100 }).notNull().default("America/New_York"),
   lastAutoInvoiceRun: date("last_auto_invoice_run"),
+  // Guard for the beginning-of-month prepay billing job: the YYYY-MM that was
+  // last billed, so the monthly charge fires once per month and never
+  // double-fires on a restart within the same month.
+  lastPrepayBillingMonth: varchar("last_prepay_billing_month", { length: 7 }),
   frozenAt: timestamp("frozen_at"),
   trialEndsAt: timestamp("trial_ends_at"),
   canceledAt: timestamp("canceled_at"),

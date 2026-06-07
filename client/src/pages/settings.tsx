@@ -630,6 +630,7 @@ type Company = {
   retellAgentId?: string | null;
   passStripeFees?: boolean;
   requireCardOnSignup?: boolean;
+  chargeTiming?: string;
   requireDocumentSigning?: boolean;
   widgetFieldConfig?: WidgetFieldConfig | null;
   yardSizeTierConfig?: YardSizeTierConfig | null;
@@ -972,6 +973,24 @@ function StripeConnectSection() {
     },
   });
 
+  const chargeTimingMutation = useMutation({
+    mutationFn: async (value: string) => {
+      const res = await apiRequest("PATCH", "/api/company", { chargeTiming: value });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save setting");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Charge timing saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
   const canManageStripeConnect = currentUser?.role === "owner" || currentUser?.role === "admin";
   const userRoleLoaded = !!currentUser?.role;
 
@@ -1231,6 +1250,85 @@ function StripeConnectSection() {
                   widget. The card is saved on file but not charged. Turn off if you prefer to
                   collect payment details later.
                 </p>
+              </div>
+            )}
+
+            {canManageStripeConnect && (
+              <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Charge timing</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Controls when recurring customers are billed.
+                </p>
+                <RadioGroup
+                  value={company?.chargeTiming || "beginning_of_month"}
+                  onValueChange={(v) => chargeTimingMutation.mutate(v)}
+                  disabled={chargeTimingMutation.isPending}
+                  className="space-y-2"
+                >
+                  <label
+                    htmlFor="charge-timing-bom"
+                    className="flex items-start gap-3 rounded-lg border-2 border-primary bg-primary/5 p-3 cursor-pointer"
+                  >
+                    <RadioGroupItem
+                      value="beginning_of_month"
+                      id="charge-timing-bom"
+                      className="mt-0.5"
+                      data-testid="radio-charge-timing-bom"
+                    />
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">
+                          Charge on the 1st for the full month ahead — prepay
+                        </span>
+                        <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold uppercase text-primary-foreground">
+                          Recommended
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        On the 1st of each month, customers are billed for the full upcoming month.
+                        Mid-month signups are prorated for the remaining days. Default for new
+                        accounts.
+                      </p>
+                    </div>
+                  </label>
+                  <label
+                    htmlFor="charge-timing-day-before"
+                    className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer"
+                  >
+                    <RadioGroupItem
+                      value="day_before"
+                      id="charge-timing-day-before"
+                      className="mt-0.5"
+                      data-testid="radio-charge-timing-day-before"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-sm font-medium">Day before service</span>
+                      <p className="text-xs text-muted-foreground">
+                        Bill each service the day before it happens.
+                      </p>
+                    </div>
+                  </label>
+                  <label
+                    htmlFor="charge-timing-weekly"
+                    className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer"
+                  >
+                    <RadioGroupItem
+                      value="weekly_batch"
+                      id="charge-timing-weekly"
+                      className="mt-0.5"
+                      data-testid="radio-charge-timing-weekly"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-sm font-medium">Weekly batch</span>
+                      <p className="text-xs text-muted-foreground">
+                        Bill all of a customer's services together once a week.
+                      </p>
+                    </div>
+                  </label>
+                </RadioGroup>
               </div>
             )}
           </>

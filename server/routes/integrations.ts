@@ -824,6 +824,12 @@ export async function registerIntegrationsRoutes(app: Express): Promise<void> {
     setInterval(() => runAutoInvoice().catch(console.error), 24 * 60 * 60 * 1000);
   });
 
+  // Beginning-of-month prepay billing (charge on the 1st for the month ahead).
+  import("../jobs/prepay-billing").then(({ runPrepayBilling }) => {
+    setTimeout(() => runPrepayBilling().catch(console.error), 75000);
+    setInterval(() => runPrepayBilling().catch(console.error), 24 * 60 * 60 * 1000);
+  });
+
   import("../jobs/auto-visits").then(({ runAutoVisits }) => {
     setTimeout(() => runAutoVisits().catch(console.error), 90000);
     setInterval(() => runAutoVisits().catch(console.error), 24 * 60 * 60 * 1000);
