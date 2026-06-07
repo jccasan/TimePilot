@@ -30,6 +30,21 @@ import {
   p,
 } from "./shared";
 
+/**
+ * Returns the name of an existing active package occupying `tierSlot` for the
+ * company (excluding `excludeId`), or null if the slot is free. Used to enforce
+ * one package per tier slot per company.
+ */
+async function findTierSlotConflict(
+  companyId: string,
+  tierSlot: string,
+  excludeId: string | null
+): Promise<string | null> {
+  const packages = await storage.getServicePackages(companyId);
+  const conflict = packages.find((p) => p.tierSlot === tierSlot && p.id !== excludeId);
+  return conflict ? conflict.name : null;
+}
+
 export async function registerPricingRoutes(app: Express): Promise<void> {
   // ================ Service Pricing ================
   app.get("/api/pricing", isAuthenticated, async (req: Request, res: Response) => {
@@ -459,6 +474,14 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const parsed = insertServicePackageSchema.parse({ ...req.body, companyId });
+      if (parsed.tierSlot) {
+        const conflict = await findTierSlotConflict(companyId, parsed.tierSlot, null);
+        if (conflict) {
+          return res.status(409).json({
+            error: `The ${parsed.tierSlot} quote tier is already assigned to "${conflict}". Unassign it from that package first.`,
+          });
+        }
+      }
       const pkg = await storage.createServicePackage(parsed);
       res.status(201).json(pkg);
     } catch (err) {
@@ -471,6 +494,14 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const parsed = insertServicePackageSchema.partial().parse(req.body);
+      if (parsed.tierSlot) {
+        const conflict = await findTierSlotConflict(companyId, parsed.tierSlot, p(req.params.id));
+        if (conflict) {
+          return res.status(409).json({
+            error: `The ${parsed.tierSlot} quote tier is already assigned to "${conflict}". Unassign it from that package first.`,
+          });
+        }
+      }
       const pkg = await storage.updateServicePackage(p(req.params.id), companyId, parsed);
       res.json(pkg);
     } catch (err) {

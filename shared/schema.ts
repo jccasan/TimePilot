@@ -1429,6 +1429,8 @@ export const serviceBillingRules = pgTable(
   ]
 );
 
+export const packageTierSlotEnum = pgEnum("package_tier_slot", ["tier1", "tier2", "tier3"]);
+
 export const servicePackages = pgTable(
   "service_packages",
   {
@@ -1443,6 +1445,12 @@ export const servicePackages = pgTable(
     frequency: varchar("frequency", { length: 50 }).notNull(),
     basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
     includedItems: jsonb("included_items").$type<string[]>().notNull().default([]),
+    // Which residential quote tier this package powers (null = standalone, not
+    // tied to any tier). Enforced one-per-slot-per-company at the API layer.
+    tierSlot: packageTierSlotEnum("tier_slot"),
+    // When true on a tier2/tier3 package, the proposal prepends
+    // "Everything in <previous tier>, plus:" to this tier's feature list.
+    showInheritancePrefix: boolean("show_inheritance_prefix").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow().notNull(),

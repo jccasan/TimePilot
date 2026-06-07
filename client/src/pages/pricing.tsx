@@ -89,6 +89,8 @@ const packageFormSchema = z.object({
   frequency: z.string().min(1, "Frequency is required"),
   basePrice: z.string().min(1, "Price is required"),
   includedItemsText: z.string().optional().or(z.literal("")),
+  tierSlot: z.enum(["none", "tier1", "tier2", "tier3"]).optional(),
+  showInheritancePrefix: z.boolean().optional(),
 });
 
 type PricingFormValues = z.infer<typeof pricingFormSchema>;
@@ -180,10 +182,22 @@ export default function Pricing({ embedded = false }: { embedded?: boolean } = {
   const [activeTab, setActiveTab] = useState("recurring_service");
   const [pricingDialogOpen, setPricingDialogOpen] = useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
+  const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
 
   const { data: pricingItems, isLoading: pricingLoading } = useQuery<ServicePricingItem[]>({
     queryKey: ["/api/pricing"],
   });
+
+  // Tier labels for the package "Quote tier" selector — operator's configured
+  // names, falling back to Good/Better/Best when unset.
+  const { data: tierNamesConfig } = useQuery<{
+    tierNames?: { tier1: string; tier2: string; tier3: string };
+  }>({ queryKey: ["/api/pricing-config"] });
+  const tierSlotLabels = {
+    tier1: tierNamesConfig?.tierNames?.tier1 || "Good",
+    tier2: tierNamesConfig?.tierNames?.tier2 || "Better",
+    tier3: tierNamesConfig?.tierNames?.tier3 || "Best",
+  };
 
   const { data: packages, isLoading: packagesLoading } = useQuery<ServicePackage[]>({
     queryKey: ["/api/packages"],
@@ -245,6 +259,8 @@ export default function Pricing({ embedded = false }: { embedded?: boolean } = {
       frequency: "weekly",
       basePrice: "",
       includedItemsText: "",
+      tierSlot: "none",
+      showInheritancePrefix: false,
     },
   });
 
@@ -300,24 +316,61 @@ export default function Pricing({ embedded = false }: { embedded?: boolean } = {
     },
   });
 
-  const createPackageMutation = useMutation({
+  const savePackageMutation = useMutation({
     mutationFn: async (data: PackageFormValues) => {
-      const { includedItemsText, ...rest } = data;
+      const { includedItemsText, tierSlot, showInheritancePrefix, ...rest } = data;
       const includedItems = includedItemsText
         ? includedItemsText.split("\n").filter((s) => s.trim())
         : [];
-      await apiRequest("POST", "/api/packages", { ...rest, includedItems });
+      const slot = tierSlot && tierSlot !== "none" ? tierSlot : null;
+      // Inheritance prefix only applies to tier2/tier3.
+      const inherit = slot === "tier2" || slot === "tier3" ? !!showInheritancePrefix : false;
+      const body = { ...rest, includedItems, tierSlot: slot, showInheritancePrefix: inherit };
+      if (editingPackageId) {
+        await apiRequest("PATCH", `/api/packages/${editingPackageId}`, body);
+      } else {
+        await apiRequest("POST", "/api/packages", body);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/packages"] });
-      toast({ title: "Package created" });
+      toast({ title: editingPackageId ? "Package updated" : "Package created" });
       setPackageDialogOpen(false);
+      setEditingPackageId(null);
       packageForm.reset();
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const openEditPackage = (pkg: ServicePackage) => {
+    setEditingPackageId(pkg.id);
+    packageForm.reset({
+      name: pkg.name,
+      description: pkg.description || "",
+      frequency: pkg.frequency,
+      basePrice: pkg.basePrice,
+      includedItemsText: ((pkg.includedItems as string[]) || []).join("\n"),
+      tierSlot: (pkg.tierSlot as "tier1" | "tier2" | "tier3" | null) ?? "none",
+      showInheritancePrefix: !!pkg.showInheritancePrefix,
+    });
+    setPackageDialogOpen(true);
+  };
+
+  const openCreatePackage = () => {
+    setEditingPackageId(null);
+    packageForm.reset({
+      name: "",
+      description: "",
+      frequency: "weekly",
+      basePrice: "",
+      includedItemsText: "",
+      tierSlot: "none",
+      showInheritancePrefix: false,
+    });
+    setPackageDialogOpen(true);
+  };
 
   const updatePackageMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<ServicePackage> }) => {
@@ -874,19 +927,29 @@ export default function Pricing({ embedded = false }: { embedded?: boolean } = {
             <h2 className="text-xl font-bold" data-testid="text-packages-heading">
               Service Packages
             </h2>
-            <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" data-testid="button-add-package">
-                  <Package className="mr-1 h-4 w-4" /> Add Package
-                </Button>
-              </DialogTrigger>
+            <Dialog
+              open={packageDialogOpen}
+              onOpenChange={(open) => {
+                setPackageDialogOpen(open);
+                if (!open) setEditingPackageId(null);
+              }}
+            >
+              <Button
+                variant="outline"
+                data-testid="button-add-package"
+                onClick={openCreatePackage}
+              >
+                <Package className="mr-1 h-4 w-4" /> Add Package
+              </Button>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Create Service Package</DialogTitle>
+                  <DialogTitle>
+                    {editingPackageId ? "Edit Service Package" : "Create Service Package"}
+                  </DialogTitle>
                 </DialogHeader>
                 <Form {...packageForm}>
                   <form
-                    onSubmit={packageForm.handleSubmit((v) => createPackageMutation.mutate(v))}
+                    onSubmit={packageForm.handleSubmit((v) => savePackageMutation.mutate(v))}
                     className="space-y-4"
                   >
                     <FormField
@@ -975,12 +1038,95 @@ export default function Pricing({ embedded = false }: { embedded?: boolean } = {
                         </FormItem>
                       )}
                     />
+                    {(() => {
+                      const selectedSlot = packageForm.watch("tierSlot") || "none";
+                      const slotConflict =
+                        selectedSlot !== "none"
+                          ? packages?.find(
+                              (p) => p.tierSlot === selectedSlot && p.id !== editingPackageId
+                            )
+                          : undefined;
+                      const isTier2or3 = selectedSlot === "tier2" || selectedSlot === "tier3";
+                      const prevLabel =
+                        selectedSlot === "tier3" ? tierSlotLabels.tier2 : tierSlotLabels.tier1;
+                      return (
+                        <>
+                          <FormField
+                            control={packageForm.control}
+                            name="tierSlot"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Quote tier</FormLabel>
+                                <Select
+                                  onValueChange={field.onChange}
+                                  value={field.value || "none"}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger data-testid="select-package-tier">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="none">None (standalone)</SelectItem>
+                                    <SelectItem value="tier1">{tierSlotLabels.tier1} (tier 1)</SelectItem>
+                                    <SelectItem value="tier2">{tierSlotLabels.tier2} (tier 2)</SelectItem>
+                                    <SelectItem value="tier3">{tierSlotLabels.tier3} (tier 3)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                  Assign this package to a residential quote tier so its included
+                                  items appear on that tier's proposal card.
+                                </p>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          {slotConflict && (
+                            <div
+                              className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2"
+                              data-testid="warning-tier-slot-occupied"
+                            >
+                              This slot is already assigned to "{slotConflict.name}". Unassign it
+                              from that package first to free this tier.
+                            </div>
+                          )}
+                          {isTier2or3 && (
+                            <FormField
+                              control={packageForm.control}
+                              name="showInheritancePrefix"
+                              render={({ field }) => (
+                                <FormItem className="flex flex-row items-center justify-between gap-3 rounded-lg border p-3">
+                                  <div className="space-y-0.5">
+                                    <FormLabel>Includes everything in {prevLabel}, plus</FormLabel>
+                                    <p className="text-xs text-muted-foreground">
+                                      Prepend "Everything in {prevLabel}, plus:" to this tier's
+                                      feature list on the proposal.
+                                    </p>
+                                  </div>
+                                  <FormControl>
+                                    <Switch
+                                      checked={!!field.value}
+                                      onCheckedChange={field.onChange}
+                                      data-testid="switch-package-inheritance"
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
                     <Button
                       type="submit"
-                      disabled={createPackageMutation.isPending}
+                      disabled={savePackageMutation.isPending}
                       data-testid="button-submit-package"
                     >
-                      {createPackageMutation.isPending ? "Creating..." : "Create Package"}
+                      {savePackageMutation.isPending
+                        ? "Saving..."
+                        : editingPackageId
+                          ? "Save Package"
+                          : "Create Package"}
                     </Button>
                   </form>
                 </Form>
@@ -1000,7 +1146,14 @@ export default function Pricing({ embedded = false }: { embedded?: boolean } = {
                 <Card key={pkg.id} data-testid={`package-card-${pkg.id}`}>
                   <CardHeader className="flex flex-row items-start justify-between gap-2">
                     <div className="space-y-1">
-                      <CardTitle className="text-lg">{pkg.name}</CardTitle>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        {pkg.name}
+                        {pkg.tierSlot && (
+                          <Badge variant="secondary" data-testid={`badge-package-tier-${pkg.id}`}>
+                            {tierSlotLabels[pkg.tierSlot as "tier1" | "tier2" | "tier3"]}
+                          </Badge>
+                        )}
+                      </CardTitle>
                       {pkg.description && (
                         <p className="text-sm text-muted-foreground">{pkg.description}</p>
                       )}
@@ -1034,14 +1187,24 @@ export default function Pricing({ embedded = false }: { embedded?: boolean } = {
                           {pkg.isActive ? "Active" : "Inactive"}
                         </span>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deletePackageMutation.mutate(pkg.id)}
-                        data-testid={`button-delete-package-${pkg.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditPackage(pkg)}
+                          data-testid={`button-edit-package-${pkg.id}`}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deletePackageMutation.mutate(pkg.id)}
+                          data-testid={`button-delete-package-${pkg.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

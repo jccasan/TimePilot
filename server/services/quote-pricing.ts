@@ -56,6 +56,42 @@ export interface TierPricing {
   breakdown: Record<string, any>;
 }
 
+/** A custom package assigned to a residential quote tier slot. */
+export interface TierPackageInfo {
+  description?: string | null;
+  includedItems: string[];
+  showInheritancePrefix?: boolean | null;
+}
+
+export interface TierPackages {
+  tier1?: TierPackageInfo | null;
+  tier2?: TierPackageInfo | null;
+  tier3?: TierPackageInfo | null;
+}
+
+/**
+ * Resolve the feature list + description shown for a tier card.
+ * - If a package is assigned to the slot, use its includedItems (and optionally
+ *   prepend the inheritance line) and its description.
+ * - Otherwise fall back to the template features with no description.
+ * `inheritanceLine` is null for tier1 (no inheritance) and the
+ * "Everything in <prev>, plus:" string for tier2/tier3.
+ */
+function resolveTierContent(
+  pkg: TierPackageInfo | null | undefined,
+  templateFeatures: string[],
+  inheritanceLine: string | null
+): { features: string[]; description: string | null } {
+  if (!pkg) {
+    return { features: templateFeatures, description: null };
+  }
+  const features =
+    inheritanceLine && pkg.showInheritancePrefix
+      ? [inheritanceLine, ...pkg.includedItems]
+      : [...pkg.includedItems];
+  return { features, description: pkg.description ?? null };
+}
+
 type YardSizeTier = { name?: string; upToAcres: number | null; surcharge: number };
 
 function getAcreageSurcharge(
@@ -424,9 +460,26 @@ export function renderResidentialProposalHtml(data: {
     monthly: { perVisit: number; monthlyEstimate: number; acceptUrl: string };
   };
   tierNames?: TierNames | null;
+  tierPackages?: TierPackages | null;
 }): string {
   const { pricing } = data;
   const tierLabels = { ...DEFAULT_TIER_NAMES, ...(data.tierNames || {}) };
+
+  // Resolve each tier's feature list + description: a package assigned to the
+  // slot overrides the template text; otherwise fall back to the template
+  // exactly as before. tier2/tier3 packages may prepend an inheritance line.
+  const tp = data.tierPackages || {};
+  const tier1Content = resolveTierContent(tp.tier1, pricing.essentialFeatures, null);
+  const tier2Content = resolveTierContent(
+    tp.tier2,
+    pricing.premiumFeatures,
+    `Everything in ${tierLabels.tier1}, plus:`
+  );
+  const tier3Content = resolveTierContent(
+    tp.tier3,
+    pricing.deluxeFeatures,
+    `Everything in ${tierLabels.tier2}, plus:`
+  );
   const e = {
     companyName: escapeHtml(data.companyName),
     contactName: escapeHtml(data.contactName),
@@ -473,14 +526,16 @@ export function renderResidentialProposalHtml(data: {
     price: number,
     features: string[],
     color: string,
-    recommended?: boolean
+    recommended?: boolean,
+    description?: string | null
   ) {
     return `
       <div class="tier-card" style="flex: 1; min-width: 200px; border: 2px solid ${recommended ? color : "#e2e8f0"}; border-radius: 12px; overflow: hidden; ${recommended ? "box-shadow: 0 4px 12px rgba(0,0,0,0.1);" : ""}">
         ${recommended ? `<div style="background-color: ${color}; color: white; text-align: center; padding: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Most Popular</div>` : ""}
         <div style="padding: 20px; text-align: center;">
           <h3 style="margin: 0 0 4px; font-size: 18px; color: #1e293b;">${escapeHtml(name)}</h3>
-          <p style="margin: 0 0 12px; font-size: 32px; font-weight: 700; color: ${color};">$${price.toFixed(2)}<span style="font-size: 14px; font-weight: 400; color: #64748b;">/visit</span></p>
+          <p style="margin: 0 0 ${description ? "8" : "12"}px; font-size: 32px; font-weight: 700; color: ${color};">$${price.toFixed(2)}<span style="font-size: 14px; font-weight: 400; color: #64748b;">/visit</span></p>
+          ${description ? `<p style="margin: 0 0 12px; font-size: 13px; color: #64748b; text-align: center;">${escapeHtml(description)}</p>` : ""}
           <ul style="list-style: none; padding: 0; margin: 0; text-align: left;">
             ${features.map((f) => `<li style="padding: 6px 0; font-size: 13px; color: #475569; border-bottom: 1px solid #f1f5f9;">✓ ${escapeHtml(f)}</li>`).join("")}
           </ul>
@@ -564,9 +619,9 @@ export function renderResidentialProposalHtml(data: {
         <p style="margin: 0 0 24px; font-size: 14px; color: #475569;">Service Frequency: <strong>${frequencyLabel}</strong></p>
         <h2 style="margin: 0 0 16px; font-size: 18px; color: #1e293b; text-align: center;">Choose Your Service Level</h2>
         <div class="tier-cards" style="display: flex; gap: 16px; flex-wrap: wrap;">
-          ${tierCard(tierLabels.tier1, pricing.essential, pricing.essentialFeatures, "#64748b")}
-          ${tierCard(tierLabels.tier2, pricing.premium, pricing.premiumFeatures, "#1a7a4c", true)}
-          ${tierCard(tierLabels.tier3, pricing.deluxe, pricing.deluxeFeatures, "#7c3aed")}
+          ${tierCard(tierLabels.tier1, pricing.essential, tier1Content.features, "#64748b", false, tier1Content.description)}
+          ${tierCard(tierLabels.tier2, pricing.premium, tier2Content.features, "#1a7a4c", true, tier2Content.description)}
+          ${tierCard(tierLabels.tier3, pricing.deluxe, tier3Content.features, "#7c3aed", false, tier3Content.description)}
         </div>`;
 
   return `

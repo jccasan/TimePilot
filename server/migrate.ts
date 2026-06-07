@@ -1775,6 +1775,21 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] charge_timing beginning_of_month default + guard column ensured");
 
+    // ── Custom packages wired to quote tiers ──────────────────────────────────
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'package_tier_slot') THEN
+          CREATE TYPE package_tier_slot AS ENUM ('tier1', 'tier2', 'tier3');
+        END IF;
+      END $$;
+    `);
+    await client.query(`
+      ALTER TABLE service_packages
+        ADD COLUMN IF NOT EXISTS tier_slot package_tier_slot,
+        ADD COLUMN IF NOT EXISTS show_inheritance_prefix BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    console.log("[Migration] service_packages tier_slot + show_inheritance_prefix ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

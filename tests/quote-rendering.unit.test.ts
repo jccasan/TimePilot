@@ -25,6 +25,57 @@ const baseData = {
   pricing: basePricing,
 };
 
+describe("renderResidentialProposalHtml — packages wired to tiers", () => {
+  const tierPackages = {
+    tier1: { description: "Our starter plan", includedItems: ["Weekly scoop", "Photo confirmation"] },
+    tier2: { description: null, includedItems: ["Deodorizing treatment"], showInheritancePrefix: true },
+    tier3: {
+      description: null,
+      includedItems: ["Monthly yard report", "Priority scheduling"],
+      showInheritancePrefix: true,
+    },
+  };
+
+  it("uses assigned package features and inheritance prefixes", () => {
+    const html = renderResidentialProposalHtml({
+      ...baseData,
+      tierNames: { tier1: "Good", tier2: "Better", tier3: "Best" },
+      tierPackages,
+    });
+    // tier1 = package features, no prefix
+    expect(html).toContain("Photo confirmation");
+    expect(html).toContain("Our starter plan");
+    // tier2 = "Everything in Good, plus:" + its items
+    expect(html).toContain("Everything in Good, plus:");
+    expect(html).toContain("Deodorizing treatment");
+    // tier3 = "Everything in Better, plus:" + its items
+    expect(html).toContain("Everything in Better, plus:");
+    expect(html).toContain("Monthly yard report");
+    // template text for those tiers is gone
+    expect(html).not.toContain("Gate latch check");
+  });
+
+  it("omits the inheritance prefix when showInheritancePrefix is false", () => {
+    const html = renderResidentialProposalHtml({
+      ...baseData,
+      tierNames: { tier1: "Good", tier2: "Better", tier3: "Best" },
+      tierPackages: {
+        ...tierPackages,
+        tier2: { description: null, includedItems: ["Deodorizing treatment"], showInheritancePrefix: false },
+      },
+    });
+    expect(html).toContain("Deodorizing treatment");
+    expect(html).not.toContain("Everything in Good, plus:");
+  });
+
+  it("falls back to template features when no packages are assigned", () => {
+    const html = renderResidentialProposalHtml({ ...baseData });
+    expect(html).toContain("Gate latch check");
+    expect(html).toContain("Deodorizer");
+    expect(html).not.toContain("Photo confirmation");
+  });
+});
+
 describe("renderResidentialProposalHtml — logo rendering", () => {
   it("renders company logo img tag when companyLogo is provided", () => {
     const html = renderResidentialProposalHtml({

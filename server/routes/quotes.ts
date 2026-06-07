@@ -19,10 +19,31 @@ import {
   renderQuoteSmsText,
   type ResidentialQuoteInput,
   type CommercialQuoteInput,
+  type TierPackages,
   calculateResidentialPricing,
 } from "../services/quote-pricing";
 import { generateQuotePdf, generateQuoteDocx } from "../services/quote-document";
 import { type InsertQuote, type TierNames } from "@shared/schema";
+
+/**
+ * Build the residential tier→package map for a company, used to override the
+ * proposal's tier feature lists with operator-defined package inclusions.
+ * Returns null-valued slots for unassigned tiers (template fallback applies).
+ */
+async function buildTierPackages(companyId: string): Promise<TierPackages> {
+  const pkgs = await storage.getServicePackages(companyId);
+  const bySlot = (slot: "tier1" | "tier2" | "tier3") => {
+    const pk = pkgs.find((p) => p.tierSlot === slot && p.isActive);
+    return pk
+      ? {
+          description: pk.description,
+          includedItems: pk.includedItems ?? [],
+          showInheritancePrefix: pk.showInheritancePrefix,
+        }
+      : null;
+  };
+  return { tier1: bySlot("tier1"), tier2: bySlot("tier2"), tier3: bySlot("tier3") };
+}
 
 import {
   isAuthenticated,
@@ -965,6 +986,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         tierNames:
           (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ??
           null,
+        tierPackages: await buildTierPackages(companyId),
       };
 
       const html =
@@ -1101,6 +1123,7 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
         tierNames:
           (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ??
           null,
+        tierPackages: await buildTierPackages(companyId),
       };
 
       const html =
