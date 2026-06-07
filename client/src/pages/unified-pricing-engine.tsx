@@ -2569,6 +2569,9 @@ function PricingEngineTab() {
         basePrices: newBasePrices,
         perDogRule,
         yardSizeTiers: newTiers,
+        // PUT replaces pricingRules wholesale; preserve the frequency toggles so
+        // saving from this page doesn't revert settings made elsewhere.
+        enabledFrequencies: pricingRules.enabledFrequencies,
       });
     },
     onSuccess: () => {
@@ -3259,6 +3262,7 @@ function MyPricingTab() {
           },
           perDogRule,
           yardSizeTiers: normalizedTiers,
+          enabledFrequencies: pricingRules.enabledFrequencies,
           firstTimeCleanupConfig: {
             ...existingCleanup,
             baseAmount,
@@ -3358,6 +3362,7 @@ function MyPricingTab() {
         basePrices: newBasePrices,
         perDogRule,
         yardSizeTiers: normalizedTiers,
+        enabledFrequencies: pricingRules.enabledFrequencies,
         firstTimeCleanupConfig: newCleanupConfig,
       });
     },
