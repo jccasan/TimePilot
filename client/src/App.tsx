@@ -62,8 +62,7 @@ const PortalCustomer = lazy(() => import("@/pages/portal-customer"));
 const PortalQuoteView = lazy(() => import("@/pages/portal-quote-view"));
 const PortalQuoteAccepted = lazy(() => import("@/pages/portal-quote-accepted"));
 const InvoicePayPage = lazy(() => import("@/pages/invoice-pay"));
-const Pricing = lazy(() => import("@/pages/pricing"));
-const UnifiedPricingEngine = lazy(() => import("@/pages/unified-pricing-engine"));
+const PricingAndBilling = lazy(() => import("@/pages/pricing-and-billing"));
 const Communications = lazy(() => import("@/pages/communications"));
 const Reports = lazy(() => import("@/pages/reports"));
 const AdminDashboard = lazy(() => import("@/pages/admin-dashboard"));
@@ -172,14 +171,23 @@ function Router() {
         </Route>
         <Route path="/api-keys" component={ApiKeysPage} />
         <Route path="/webhooks" component={WebhooksPage} />
-        <Route path="/pricing">
+        <Route path="/pricing-settings">
           <SubscriptionGate featureName="Pricing">
-            <UnifiedPricingEngine />
+            <PricingAndBilling />
           </SubscriptionGate>
         </Route>
-        <Route path="/pricing/catalog" component={Pricing} />
+        {/* Consolidated into /pricing-settings — redirect old routes to the right anchor */}
+        <Route path="/pricing">
+          <Redirect to="/pricing-settings#packages" />
+        </Route>
+        <Route path="/pricing/catalog">
+          <Redirect to="/pricing-settings#packages" />
+        </Route>
+        <Route path="/pricing-engine">
+          <Redirect to="/pricing-settings#cost-model" />
+        </Route>
         <Route path="/pricing-calculator">
-          <Redirect to="/pricing" />
+          <Redirect to="/pricing-settings#packages" />
         </Route>
         <Route path="/business-overview">
           <SubscriptionGate featureName="Business Overview">
@@ -212,10 +220,10 @@ function Router() {
           </SubscriptionGate>
         </Route>
         <Route path="/ai-pricing-optimizer">
-          <Redirect to="/pricing?tab=simulator" />
+          <Redirect to="/pricing-settings#cost-model" />
         </Route>
         <Route path="/overhead-costs">
-          <Redirect to="/pricing" />
+          <Redirect to="/pricing-settings#cost-model" />
         </Route>
         <Route path="/communications">
           <SubscriptionGate featureName="Messages">

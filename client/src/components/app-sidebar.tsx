@@ -183,8 +183,8 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
         requiresSubscription: true,
       },
       {
-        title: "Pricing",
-        url: "/pricing",
+        title: "Pricing and billing",
+        url: "/pricing-settings",
         icon: Calculator,
         requiresSubscription: true,
       },
@@ -292,7 +292,6 @@ const menuSections: { label: string; key: string; items: MenuItem[] }[] = [
     key: "setup",
     items: [
       { title: "Settings", url: "/settings", icon: Settings },
-      { title: "Service Catalog", url: "/pricing/catalog", icon: ClipboardList },
       { title: "Automations", url: "/automation", icon: Zap, requiresSubscription: true },
       { title: "Integrations", url: "/integrations", icon: Plug, requiresSubscription: true },
       { title: "Import Data", url: "/migration", icon: Database, requiresSubscription: true },
