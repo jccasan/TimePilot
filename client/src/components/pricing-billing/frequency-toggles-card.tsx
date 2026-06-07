@@ -5,6 +5,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Save, CheckCircle2 } from "lucide-react";
 import { type PricingConfig } from "@shared/schema";
 
 /**
@@ -12,39 +14,59 @@ import { type PricingConfig } from "@shared/schema";
  * pricing.tsx's PricingRulesPanel. Persists only pricingRules.enabledFrequencies
  * via a dedicated endpoint that deep-merges server-side, so we never resend (and
  * risk clobbering) the rest of pricingRules.
+ *
+ * Saving is explicit (Save button) with a visible saved/unsaved indicator so the
+ * operator can confirm the write completed.
  */
 export function FrequencyTogglesCard() {
   const { toast } = useToast();
   const { data: config } = useQuery<PricingConfig>({ queryKey: ["/api/pricing-config"] });
 
+  const serverTwiceWeekly = config?.pricingRules?.enabledFrequencies?.twiceWeekly !== false;
+  const serverMonthly = config?.pricingRules?.enabledFrequencies?.monthly === true;
+
   const [twiceWeekly, setTwiceWeekly] = useState(true);
   const [monthly, setMonthly] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [savedOnce, setSavedOnce] = useState(false);
 
+  // Sync from the server only when there are no unsaved local edits, so a
+  // background refetch can't discard a toggle the operator just flipped.
   useEffect(() => {
-    if (config?.pricingRules) {
-      setTwiceWeekly(config.pricingRules.enabledFrequencies?.twiceWeekly !== false);
-      setMonthly(config.pricingRules.enabledFrequencies?.monthly === true);
+    if (config?.pricingRules && !dirty) {
+      setTwiceWeekly(serverTwiceWeekly);
+      setMonthly(serverMonthly);
     }
-  }, [config]);
+  }, [config, dirty, serverTwiceWeekly, serverMonthly]);
 
   const save = useMutation({
-    mutationFn: async (next: { twiceWeekly: boolean; monthly: boolean }) => {
-      await apiRequest("PATCH", "/api/pricing-config/enabled-frequencies", next);
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", "/api/pricing-config/enabled-frequencies", {
+        twiceWeekly,
+        monthly,
+      });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
-      toast({ title: "Frequencies updated" });
+      setDirty(false);
+      setSavedOnce(true);
+      toast({ title: "Frequencies saved" });
     },
     onError: (err: Error) => {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({
+        title: "Couldn't save frequencies",
+        description: err.message,
+        variant: "destructive",
+      });
     },
   });
 
-  const update = (key: "twiceWeekly" | "monthly", value: boolean) => {
-    const next = { twiceWeekly, monthly, [key]: value };
+  const toggle = (key: "twiceWeekly" | "monthly", value: boolean) => {
     if (key === "twiceWeekly") setTwiceWeekly(value);
     else setMonthly(value);
-    save.mutate(next);
+    setDirty(true);
+    setSavedOnce(false);
   };
 
   return (
@@ -64,8 +86,7 @@ export function FrequencyTogglesCard() {
           </div>
           <Switch
             checked={twiceWeekly}
-            onCheckedChange={(c) => update("twiceWeekly", !!c)}
-            disabled={save.isPending}
+            onCheckedChange={(c) => toggle("twiceWeekly", !!c)}
             data-testid="switch-enable-twice-weekly"
           />
         </div>
@@ -76,10 +97,30 @@ export function FrequencyTogglesCard() {
           </div>
           <Switch
             checked={monthly}
-            onCheckedChange={(c) => update("monthly", !!c)}
-            disabled={save.isPending}
+            onCheckedChange={(c) => toggle("monthly", !!c)}
             data-testid="switch-enable-monthly"
           />
+        </div>
+
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <span className="text-xs" data-testid="text-frequency-save-status">
+            {dirty ? (
+              <span className="text-amber-600 dark:text-amber-400">Unsaved changes</span>
+            ) : savedOnce ? (
+              <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Saved
+              </span>
+            ) : null}
+          </span>
+          <Button
+            size="sm"
+            onClick={() => save.mutate()}
+            disabled={save.isPending || !dirty}
+            data-testid="button-save-frequencies"
+          >
+            <Save className="h-3.5 w-3.5 mr-1" />
+            {save.isPending ? "Saving..." : "Save frequencies"}
+          </Button>
         </div>
       </CardContent>
     </Card>
