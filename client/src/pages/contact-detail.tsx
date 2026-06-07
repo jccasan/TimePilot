@@ -4644,7 +4644,7 @@ function useInlinePriceCalc(
     const body = {
       yardSizeAcres,
       dogCount: selectedProperty.numberOfDogs || 1,
-      serviceFrequency: frequency === "monthly" ? "onetime" : frequency,
+      serviceFrequency: frequency,
       yardDifficulty: selectedProperty.yardDifficulty || "flat",
       distanceFromNearestStopMiles: 1,
       currentPriceCents,
@@ -4906,7 +4906,7 @@ function ServicePlansCard({
       const categoryMap: Record<string, string> = {
         weekly: "recurring_service",
         biweekly: "recurring_service",
-        monthly: "one_time_service",
+        monthly: "recurring_service",
         onetime: "one_time_service",
       };
       const cat = categoryMap[freq] || "recurring_service";
