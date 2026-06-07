@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
 import { useAddressLabels } from "@/hooks/use-address-labels";
 import type { PricingConfig, PricingRulesConfig, YardSizeTierConfig } from "@shared/schema";
-import { DEFAULT_PRICING_CONFIG, DEFAULT_PRICING_RULES } from "@shared/schema";
+import { DEFAULT_PRICING_CONFIG, DEFAULT_PRICING_RULES, DEFAULT_TIER_NAMES } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -3118,6 +3118,15 @@ function MyPricingTab() {
 
   const [isDirty, setIsDirty] = useState(false);
 
+  // ── Proposal tier names (residential quotes) ─────────────────────────────────
+  // Stored empty when unset so the default shows as placeholder text.
+  const [tierNames, setTierNames] = useState<{ tier1: string; tier2: string; tier3: string }>({
+    tier1: "",
+    tier2: "",
+    tier3: "",
+  });
+  const [tierNamesDirty, setTierNamesDirty] = useState(false);
+
   // ── Sync from server on first load ───────────────────────────────────────────
   // Wait for both pricingConfigData AND companyData to be resolved before syncing
   // so tier labels from yardSizeTierConfig are available on the first hydration.
@@ -3143,6 +3152,11 @@ function MyPricingTab() {
       });
       setPerDogRule(rules.perDogRule ?? DEFAULT_PRICING_RULES.perDogRule);
       setLocalTiers(buildLocalTiers(rules, companyData?.yardSizeTierConfig));
+      setTierNames({
+        tier1: pricingConfigData.tierNames?.tier1 ?? "",
+        tier2: pricingConfigData.tierNames?.tier2 ?? "",
+        tier3: pricingConfigData.tierNames?.tier3 ?? "",
+      });
       const cleanup = rules.firstTimeCleanupConfig;
       if (cleanup) {
         setCleanupMode(cleanup.firstTimeCleanupMode ?? "fixed");
@@ -3371,6 +3385,29 @@ function MyPricingTab() {
       syncedRef.current = false;
       setIsDirty(false);
       toast({ title: "Prices saved", description: "Your pricing rules have been updated." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const saveTierNamesMutation = useMutation({
+    mutationFn: async () => {
+      // Empty fields fall back to the defaults so the saved config is complete.
+      const payload = {
+        tierNames: {
+          tier1: tierNames.tier1.trim() || DEFAULT_TIER_NAMES.tier1,
+          tier2: tierNames.tier2.trim() || DEFAULT_TIER_NAMES.tier2,
+          tier3: tierNames.tier3.trim() || DEFAULT_TIER_NAMES.tier3,
+        },
+      };
+      await apiRequest("PATCH", "/api/pricing-config", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
+      syncedRef.current = false;
+      setTierNamesDirty(false);
+      toast({ title: "Tier names saved" });
     },
     onError: (err: Error) => {
       toast({ title: "Save failed", description: err.message, variant: "destructive" });
@@ -3804,6 +3841,53 @@ function MyPricingTab() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Proposal tier names (residential quotes) */}
+      <Card data-testid="card-tier-names">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Proposal Tier Names</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Customize the three service tier labels shown on residential quote proposals (e.g.
+            Good / Better / Best, or Bronze / Silver / Gold). Leave blank to use the defaults.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {(
+              [
+                { key: "tier1", label: "Tier 1", placeholder: DEFAULT_TIER_NAMES.tier1 },
+                { key: "tier2", label: "Tier 2", placeholder: DEFAULT_TIER_NAMES.tier2 },
+                { key: "tier3", label: "Tier 3", placeholder: DEFAULT_TIER_NAMES.tier3 },
+              ] as const
+            ).map(({ key, label, placeholder }) => (
+              <div key={key} className="space-y-1">
+                <Label className="text-xs">{label}</Label>
+                <Input
+                  value={tierNames[key]}
+                  placeholder={placeholder}
+                  onChange={(e) => {
+                    setTierNames((prev) => ({ ...prev, [key]: e.target.value }));
+                    setTierNamesDirty(true);
+                  }}
+                  className="h-8 text-sm"
+                  data-testid={`input-tier-name-${key}`}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={() => saveTierNamesMutation.mutate()}
+              disabled={saveTierNamesMutation.isPending || !tierNamesDirty}
+              data-testid="button-save-tier-names"
+            >
+              <Save className="h-3.5 w-3.5 mr-1" />
+              {saveTierNamesMutation.isPending ? "Saving..." : "Save Tier Names"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -91,6 +91,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     companyName: string;
     companyCurrency: string;
     companyLogoUrl?: string;
+    tierNames?: { tier1: string; tier2: string; tier3: string };
   }>({
     queryKey: ["/api/portal/quotes", quoteId, token],
     queryFn: async () => {
@@ -202,6 +203,11 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
   }
 
   const { quote, companyName, companyLogoUrl } = data;
+  // Residential proposals use the company's configured tier labels; commercial
+  // quotes keep the fixed defaults.
+  const DEFAULT_TIER_LABELS = { tier1: "Essential", tier2: "Property Care", tier3: "Deluxe" };
+  const tierLabels =
+    quote.type === "residential" ? (data.tierNames ?? DEFAULT_TIER_LABELS) : DEFAULT_TIER_LABELS;
   const approvalEnabled = quote.approvalEnabled !== false;
 
   if (quote.status === "accepted") {
@@ -277,7 +283,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
   const tiers = [
     {
       key: "essential",
-      name: "Essential",
+      name: tierLabels.tier1,
       price: essentialPrice,
       features: quote.essentialFeatures || [],
       borderColor: "border-slate-400",
@@ -286,7 +292,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     },
     {
       key: "premium",
-      name: "Property Care",
+      name: tierLabels.tier2,
       price: premiumPrice,
       features: quote.premiumFeatures || [],
       borderColor: "border-green-500",
@@ -296,7 +302,7 @@ export default function PortalQuoteView({ quoteId, token }: { quoteId: string; t
     },
     {
       key: "deluxe",
-      name: "Deluxe",
+      name: tierLabels.tier3,
       price: deluxePrice,
       features: quote.deluxeFeatures || [],
       borderColor: "border-violet-500",

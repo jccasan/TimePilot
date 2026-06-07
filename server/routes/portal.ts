@@ -11,6 +11,8 @@ import {
   type InsertProperty,
   type Visit,
   type InvoiceLineItem,
+  type TierNames,
+  DEFAULT_TIER_NAMES,
 } from "@shared/schema";
 import { sendEmail } from "../services/email";
 import {
@@ -1198,11 +1200,19 @@ export async function registerPortalRoutes(app: Express): Promise<void> {
           ? company.logoUrl
           : `${getBaseUrl(req)}${company.logoUrl}`
         : undefined;
+      // Residential proposals use the company's configured tier labels; the
+      // client applies these only for residential quotes.
+      const tierNames: TierNames = {
+        ...DEFAULT_TIER_NAMES,
+        ...((company?.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ||
+          {}),
+      };
       res.json({
         quote: safeQuote,
         companyName,
         companyCurrency: company?.currency || "usd",
         companyLogoUrl: logoUrl,
+        tierNames,
       });
     } catch (err: unknown) {
       console.error("Error fetching portal quote:", err);

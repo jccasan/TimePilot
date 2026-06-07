@@ -207,8 +207,25 @@ export const DEFAULT_PRICING_RULES: PricingRulesConfig = {
   },
 };
 
+export interface TierNames {
+  tier1: string;
+  tier2: string;
+  tier3: string;
+}
+
+// Default residential proposal tier labels. These match the labels the app has
+// always rendered, so companies without a configured tierNames see no change.
+export const DEFAULT_TIER_NAMES: TierNames = {
+  tier1: "Essential",
+  tier2: "Property Care",
+  tier3: "Deluxe",
+};
+
 export interface PricingConfig {
   pricingRules?: PricingRulesConfig;
+  // Operator-configurable labels for the three residential quote tiers.
+  // Optional + backward-compatible (JSONB), falls back to DEFAULT_TIER_NAMES.
+  tierNames?: TierNames;
   techHourlyWageCents: number;
   burdenMultiplier: number;
   averageGasPriceCentsPerGallon: number;
@@ -247,6 +264,8 @@ export interface PricingConfig {
 }
 
 export const DEFAULT_PRICING_CONFIG: PricingConfig = {
+  // tierNames intentionally omitted: left unset so the settings UI can show the
+  // defaults as placeholders. Render sites fall back to DEFAULT_TIER_NAMES.
   techHourlyWageCents: 1500,
   burdenMultiplier: 1.4,
   averageGasPriceCentsPerGallon: 350,

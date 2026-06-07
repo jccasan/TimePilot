@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderResidentialProposalHtml } from "../server/services/quote-pricing";
+import {
+  renderResidentialProposalHtml,
+  renderQuoteSmsText,
+  calculateResidentialPricing,
+} from "../server/services/quote-pricing";
 import { generateQuotePdf } from "../server/services/quote-document";
 
 const basePricing = {
@@ -93,6 +97,98 @@ describe("renderResidentialProposalHtml — line-items vs tier-card layout", () 
       ],
     });
     expect(html).toContain("$40.00");
+  });
+});
+
+describe("renderResidentialProposalHtml — configurable tier names", () => {
+  it("uses the company's configured tier names on residential tier cards", () => {
+    const html = renderResidentialProposalHtml({
+      ...baseData,
+      tierNames: { tier1: "Good", tier2: "Better", tier3: "Best" },
+    });
+    expect(html).toContain("Good");
+    expect(html).toContain("Better");
+    expect(html).toContain("Best");
+    expect(html).not.toContain("Essential");
+    expect(html).not.toContain("Property Care");
+    expect(html).not.toContain("Deluxe");
+  });
+
+  it("falls back to default tier names when tierNames is omitted", () => {
+    const html = renderResidentialProposalHtml({ ...baseData });
+    expect(html).toContain("Essential");
+    expect(html).toContain("Property Care");
+    expect(html).toContain("Deluxe");
+  });
+
+  it("falls back to defaults for any individual tier left unset", () => {
+    const html = renderResidentialProposalHtml({
+      ...baseData,
+      // @ts-expect-error intentionally partial to verify per-field fallback
+      tierNames: { tier1: "Bronze" },
+    });
+    expect(html).toContain("Bronze");
+    expect(html).toContain("Property Care");
+    expect(html).toContain("Deluxe");
+  });
+});
+
+describe("renderQuoteSmsText — configurable tier names", () => {
+  it("uses configured tier names for residential quotes", () => {
+    const text = renderQuoteSmsText({
+      companyName: "Acme",
+      contactName: "Jane",
+      quoteNumber: "Q-1",
+      pricing: basePricing,
+      type: "residential",
+      frequency: "weekly",
+      tierNames: { tier1: "Good", tier2: "Better", tier3: "Best" },
+    });
+    expect(text).toContain("Good: $25.00/visit");
+    expect(text).toContain("Better: $35.00/visit");
+    expect(text).toContain("Best: $45.00/visit");
+  });
+
+  it("ignores tier names for commercial quotes (keeps defaults)", () => {
+    const text = renderQuoteSmsText({
+      companyName: "Acme",
+      contactName: "Jane",
+      quoteNumber: "Q-1",
+      pricing: basePricing,
+      type: "commercial",
+      frequency: "weekly",
+      tierNames: { tier1: "Good", tier2: "Better", tier3: "Best" },
+    });
+    expect(text).toContain("Essential: $25.00/visit");
+    expect(text).toContain("Property Care: $35.00/visit");
+    expect(text).toContain("Deluxe: $45.00/visit");
+    expect(text).not.toContain("Good:");
+  });
+});
+
+describe("calculateResidentialPricing — tier names in feature copy", () => {
+  const input = {
+    type: "residential" as const,
+    dogCount: 1,
+    yardSize: "Standard",
+    frequency: "weekly" as const,
+    isFirstTime: false,
+  };
+
+  it("substitutes the configured tier1 / tier2 names into 'Everything in X, plus:'", () => {
+    const pricing = calculateResidentialPricing(input, null, null, null, {
+      tier1: "Good",
+      tier2: "Better",
+      tier3: "Best",
+    });
+    expect(pricing.premiumFeatures[0]).toBe("Everything in Good, plus:");
+    expect(pricing.deluxeFeatures[0]).toBe("Everything in Better, plus:");
+  });
+
+  it("uses default tier names in feature copy when none configured", () => {
+    const pricing = calculateResidentialPricing(input);
+    expect(pricing.premiumFeatures[0]).toBe("Everything in Essential, plus:");
+    expect(pricing.deluxeFeatures[0]).toBe("Everything in Property Care, plus:");
   });
 });
 

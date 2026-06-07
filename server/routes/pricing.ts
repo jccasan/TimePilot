@@ -667,6 +667,13 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
 
   const pricingConfigSchema = z.object({
     pricingRules: pricingRulesSchema,
+    tierNames: z
+      .object({
+        tier1: z.string(),
+        tier2: z.string(),
+        tier3: z.string(),
+      })
+      .optional(),
     techHourlyWageCents: z.number().min(0).optional(),
     burdenMultiplier: z.number().min(1).max(5).optional(),
     averageGasPriceCentsPerGallon: z.number().min(0).optional(),

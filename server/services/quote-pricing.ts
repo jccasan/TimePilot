@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { type QuoteDefaults, DEFAULT_QUOTE_DEFAULTS } from "@shared/schema";
+import {
+  type QuoteDefaults,
+  DEFAULT_QUOTE_DEFAULTS,
+  type TierNames,
+  DEFAULT_TIER_NAMES,
+} from "@shared/schema";
 
 function resolveImageUrl(url: string, baseUrl?: string): string {
   if (/^https?:\/\//i.test(url)) return url;
@@ -131,9 +136,11 @@ export function calculateResidentialPricing(
   input: ResidentialQuoteInput,
   config?: Partial<QuoteDefaults> | null,
   yardSizeTiers?: YardSizeTier[] | null,
-  firstTimeCleanupConfig?: FirstTimeCleanupConfig | null
+  firstTimeCleanupConfig?: FirstTimeCleanupConfig | null,
+  tierNames?: TierNames | null
 ): TierPricing {
   const d = { ...DEFAULT_QUOTE_DEFAULTS, ...(config || {}) };
+  const tn = { ...DEFAULT_TIER_NAMES, ...(tierNames || {}) };
 
   let basePerVisit = d.residentialBaseRate;
   const additionalDogs = Math.max(input.dogCount - 1, 0);
@@ -213,13 +220,13 @@ export function calculateResidentialPricing(
       "Service confirmation notification",
     ],
     premiumFeatures: [
-      "Everything in Essential, plus:",
+      `Everything in ${tn.tier1}, plus:`,
       `Yard deodorizer treatment (+$${d.premiumDeodorizerPrice}/visit)`,
       `Gate & fence safety check (+$${d.premiumGateCheckPrice}/visit)`,
       "Service completion photo",
     ],
     deluxeFeatures: [
-      "Everything in Property Care, plus:",
+      `Everything in ${tn.tier2}, plus:`,
       `Bi-weekly sanitization spray (+$${d.deluxeSanitizationPrice}/visit)`,
       `Priority scheduling (+$${d.deluxePriorityPrice}/visit)`,
       "Before & after photos",
@@ -378,11 +385,20 @@ export function calculateQuotePricing(
   input: QuoteInput,
   config?: Partial<QuoteDefaults> | null,
   yardSizeTiers?: YardSizeTier[] | null,
-  firstTimeCleanupConfig?: FirstTimeCleanupConfig | null
+  firstTimeCleanupConfig?: FirstTimeCleanupConfig | null,
+  tierNames?: TierNames | null
 ): TierPricing {
   if (input.type === "residential") {
-    return calculateResidentialPricing(input, config, yardSizeTiers, firstTimeCleanupConfig);
+    return calculateResidentialPricing(
+      input,
+      config,
+      yardSizeTiers,
+      firstTimeCleanupConfig,
+      tierNames
+    );
   }
+  // Commercial quotes intentionally keep their fixed tier labels and are not
+  // affected by the residential tierNames configuration.
   return calculateCommercialPricing(input, config);
 }
 
@@ -407,8 +423,10 @@ export function renderResidentialProposalHtml(data: {
     biweekly: { perVisit: number; monthlyEstimate: number; acceptUrl: string };
     monthly: { perVisit: number; monthlyEstimate: number; acceptUrl: string };
   };
+  tierNames?: TierNames | null;
 }): string {
   const { pricing } = data;
+  const tierLabels = { ...DEFAULT_TIER_NAMES, ...(data.tierNames || {}) };
   const e = {
     companyName: escapeHtml(data.companyName),
     contactName: escapeHtml(data.contactName),
@@ -546,9 +564,9 @@ export function renderResidentialProposalHtml(data: {
         <p style="margin: 0 0 24px; font-size: 14px; color: #475569;">Service Frequency: <strong>${frequencyLabel}</strong></p>
         <h2 style="margin: 0 0 16px; font-size: 18px; color: #1e293b; text-align: center;">Choose Your Service Level</h2>
         <div class="tier-cards" style="display: flex; gap: 16px; flex-wrap: wrap;">
-          ${tierCard("Essential", pricing.essential, pricing.essentialFeatures, "#64748b")}
-          ${tierCard("Property Care", pricing.premium, pricing.premiumFeatures, "#1a7a4c", true)}
-          ${tierCard("Deluxe", pricing.deluxe, pricing.deluxeFeatures, "#7c3aed")}
+          ${tierCard(tierLabels.tier1, pricing.essential, pricing.essentialFeatures, "#64748b")}
+          ${tierCard(tierLabels.tier2, pricing.premium, pricing.premiumFeatures, "#1a7a4c", true)}
+          ${tierCard(tierLabels.tier3, pricing.deluxe, pricing.deluxeFeatures, "#7c3aed")}
         </div>`;
 
   return `
@@ -862,15 +880,22 @@ export function renderQuoteSmsText(data: {
   type: "residential" | "commercial";
   frequency: string;
   acceptUrl?: string;
+  tierNames?: TierNames | null;
 }): string {
+  // Residential quotes use the company's configured tier labels; commercial
+  // quotes keep the fixed defaults.
+  const tl =
+    data.type === "residential"
+      ? { ...DEFAULT_TIER_NAMES, ...(data.tierNames || {}) }
+      : DEFAULT_TIER_NAMES;
   const lines: string[] = [
     `Hi ${data.contactName},`,
     ``,
     `${data.companyName} has prepared a ${data.type === "commercial" ? "site management proposal" : "service quote"} for you (Quote #${data.quoteNumber}):`,
     ``,
-    `Essential: $${data.pricing.essential.toFixed(2)}/visit`,
-    `Property Care: $${data.pricing.premium.toFixed(2)}/visit`,
-    `Deluxe: $${data.pricing.deluxe.toFixed(2)}/visit`,
+    `${tl.tier1}: $${data.pricing.essential.toFixed(2)}/visit`,
+    `${tl.tier2}: $${data.pricing.premium.toFixed(2)}/visit`,
+    `${tl.tier3}: $${data.pricing.deluxe.toFixed(2)}/visit`,
   ];
 
   if (data.pricing.initialCleanFee > 0) {

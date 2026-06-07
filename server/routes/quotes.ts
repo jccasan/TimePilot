@@ -22,7 +22,7 @@ import {
   calculateResidentialPricing,
 } from "../services/quote-pricing";
 import { generateQuotePdf, generateQuoteDocx } from "../services/quote-document";
-import { type InsertQuote } from "@shared/schema";
+import { type InsertQuote, type TierNames } from "@shared/schema";
 
 import {
   isAuthenticated,
@@ -339,6 +339,8 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       const companyYardSizeTiers = companyPricingConfig?.pricingRules?.yardSizeTiers ?? null;
       const companyFirstTimeCleanupConfig =
         companyPricingConfig?.pricingRules?.firstTimeCleanupConfig ?? null;
+      const companyTierNames =
+        (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ?? null;
 
       const type = req.query.type as string;
       if (type === "residential") {
@@ -355,7 +357,8 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           input,
           companyQuoteDefaults,
           companyYardSizeTiers,
-          companyFirstTimeCleanupConfig
+          companyFirstTimeCleanupConfig,
+          companyTierNames
         );
         res.json(pricing);
       } else if (type === "commercial") {
@@ -959,6 +962,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           }[]) || undefined,
         frequencyOptions,
         tierAcceptUrls,
+        tierNames:
+          (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ??
+          null,
       };
 
       const html =
@@ -998,6 +1004,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
             type: quote.type,
             frequency: quote.frequency || "weekly",
             acceptUrl,
+            tierNames:
+              (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ??
+              null,
           });
           const smsConfigured = await isSmsConfiguredForCompany(companyId);
           if (smsConfigured) {
@@ -1089,6 +1098,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
             unitPrice: number;
             quantity: number;
           }[]) || undefined,
+        tierNames:
+          (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ??
+          null,
       };
 
       const html =
@@ -1164,6 +1176,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
               unitPrice: number;
               quantity: number;
             }[]) || undefined,
+          tierNames:
+            (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ??
+            null,
         };
 
         const safeName = `Quote-${quote.quoteNumber}`.replace(/[^a-zA-Z0-9-_]/g, "_");
