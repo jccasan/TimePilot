@@ -3148,7 +3148,6 @@ export class DatabaseStorage implements IStorage {
   // ================ Seed Default Pricing ================
   async seedDefaultPricing(companyId: string): Promise<void> {
     const existingPricing = await this.getServicePricing(companyId);
-    const existingPackages = await this.getServicePackages(companyId);
 
     if (existingPricing.length === 0) {
       const rules = DEFAULT_PRICING_RULES;
@@ -3284,50 +3283,9 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const defaultPackages: Omit<InsertServicePackage, "companyId">[] = [
-      {
-        name: "Basic Weekly",
-        description: "Weekly scooping for 1 dog on a standard lot",
-        frequency: "weekly",
-        basePrice: "19.99",
-        includedItems: ["Weekly Scooping 1 Dog", "Lot size up to .25 acre"],
-        sortOrder: 1,
-      },
-      {
-        name: "Standard Weekly",
-        description: "Weekly scooping for 2 dogs with waste take-away",
-        frequency: "weekly",
-        basePrice: "30.98",
-        includedItems: ["Weekly Scooping 2 Dog", "Waste Take-Away", "Lot size up to .25 acre"],
-        sortOrder: 2,
-      },
-      {
-        name: "Premium Weekly",
-        description: "Twice weekly scooping for 2 dogs with deodorizing",
-        frequency: "weekly",
-        basePrice: "55.97",
-        includedItems: [
-          "Twice Weekly Scooping 2 Dog",
-          "Deodorizing (with Scoop)",
-          "Waste Take-Away",
-        ],
-        sortOrder: 3,
-      },
-      {
-        name: "Multi-Dog Household",
-        description: "Weekly service for 4+ dogs with full treatment",
-        frequency: "weekly",
-        basePrice: "50.97",
-        includedItems: ["Weekly Scooping 4 Dog", "Deodorizing (with Scoop)", "Waste Take-Away"],
-        sortOrder: 4,
-      },
-    ];
-
-    if (existingPackages.length === 0) {
-      for (const pkg of defaultPackages) {
-        await this.createServicePackage({ ...pkg, companyId });
-      }
-    }
+    // Default service packages are intentionally NOT auto-created. Operators
+    // define their own packages (including Good/Better/Best quote-tier packages)
+    // in Pricing and billing. Only the default pricing items above are seeded.
   }
 
   // ================ Messages ================
