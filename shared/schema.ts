@@ -40,6 +40,7 @@ export const serviceFrequencyEnum = pgEnum("service_frequency", [
   "weekly",
   "biweekly",
   "monthly",
+  "semi_monthly",
   "onetime",
 ]);
 export const jobStatusEnum = pgEnum("job_status", [
@@ -158,6 +159,7 @@ export interface PricingRulesConfig {
     biWeekly: number;
     twiceWeekly: number;
     monthly?: number;
+    semiMonthly?: number;
     oneTime?: number;
   };
   enabledFrequencies?: {
@@ -184,6 +186,7 @@ export const DEFAULT_PRICING_RULES: PricingRulesConfig = {
     biWeekly: 26.99,
     twiceWeekly: 17.99,
     monthly: 0,
+    semiMonthly: 0,
   },
   enabledFrequencies: {
     twiceWeekly: true,
@@ -818,6 +821,10 @@ export const servicePlans = pgTable(
       .references(() => properties.id, { onDelete: "cascade" }),
     frequency: serviceFrequencyEnum("frequency").notNull(),
     dayOfWeek: dayOfWeekEnum("day_of_week"),
+    // For semi_monthly frequency: the two days of the month a visit occurs on.
+    // Constrained to 1-28 to avoid month-length edge cases (see insert schema).
+    semiMonthlyDay1: integer("semi_monthly_day1").default(1),
+    semiMonthlyDay2: integer("semi_monthly_day2").default(15),
     pricePerVisit: decimal("price_per_visit", { precision: 10, scale: 2 }).notNull(),
     discount: decimal("discount", { precision: 5, scale: 2 }),
     isActive: boolean("is_active").notNull().default(true),
@@ -1641,11 +1648,28 @@ export const insertJobAddOnSchema = createInsertSchema(jobAddOns).omit({
   id: true,
   createdAt: true,
 });
-export const insertServicePlanSchema = createInsertSchema(servicePlans).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertServicePlanSchema = createInsertSchema(servicePlans, {
+  // Day 1 must be 1-28; day 2 must be after day 1 and at most 28. Capping at 28
+  // avoids month-length edge cases (February has 28 days minimum).
+  semiMonthlyDay1: z.number().int().min(1).max(28).optional(),
+  semiMonthlyDay2: z.number().int().min(2).max(28).optional(),
+})
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .refine(
+    (data) =>
+      data.frequency !== "semi_monthly" ||
+      data.semiMonthlyDay1 == null ||
+      data.semiMonthlyDay2 == null ||
+      data.semiMonthlyDay2 > data.semiMonthlyDay1,
+    {
+      message: "Second day of month must be after the first",
+      path: ["semiMonthlyDay2"],
+    }
+  );
 export const insertServicePlanAddOnSchema = createInsertSchema(servicePlanAddOns).omit({
   id: true,
   createdAt: true,

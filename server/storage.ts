@@ -4508,6 +4508,9 @@ export class DatabaseStorage implements IStorage {
           case "monthly":
             visitsPerMonth = 1;
             break;
+          case "semi_monthly":
+            visitsPerMonth = 2;
+            break;
           case "onetime":
             visitsPerMonth = 0.25;
             break;

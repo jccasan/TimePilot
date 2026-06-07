@@ -1746,6 +1746,18 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] contacts.billing_setup_token columns verified");
 
+    // ── Semi-monthly service frequency (twice per calendar month) ─────────────
+    // ADD VALUE runs in autocommit (each client.query is its own statement).
+    await client.query(`
+      ALTER TYPE service_frequency ADD VALUE IF NOT EXISTS 'semi_monthly'
+    `);
+    await client.query(`
+      ALTER TABLE service_plans
+        ADD COLUMN IF NOT EXISTS semi_monthly_day1 INTEGER DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS semi_monthly_day2 INTEGER DEFAULT 15
+    `);
+    console.log("[Migration] service_plans semi_monthly columns and enum value ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

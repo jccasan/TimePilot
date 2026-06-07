@@ -174,6 +174,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
             biWeekly: z.number().min(0),
             twiceWeekly: z.number().min(0),
             monthly: z.number().min(0).optional(),
+            semiMonthly: z.number().min(0).optional(),
             oneTime: z.number().min(0).optional(),
           }),
           enabledFrequencies: z
@@ -641,6 +642,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         biWeekly: z.number().min(0),
         twiceWeekly: z.number().min(0),
         monthly: z.number().min(0).optional(),
+        semiMonthly: z.number().min(0).optional(),
         oneTime: z.number().min(0).optional(),
       }),
       enabledFrequencies: z

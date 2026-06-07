@@ -43,6 +43,13 @@
       "when": 1779972729387,
       "tag": "0004_crm_pipeline_stages",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780000000000,
+      "tag": "0005_semi_monthly",
+      "breakpoints": true
     }
   ]
 }

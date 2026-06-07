@@ -622,7 +622,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getServicePlan(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Scheduled service not found" });
-      const validFrequencies = ["weekly", "biweekly", "monthly", "onetime"];
+      const validFrequencies = ["weekly", "biweekly", "monthly", "semi_monthly", "onetime"];
       if (req.body.frequency && !validFrequencies.includes(req.body.frequency)) {
         return res
           .status(400)
@@ -646,6 +646,8 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       const allowedFields = [
         "frequency",
         "dayOfWeek",
+        "semiMonthlyDay1",
+        "semiMonthlyDay2",
         "pricePerVisit",
         "isActive",
         "startDate",
