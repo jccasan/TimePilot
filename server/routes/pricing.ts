@@ -792,6 +792,45 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
     }
   });
 
+  // Dedicated endpoint to flip which recurring frequencies are offered. Updates
+  // ONLY pricingRules.enabledFrequencies by deep-merging into the company's
+  // current pricingRules server-side, so the client never has to resend the
+  // whole (possibly stale/incomplete) pricingRules object — which is what made
+  // this setting fragile when multiple editors each rewrote pricingRules.
+  app.patch(
+    "/api/pricing-config/enabled-frequencies",
+    isAuthenticated,
+    async (req: Request, res: Response) => {
+      try {
+        const { companyId, role } = await getCompanyContext(req);
+        requireRole(role);
+        const company = await storage.getCompany(companyId);
+        if (!company) return res.status(404).json({ error: "Company not found" });
+        const body = z
+          .object({
+            twiceWeekly: z.boolean().optional(),
+            monthly: z.boolean().optional(),
+          })
+          .parse(req.body);
+
+        const existing: PricingConfig = {
+          ...DEFAULT_PRICING_CONFIG,
+          ...(company.pricingConfig || {}),
+        };
+        const existingRules = existing.pricingRules ?? DEFAULT_PRICING_RULES;
+        const mergedRules = {
+          ...existingRules,
+          enabledFrequencies: { ...existingRules.enabledFrequencies, ...body },
+        };
+        const merged: PricingConfig = { ...existing, pricingRules: mergedRules };
+        await storage.updateCompany(companyId, { pricingConfig: merged });
+        res.json(mergedRules.enabledFrequencies);
+      } catch (err) {
+        handleError(res, err);
+      }
+    }
+  );
+
   app.put("/api/pricing-rules", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const { companyId, role } = await getCompanyContext(req);

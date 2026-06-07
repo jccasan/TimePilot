@@ -5,18 +5,18 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { DEFAULT_PRICING_RULES, type PricingConfig, type PricingRulesConfig } from "@shared/schema";
+import { type PricingConfig } from "@shared/schema";
 
 /**
  * Standalone "which recurring frequencies do you offer" toggles, extracted from
- * pricing.tsx's PricingRulesPanel. Persists pricingRules.enabledFrequencies via
- * PATCH /api/pricing-config (sending the full pricingRules so nothing is wiped).
+ * pricing.tsx's PricingRulesPanel. Persists only pricingRules.enabledFrequencies
+ * via a dedicated endpoint that deep-merges server-side, so we never resend (and
+ * risk clobbering) the rest of pricingRules.
  */
 export function FrequencyTogglesCard() {
   const { toast } = useToast();
   const { data: config } = useQuery<PricingConfig>({ queryKey: ["/api/pricing-config"] });
 
-  const rules: PricingRulesConfig = config?.pricingRules ?? DEFAULT_PRICING_RULES;
   const [twiceWeekly, setTwiceWeekly] = useState(true);
   const [monthly, setMonthly] = useState(false);
 
@@ -29,12 +29,7 @@ export function FrequencyTogglesCard() {
 
   const save = useMutation({
     mutationFn: async (next: { twiceWeekly: boolean; monthly: boolean }) => {
-      const merged: PricingRulesConfig = {
-        ...DEFAULT_PRICING_RULES,
-        ...rules,
-        enabledFrequencies: { twiceWeekly: next.twiceWeekly, monthly: next.monthly },
-      };
-      await apiRequest("PATCH", "/api/pricing-config", { pricingRules: merged });
+      await apiRequest("PATCH", "/api/pricing-config/enabled-frequencies", next);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
