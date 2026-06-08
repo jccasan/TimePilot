@@ -630,6 +630,7 @@ type Company = {
   retellAgentId?: string | null;
   passStripeFees?: boolean;
   requireCardOnSignup?: boolean;
+  chargeTiming?: string;
   requireDocumentSigning?: boolean;
   widgetFieldConfig?: WidgetFieldConfig | null;
   yardSizeTierConfig?: YardSizeTierConfig | null;
@@ -726,7 +727,6 @@ const SETTINGS_BLOCK_DEFS: {
   { id: "audit_log", label: "Audit Log", defaultW: 12, defaultH: 5, minW: 6, minH: 4 },
   { id: "developer_tools", label: "Developer Tools", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   { id: "demo_mode", label: "Demo Mode", defaultW: 6, defaultH: 7, minW: 4, minH: 5 },
-  { id: "billing_defaults", label: "Billing Defaults", defaultW: 6, defaultH: 5, minW: 4, minH: 4 },
   { id: "call_tracking", label: "Call Tracking", defaultW: 6, defaultH: 4, minW: 4, minH: 3 },
   {
     id: "client_notifications",
@@ -795,7 +795,6 @@ const DEFAULT_SETTINGS_BLOCK_IDS = [
   "developer_tools",
   "audit_log",
   "demo_mode",
-  "billing_defaults",
   "call_tracking",
   "client_notifications",
   "portal_api_docs",
@@ -903,7 +902,7 @@ const ENTITY_TYPES = [
   { value: "company", label: "Company" },
 ];
 
-function StripeConnectSection() {
+export function StripeConnectSection() {
   const { toast } = useToast();
   const { startTutorial, isTutorialCompleted } = useTutorialContext();
 
@@ -971,6 +970,7 @@ function StripeConnectSection() {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
   });
+
 
   const canManageStripeConnect = currentUser?.role === "owner" || currentUser?.role === "admin";
   const userRoleLoaded = !!currentUser?.role;
@@ -1230,6 +1230,22 @@ function StripeConnectSection() {
                   When enabled, new customers must add a card before completing signup via your
                   widget. The card is saved on file but not charged. Turn off if you prefer to
                   collect payment details later.
+                </p>
+              </div>
+            )}
+
+            {canManageStripeConnect && (
+              <div className="border rounded-lg p-4 space-y-1 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <CalendarClock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Charge timing has moved</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Configure when recurring customers are billed under{" "}
+                  <a href="/pricing-settings#billing" className="underline">
+                    Pricing and billing → Billing
+                  </a>
+                  .
                 </p>
               </div>
             )}
@@ -5758,7 +5774,7 @@ const PAYMENT_BEHAVIOR_OPTIONS = [
   { value: "review_only", label: "Generate for Review Only" },
 ];
 
-function BillingDefaultsSection({ company }: { company: Company | null | undefined }) {
+export function BillingDefaultsSection({ company }: { company: Company | null | undefined }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [cadence, setCadence] = useState(company?.billingCadence || "per_visit");
@@ -8895,24 +8911,8 @@ export default function Settings() {
             </CardContent>
           </Card>
         );
-      case "billing_defaults":
-        return (
-          <Card className="h-full overflow-auto">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Billing Defaults
-              </CardTitle>
-              <CardDescription>
-                Set system-wide defaults for billing cadence, invoice trigger, and payment behavior.
-                These apply to all services unless overridden at the service or customer level.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BillingDefaultsSection company={company} />
-            </CardContent>
-          </Card>
-        );
+      // "billing_defaults" widget removed — its content now lives in
+      // Pricing and billing → Billing (see pricing-and-billing.tsx).
       case "client_notifications":
         return (
           <Card className="h-full overflow-auto">

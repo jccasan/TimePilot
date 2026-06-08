@@ -278,6 +278,18 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
         storage.renumberRouteStops(plan.routeId, companyId).catch(console.error);
       }
 
+      // Beginning-of-month prepay: a client added mid-month gets a prorated
+      // first-month invoice immediately for the remaining days. No-op unless the
+      // company uses beginning_of_month timing; idempotent via proratedThrough.
+      // (The daily prepay job is the safety net if this side-effect fails.)
+      import("../jobs/prepay-billing")
+        .then(({ generatePrepayProrationForPlan }) =>
+          generatePrepayProrationForPlan(companyId, plan.id)
+        )
+        .catch((err) =>
+          console.error("[prepay-billing] Signup proration failed on plan creation:", err)
+        );
+
       const { userId } = await getCompanyContext(req);
       auditLog(
         companyId,
@@ -622,7 +634,7 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       const { companyId } = await getCompanyContext(req);
       const existing = await storage.getServicePlan(p(req.params.id), companyId);
       if (!existing) return res.status(404).json({ error: "Scheduled service not found" });
-      const validFrequencies = ["weekly", "biweekly", "monthly", "onetime"];
+      const validFrequencies = ["weekly", "biweekly", "monthly", "semi_monthly", "onetime"];
       if (req.body.frequency && !validFrequencies.includes(req.body.frequency)) {
         return res
           .status(400)
@@ -646,6 +658,8 @@ export async function registerServicePlansRoutes(app: Express): Promise<void> {
       const allowedFields = [
         "frequency",
         "dayOfWeek",
+        "semiMonthlyDay1",
+        "semiMonthlyDay2",
         "pricePerVisit",
         "isActive",
         "startDate",

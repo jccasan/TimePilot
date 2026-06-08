@@ -14,6 +14,7 @@ import {
 import { getAppBaseUrl } from "../services/invoice-email";
 import { haversineDistance, fetchMapboxDirections } from "../services/route-optimizer";
 import { insertVisitSchema, reviewTokens, reviewResponses } from "@shared/schema";
+import { computeSemiMonthlyVisitDates } from "@shared/frequency-utils";
 
 import {
   isAuthenticated,
@@ -1431,6 +1432,43 @@ export async function registerVisitsRoutes(app: Express): Promise<void> {
       const end = new Date(endDate + "T00:00:00Z");
 
       for (const plan of plans) {
+        // Semi-monthly: two visits per calendar month on operator-specified days
+        // of the month. Driven by day-of-month, not day-of-week, so it is handled
+        // separately and does not require a dayOfWeek.
+        if (plan.frequency === "semi_monthly") {
+          const planStart = plan.startDate ? new Date(plan.startDate + "T00:00:00Z") : start;
+          const planEnd = plan.endDate ? new Date(plan.endDate + "T00:00:00Z") : end;
+          const effectiveStart = planStart > start ? planStart : start;
+          const effectiveEnd = planEnd < end ? planEnd : end;
+          const planHolds = holdsByPlan.get(plan.id) || [];
+          const day1 = plan.semiMonthlyDay1 ?? 1;
+          const day2 = plan.semiMonthlyDay2 ?? 15;
+
+          const semiMonthlyDates = computeSemiMonthlyVisitDates(
+            effectiveStart,
+            effectiveEnd,
+            day1,
+            day2
+          );
+          for (const dateStr of semiMonthlyDates) {
+            const key = `${plan.id}_${dateStr}`;
+            const inVacation = planHolds.some((h) => dateStr >= h.startDate && dateStr <= h.endDate);
+            if (existingKeys.has(key) || inVacation) continue;
+
+            const visit = await storage.createVisit({
+              companyId,
+              servicePlanId: plan.id,
+              propertyId: plan.propertyId,
+              routeId: plan.routeId || null,
+              scheduledDate: dateStr,
+              status: "scheduled",
+            });
+            if (visit) created.push(visit);
+            existingKeys.add(key);
+          }
+          continue;
+        }
+
         if (!plan.dayOfWeek) continue;
         const targetDay = dayMap[plan.dayOfWeek];
         if (targetDay === undefined) continue;

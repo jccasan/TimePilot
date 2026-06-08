@@ -40,6 +40,7 @@ export const serviceFrequencyEnum = pgEnum("service_frequency", [
   "weekly",
   "biweekly",
   "monthly",
+  "semi_monthly",
   "onetime",
 ]);
 export const jobStatusEnum = pgEnum("job_status", [
@@ -77,7 +78,11 @@ export const invoiceStatusEnum = pgEnum("invoice_status", [
   "refunded",
   "voided",
 ]);
-export const chargeTimingEnum = pgEnum("charge_timing", ["day_before", "weekly_batch"]);
+export const chargeTimingEnum = pgEnum("charge_timing", [
+  "day_before",
+  "weekly_batch",
+  "beginning_of_month",
+]);
 export const invoiceTimingEnum = pgEnum("invoice_timing", ["before_service", "after_service"]);
 export const invoiceFrequencyEnum = pgEnum("invoice_frequency", [
   "per_service",
@@ -158,6 +163,7 @@ export interface PricingRulesConfig {
     biWeekly: number;
     twiceWeekly: number;
     monthly?: number;
+    semiMonthly?: number;
     oneTime?: number;
   };
   enabledFrequencies?: {
@@ -184,6 +190,7 @@ export const DEFAULT_PRICING_RULES: PricingRulesConfig = {
     biWeekly: 26.99,
     twiceWeekly: 17.99,
     monthly: 0,
+    semiMonthly: 0,
   },
   enabledFrequencies: {
     twiceWeekly: true,
@@ -207,8 +214,25 @@ export const DEFAULT_PRICING_RULES: PricingRulesConfig = {
   },
 };
 
+export interface TierNames {
+  tier1: string;
+  tier2: string;
+  tier3: string;
+}
+
+// Default residential proposal tier labels. These match the labels the app has
+// always rendered, so companies without a configured tierNames see no change.
+export const DEFAULT_TIER_NAMES: TierNames = {
+  tier1: "Essential",
+  tier2: "Property Care",
+  tier3: "Deluxe",
+};
+
 export interface PricingConfig {
   pricingRules?: PricingRulesConfig;
+  // Operator-configurable labels for the three residential quote tiers.
+  // Optional + backward-compatible (JSONB), falls back to DEFAULT_TIER_NAMES.
+  tierNames?: TierNames;
   techHourlyWageCents: number;
   burdenMultiplier: number;
   averageGasPriceCentsPerGallon: number;
@@ -247,6 +271,8 @@ export interface PricingConfig {
 }
 
 export const DEFAULT_PRICING_CONFIG: PricingConfig = {
+  // tierNames intentionally omitted: left unset so the settings UI can show the
+  // defaults as placeholders. Render sites fall back to DEFAULT_TIER_NAMES.
   techHourlyWageCents: 1500,
   burdenMultiplier: 1.4,
   averageGasPriceCentsPerGallon: 350,
@@ -385,7 +411,10 @@ export const companies = pgTable("companies", {
   stripeConnectOnboarded: boolean("stripe_connect_onboarded").notNull().default(false),
   subscriptionTier: subscriptionTierEnum("subscription_tier").notNull().default("tier_1"),
   subscriptionStatus: subscriptionStatusEnum("subscription_status").notNull().default("trialing"),
-  chargeTiming: chargeTimingEnum("charge_timing").notNull().default("day_before"),
+  // New companies default to beginning-of-month prepay billing. Existing rows
+  // keep whatever value they were created with (migration only changes the
+  // column default, not existing data).
+  chargeTiming: chargeTimingEnum("charge_timing").notNull().default("beginning_of_month"),
   invoiceTheme: text("invoice_theme"),
   mrrCents: integer("mrr_cents").notNull().default(0),
   remindersEnabled: boolean("reminders_enabled").notNull().default(false),
@@ -421,6 +450,10 @@ export const companies = pgTable("companies", {
   qboFeeAccountRef: varchar("qbo_fee_account_ref", { length: 50 }),
   timezone: varchar("timezone", { length: 100 }).notNull().default("America/New_York"),
   lastAutoInvoiceRun: date("last_auto_invoice_run"),
+  // Guard for the beginning-of-month prepay billing job: the YYYY-MM that was
+  // last billed, so the monthly charge fires once per month and never
+  // double-fires on a restart within the same month.
+  lastPrepayBillingMonth: varchar("last_prepay_billing_month", { length: 7 }),
   frozenAt: timestamp("frozen_at"),
   trialEndsAt: timestamp("trial_ends_at"),
   canceledAt: timestamp("canceled_at"),
@@ -799,6 +832,10 @@ export const servicePlans = pgTable(
       .references(() => properties.id, { onDelete: "cascade" }),
     frequency: serviceFrequencyEnum("frequency").notNull(),
     dayOfWeek: dayOfWeekEnum("day_of_week"),
+    // For semi_monthly frequency: the two days of the month a visit occurs on.
+    // Constrained to 1-28 to avoid month-length edge cases (see insert schema).
+    semiMonthlyDay1: integer("semi_monthly_day1").default(1),
+    semiMonthlyDay2: integer("semi_monthly_day2").default(15),
     pricePerVisit: decimal("price_per_visit", { precision: 10, scale: 2 }).notNull(),
     discount: decimal("discount", { precision: 5, scale: 2 }),
     isActive: boolean("is_active").notNull().default(true),
@@ -1392,6 +1429,8 @@ export const serviceBillingRules = pgTable(
   ]
 );
 
+export const packageTierSlotEnum = pgEnum("package_tier_slot", ["tier1", "tier2", "tier3"]);
+
 export const servicePackages = pgTable(
   "service_packages",
   {
@@ -1406,6 +1445,12 @@ export const servicePackages = pgTable(
     frequency: varchar("frequency", { length: 50 }).notNull(),
     basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
     includedItems: jsonb("included_items").$type<string[]>().notNull().default([]),
+    // Which residential quote tier this package powers (null = standalone, not
+    // tied to any tier). Enforced one-per-slot-per-company at the API layer.
+    tierSlot: packageTierSlotEnum("tier_slot"),
+    // When true on a tier2/tier3 package, the proposal prepends
+    // "Everything in <previous tier>, plus:" to this tier's feature list.
+    showInheritancePrefix: boolean("show_inheritance_prefix").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1622,11 +1667,28 @@ export const insertJobAddOnSchema = createInsertSchema(jobAddOns).omit({
   id: true,
   createdAt: true,
 });
-export const insertServicePlanSchema = createInsertSchema(servicePlans).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertServicePlanSchema = createInsertSchema(servicePlans, {
+  // Day 1 must be 1-28; day 2 must be after day 1 and at most 28. Capping at 28
+  // avoids month-length edge cases (February has 28 days minimum).
+  semiMonthlyDay1: z.number().int().min(1).max(28).optional(),
+  semiMonthlyDay2: z.number().int().min(2).max(28).optional(),
+})
+  .omit({
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .refine(
+    (data) =>
+      data.frequency !== "semi_monthly" ||
+      data.semiMonthlyDay1 == null ||
+      data.semiMonthlyDay2 == null ||
+      data.semiMonthlyDay2 > data.semiMonthlyDay1,
+    {
+      message: "Second day of month must be after the first",
+      path: ["semiMonthlyDay2"],
+    }
+  );
 export const insertServicePlanAddOnSchema = createInsertSchema(servicePlanAddOns).omit({
   id: true,
   createdAt: true,

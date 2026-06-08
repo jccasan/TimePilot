@@ -19,10 +19,31 @@ import {
   renderQuoteSmsText,
   type ResidentialQuoteInput,
   type CommercialQuoteInput,
+  type TierPackages,
   calculateResidentialPricing,
 } from "../services/quote-pricing";
 import { generateQuotePdf, generateQuoteDocx } from "../services/quote-document";
-import { type InsertQuote } from "@shared/schema";
+import { type InsertQuote, type TierNames } from "@shared/schema";
+
+/**
+ * Build the residential tier→package map for a company, used to override the
+ * proposal's tier feature lists with operator-defined package inclusions.
+ * Returns null-valued slots for unassigned tiers (template fallback applies).
+ */
+async function buildTierPackages(companyId: string): Promise<TierPackages> {
+  const pkgs = await storage.getServicePackages(companyId);
+  const bySlot = (slot: "tier1" | "tier2" | "tier3") => {
+    const pk = pkgs.find((p) => p.tierSlot === slot && p.isActive);
+    return pk
+      ? {
+          description: pk.description,
+          includedItems: pk.includedItems ?? [],
+          showInheritancePrefix: pk.showInheritancePrefix,
+        }
+      : null;
+  };
+  return { tier1: bySlot("tier1"), tier2: bySlot("tier2"), tier3: bySlot("tier3") };
+}
 
 import {
   isAuthenticated,
@@ -339,6 +360,8 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
       const companyYardSizeTiers = companyPricingConfig?.pricingRules?.yardSizeTiers ?? null;
       const companyFirstTimeCleanupConfig =
         companyPricingConfig?.pricingRules?.firstTimeCleanupConfig ?? null;
+      const companyTierNames =
+        (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ?? null;
 
       const type = req.query.type as string;
       if (type === "residential") {
@@ -355,7 +378,8 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           input,
           companyQuoteDefaults,
           companyYardSizeTiers,
-          companyFirstTimeCleanupConfig
+          companyFirstTimeCleanupConfig,
+          companyTierNames
         );
         res.json(pricing);
       } else if (type === "commercial") {
@@ -959,6 +983,10 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
           }[]) || undefined,
         frequencyOptions,
         tierAcceptUrls,
+        tierNames:
+          (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ??
+          null,
+        tierPackages: await buildTierPackages(companyId),
       };
 
       const html =
@@ -998,6 +1026,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
             type: quote.type,
             frequency: quote.frequency || "weekly",
             acceptUrl,
+            tierNames:
+              (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ??
+              null,
           });
           const smsConfigured = await isSmsConfiguredForCompany(companyId);
           if (smsConfigured) {
@@ -1089,6 +1120,10 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
             unitPrice: number;
             quantity: number;
           }[]) || undefined,
+        tierNames:
+          (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ??
+          null,
+        tierPackages: await buildTierPackages(companyId),
       };
 
       const html =
@@ -1164,6 +1199,9 @@ export async function registerQuotesRoutes(app: Express): Promise<void> {
               unitPrice: number;
               quantity: number;
             }[]) || undefined,
+          tierNames:
+            (company.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ??
+            null,
         };
 
         const safeName = `Quote-${quote.quoteNumber}`.replace(/[^a-zA-Z0-9-_]/g, "_");

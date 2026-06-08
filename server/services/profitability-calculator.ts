@@ -11,6 +11,7 @@ import {
 } from "./pricing-calculator";
 import { computeJobEconomics, type JobEconomicsResult } from "./job-economics-engine";
 import type { PricingConfig, InsertProfitabilitySnapshot } from "@shared/schema";
+import { frequencyVisitsPerMonth } from "@shared/frequency-utils";
 
 export type ProfitabilityStatus = "profitable" | "marginal" | "unprofitable";
 
@@ -125,18 +126,7 @@ function buildEngineInputs(
 }
 
 function getFrequencyVisitsPerMonth(frequency: string): number {
-  switch (frequency) {
-    case "weekly":
-      return 4.33;
-    case "biweekly":
-      return 2.17;
-    case "monthly":
-      return 1;
-    case "onetime":
-      return 1;
-    default:
-      return 4.33;
-  }
+  return frequencyVisitsPerMonth(frequency);
 }
 
 function determineProfitabilityStatus(

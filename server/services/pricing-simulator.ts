@@ -6,6 +6,7 @@ import {
 } from "./pricing-calculator";
 import { calculateAllCustomerProfitability } from "./profitability-calculator";
 import type { PricingConfig } from "@shared/schema";
+import { frequencyVisitsPerMonth } from "@shared/frequency-utils";
 
 export interface SimulationParams {
   targetMarginPct: number;
@@ -91,18 +92,7 @@ export interface CompetitorAnalysisResult {
 }
 
 function getFrequencyVisitsPerMonth(frequency: string): number {
-  switch (frequency) {
-    case "weekly":
-      return 4.33;
-    case "biweekly":
-      return 2.17;
-    case "monthly":
-      return 1;
-    case "onetime":
-      return 1;
-    default:
-      return 4.33;
-  }
+  return frequencyVisitsPerMonth(frequency);
 }
 
 function normalizeToWeekly(priceCents: number, frequency: string): number {
@@ -113,6 +103,8 @@ function normalizeToWeekly(priceCents: number, frequency: string): number {
       return Math.round(priceCents / 2);
     case "monthly":
       return Math.round(priceCents / 4.33);
+    case "semi_monthly":
+      return Math.round((priceCents * 2) / 4.33);
     case "onetime":
       return priceCents;
     default:

@@ -379,9 +379,10 @@ async function fetchRevenueByFrequency(companyId: string): Promise<ReportSection
       sp.frequency,
       COUNT(sp.id) AS plan_count,
       ROUND(SUM(CASE
-        WHEN sp.frequency = 'weekly'   THEN sp.price_per_visit::numeric * 4.33
-        WHEN sp.frequency = 'biweekly' THEN sp.price_per_visit::numeric * 2.17
-        WHEN sp.frequency = 'monthly'  THEN sp.price_per_visit::numeric
+        WHEN sp.frequency = 'weekly'       THEN sp.price_per_visit::numeric * 4.33
+        WHEN sp.frequency = 'biweekly'     THEN sp.price_per_visit::numeric * 2.17
+        WHEN sp.frequency = 'monthly'      THEN sp.price_per_visit::numeric
+        WHEN sp.frequency = 'semi_monthly' THEN sp.price_per_visit::numeric * 2
         ELSE sp.price_per_visit::numeric
       END), 2) AS est_monthly
     FROM service_plans sp

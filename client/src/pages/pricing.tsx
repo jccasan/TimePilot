@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,13 +10,9 @@ import { useCurrency } from "@/hooks/use-currency";
 import type {
   ServicePricingItem,
   ServicePackage,
-  PricingRulesConfig,
-  PricingConfig,
   ServiceBillingRule,
-  CleanupFeeModifier,
   YardSizeTierConfig,
 } from "@shared/schema";
-import { DEFAULT_PRICING_RULES } from "@shared/schema";
 import {
   BILLING_CADENCE_LABELS,
   BILLING_TRIGGER_LABELS,
@@ -63,9 +59,7 @@ import {
   Phone,
   Settings2,
 } from "lucide-react";
-import { YardSizeTierEditor } from "@/components/yard-size-tier-editor";
 import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 
 const CATEGORY_LABELS: Record<string, string> = {
   recurring_service: "Recurring Services",
@@ -95,6 +89,8 @@ const packageFormSchema = z.object({
   frequency: z.string().min(1, "Frequency is required"),
   basePrice: z.string().min(1, "Price is required"),
   includedItemsText: z.string().optional().or(z.literal("")),
+  tierSlot: z.enum(["none", "tier1", "tier2", "tier3"]).optional(),
+  showInheritancePrefix: z.boolean().optional(),
 });
 
 type PricingFormValues = z.infer<typeof pricingFormSchema>;
@@ -180,661 +176,31 @@ function getDogCount(name: string): number | null {
   return match ? parseInt(match[1]) : null;
 }
 
-function PricingRulesPanel({
-  rules,
-  onGenerate,
-  isGenerating,
-  onSave,
-  isSaving,
-  yardSizeTierConfig,
-}: {
-  rules: PricingRulesConfig;
-  onGenerate: (rules: PricingRulesConfig) => void;
-  isGenerating: boolean;
-  onSave: (rules: PricingRulesConfig) => void;
-  isSaving: boolean;
-  yardSizeTierConfig?: YardSizeTierConfig;
-}) {
-  const [localRules, setLocalRules] = useState<PricingRulesConfig>(rules);
-  const { formatMoney } = useCurrency();
-
-  useEffect(() => {
-    setLocalRules(rules);
-  }, [rules]);
-
-  const twiceWeeklyEnabled = localRules.enabledFrequencies?.twiceWeekly !== false;
-  const monthlyEnabled = localRules.enabledFrequencies?.monthly === true;
-  const monthlyLinked = localRules.monthlyLinkedToCleanup === true;
-  const _existingCleanup = localRules.firstTimeCleanupConfig;
-  const _conversionDiscount: {
-    type: "waive" | "discount_amount" | "discount_percent" | "none";
-    discountAmount?: number;
-    discountPercent?: number;
-  } = _existingCleanup?.conversionDiscount ?? { type: "none" };
-  const cleanupConfig = {
-    ...(_existingCleanup ?? {}),
-    baseAmount: _existingCleanup?.baseAmount ?? 0,
-    modifiers: _existingCleanup?.modifiers ?? ([] as CleanupFeeModifier[]),
-    conversionDiscount: _conversionDiscount,
-  };
-
-  useEffect(() => {
-    if (monthlyLinked && monthlyEnabled) {
-      setLocalRules((prev) => ({
-        ...prev,
-        basePrices: { ...prev.basePrices, monthly: cleanupConfig.baseAmount },
-      }));
-    }
-  }, [monthlyLinked, monthlyEnabled, cleanupConfig.baseAmount]);
-
-  const updateBasePrice = (key: keyof PricingRulesConfig["basePrices"], value: string) => {
-    const num = value === "" ? 0 : parseFloat(value);
-    if (!isNaN(num)) {
-      setLocalRules((prev) => ({
-        ...prev,
-        basePrices: { ...prev.basePrices, [key]: num },
-      }));
-    }
-  };
-
-  const updatePerDogRule = (key: keyof PricingRulesConfig["perDogRule"], value: string) => {
-    const num = value === "" ? 0 : key === "surchargeAmount" ? parseFloat(value) : parseInt(value);
-    if (!isNaN(num)) {
-      setLocalRules((prev) => ({
-        ...prev,
-        perDogRule: {
-          ...prev.perDogRule,
-          [key]: Math.max(key === "incrementDogs" || key === "maxDogs" ? 1 : 0, num),
-        },
-      }));
-    }
-  };
-
-  const handleYardTiersChange = (tiers: PricingRulesConfig["yardSizeTiers"]) => {
-    setLocalRules((prev) => ({ ...prev, yardSizeTiers: tiers }));
-  };
-
-  const toggleFrequency = (key: "twiceWeekly" | "monthly", enabled: boolean) => {
-    setLocalRules((prev) => ({
-      ...prev,
-      enabledFrequencies: { ...prev.enabledFrequencies, [key]: enabled },
-    }));
-  };
-
-  const setMonthlyLinked = (linked: boolean) => {
-    setLocalRules((prev) => {
-      const cfg = prev.firstTimeCleanupConfig;
-      return {
-        ...prev,
-        monthlyLinkedToCleanup: linked,
-        basePrices: {
-          ...prev.basePrices,
-          monthly: linked && cfg ? cfg.baseAmount : prev.basePrices.monthly,
-        },
-      };
-    });
-  };
-
-  const updateCleanupConfig = (updates: Partial<typeof cleanupConfig>) => {
-    const merged = { ...cleanupConfig, ...updates };
-    setLocalRules((prev) => {
-      const updated: PricingRulesConfig = { ...prev, firstTimeCleanupConfig: merged };
-      if (prev.monthlyLinkedToCleanup && updates.baseAmount !== undefined) {
-        updated.basePrices = { ...prev.basePrices, monthly: updates.baseAmount };
-      }
-      return updated;
-    });
-  };
-
-  const addModifier = () => {
-    updateCleanupConfig({
-      modifiers: [
-        ...cleanupConfig.modifiers,
-        { id: String(Date.now()), type: "flat_fee" as const, label: "", amount: 0 },
-      ],
-    });
-  };
-
-  const updateModifier = (id: string, updates: Partial<CleanupFeeModifier>) => {
-    updateCleanupConfig({
-      modifiers: cleanupConfig.modifiers.map((m) => (m.id === id ? { ...m, ...updates } : m)),
-    });
-  };
-
-  const removeModifier = (id: string) => {
-    updateCleanupConfig({
-      modifiers: cleanupConfig.modifiers.filter((m) => m.id !== id),
-    });
-  };
-
-  const computeCleanupTotal = () => {
-    let total = cleanupConfig.baseAmount;
-    for (const mod of cleanupConfig.modifiers) {
-      if (mod.type === "per_unit") total += mod.pricePerUnit ?? 0;
-      else if (mod.type === "hourly") total += (mod.rate ?? 0) * (mod.estimatedHours ?? 1);
-      else if (mod.type === "flat_fee") total += mod.amount ?? 0;
-    }
-    return total;
-  };
-
-  const MODIFIER_TYPE_LABELS: Record<string, string> = {
-    per_unit: "Per unit",
-    hourly: "Hourly",
-    flat_fee: "Flat fee",
-  };
-
-  const CONVERSION_LABELS: Record<string, string> = {
-    waive: "Waive entirely",
-    discount_amount: "Apply fixed discount ($)",
-    discount_percent: "Apply % discount",
-    none: "No change",
-  };
-
-  return (
-    <Card data-testid="pricing-rules-panel">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Settings2 className="h-5 w-5" />
-          Pricing Rules
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Set your base prices and rules, then generate individual pricing rows
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Base Prices */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              Base Prices (1 Dog)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {/* Weekly — always enabled */}
-            <div className="flex items-center gap-3">
-              <div className="w-4 shrink-0" />
-              <span className="text-sm font-medium w-28 shrink-0">Weekly</span>
-              <div className="flex items-center gap-1">
-                <span className="text-muted-foreground text-sm">$</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={localRules.basePrices.weekly}
-                  onChange={(e) => updateBasePrice("weekly", e.target.value)}
-                  className="w-28"
-                  data-testid="input-base-weekly"
-                />
-              </div>
-            </div>
-
-            {/* Bi-Weekly — always enabled */}
-            <div className="flex items-center gap-3">
-              <div className="w-4 shrink-0" />
-              <span className="text-sm font-medium w-28 shrink-0">Bi-Weekly</span>
-              <div className="flex items-center gap-1">
-                <span className="text-muted-foreground text-sm">$</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={localRules.basePrices.biWeekly}
-                  onChange={(e) => updateBasePrice("biWeekly", e.target.value)}
-                  className="w-28"
-                  data-testid="input-base-biweekly"
-                />
-              </div>
-            </div>
-
-            {/* Twice Weekly — optional */}
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <Checkbox
-                  checked={twiceWeeklyEnabled}
-                  onCheckedChange={(c) => toggleFrequency("twiceWeekly", !!c)}
-                  data-testid="checkbox-twice-weekly"
-                />
-                <span
-                  className={`text-sm font-medium w-28 shrink-0 ${!twiceWeeklyEnabled ? "text-muted-foreground" : ""}`}
-                >
-                  Twice Weekly
-                </span>
-                {twiceWeeklyEnabled && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground text-sm">$</span>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={localRules.basePrices.twiceWeekly}
-                      onChange={(e) => updateBasePrice("twiceWeekly", e.target.value)}
-                      className="w-28"
-                      data-testid="input-base-twiceweekly"
-                    />
-                  </div>
-                )}
-              </div>
-              {!twiceWeeklyEnabled && (
-                <p className="text-xs text-muted-foreground pl-7">
-                  Twice weekly will not be included in generated pricing
-                </p>
-              )}
-            </div>
-
-            {/* Monthly — optional with link toggle */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <Checkbox
-                  checked={monthlyEnabled}
-                  onCheckedChange={(c) => toggleFrequency("monthly", !!c)}
-                  data-testid="checkbox-monthly"
-                />
-                <span
-                  className={`text-sm font-medium w-28 shrink-0 ${!monthlyEnabled ? "text-muted-foreground" : ""}`}
-                >
-                  Monthly
-                </span>
-                {monthlyEnabled && (
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground text-sm">$</span>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={localRules.basePrices.monthly ?? 0}
-                      onChange={(e) => updateBasePrice("monthly", e.target.value)}
-                      className="w-28"
-                      disabled={monthlyLinked}
-                      data-testid="input-base-monthly"
-                    />
-                  </div>
-                )}
-              </div>
-              {monthlyEnabled && (
-                <div className="flex items-center gap-2 pl-7">
-                  <Switch
-                    checked={monthlyLinked}
-                    onCheckedChange={setMonthlyLinked}
-                    data-testid="switch-monthly-linked"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    Charge monthly visits at first-time cleanup fee price
-                  </span>
-                </div>
-              )}
-              {!monthlyEnabled && (
-                <p className="text-xs text-muted-foreground pl-7">
-                  Monthly will not be included in generated pricing
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Per-Dog Pricing Rule */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Settings2 className="h-4 w-4" />
-              Per-Dog Pricing Rule
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">For every</label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={localRules.perDogRule.incrementDogs}
-                  onChange={(e) => updatePerDogRule("incrementDogs", e.target.value)}
-                  className="w-20"
-                  data-testid="input-increment-dogs"
-                />
-              </div>
-              <span className="text-sm text-muted-foreground pb-2">dog(s), add</span>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Surcharge</label>
-                <div className="flex items-center gap-1">
-                  <span className="text-muted-foreground">$</span>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={localRules.perDogRule.surchargeAmount}
-                    onChange={(e) => updatePerDogRule("surchargeAmount", e.target.value)}
-                    className="w-24"
-                    data-testid="input-surcharge-amount"
-                  />
-                </div>
-              </div>
-              <span className="text-sm text-muted-foreground pb-2">up to</span>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-muted-foreground">Max Dogs</label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={localRules.perDogRule.maxDogs}
-                  onChange={(e) => updatePerDogRule("maxDogs", e.target.value)}
-                  className="w-20"
-                  data-testid="input-max-dogs"
-                />
-              </div>
-              <span className="text-sm text-muted-foreground pb-2">dogs</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Dogs beyond the max will be marked "Call for Quote"
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Yard Size Tiers */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Settings2 className="h-4 w-4" />
-              Yard Size Tiers
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <YardSizeTierEditor
-              tiers={localRules.yardSizeTiers}
-              onChange={handleYardTiersChange}
-              yardSizeTierConfig={yardSizeTierConfig}
-            />
-          </CardContent>
-        </Card>
-
-        {/* First-Time Cleanup Fee */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              First-Time Cleanup Fee
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Applied to the first visit for new clients. Subsequent visits use the recurring price
-              only.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-muted-foreground">Base flat amount</label>
-              <div className="flex items-center gap-1 w-36">
-                <span className="text-muted-foreground">$</span>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={cleanupConfig.baseAmount}
-                  onChange={(e) => {
-                    const num = e.target.value === "" ? 0 : parseFloat(e.target.value);
-                    if (!isNaN(num)) updateCleanupConfig({ baseAmount: num });
-                  }}
-                  data-testid="input-cleanup-base"
-                />
-              </div>
-            </div>
-
-            {cleanupConfig.modifiers.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Modifiers</p>
-                {cleanupConfig.modifiers.map((mod) => (
-                  <div
-                    key={mod.id}
-                    className="border rounded-md p-3 space-y-2"
-                    data-testid={`modifier-row-${mod.id}`}
-                  >
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Select
-                        value={mod.type}
-                        onValueChange={(v) =>
-                          updateModifier(mod.id, { type: v as "per_unit" | "hourly" | "flat_fee" })
-                        }
-                      >
-                        <SelectTrigger
-                          className="w-32 h-8 text-sm"
-                          data-testid={`select-modifier-type-${mod.id}`}
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(MODIFIER_TYPE_LABELS).map(([v, l]) => (
-                            <SelectItem key={v} value={v}>
-                              {l}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        placeholder="Label (shown on quote)"
-                        value={mod.label}
-                        onChange={(e) => updateModifier(mod.id, { label: e.target.value })}
-                        className="flex-1 min-w-[140px] h-8 text-sm"
-                        data-testid={`input-modifier-label-${mod.id}`}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeModifier(mod.id)}
-                        data-testid={`button-remove-modifier-${mod.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap pl-1">
-                      {mod.type === "per_unit" && (
-                        <>
-                          <span className="text-xs text-muted-foreground">Price per unit</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm text-muted-foreground">$</span>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min={0}
-                              value={mod.pricePerUnit ?? 0}
-                              onChange={(e) =>
-                                updateModifier(mod.id, {
-                                  pricePerUnit: parseFloat(e.target.value) || 0,
-                                })
-                              }
-                              className="w-24 h-8 text-sm"
-                              data-testid={`input-modifier-unit-price-${mod.id}`}
-                            />
-                          </div>
-                        </>
-                      )}
-                      {mod.type === "hourly" && (
-                        <>
-                          <span className="text-xs text-muted-foreground">Rate ($/hr)</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm text-muted-foreground">$</span>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min={0}
-                              value={mod.rate ?? 0}
-                              onChange={(e) =>
-                                updateModifier(mod.id, { rate: parseFloat(e.target.value) || 0 })
-                              }
-                              className="w-24 h-8 text-sm"
-                              data-testid={`input-modifier-rate-${mod.id}`}
-                            />
-                          </div>
-                          <span className="text-xs text-muted-foreground">Est. hours</span>
-                          <Input
-                            type="number"
-                            step="0.5"
-                            min={0}
-                            value={mod.estimatedHours ?? 1}
-                            onChange={(e) =>
-                              updateModifier(mod.id, {
-                                estimatedHours: parseFloat(e.target.value) || 0,
-                              })
-                            }
-                            className="w-20 h-8 text-sm"
-                            data-testid={`input-modifier-hours-${mod.id}`}
-                          />
-                        </>
-                      )}
-                      {mod.type === "flat_fee" && (
-                        <>
-                          <span className="text-xs text-muted-foreground">Amount</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm text-muted-foreground">$</span>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min={0}
-                              value={mod.amount ?? 0}
-                              onChange={(e) =>
-                                updateModifier(mod.id, { amount: parseFloat(e.target.value) || 0 })
-                              }
-                              className="w-24 h-8 text-sm"
-                              data-testid={`input-modifier-amount-${mod.id}`}
-                            />
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={addModifier}
-              data-testid="button-add-modifier"
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Add modifier
-            </Button>
-
-            <div className="flex items-center gap-2 border-t pt-3">
-              <span className="text-sm font-medium">Total first-visit fee:</span>
-              <span className="text-sm font-semibold" data-testid="text-cleanup-total">
-                {formatMoney(computeCleanupTotal())}
-              </span>
-            </div>
-
-            <div className="space-y-2 border-t pt-3">
-              <p className="text-sm font-medium">When client converts to recurring service</p>
-              <Select
-                value={cleanupConfig.conversionDiscount.type}
-                onValueChange={(v) =>
-                  updateCleanupConfig({
-                    conversionDiscount: {
-                      ...cleanupConfig.conversionDiscount,
-                      type: v as "waive" | "discount_amount" | "discount_percent" | "none",
-                    },
-                  })
-                }
-              >
-                <SelectTrigger className="w-56" data-testid="select-conversion-discount">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CONVERSION_LABELS).map(([v, l]) => (
-                    <SelectItem key={v} value={v}>
-                      {l}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {cleanupConfig.conversionDiscount.type === "discount_amount" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Reduce by</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-muted-foreground">$</span>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      value={cleanupConfig.conversionDiscount.discountAmount ?? 0}
-                      onChange={(e) =>
-                        updateCleanupConfig({
-                          conversionDiscount: {
-                            ...cleanupConfig.conversionDiscount,
-                            discountAmount: parseFloat(e.target.value) || 0,
-                          },
-                        })
-                      }
-                      className="w-24"
-                      data-testid="input-discount-amount"
-                    />
-                  </div>
-                </div>
-              )}
-              {cleanupConfig.conversionDiscount.type === "discount_percent" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Reduce by</span>
-                  <Input
-                    type="number"
-                    step="1"
-                    min={0}
-                    max={100}
-                    value={cleanupConfig.conversionDiscount.discountPercent ?? 0}
-                    onChange={(e) =>
-                      updateCleanupConfig({
-                        conversionDiscount: {
-                          ...cleanupConfig.conversionDiscount,
-                          discountPercent: parseFloat(e.target.value) || 0,
-                        },
-                      })
-                    }
-                    className="w-20"
-                    data-testid="input-discount-percent"
-                  />
-                  <span className="text-sm text-muted-foreground">%</span>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="flex gap-3">
-          <Button
-            variant="outline"
-            onClick={() => onSave(localRules)}
-            disabled={isSaving}
-            className="flex-1"
-            data-testid="button-save-rules"
-          >
-            <CheckCircle2 className="mr-2 h-4 w-4" />
-            {isSaving ? "Saving..." : "Save Rules"}
-          </Button>
-          <Button
-            onClick={() => onGenerate(localRules)}
-            disabled={isGenerating}
-            className="flex-1"
-            data-testid="button-generate-prices"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${isGenerating ? "animate-spin" : ""}`} />
-            {isGenerating ? "Generating..." : "Generate Prices from Rules"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-export default function Pricing() {
+export default function Pricing({ embedded = false }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
   const { formatMoney } = useCurrency();
   const [activeTab, setActiveTab] = useState("recurring_service");
   const [pricingDialogOpen, setPricingDialogOpen] = useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
+  const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
 
   const { data: pricingItems, isLoading: pricingLoading } = useQuery<ServicePricingItem[]>({
     queryKey: ["/api/pricing"],
   });
 
+  // Tier labels for the package "Quote tier" selector — operator's configured
+  // names, falling back to Good/Better/Best when unset.
+  const { data: tierNamesConfig } = useQuery<{
+    tierNames?: { tier1: string; tier2: string; tier3: string };
+  }>({ queryKey: ["/api/pricing-config"] });
+  const tierSlotLabels = {
+    tier1: tierNamesConfig?.tierNames?.tier1 || "Good",
+    tier2: tierNamesConfig?.tierNames?.tier2 || "Better",
+    tier3: tierNamesConfig?.tierNames?.tier3 || "Best",
+  };
+
   const { data: packages, isLoading: packagesLoading } = useQuery<ServicePackage[]>({
     queryKey: ["/api/packages"],
-  });
-
-  const { data: pricingConfig } = useQuery<PricingConfig & { pricingRules?: PricingRulesConfig }>({
-    queryKey: ["/api/pricing-config"],
   });
 
   const { data: serviceBillingRules = [] } = useQuery<ServiceBillingRule[]>({
@@ -874,8 +240,6 @@ export default function Pricing() {
     },
   });
 
-  const pricingRules: PricingRulesConfig = pricingConfig?.pricingRules || DEFAULT_PRICING_RULES;
-
   const pricingForm = useForm<PricingFormValues>({
     resolver: zodResolver(pricingFormSchema),
     defaultValues: {
@@ -895,6 +259,8 @@ export default function Pricing() {
       frequency: "weekly",
       basePrice: "",
       includedItemsText: "",
+      tierSlot: "none",
+      showInheritancePrefix: false,
     },
   });
 
@@ -909,38 +275,6 @@ export default function Pricing() {
       toast({
         title: "Pricing loaded",
         description: "Default pricing has been set up. Review and confirm your pricing.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const saveRulesMutation = useMutation({
-    mutationFn: async (rules: PricingRulesConfig) => {
-      const res = await apiRequest("PATCH", "/api/pricing-config", { pricingRules: rules });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
-      toast({ title: "Rules saved" });
-    },
-    onError: (error: Error) => {
-      toast({ title: "Error saving rules", description: error.message, variant: "destructive" });
-    },
-  });
-
-  const generateFromRulesMutation = useMutation({
-    mutationFn: async (rules: PricingRulesConfig) => {
-      const res = await apiRequest("POST", "/api/pricing/generate-from-rules", rules);
-      return res.json();
-    },
-    onSuccess: (data: { itemsGenerated: number }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/pricing"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/pricing-config"] });
-      toast({
-        title: "Prices generated",
-        description: `${data.itemsGenerated} pricing items generated from your rules.`,
       });
     },
     onError: (error: Error) => {
@@ -982,24 +316,61 @@ export default function Pricing() {
     },
   });
 
-  const createPackageMutation = useMutation({
+  const savePackageMutation = useMutation({
     mutationFn: async (data: PackageFormValues) => {
-      const { includedItemsText, ...rest } = data;
+      const { includedItemsText, tierSlot, showInheritancePrefix, ...rest } = data;
       const includedItems = includedItemsText
         ? includedItemsText.split("\n").filter((s) => s.trim())
         : [];
-      await apiRequest("POST", "/api/packages", { ...rest, includedItems });
+      const slot = tierSlot && tierSlot !== "none" ? tierSlot : null;
+      // Inheritance prefix only applies to tier2/tier3.
+      const inherit = slot === "tier2" || slot === "tier3" ? !!showInheritancePrefix : false;
+      const body = { ...rest, includedItems, tierSlot: slot, showInheritancePrefix: inherit };
+      if (editingPackageId) {
+        await apiRequest("PATCH", `/api/packages/${editingPackageId}`, body);
+      } else {
+        await apiRequest("POST", "/api/packages", body);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/packages"] });
-      toast({ title: "Package created" });
+      toast({ title: editingPackageId ? "Package updated" : "Package created" });
       setPackageDialogOpen(false);
+      setEditingPackageId(null);
       packageForm.reset();
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const openEditPackage = (pkg: ServicePackage) => {
+    setEditingPackageId(pkg.id);
+    packageForm.reset({
+      name: pkg.name,
+      description: pkg.description || "",
+      frequency: pkg.frequency,
+      basePrice: pkg.basePrice,
+      includedItemsText: ((pkg.includedItems as string[]) || []).join("\n"),
+      tierSlot: (pkg.tierSlot as "tier1" | "tier2" | "tier3" | null) ?? "none",
+      showInheritancePrefix: !!pkg.showInheritancePrefix,
+    });
+    setPackageDialogOpen(true);
+  };
+
+  const openCreatePackage = () => {
+    setEditingPackageId(null);
+    packageForm.reset({
+      name: "",
+      description: "",
+      frequency: "weekly",
+      basePrice: "",
+      includedItemsText: "",
+      tierSlot: "none",
+      showInheritancePrefix: false,
+    });
+    setPackageDialogOpen(true);
+  };
 
   const updatePackageMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<ServicePackage> }) => {
@@ -1062,9 +433,9 @@ export default function Pricing() {
   const hasPricing = pricingItems && pricingItems.length > 0;
 
   return (
-    <div className="p-4 md:p-6 space-y-6 overflow-auto h-full">
+    <div className={embedded ? "space-y-6" : "p-4 md:p-6 space-y-6 overflow-auto h-full"}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
+        <div className={embedded ? "sr-only" : undefined}>
           <h1 className="text-2xl font-bold" data-testid="text-pricing-heading">
             Pricing & Packages
           </h1>
@@ -1260,17 +631,6 @@ export default function Pricing() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-
-          {activeTab === "recurring_service" && (
-            <PricingRulesPanel
-              rules={pricingRules}
-              onGenerate={(rules) => generateFromRulesMutation.mutate(rules)}
-              isGenerating={generateFromRulesMutation.isPending}
-              onSave={(rules) => saveRulesMutation.mutate(rules)}
-              isSaving={saveRulesMutation.isPending}
-              yardSizeTierConfig={company?.yardSizeTierConfig}
-            />
-          )}
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
@@ -1567,19 +927,29 @@ export default function Pricing() {
             <h2 className="text-xl font-bold" data-testid="text-packages-heading">
               Service Packages
             </h2>
-            <Dialog open={packageDialogOpen} onOpenChange={setPackageDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" data-testid="button-add-package">
-                  <Package className="mr-1 h-4 w-4" /> Add Package
-                </Button>
-              </DialogTrigger>
+            <Dialog
+              open={packageDialogOpen}
+              onOpenChange={(open) => {
+                setPackageDialogOpen(open);
+                if (!open) setEditingPackageId(null);
+              }}
+            >
+              <Button
+                variant="outline"
+                data-testid="button-add-package"
+                onClick={openCreatePackage}
+              >
+                <Package className="mr-1 h-4 w-4" /> Add Package
+              </Button>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Create Service Package</DialogTitle>
+                  <DialogTitle>
+                    {editingPackageId ? "Edit Service Package" : "Create Service Package"}
+                  </DialogTitle>
                 </DialogHeader>
                 <Form {...packageForm}>
                   <form
-                    onSubmit={packageForm.handleSubmit((v) => createPackageMutation.mutate(v))}
+                    onSubmit={packageForm.handleSubmit((v) => savePackageMutation.mutate(v))}
                     className="space-y-4"
                   >
                     <FormField
@@ -1668,12 +1038,95 @@ export default function Pricing() {
                         </FormItem>
                       )}
                     />
+                    {(() => {
+                      const selectedSlot = packageForm.watch("tierSlot") || "none";
+                      const slotConflict =
+                        selectedSlot !== "none"
+                          ? packages?.find(
+                              (p) => p.tierSlot === selectedSlot && p.id !== editingPackageId
+                            )
+                          : undefined;
+                      const isTier2or3 = selectedSlot === "tier2" || selectedSlot === "tier3";
+                      const prevLabel =
+                        selectedSlot === "tier3" ? tierSlotLabels.tier2 : tierSlotLabels.tier1;
+                      return (
+                        <>
+                          <FormField
+                            control={packageForm.control}
+                            name="tierSlot"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Quote tier</FormLabel>
+                                <Select
+                                  onValueChange={field.onChange}
+                                  value={field.value || "none"}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger data-testid="select-package-tier">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="none">None (standalone)</SelectItem>
+                                    <SelectItem value="tier1">{tierSlotLabels.tier1} (tier 1)</SelectItem>
+                                    <SelectItem value="tier2">{tierSlotLabels.tier2} (tier 2)</SelectItem>
+                                    <SelectItem value="tier3">{tierSlotLabels.tier3} (tier 3)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                  Assign this package to a residential quote tier so its included
+                                  items appear on that tier's proposal card.
+                                </p>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          {slotConflict && (
+                            <div
+                              className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md px-3 py-2"
+                              data-testid="warning-tier-slot-occupied"
+                            >
+                              This slot is already assigned to "{slotConflict.name}". Unassign it
+                              from that package first to free this tier.
+                            </div>
+                          )}
+                          {isTier2or3 && (
+                            <FormField
+                              control={packageForm.control}
+                              name="showInheritancePrefix"
+                              render={({ field }) => (
+                                <FormItem className="flex flex-row items-center justify-between gap-3 rounded-lg border p-3">
+                                  <div className="space-y-0.5">
+                                    <FormLabel>Includes everything in {prevLabel}, plus</FormLabel>
+                                    <p className="text-xs text-muted-foreground">
+                                      Prepend "Everything in {prevLabel}, plus:" to this tier's
+                                      feature list on the proposal.
+                                    </p>
+                                  </div>
+                                  <FormControl>
+                                    <Switch
+                                      checked={!!field.value}
+                                      onCheckedChange={field.onChange}
+                                      data-testid="switch-package-inheritance"
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
                     <Button
                       type="submit"
-                      disabled={createPackageMutation.isPending}
+                      disabled={savePackageMutation.isPending}
                       data-testid="button-submit-package"
                     >
-                      {createPackageMutation.isPending ? "Creating..." : "Create Package"}
+                      {savePackageMutation.isPending
+                        ? "Saving..."
+                        : editingPackageId
+                          ? "Save Package"
+                          : "Create Package"}
                     </Button>
                   </form>
                 </Form>
@@ -1693,7 +1146,14 @@ export default function Pricing() {
                 <Card key={pkg.id} data-testid={`package-card-${pkg.id}`}>
                   <CardHeader className="flex flex-row items-start justify-between gap-2">
                     <div className="space-y-1">
-                      <CardTitle className="text-lg">{pkg.name}</CardTitle>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        {pkg.name}
+                        {pkg.tierSlot && (
+                          <Badge variant="secondary" data-testid={`badge-package-tier-${pkg.id}`}>
+                            {tierSlotLabels[pkg.tierSlot as "tier1" | "tier2" | "tier3"]}
+                          </Badge>
+                        )}
+                      </CardTitle>
                       {pkg.description && (
                         <p className="text-sm text-muted-foreground">{pkg.description}</p>
                       )}
@@ -1727,14 +1187,24 @@ export default function Pricing() {
                           {pkg.isActive ? "Active" : "Inactive"}
                         </span>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => deletePackageMutation.mutate(pkg.id)}
-                        data-testid={`button-delete-package-${pkg.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditPackage(pkg)}
+                          data-testid={`button-edit-package-${pkg.id}`}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deletePackageMutation.mutate(pkg.id)}
+                          data-testid={`button-delete-package-${pkg.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

@@ -30,6 +30,21 @@ import {
   p,
 } from "./shared";
 
+/**
+ * Returns the name of an existing active package occupying `tierSlot` for the
+ * company (excluding `excludeId`), or null if the slot is free. Used to enforce
+ * one package per tier slot per company.
+ */
+async function findTierSlotConflict(
+  companyId: string,
+  tierSlot: string,
+  excludeId: string | null
+): Promise<string | null> {
+  const packages = await storage.getServicePackages(companyId);
+  const conflict = packages.find((p) => p.tierSlot === tierSlot && p.id !== excludeId);
+  return conflict ? conflict.name : null;
+}
+
 export async function registerPricingRoutes(app: Express): Promise<void> {
   // ================ Service Pricing ================
   app.get("/api/pricing", isAuthenticated, async (req: Request, res: Response) => {
@@ -174,6 +189,7 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
             biWeekly: z.number().min(0),
             twiceWeekly: z.number().min(0),
             monthly: z.number().min(0).optional(),
+            semiMonthly: z.number().min(0).optional(),
             oneTime: z.number().min(0).optional(),
           }),
           enabledFrequencies: z
@@ -458,6 +474,14 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const parsed = insertServicePackageSchema.parse({ ...req.body, companyId });
+      if (parsed.tierSlot) {
+        const conflict = await findTierSlotConflict(companyId, parsed.tierSlot, null);
+        if (conflict) {
+          return res.status(409).json({
+            error: `The ${parsed.tierSlot} quote tier is already assigned to "${conflict}". Unassign it from that package first.`,
+          });
+        }
+      }
       const pkg = await storage.createServicePackage(parsed);
       res.status(201).json(pkg);
     } catch (err) {
@@ -470,6 +494,14 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
       const { companyId, role } = await getCompanyContext(req);
       requireRole(role);
       const parsed = insertServicePackageSchema.partial().parse(req.body);
+      if (parsed.tierSlot) {
+        const conflict = await findTierSlotConflict(companyId, parsed.tierSlot, p(req.params.id));
+        if (conflict) {
+          return res.status(409).json({
+            error: `The ${parsed.tierSlot} quote tier is already assigned to "${conflict}". Unassign it from that package first.`,
+          });
+        }
+      }
       const pkg = await storage.updateServicePackage(p(req.params.id), companyId, parsed);
       res.json(pkg);
     } catch (err) {
@@ -503,10 +535,15 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
             !(p.metadata as Record<string, unknown>)?.callForQuote
         );
 
+        // Generation is additive: never delete existing packages. We only insert
+        // packages that don't already exist, and skip any that conflict with an
+        // existing (custom) package, leaving it untouched.
+        //
+        // The generated package name (`${freqLabel} - ${dogLabel}`) uniquely encodes
+        // both the frequency and the dog tier, so matching by name is sufficient to
+        // detect a package that already exists or conflicts with a custom one.
         const existingPackages = await storage.getServicePackages(companyId);
-        for (const pkg of existingPackages) {
-          await storage.deleteServicePackage(pkg.id, companyId);
-        }
+        const existingNames = new Set(existingPackages.map((p) => p.name.trim().toLowerCase()));
 
         const addOns = pricing.filter((p) => p.category === "add_on" && p.isActive);
         const lotAddOn = addOns.find((a) => a.name.toLowerCase().includes("lot size"));
@@ -524,7 +561,8 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
           frequencyGroups[freq].push(item);
         }
 
-        let sortOrder = 1;
+        let sortOrder = existingPackages.length + 1;
+        let createdCount = 0;
         for (const [freq, items] of Object.entries(frequencyGroups)) {
           const freqLabel =
             freq === "twice_weekly" ? "Twice Weekly" : freq === "biweekly" ? "Bi-Weekly" : "Weekly";
@@ -549,20 +587,30 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
               totalPrice += parseFloat(deodorizingAddOn.basePrice);
             }
 
+            const packageName = `${freqLabel} - ${dogMatch ? dogMatch[0] : "1 Dog"}`;
+
+            // Additive: skip if a package with this name already exists (either a
+            // previously generated one or a custom package), leaving it untouched.
+            if (existingNames.has(packageName.trim().toLowerCase())) {
+              continue;
+            }
+            existingNames.add(packageName.trim().toLowerCase());
+
             await storage.createServicePackage({
               companyId,
-              name: `${freqLabel} - ${dogMatch ? dogMatch[0] : "1 Dog"}`,
+              name: packageName,
               description: `${freqLabel} service for ${dogMatch ? dogMatch[0].toLowerCase() : "1 dog"}`,
               frequency: displayFreq,
               basePrice: totalPrice.toFixed(2),
               includedItems,
               sortOrder: sortOrder++,
             });
+            createdCount++;
           }
         }
 
         const newPackages = await storage.getServicePackages(companyId);
-        res.json({ success: true, packagesCreated: newPackages.length, packages: newPackages });
+        res.json({ success: true, packagesCreated: createdCount, packages: newPackages });
       } catch (err) {
         handleError(res, err);
       }
@@ -625,8 +673,15 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
         biWeekly: z.number().min(0),
         twiceWeekly: z.number().min(0),
         monthly: z.number().min(0).optional(),
+        semiMonthly: z.number().min(0).optional(),
         oneTime: z.number().min(0).optional(),
       }),
+      enabledFrequencies: z
+        .object({
+          twiceWeekly: z.boolean().optional(),
+          monthly: z.boolean().optional(),
+        })
+        .optional(),
       perDogRule: z.object({
         incrementDogs: z.number().int().min(1),
         surchargeAmount: z.number().min(0),
@@ -645,6 +700,13 @@ export async function registerPricingRoutes(app: Express): Promise<void> {
 
   const pricingConfigSchema = z.object({
     pricingRules: pricingRulesSchema,
+    tierNames: z
+      .object({
+        tier1: z.string(),
+        tier2: z.string(),
+        tier3: z.string(),
+      })
+      .optional(),
     techHourlyWageCents: z.number().min(0).optional(),
     burdenMultiplier: z.number().min(1).max(5).optional(),
     averageGasPriceCentsPerGallon: z.number().min(0).optional(),

@@ -10,6 +10,7 @@ import {
   quoteFormEvents,
   DEFAULT_PRICING_RULES,
   type PricingRulesConfig,
+  type TierNames,
 } from "@shared/schema";
 import { calculatePrice, type PriceCalculatorInputs } from "../services/pricing-calculator";
 import { z } from "zod";
@@ -1176,7 +1177,13 @@ export async function registerPublicRoutes(app: Express): Promise<void> {
         frequency,
         isFirstTime,
       };
-      const tierPricing = calculateQuotePricing(pricingInput, company?.quoteDefaults ?? null);
+      const tierPricing = calculateQuotePricing(
+        pricingInput,
+        company?.quoteDefaults ?? null,
+        null,
+        null,
+        (company?.pricingConfig as { tierNames?: TierNames } | null | undefined)?.tierNames ?? null
+      );
 
       const fullAddress = hasFullAddress
         ? `${streetAddress}, ${city}, ${st} ${zipCode}`

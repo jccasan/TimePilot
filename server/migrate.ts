@@ -1746,6 +1746,50 @@ export async function runStartupMigrations(): Promise<void> {
     `);
     console.log("[Migration] contacts.billing_setup_token columns verified");
 
+    // ── Semi-monthly service frequency (twice per calendar month) ─────────────
+    // ADD VALUE runs in autocommit (each client.query is its own statement).
+    await client.query(`
+      ALTER TYPE service_frequency ADD VALUE IF NOT EXISTS 'semi_monthly'
+    `);
+    await client.query(`
+      ALTER TABLE service_plans
+        ADD COLUMN IF NOT EXISTS semi_monthly_day1 INTEGER DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS semi_monthly_day2 INTEGER DEFAULT 15
+    `);
+    console.log("[Migration] service_plans semi_monthly columns and enum value ensured");
+
+    // ── Beginning-of-month prepay billing ────────────────────────────────────
+    // Add the new charge_timing value and make it the default for NEW companies.
+    // Existing rows are intentionally left untouched (no UPDATE) so operators
+    // keep whatever timing they already had.
+    await client.query(`
+      ALTER TYPE charge_timing ADD VALUE IF NOT EXISTS 'beginning_of_month'
+    `);
+    await client.query(`
+      ALTER TABLE companies
+        ALTER COLUMN charge_timing SET DEFAULT 'beginning_of_month'
+    `);
+    await client.query(`
+      ALTER TABLE companies
+        ADD COLUMN IF NOT EXISTS last_prepay_billing_month VARCHAR(7)
+    `);
+    console.log("[Migration] charge_timing beginning_of_month default + guard column ensured");
+
+    // ── Custom packages wired to quote tiers ──────────────────────────────────
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'package_tier_slot') THEN
+          CREATE TYPE package_tier_slot AS ENUM ('tier1', 'tier2', 'tier3');
+        END IF;
+      END $$;
+    `);
+    await client.query(`
+      ALTER TABLE service_packages
+        ADD COLUMN IF NOT EXISTS tier_slot package_tier_slot,
+        ADD COLUMN IF NOT EXISTS show_inheritance_prefix BOOLEAN NOT NULL DEFAULT FALSE
+    `);
+    console.log("[Migration] service_packages tier_slot + show_inheritance_prefix ensured");
+
     console.log("[Migrate] Startup schema migrations applied successfully");
   } catch (err) {
     console.error("[Migrate] Startup migration failed:", err);

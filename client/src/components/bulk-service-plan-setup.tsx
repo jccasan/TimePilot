@@ -72,6 +72,7 @@ const FREQUENCY_LABELS: Record<string, string> = {
   weekly: "Weekly",
   biweekly: "Biweekly",
   monthly: "Monthly",
+  semi_monthly: "Semi-Monthly",
   onetime: "One-time",
 };
 

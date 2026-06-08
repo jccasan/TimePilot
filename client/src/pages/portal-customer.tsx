@@ -299,6 +299,7 @@ const frequencyLabels: Record<string, string> = {
   "2_per_week": "Twice Weekly",
   biweekly: "Bi-Weekly",
   monthly: "Monthly",
+  semi_monthly: "Semi-Monthly",
   as_needed: "As Needed",
 };
 

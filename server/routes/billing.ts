@@ -922,7 +922,7 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
 
   app.get("/api/streetview", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const token = process.env.MAPBOX_PUBLIC_TOKEN;
+      const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
       if (!token) return res.status(503).json({ error: "Street view not configured" });
 
       const { address, lat, lng, size } = req.query;
@@ -968,7 +968,7 @@ export async function registerBillingRoutes(app: Express): Promise<void> {
 
   app.get("/api/satellite", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const token = process.env.MAPBOX_PUBLIC_TOKEN;
+      const token = process.env.MAPBOX_PUBLIC_TOKEN || process.env.MAPBOX_SECRET_TOKEN;
       if (!token) return res.status(503).json({ error: "Satellite view not configured" });
 
       const { address, lat, lng, size, zoom } = req.query;

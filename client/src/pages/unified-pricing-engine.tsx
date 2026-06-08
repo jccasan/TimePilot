@@ -1745,7 +1745,7 @@ function LaborSettingsPanel({ config, onSaved }: { config: PricingConfig; onSave
 
 // ─── Costs tab ────────────────────────────────────────────────────────────────
 
-function CostsTab() {
+export function CostsTab() {
   const { toast } = useToast();
   const [addingCategory, setAddingCategory] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
@@ -2412,7 +2412,7 @@ function computeSuggestedPrice(
   return totalCost / (1 - margin);
 }
 
-function PricingEngineTab() {
+export function PricingEngineTab() {
   const { toast } = useToast();
   const { formatMoney } = useCurrency();
 
@@ -2569,6 +2569,9 @@ function PricingEngineTab() {
         basePrices: newBasePrices,
         perDogRule,
         yardSizeTiers: newTiers,
+        // PUT replaces pricingRules wholesale; preserve the frequency toggles so
+        // saving from this page doesn't revert settings made elsewhere.
+        enabledFrequencies: pricingRules.enabledFrequencies,
       });
     },
     onSuccess: () => {
@@ -3029,7 +3032,7 @@ function PricingEngineCell({
 
 // ─── My Pricing Tab ───────────────────────────────────────────────────────────
 
-function MyPricingTab() {
+export function MyPricingTab() {
   const { toast } = useToast();
   const { formatMoney } = useCurrency();
 
@@ -3259,6 +3262,7 @@ function MyPricingTab() {
           },
           perDogRule,
           yardSizeTiers: normalizedTiers,
+          enabledFrequencies: pricingRules.enabledFrequencies,
           firstTimeCleanupConfig: {
             ...existingCleanup,
             baseAmount,
@@ -3358,6 +3362,7 @@ function MyPricingTab() {
         basePrices: newBasePrices,
         perDogRule,
         yardSizeTiers: normalizedTiers,
+        enabledFrequencies: pricingRules.enabledFrequencies,
         firstTimeCleanupConfig: newCleanupConfig,
       });
     },
@@ -3809,6 +3814,54 @@ function MyPricingTab() {
 
 type ProfitSummaryEntry = { monthlyRevenueCents: number };
 type OverviewKpis = { kpis: { avgProfitMarginPct: number } };
+
+/**
+ * Stacked, tab-free rendering of the cost-model content (overhead ledger, labor
+ * & vehicle settings, suggested-vs-current prices, profit optimizer, LTV) for
+ * embedding in the consolidated Pricing and billing page's "Cost model" section.
+ * Reuses the same tab components as the standalone engine page — no rebuild.
+ */
+export function CostModelSections() {
+  const { data: profSummary } = useQuery<ProfitSummaryEntry[]>({
+    queryKey: ["/api/profitability/summary"],
+  });
+  const { data: overviewData } = useQuery<OverviewKpis>({
+    queryKey: ["/api/business-overview"],
+  });
+  const avgMonthlyRevenueCents =
+    profSummary && profSummary.length > 0
+      ? Math.round(
+          profSummary.reduce((sum, c) => sum + c.monthlyRevenueCents, 0) / profSummary.length
+        )
+      : 0;
+  const netMarginPct = overviewData?.kpis.avgProfitMarginPct ?? 30;
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Costs &amp; overhead</h3>
+        <CostsTab />
+      </div>
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-muted-foreground">
+          Pricing engine — suggested vs. current
+        </h3>
+        <PricingEngineTab />
+      </div>
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Profit optimizer</h3>
+        <AIPricingOptimizer />
+      </div>
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-muted-foreground">Lifetime value</h3>
+        <LTVCalculator
+          avgMonthlyRevenueCents={avgMonthlyRevenueCents}
+          netMarginPct={netMarginPct}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function UnifiedPricingEngine() {
   const [tab, setTab] = useState(readTabFromUrl);

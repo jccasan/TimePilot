@@ -43,6 +43,27 @@
       "when": 1779972729387,
       "tag": "0004_crm_pipeline_stages",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780000000000,
+      "tag": "0005_semi_monthly",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780000100000,
+      "tag": "0006_beginning_of_month_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780000200000,
+      "tag": "0007_package_tier_slots",
+      "breakpoints": true
     }
   ]
 }

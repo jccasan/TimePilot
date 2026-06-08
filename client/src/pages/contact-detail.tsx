@@ -4524,28 +4524,42 @@ function BillingOverrideSection({ contact, contactId }: { contact: Contact; cont
   );
 }
 
-const servicePlanFormSchema = z.object({
-  propertyId: z.string().min(1, "Property is required"),
-  frequency: z.enum(["weekly", "biweekly", "monthly", "onetime"]),
-  dayOfWeek: z
-    .enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"])
-    .optional(),
-  pricePerVisit: z.string().min(1, "Price is required"),
-  discount: z.string().optional(),
-  startDate: z.string().min(1, "Start date is required"),
-  isActive: z.boolean().optional(),
-  jobType: z.enum(["one_off", "recurring"]).optional(),
-  serviceName: z.string().optional(),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
-  anytime: z.boolean().optional(),
-  visitInstructions: z.string().optional(),
-  assignedUserId: z.string().optional(),
-  endsAfterCount: z.number().optional(),
-  endsAfterUnit: z.enum(["days", "weeks", "months", "years"]).optional(),
-  endDate: z.string().optional(),
-  isStopOnly: z.boolean().optional(),
-});
+const servicePlanFormSchema = z
+  .object({
+    propertyId: z.string().min(1, "Property is required"),
+    frequency: z.enum(["weekly", "biweekly", "monthly", "semi_monthly", "onetime"]),
+    dayOfWeek: z
+      .enum(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"])
+      .optional(),
+    semiMonthlyDay1: z.number().int().min(1).max(28).optional(),
+    semiMonthlyDay2: z.number().int().min(2).max(28).optional(),
+    pricePerVisit: z.string().min(1, "Price is required"),
+    discount: z.string().optional(),
+    startDate: z.string().min(1, "Start date is required"),
+    isActive: z.boolean().optional(),
+    jobType: z.enum(["one_off", "recurring"]).optional(),
+    serviceName: z.string().optional(),
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
+    anytime: z.boolean().optional(),
+    visitInstructions: z.string().optional(),
+    assignedUserId: z.string().optional(),
+    endsAfterCount: z.number().optional(),
+    endsAfterUnit: z.enum(["days", "weeks", "months", "years"]).optional(),
+    endDate: z.string().optional(),
+    isStopOnly: z.boolean().optional(),
+  })
+  .refine(
+    (data) =>
+      data.frequency !== "semi_monthly" ||
+      data.semiMonthlyDay1 == null ||
+      data.semiMonthlyDay2 == null ||
+      data.semiMonthlyDay2 > data.semiMonthlyDay1,
+    {
+      message: "Second day of month must be after the first",
+      path: ["semiMonthlyDay2"],
+    }
+  );
 
 type ServicePlanFormValues = z.infer<typeof servicePlanFormSchema>;
 
@@ -4562,6 +4576,7 @@ const frequencyLabelsMap: Record<string, string> = {
   weekly: "Weekly",
   biweekly: "Biweekly",
   monthly: "Monthly",
+  semi_monthly: "Semi-Monthly",
   onetime: "One-time",
 };
 
@@ -4644,7 +4659,7 @@ function useInlinePriceCalc(
     const body = {
       yardSizeAcres,
       dogCount: selectedProperty.numberOfDogs || 1,
-      serviceFrequency: frequency === "monthly" ? "onetime" : frequency,
+      serviceFrequency: frequency,
       yardDifficulty: selectedProperty.yardDifficulty || "flat",
       distanceFromNearestStopMiles: 1,
       currentPriceCents,
@@ -4906,7 +4921,7 @@ function ServicePlansCard({
       const categoryMap: Record<string, string> = {
         weekly: "recurring_service",
         biweekly: "recurring_service",
-        monthly: "one_time_service",
+        monthly: "recurring_service",
         onetime: "one_time_service",
       };
       const cat = categoryMap[freq] || "recurring_service";
@@ -4926,6 +4941,8 @@ function ServicePlansCard({
       propertyId: "",
       frequency: "weekly",
       dayOfWeek: "monday",
+      semiMonthlyDay1: 1,
+      semiMonthlyDay2: 15,
       jobType: "recurring",
       anytime: true,
       pricePerVisit: "",
@@ -4940,6 +4957,8 @@ function ServicePlansCard({
       propertyId: "",
       frequency: "weekly",
       dayOfWeek: "monday",
+      semiMonthlyDay1: 1,
+      semiMonthlyDay2: 15,
       jobType: "recurring",
       anytime: true,
       pricePerVisit: "",
@@ -4987,6 +5006,8 @@ function ServicePlansCard({
         propertyId: editingPlan.propertyId,
         frequency: (editingPlan.frequency || "weekly") as ServicePlanFormValues["frequency"],
         dayOfWeek: (editingPlan.dayOfWeek || "monday") as ServicePlanFormValues["dayOfWeek"],
+        semiMonthlyDay1: editingPlan.semiMonthlyDay1 ?? 1,
+        semiMonthlyDay2: editingPlan.semiMonthlyDay2 ?? 15,
         pricePerVisit: editingPlan.pricePerVisit,
         discount: editingPlan.discount || "",
         startDate: editingPlan.startDate,
@@ -5433,6 +5454,7 @@ function ServicePlansCard({
                       <SelectItem value="weekly">Weekly</SelectItem>
                       <SelectItem value="biweekly">Biweekly</SelectItem>
                       <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="semi_monthly">Semi-Monthly (twice a month)</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -5440,7 +5462,65 @@ function ServicePlansCard({
               )}
             />
           )}
-          {jobType !== "one_off" && (
+          {jobType !== "one_off" && freq === "semi_monthly" && (
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="semiMonthlyDay1"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>First day of month</FormLabel>
+                    <Select
+                      onValueChange={(v) => field.onChange(parseInt(v, 10))}
+                      value={field.value != null ? String(field.value) : "1"}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-semi-monthly-day1">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                          <SelectItem key={d} value={String(d)}>
+                            {d}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="semiMonthlyDay2"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Second day of month</FormLabel>
+                    <Select
+                      onValueChange={(v) => field.onChange(parseInt(v, 10))}
+                      value={field.value != null ? String(field.value) : "15"}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-semi-monthly-day2">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                          <SelectItem key={d} value={String(d)}>
+                            {d}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
+          {jobType !== "one_off" && freq !== "semi_monthly" && (
             <FormField
               control={form.control}
               name="dayOfWeek"

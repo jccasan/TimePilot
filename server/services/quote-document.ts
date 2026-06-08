@@ -15,6 +15,7 @@ import {
   ImageRun,
   convertInchesToTwip,
 } from "docx";
+import { type TierNames, DEFAULT_TIER_NAMES } from "@shared/schema";
 
 interface QuoteImage {
   url: string;
@@ -53,6 +54,15 @@ interface QuoteDocData {
   baseUrl?: string;
   lineItems?: LineItem[];
   country?: string;
+  tierNames?: TierNames | null;
+}
+
+// Residential quotes use the company's configured tier labels; commercial
+// quotes keep the fixed defaults.
+function resolveTierNames(data: QuoteDocData): TierNames {
+  return data.type === "residential"
+    ? { ...DEFAULT_TIER_NAMES, ...(data.tierNames || {}) }
+    : DEFAULT_TIER_NAMES;
 }
 
 const MI_TO_KM = 1.60934;
@@ -393,18 +403,23 @@ export async function generateQuotePdf(data: QuoteDocData): Promise<Buffer> {
       doc.restore();
       y += 30;
     } else {
+      const tierNames = resolveTierNames(data);
       const tiers = [
         {
-          name: "Essential",
+          name: tierNames.tier1,
           price: data.essentialPrice,
           features: filterFeatures(data.essentialFeatures),
         },
         {
-          name: "Property Care",
+          name: tierNames.tier2,
           price: data.premiumPrice,
           features: filterFeatures(data.premiumFeatures),
         },
-        { name: "Deluxe", price: data.deluxePrice, features: filterFeatures(data.deluxeFeatures) },
+        {
+          name: tierNames.tier3,
+          price: data.deluxePrice,
+          features: filterFeatures(data.deluxeFeatures),
+        },
       ];
 
       const maxFeatures = tiers.reduce((max, t) => Math.max(max, t.features.length), 0);
@@ -701,18 +716,23 @@ export async function generateQuoteDocx(data: QuoteDocData): Promise<Buffer> {
       width: { size: 100, type: WidthType.PERCENTAGE },
     });
   } else {
+    const tierNames = resolveTierNames(data);
     const tiers = [
       {
-        name: "Essential",
+        name: tierNames.tier1,
         price: data.essentialPrice,
         features: filterFeatures(data.essentialFeatures),
       },
       {
-        name: "Property Care",
+        name: tierNames.tier2,
         price: data.premiumPrice,
         features: filterFeatures(data.premiumFeatures),
       },
-      { name: "Deluxe", price: data.deluxePrice, features: filterFeatures(data.deluxeFeatures) },
+      {
+        name: tierNames.tier3,
+        price: data.deluxePrice,
+        features: filterFeatures(data.deluxeFeatures),
+      },
     ];
 
     pricingTable = new Table({
